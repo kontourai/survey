@@ -13,9 +13,9 @@ ingestion platform:
 - Surface owns trust reporting, derivation, console projections, and downstream
   transparency.
 
-The first success criterion is that tax and public-directory fixtures can pass
-through Survey and produce valid Surface reports without Survey absorbing
-vertical policy.
+The first success criterion is that generic corrected-document and public-field
+fixtures can pass through Survey and produce valid Surface reports without
+Survey absorbing vertical policy.
 
 ## Commands
 

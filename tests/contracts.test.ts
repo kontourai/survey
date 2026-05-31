@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildTrustReport, validateTrustInput } from "@kontourai/surface";
-import { campfitRegistrationStatusFixture } from "../fixtures/campfit-registration-status.js";
-import { taxW2CorrectedFixture } from "../fixtures/tax-w2-corrected.js";
-import { buildSurveyTrustInput } from "../src/index.js";
+import { correctedDocumentCandidatesFixture } from "../fixtures/corrected-document-candidates.js";
+import { publicFieldReviewFixture } from "../fixtures/public-field-review.js";
+import { buildSurveyTrustInput, SurveyInputBuilder } from "../src/index.js";
 
 describe("Survey Surface projection", () => {
-  it("projects Campfit registration status into valid Surface trust input", () => {
-    const input = buildSurveyTrustInput(campfitRegistrationStatusFixture);
+  it("projects a reviewed public field into valid Surface trust input", () => {
+    const input = buildSurveyTrustInput(publicFieldReviewFixture);
     const valid = validateTrustInput(input);
     const report = buildTrustReport(valid);
 
@@ -18,8 +18,8 @@ describe("Survey Surface projection", () => {
     assert.equal(report.claims[0]?.metadata?.survey && typeof report.claims[0].metadata.survey, "object");
   });
 
-  it("projects corrected tax W-2 candidates and preserves derived recompute pressure", () => {
-    const input = buildSurveyTrustInput(taxW2CorrectedFixture);
+  it("projects corrected document candidates and preserves derived recompute pressure", () => {
+    const input = buildSurveyTrustInput(correctedDocumentCandidatesFixture);
     const valid = validateTrustInput(input);
     const report = buildTrustReport(valid);
 
@@ -30,7 +30,7 @@ describe("Survey Surface projection", () => {
   });
 
   it("rejects verified claims without review authority", () => {
-    const broken = structuredClone(campfitRegistrationStatusFixture);
+    const broken = structuredClone(publicFieldReviewFixture);
     broken.reviewOutcomes = [];
     broken.claims[0] = { ...broken.claims[0], status: "verified" };
 
@@ -41,12 +41,30 @@ describe("Survey Surface projection", () => {
   });
 
   it("rejects non-manual source claims without locators", () => {
-    const broken = structuredClone(campfitRegistrationStatusFixture);
+    const broken = structuredClone(publicFieldReviewFixture);
     broken.extractions[0] = { ...broken.extractions[0], locator: undefined };
 
     assert.throws(
       () => buildSurveyTrustInput(broken),
       /needs a source locator/,
     );
+  });
+
+  it("builds Survey input through the record builder", () => {
+    const input = new SurveyInputBuilder({
+        source: "survey.builder.fixture",
+        generatedAt: "2026-05-31T16:00:00.000Z",
+      })
+      .addClaimRecord({
+        rawSource: publicFieldReviewFixture.rawSources[0]!,
+        extraction: publicFieldReviewFixture.extractions[0]!,
+        candidateSet: publicFieldReviewFixture.candidateSets[0]!,
+        reviewOutcome: publicFieldReviewFixture.reviewOutcomes[0]!,
+        claim: publicFieldReviewFixture.claims[0]!,
+      })
+      .build();
+
+    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    assert.equal(report.summary.byStatus.verified, 1);
   });
 });
