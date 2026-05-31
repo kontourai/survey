@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { buildTrustReport, validateTrustInput } from "@kontourai/surface";
 import { correctedDocumentCandidatesFixture } from "../fixtures/corrected-document-candidates.js";
 import { publicFieldReviewFixture } from "../fixtures/public-field-review.js";
-import { buildSurveyTrustInput, SurveyInputBuilder } from "../src/index.js";
+import { buildSurveyTrustInput, repeatedObservation, SurveyInputBuilder } from "../src/index.js";
 
 describe("Survey Surface projection", () => {
   it("projects a reviewed public field into valid Surface trust input", () => {
@@ -111,5 +111,188 @@ describe("Survey Surface projection", () => {
     assert.equal(report.summary.byStatus.verified, 1);
     const surveyMetadata = report.claims[0]?.metadata?.survey as { candidateSetId?: string } | undefined;
     assert.equal(surveyMetadata?.candidateSetId, "observation.entity-1.availability.candidates");
+  });
+
+  it("builds a verified repeated public-record observation", () => {
+    const aliases = [
+      { name: "North Annex", sourceLabel: "record row 1" },
+      { name: "East Annex", sourceLabel: "record row 2" },
+    ];
+    const input = new SurveyInputBuilder({
+      source: "survey.repeated.fixture",
+      generatedAt: "2026-05-31T16:00:00.000Z",
+    })
+      .addObservation(repeatedObservation({
+        id: "observation.entity-1.aliases.current",
+        field: "knownAliases",
+        value: aliases,
+        rawSource: {
+          kind: "api-record",
+          sourceRef: "public-records://entity/entity-1",
+          observedAt: "2026-05-31T15:00:00.000Z",
+          locatorScheme: "structured-field",
+          metadata: { producer: "public-record-import" },
+        },
+        extraction: {
+          confidence: 0.88,
+          locator: "json:$.aliases",
+          extractor: "public-record-importer",
+          extractedAt: "2026-05-31T15:00:00.000Z",
+        },
+        reviewOutcome: {
+          status: "verified",
+          actor: "records-operator",
+          reviewedAt: "2026-05-31T15:05:00.000Z",
+        },
+        claim: {
+          subjectType: "public-record.entity",
+          subjectId: "entity-1",
+          surface: "public-record.profile",
+          claimType: "public-data.repeated-field",
+          status: "verified",
+          impactLevel: "medium",
+          collectedBy: "public-record-importer",
+          metadata: {
+            claimScope: "profile",
+            survey: { claimNote: "also kept" },
+          },
+        },
+        metadata: {
+          producerField: "aliases",
+          survey: { producerNote: "kept" },
+        },
+      }))
+      .build();
+
+    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const claim = report.claims[0]!;
+    const surveyMetadata = claim.metadata?.survey as {
+      repeated?: { representation?: string; itemCount?: number };
+      producerNote?: string;
+      claimNote?: string;
+    } | undefined;
+
+    assert.equal(report.summary.byStatus.verified, 1);
+    assert.deepEqual(claim.value, aliases);
+    assert.equal(claim.fieldOrBehavior, "knownAliases");
+    assert.equal(claim.metadata?.claimScope, "profile");
+    assert.equal(claim.metadata?.producerField, "aliases");
+    assert.equal(surveyMetadata?.claimNote, "also kept");
+    assert.equal(surveyMetadata?.producerNote, "kept");
+    assert.equal(surveyMetadata?.repeated?.representation, "aggregate-array");
+    assert.equal(surveyMetadata?.repeated?.itemCount, 2);
+    assert.equal(report.evidence[0]?.excerptOrSummary, "knownAliases: 2 item(s)");
+  });
+
+  it("builds a proposed repeated candidate observation", () => {
+    const officers = [
+      { name: "Riley Chen", role: "Director" },
+      { name: "Morgan Lee", role: "Secretary" },
+    ];
+    const input = new SurveyInputBuilder({
+      source: "survey.repeated.fixture",
+      generatedAt: "2026-05-31T16:00:00.000Z",
+    })
+      .addObservation(repeatedObservation({
+        id: "observation.entity-1.officers.proposed",
+        field: "listedOfficers",
+        value: officers,
+        rawSource: {
+          kind: "web-page",
+          sourceRef: "https://records.example.test/entities/entity-1",
+          observedAt: "2026-05-31T15:00:00.000Z",
+          locatorScheme: "html",
+        },
+        extraction: {
+          target: "officerCandidates",
+          confidence: 0.76,
+          locator: "css:#officers",
+          excerpt: "Officer table contains two rows.",
+          extractor: "records-crawler",
+          extractedAt: "2026-05-31T15:00:00.000Z",
+        },
+        candidateSet: {
+          status: "needs-review",
+          rationale: "New public-record candidate pending operator review.",
+          metadata: { candidateGroup: "officers" },
+        },
+        candidate: {
+          confidence: 0.76,
+          metadata: { normalizedBy: "records-crawler" },
+        },
+        claim: {
+          subjectType: "public-record.entity",
+          subjectId: "entity-1",
+          surface: "public-record.profile",
+          claimType: "public-data.repeated-field-candidate",
+          impactLevel: "high",
+          collectedBy: "records-crawler",
+        },
+      }))
+      .build();
+
+    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const claim = report.claims[0]!;
+    const surveyMetadata = claim.metadata?.survey as {
+      repeated?: { representation?: string; itemCount?: number };
+    } | undefined;
+
+    assert.equal(report.summary.byStatus.proposed, 1);
+    assert.equal(claim.fieldOrBehavior, "listedOfficers");
+    assert.deepEqual(claim.value, officers);
+    assert.equal(surveyMetadata?.repeated?.representation, "aggregate-array");
+    assert.equal(surveyMetadata?.repeated?.itemCount, 2);
+    assert.equal(report.evidence[0]?.excerptOrSummary, "Officer table contains two rows.");
+  });
+
+  it("builds an empty verified repeated public-record observation", () => {
+    const input = new SurveyInputBuilder({
+      source: "survey.repeated.fixture",
+      generatedAt: "2026-05-31T16:00:00.000Z",
+    })
+      .addObservation(repeatedObservation({
+        id: "observation.entity-1.public-notices.current",
+        field: "publicNotices",
+        value: [],
+        rawSource: {
+          kind: "api-record",
+          sourceRef: "public-records://entity/entity-1/notices",
+          observedAt: "2026-05-31T15:00:00.000Z",
+          locatorScheme: "structured-field",
+        },
+        extraction: {
+          confidence: 0.99,
+          locator: "json:$.notices",
+          extractor: "public-record-importer",
+          extractedAt: "2026-05-31T15:00:00.000Z",
+        },
+        reviewOutcome: {
+          status: "verified",
+          actor: "records-operator",
+          reviewedAt: "2026-05-31T15:05:00.000Z",
+        },
+        claim: {
+          subjectType: "public-record.entity",
+          subjectId: "entity-1",
+          surface: "public-record.profile",
+          claimType: "public-data.repeated-field",
+          status: "verified",
+          impactLevel: "low",
+          collectedBy: "public-record-importer",
+        },
+      }))
+      .build();
+
+    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const claim = report.claims[0]!;
+    const surveyMetadata = claim.metadata?.survey as {
+      repeated?: { representation?: string; itemCount?: number };
+    } | undefined;
+
+    assert.equal(report.summary.byStatus.verified, 1);
+    assert.deepEqual(claim.value, []);
+    assert.equal(surveyMetadata?.repeated?.representation, "aggregate-array");
+    assert.equal(surveyMetadata?.repeated?.itemCount, 0);
+    assert.equal(report.evidence[0]?.excerptOrSummary, "publicNotices: 0 item(s)");
   });
 });

@@ -64,6 +64,75 @@ const trustInput = validateTrustInput(buildSurveyTrustInput(surveyInput));
 const report = buildTrustReport(trustInput);
 ```
 
+## Repeated observations
+
+Use `repeatedObservation` when a producer wants to describe a repeated field or
+entity list as one aggregate observation. The helper returns a normal
+`SurveyObservationInput`, so it works with `SurveyInputBuilder.addObservation`
+and the same Surface projection path.
+
+```ts
+import {
+  buildSurveyTrustInput,
+  repeatedObservation,
+  SurveyInputBuilder,
+} from "@kontourai/survey";
+
+const aliases = [
+  { name: "North Annex", sourceLabel: "record row 1" },
+  { name: "East Annex", sourceLabel: "record row 2" },
+];
+
+const surveyInput = new SurveyInputBuilder({
+  source: "example-producer:run-1",
+})
+  .addObservation(repeatedObservation({
+    id: "entity-123.aliases.current",
+    field: "knownAliases",
+    value: aliases,
+    rawSource: {
+      kind: "api-record",
+      sourceRef: "example-records://entity/entity-123",
+      observedAt: new Date().toISOString(),
+      locatorScheme: "structured-field",
+    },
+    extraction: {
+      confidence: 0.88,
+      locator: "json:$.aliases",
+      extractor: "example-extractor",
+      extractedAt: new Date().toISOString(),
+    },
+    reviewOutcome: {
+      status: "verified",
+      actor: "records-operator",
+      reviewedAt: new Date().toISOString(),
+    },
+    claim: {
+      subjectType: "public-record.entity",
+      subjectId: "entity-123",
+      surface: "example.profile",
+      claimType: "public-data.repeated-field",
+      status: "verified",
+      impactLevel: "medium",
+      collectedBy: "example-extractor",
+    },
+    metadata: {
+      producerField: "aliases",
+    },
+  }))
+  .build();
+
+const trustInput = buildSurveyTrustInput(surveyInput);
+```
+
+`repeatedObservation` sets `extraction.target` and
+`claim.fieldOrBehavior` from `field` when omitted, uses the array as both the
+extraction and claim value, and adds neutral helper metadata at
+`metadata.survey.repeated = { representation: "aggregate-array", itemCount }`.
+Producer metadata is preserved. Producers still own item semantics,
+validation, candidate ranking, review policy, and whether a value should be
+verified, proposed, rejected, or assumed.
+
 ## Product Boundary
 
 Survey does not crawl pages, parse PDFs, rank candidates, decide review policy,
