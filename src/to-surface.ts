@@ -56,6 +56,7 @@ export function buildSurveyTrustInput(input: SurveyInput): TrustInput {
       metadata: {
         ...projection.metadata,
         survey: {
+          ...(isRecord(projection.metadata?.survey) ? projection.metadata.survey : {}),
           rawSourceId: rawSource.id,
           extractionId: extraction.id,
           candidateSetId: candidateSet.id,
@@ -246,4 +247,8 @@ function groupBy<T>(items: T[], getKey: (item: T) => string): Map<string, T[]> {
     map.set(key, [...(map.get(key) ?? []), item]);
   }
   return map;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
