@@ -67,4 +67,49 @@ describe("Survey Surface projection", () => {
     const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
     assert.equal(report.summary.byStatus.verified, 1);
   });
+
+  it("builds a single claim observation without manual link IDs", () => {
+    const input = new SurveyInputBuilder({
+      source: "survey.observation.fixture",
+      generatedAt: "2026-05-31T16:00:00.000Z",
+    })
+      .addObservation({
+        id: "observation.entity-1.availability",
+        rawSource: {
+          kind: "web-page",
+          sourceRef: "https://example.test/listing",
+          observedAt: "2026-05-31T15:00:00.000Z",
+          locatorScheme: "html",
+        },
+        extraction: {
+          target: "availabilityStatus",
+          value: "AVAILABLE",
+          confidence: 0.9,
+          locator: "html:field=availabilityStatus",
+          excerpt: "Availability is open.",
+          extractor: "example-crawler",
+          extractedAt: "2026-05-31T15:00:00.000Z",
+        },
+        reviewOutcome: {
+          status: "verified",
+          actor: "example-operator",
+          reviewedAt: "2026-05-31T15:05:00.000Z",
+        },
+        claim: {
+          subjectType: "public-record.entity",
+          subjectId: "entity-1",
+          surface: "public-record.profile",
+          claimType: "public-data.field",
+          fieldOrBehavior: "availabilityStatus",
+          impactLevel: "medium",
+          collectedBy: "example-crawler",
+        },
+      })
+      .build();
+
+    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    assert.equal(report.summary.byStatus.verified, 1);
+    const surveyMetadata = report.claims[0]?.metadata?.survey as { candidateSetId?: string } | undefined;
+    assert.equal(surveyMetadata?.candidateSetId, "observation.entity-1.availability.candidates");
+  });
 });

@@ -3,6 +3,7 @@ import type {
   ClaimTarget,
   DerivedClaimTarget,
   Extraction,
+  ReviewStatus,
   RawSource,
   ReviewOutcome,
   SurveyInput,
@@ -19,6 +20,26 @@ export interface SurveyClaimRecord {
   candidateSet: CandidateSet;
   reviewOutcome?: ReviewOutcome;
   claim: ClaimTarget;
+}
+
+export interface SurveyObservationInput {
+  id: string;
+  rawSource: Omit<RawSource, "id"> & { id?: string };
+  extraction: Omit<Extraction, "id" | "sourceId"> & { id?: string };
+  candidate?: {
+    id?: string;
+    confidence?: number;
+    sourceRank?: number;
+    metadata?: Record<string, unknown>;
+  };
+  candidateSet?: {
+    id?: string;
+    status?: CandidateSet["status"];
+    rationale?: string;
+    metadata?: Record<string, unknown>;
+  };
+  reviewOutcome?: Omit<ReviewOutcome, "id" | "candidateSetId" | "candidateId"> & { id?: string };
+  claim: Omit<ClaimTarget, "id" | "candidateSetId" | "candidateId"> & { id?: string };
 }
 
 export class SurveyInputBuilder {
@@ -80,6 +101,15 @@ export class SurveyInputBuilder {
     return this;
   }
 
+  addObservation(observation: SurveyObservationInput): this {
+    return this.addClaimRecord(observationToClaimRecord(observation));
+  }
+
+  addObservations(observations: SurveyObservationInput[]): this {
+    for (const observation of observations) this.addObservation(observation);
+    return this;
+  }
+
   build(): SurveyInput {
     return {
       source: this.source,
@@ -92,6 +122,79 @@ export class SurveyInputBuilder {
       derivedClaims: [...this.derivedClaims.values()],
     };
   }
+}
+
+function observationToClaimRecord(observation: SurveyObservationInput): SurveyClaimRecord {
+  const ids = observationIds(observation.id, observation);
+  const value = observation.claim.value ?? observation.extraction.value;
+  const confidence = observation.candidate?.confidence ?? observation.extraction.confidence;
+
+  return {
+    rawSource: {
+      id: ids.sourceId,
+      ...observation.rawSource,
+    },
+    extraction: {
+      id: ids.extractionId,
+      sourceId: ids.sourceId,
+      ...observation.extraction,
+    },
+    candidateSet: {
+      id: ids.candidateSetId,
+      target: observation.extraction.target,
+      selectedCandidateId: ids.candidateId,
+      status: observation.candidateSet?.status ?? candidateSetStatusFor(observation.reviewOutcome?.status),
+      rationale: observation.candidateSet?.rationale,
+      metadata: observation.candidateSet?.metadata,
+      candidates: [{
+        id: ids.candidateId,
+        extractionId: ids.extractionId,
+        value,
+        confidence,
+        sourceRank: observation.candidate?.sourceRank,
+        metadata: observation.candidate?.metadata,
+      }],
+    },
+    reviewOutcome: observation.reviewOutcome
+      ? {
+          id: ids.reviewOutcomeId,
+          candidateSetId: ids.candidateSetId,
+          candidateId: ids.candidateId,
+          ...observation.reviewOutcome,
+        }
+      : undefined,
+    claim: {
+      id: ids.claimId,
+      candidateSetId: ids.candidateSetId,
+      candidateId: ids.candidateId,
+      ...observation.claim,
+      value,
+    },
+  };
+}
+
+function observationIds(rootId: string, observation: SurveyObservationInput): {
+  claimId: string;
+  sourceId: string;
+  extractionId: string;
+  candidateId: string;
+  candidateSetId: string;
+  reviewOutcomeId: string;
+} {
+  const claimId = observation.claim.id ?? rootId;
+  return {
+    claimId,
+    sourceId: observation.rawSource.id ?? `${rootId}.source`,
+    extractionId: observation.extraction.id ?? `${rootId}.extraction`,
+    candidateId: observation.candidate?.id ?? `${rootId}.candidate`,
+    candidateSetId: observation.candidateSet?.id ?? `${rootId}.candidates`,
+    reviewOutcomeId: observation.reviewOutcome?.id ?? `${rootId}.review`,
+  };
+}
+
+function candidateSetStatusFor(reviewStatus?: ReviewStatus): CandidateSet["status"] {
+  if (!reviewStatus || reviewStatus === "proposed") return "needs-review";
+  return "resolved";
 }
 
 function addUnique<T extends { id: string }>(map: Map<string, T>, item: T, label: string): void {
