@@ -1,4 +1,5 @@
 import type {
+  Candidate,
   CandidateSet,
   ClaimTarget,
   DerivedClaimTarget,
@@ -40,6 +41,20 @@ export interface SurveyObservationInput {
   };
   reviewOutcome?: Omit<ReviewOutcome, "id" | "candidateSetId" | "candidateId"> & { id?: string };
   claim: Omit<ClaimTarget, "id" | "candidateSetId" | "candidateId"> & { id?: string };
+}
+
+export interface CandidateReviewRecordInput {
+  id: string;
+  target: string;
+  observations: SurveyObservationInput[];
+  selectedCandidateId?: string;
+  status?: CandidateSet["status"];
+  rationale?: string;
+  metadata?: Record<string, unknown>;
+  reviewOutcome?: Omit<ReviewOutcome, "id" | "candidateSetId"> & {
+    id?: string;
+    candidateId?: string;
+  };
 }
 
 export class SurveyInputBuilder {
@@ -88,9 +103,9 @@ export class SurveyInputBuilder {
   }
 
   addClaimRecord(record: SurveyClaimRecord): this {
-    this.addRawSource(record.rawSource);
+    this.addRecordRawSource(record.rawSource);
     this.addExtraction(record.extraction);
-    this.addCandidateSet(record.candidateSet);
+    this.addRecordCandidateSet(record.candidateSet);
     if (record.reviewOutcome) this.addReviewOutcome(record.reviewOutcome);
     this.addClaim(record.claim);
     return this;
@@ -121,6 +136,87 @@ export class SurveyInputBuilder {
       claims: [...this.claims.values()],
       derivedClaims: [...this.derivedClaims.values()],
     };
+  }
+
+  private addRecordCandidateSet(candidateSet: CandidateSet): void {
+    addIdempotent(this.candidateSets, candidateSet, "candidate set");
+  }
+
+  private addRecordRawSource(rawSource: RawSource): void {
+    addIdempotent(this.rawSources, rawSource, "raw source");
+  }
+}
+
+export function candidateReviewRecord(input: CandidateReviewRecordInput): SurveyClaimRecord[] {
+  if (input.observations.length === 0) {
+    throw new Error(`Candidate review record ${input.id} needs at least one observation`);
+  }
+  const records = input.observations.map((observation) => observationToClaimRecord(observation));
+  const candidateSetId = input.id;
+  const selectedCandidateId = input.selectedCandidateId ?? input.reviewOutcome?.candidateId;
+  const candidates = records.map((record) => record.candidateSet.candidates[0]!);
+  assertUniqueCandidateIds(candidates, candidateSetId);
+  assertCandidateIdExists(candidates, selectedCandidateId, candidateSetId, "selected");
+  if (input.selectedCandidateId && input.reviewOutcome?.candidateId && input.selectedCandidateId !== input.reviewOutcome.candidateId) {
+    throw new Error(`Candidate review record ${candidateSetId} has conflicting selected and review candidate ids`);
+  }
+  if (input.reviewOutcome && !selectedCandidateId) {
+    throw new Error(`Candidate review record ${candidateSetId} needs a selected candidate id for review outcome`);
+  }
+  const candidateSet: CandidateSet = {
+    id: candidateSetId,
+    target: input.target,
+    candidates,
+    selectedCandidateId,
+    status: input.status ?? candidateSetStatusFor(input.reviewOutcome?.status),
+    rationale: input.rationale,
+    metadata: input.metadata,
+  };
+  const reviewCandidateId = input.reviewOutcome?.candidateId ?? selectedCandidateId;
+  const reviewOutcome = input.reviewOutcome
+    ? {
+        id: input.reviewOutcome.id ?? `${candidateSetId}.review`,
+        candidateSetId,
+        ...input.reviewOutcome,
+        candidateId: reviewCandidateId,
+      }
+    : undefined;
+  assertCandidateIdExists(candidates, reviewCandidateId, candidateSetId, "review");
+
+  return records.map((record) => {
+    const candidate = record.candidateSet.candidates[0]!;
+    return {
+      ...record,
+      candidateSet,
+      reviewOutcome: candidate.id === reviewCandidateId ? reviewOutcome : undefined,
+      claim: {
+        ...record.claim,
+        candidateSetId,
+        candidateId: candidate.id,
+      },
+    };
+  });
+}
+
+function assertUniqueCandidateIds(candidates: Candidate[], candidateSetId: string): void {
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    if (seen.has(candidate.id)) {
+      throw new Error(`Candidate review record ${candidateSetId} has duplicate candidate id: ${candidate.id}`);
+    }
+    seen.add(candidate.id);
+  }
+}
+
+function assertCandidateIdExists(
+  candidates: Candidate[],
+  candidateId: string | undefined,
+  candidateSetId: string,
+  role: "review" | "selected",
+): void {
+  if (!candidateId) return;
+  if (!candidates.some((candidate) => candidate.id === candidateId)) {
+    throw new Error(`Candidate review record ${candidateSetId} does not contain ${role} candidate ${candidateId}`);
   }
 }
 
@@ -200,4 +296,30 @@ function candidateSetStatusFor(reviewStatus?: ReviewStatus): CandidateSet["statu
 function addUnique<T extends { id: string }>(map: Map<string, T>, item: T, label: string): void {
   if (map.has(item.id)) throw new Error(`Duplicate ${label} id: ${item.id}`);
   map.set(item.id, item);
+}
+
+function addIdempotent<T extends { id: string }>(map: Map<string, T>, item: T, label: string): void {
+  const existing = map.get(item.id);
+  if (existing) {
+    if (stableStringify(existing) !== stableStringify(item)) {
+      throw new Error(`Conflicting ${label} id: ${item.id}`);
+    }
+    return;
+  }
+  map.set(item.id, item);
+}
+
+function stableStringify(value: unknown): string {
+  return JSON.stringify(sortValue(value));
+}
+
+function sortValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortValue);
+  if (!value || typeof value !== "object") return value;
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => [key, sortValue(item)]),
+  );
 }

@@ -3,7 +3,13 @@ import { describe, it } from "node:test";
 import { buildTrustReport, validateTrustInput } from "@kontourai/surface";
 import { correctedDocumentCandidatesFixture } from "../fixtures/corrected-document-candidates.js";
 import { publicFieldReviewFixture } from "../fixtures/public-field-review.js";
-import { buildSurveyTrustInput, fieldObservation, repeatedObservation, SurveyInputBuilder } from "../src/index.js";
+import {
+  buildSurveyTrustInput,
+  candidateReviewRecord,
+  fieldObservation,
+  repeatedObservation,
+  SurveyInputBuilder,
+} from "../src/index.js";
 
 describe("Survey Surface projection", () => {
   it("projects a reviewed public field into valid Surface trust input", () => {
@@ -289,6 +295,456 @@ describe("Survey Surface projection", () => {
     assert.equal(claim.fieldOrBehavior, "licenses.activeCount");
     assert.equal(claim.value, 3);
     assert.equal(report.evidence[0]?.excerptOrSummary, "Three listed licenses.");
+  });
+
+  it("builds candidate review records from scalar field observations", () => {
+    const records = candidateReviewRecord({
+      id: "candidate-set.entity-1.registration-status",
+      target: "registrationStatus",
+      selectedCandidateId: "candidate.registration-status.active",
+      status: "resolved",
+      rationale: "Operator selected the registry value.",
+      metadata: {
+        reviewBatch: "batch-1",
+        survey: { candidateSetNote: "kept" },
+      },
+      reviewOutcome: {
+        id: "review.registration-status.active",
+        status: "verified",
+        actor: "records-operator",
+        reviewedAt: "2026-05-31T15:05:00.000Z",
+        rationale: "Registry source is authoritative for this field.",
+      },
+      observations: [
+        fieldObservation({
+          id: "observation.entity-1.registration-status.registry",
+          field: "registrationStatus",
+          value: "ACTIVE",
+          rawSource: {
+            kind: "api-record",
+            sourceRef: "public-records://entity/entity-1",
+            observedAt: "2026-05-31T15:00:00.000Z",
+            locatorScheme: "structured-field",
+            metadata: { sourceName: "registry" },
+          },
+          extraction: {
+            confidence: 0.97,
+            locator: "json:$.registrationStatus",
+            extractor: "public-record-importer",
+            extractedAt: "2026-05-31T15:00:00.000Z",
+            metadata: { extractionRun: "run-1" },
+          },
+          candidate: {
+            id: "candidate.registration-status.active",
+            confidence: 0.97,
+            sourceRank: 1,
+            metadata: { normalizedValue: "active" },
+          },
+          claim: {
+            id: "claim.entity-1.registration-status.registry",
+            subjectType: "public-record.entity",
+            subjectId: "entity-1",
+            surface: "public-record.profile",
+            claimType: "public-data.field",
+            status: "verified",
+            impactLevel: "medium",
+            collectedBy: "public-record-importer",
+            metadata: { candidateRole: "selected" },
+          },
+          metadata: { producerField: "registrationStatus" },
+        }),
+        fieldObservation({
+          id: "observation.entity-1.registration-status.archive",
+          field: "registrationStatus",
+          value: "INACTIVE",
+          rawSource: {
+            kind: "web-page",
+            sourceRef: "https://records.example.test/entities/entity-1/archive",
+            observedAt: "2026-05-31T14:00:00.000Z",
+            locatorScheme: "html",
+            metadata: { sourceName: "archive" },
+          },
+          extraction: {
+            confidence: 0.71,
+            locator: "css:#registration-status",
+            extractor: "records-crawler",
+            extractedAt: "2026-05-31T14:00:00.000Z",
+            metadata: { extractionRun: "run-2" },
+          },
+          candidate: {
+            id: "candidate.registration-status.inactive",
+            confidence: 0.71,
+            sourceRank: 2,
+            metadata: { normalizedValue: "inactive" },
+          },
+          claim: {
+            id: "claim.entity-1.registration-status.archive",
+            subjectType: "public-record.entity",
+            subjectId: "entity-1",
+            surface: "public-record.profile",
+            claimType: "public-data.field",
+            status: "superseded",
+            impactLevel: "medium",
+            collectedBy: "records-crawler",
+            metadata: { candidateRole: "superseded" },
+          },
+          metadata: { producerField: "registrationStatus" },
+        }),
+      ],
+    });
+    const input = new SurveyInputBuilder({
+      source: "survey.candidate-review.fixture",
+      generatedAt: "2026-05-31T16:00:00.000Z",
+    })
+      .addClaimRecords(records)
+      .build();
+
+    assert.equal(input.rawSources.length, 2);
+    assert.equal(input.extractions.length, 2);
+    assert.equal(input.candidateSets.length, 1);
+    assert.equal(input.reviewOutcomes.length, 1);
+    assert.equal(input.claims.length, 2);
+
+    const candidateSet = input.candidateSets[0]!;
+    assert.equal(candidateSet.id, "candidate-set.entity-1.registration-status");
+    assert.equal(candidateSet.selectedCandidateId, "candidate.registration-status.active");
+    assert.equal(candidateSet.status, "resolved");
+    assert.equal(candidateSet.rationale, "Operator selected the registry value.");
+    assert.equal(candidateSet.metadata?.reviewBatch, "batch-1");
+    assert.equal(candidateSet.candidates.length, 2);
+    assert.deepEqual(candidateSet.candidates.map((candidate) => candidate.id), [
+      "candidate.registration-status.active",
+      "candidate.registration-status.inactive",
+    ]);
+    assert.notEqual(candidateSet.candidates[0]?.extractionId, candidateSet.candidates[1]?.extractionId);
+    assert.equal(candidateSet.candidates[0]?.metadata?.normalizedValue, "active");
+    assert.equal(candidateSet.candidates[1]?.metadata?.normalizedValue, "inactive");
+
+    assert.equal(input.claims[0]?.candidateSetId, candidateSet.id);
+    assert.equal(input.claims[1]?.candidateSetId, candidateSet.id);
+    assert.notEqual(input.claims[0]?.id, input.claims[1]?.id);
+    assert.equal(input.claims[0]?.candidateId, "candidate.registration-status.active");
+    assert.equal(input.claims[1]?.candidateId, "candidate.registration-status.inactive");
+    assert.equal(input.reviewOutcomes[0]?.candidateSetId, candidateSet.id);
+    assert.equal(input.reviewOutcomes[0]?.candidateId, "candidate.registration-status.active");
+    assert.equal(input.reviewOutcomes[0]?.status, "verified");
+
+    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const verifiedClaim = report.claims.find((claim) => claim.id === "claim.entity-1.registration-status.registry");
+    const supersededClaim = report.claims.find((claim) => claim.id === "claim.entity-1.registration-status.archive");
+    const registryEvidence = report.evidence.find((evidence) => evidence.claimId === verifiedClaim?.id);
+    const archiveEvidence = report.evidence.find((evidence) => evidence.claimId === supersededClaim?.id);
+
+    assert.equal(report.claims.length, 2);
+    assert.equal(report.summary.byStatus.verified, 1);
+    assert.equal(report.summary.byStatus.superseded, 1);
+    assert.equal(verifiedClaim?.status, "verified");
+    assert.equal(verifiedClaim?.value, "ACTIVE");
+    assert.equal(supersededClaim?.status, "superseded");
+    assert.equal(supersededClaim?.value, "INACTIVE");
+    assert.equal(verifiedClaim?.metadata?.candidateRole, "selected");
+    assert.equal(supersededClaim?.metadata?.candidateRole, "superseded");
+    assert.equal(registryEvidence?.metadata?.sourceName, "registry");
+    assert.equal(registryEvidence?.metadata?.extractionRun, "run-1");
+    assert.equal(registryEvidence?.metadata?.normalizedValue, "active");
+    assert.equal(archiveEvidence?.metadata?.sourceName, "archive");
+    assert.equal(archiveEvidence?.metadata?.extractionRun, "run-2");
+    assert.equal(archiveEvidence?.metadata?.normalizedValue, "inactive");
+  });
+
+  it("accepts claim records that reuse an identical raw source", () => {
+    const sharedRawSource = {
+      id: "source.entity-1.registry",
+      kind: "api-record" as const,
+      sourceRef: "public-records://entity/entity-1",
+      observedAt: "2026-05-31T15:00:00.000Z",
+      locatorScheme: "structured-field" as const,
+      metadata: { sourceName: "registry" },
+    };
+    const records = candidateReviewRecord({
+      id: "candidate-set.entity-1.reused-source",
+      target: "profileField",
+      selectedCandidateId: "candidate.field-a",
+      status: "resolved",
+      observations: [
+        fieldObservation({
+          id: "observation.entity-1.field-a",
+          field: "profileField.a",
+          value: "A",
+          rawSource: sharedRawSource,
+          extraction: {
+            confidence: 0.96,
+            locator: "json:$.fieldA",
+            extractor: "public-record-importer",
+            extractedAt: "2026-05-31T15:00:00.000Z",
+          },
+          candidate: { id: "candidate.field-a", confidence: 0.96 },
+          claim: {
+            id: "claim.entity-1.field-a",
+            subjectType: "public-record.entity",
+            subjectId: "entity-1",
+            surface: "public-record.profile",
+            claimType: "public-data.field",
+            status: "verified",
+            impactLevel: "low",
+            collectedBy: "public-record-importer",
+          },
+        }),
+        fieldObservation({
+          id: "observation.entity-1.field-b",
+          field: "profileField.b",
+          value: "B",
+          rawSource: { ...sharedRawSource },
+          extraction: {
+            confidence: 0.95,
+            locator: "json:$.fieldB",
+            extractor: "public-record-importer",
+            extractedAt: "2026-05-31T15:00:00.000Z",
+          },
+          candidate: { id: "candidate.field-b", confidence: 0.95 },
+          claim: {
+            id: "claim.entity-1.field-b",
+            subjectType: "public-record.entity",
+            subjectId: "entity-1",
+            surface: "public-record.profile",
+            claimType: "public-data.field",
+            status: "verified",
+            impactLevel: "low",
+            collectedBy: "public-record-importer",
+          },
+        }),
+      ],
+    });
+
+    const input = new SurveyInputBuilder({
+      source: "survey.reused-source.fixture",
+      generatedAt: "2026-05-31T16:00:00.000Z",
+    })
+      .addRawSource(sharedRawSource)
+      .addClaimRecords(records)
+      .build();
+
+    assert.equal(input.rawSources.length, 1);
+    assert.equal(input.extractions.length, 2);
+    assert.equal(input.claims.length, 2);
+  });
+
+  it("rejects duplicate candidate ids in candidate review records", () => {
+    const observation = fieldObservation({
+      id: "observation.entity-1.status.registry",
+      field: "registrationStatus",
+      value: "ACTIVE",
+      rawSource: {
+        kind: "api-record",
+        sourceRef: "public-records://entity/entity-1",
+        observedAt: "2026-05-31T15:00:00.000Z",
+        locatorScheme: "structured-field",
+      },
+      extraction: {
+        confidence: 0.96,
+        locator: "json:$.registrationStatus",
+        extractor: "public-record-importer",
+        extractedAt: "2026-05-31T15:00:00.000Z",
+      },
+      candidate: { id: "candidate.registration-status", confidence: 0.96 },
+      claim: {
+        id: "claim.entity-1.status.registry",
+        subjectType: "public-record.entity",
+        subjectId: "entity-1",
+        surface: "public-record.profile",
+        claimType: "public-data.field",
+        status: "verified",
+        impactLevel: "medium",
+        collectedBy: "public-record-importer",
+      },
+    });
+
+    assert.throws(
+      () => candidateReviewRecord({
+        id: "candidate-set.entity-1.registration-status",
+        target: "registrationStatus",
+        observations: [
+          observation,
+          {
+            ...observation,
+            id: "observation.entity-1.status.archive",
+            claim: { ...observation.claim, id: "claim.entity-1.status.archive", value: "INACTIVE" },
+          },
+        ],
+      }),
+      /duplicate candidate id: candidate\.registration-status/,
+    );
+  });
+
+  it("rejects review outcomes without a selected candidate", () => {
+    assert.throws(
+      () => candidateReviewRecord({
+        id: "candidate-set.entity-1.registration-status",
+        target: "registrationStatus",
+        reviewOutcome: {
+          status: "verified",
+          actor: "records-operator",
+          reviewedAt: "2026-05-31T15:05:00.000Z",
+        },
+        observations: [
+          fieldObservation({
+            id: "observation.entity-1.status.registry",
+            field: "registrationStatus",
+            value: "ACTIVE",
+            rawSource: {
+              kind: "api-record",
+              sourceRef: "public-records://entity/entity-1",
+              observedAt: "2026-05-31T15:00:00.000Z",
+              locatorScheme: "structured-field",
+            },
+            extraction: {
+              confidence: 0.96,
+              locator: "json:$.registrationStatus",
+              extractor: "public-record-importer",
+              extractedAt: "2026-05-31T15:00:00.000Z",
+            },
+            claim: {
+              id: "claim.entity-1.status.registry",
+              subjectType: "public-record.entity",
+              subjectId: "entity-1",
+              surface: "public-record.profile",
+              claimType: "public-data.field",
+              status: "verified",
+              impactLevel: "medium",
+              collectedBy: "public-record-importer",
+            },
+          }),
+        ],
+      }),
+      /needs a selected candidate id for review outcome/,
+    );
+  });
+
+  it("rejects conflicting selected and review candidate ids", () => {
+    assert.throws(
+      () => candidateReviewRecord({
+        id: "candidate-set.entity-1.registration-status",
+        target: "registrationStatus",
+        selectedCandidateId: "candidate.registry",
+        reviewOutcome: {
+          candidateId: "candidate.archive",
+          status: "verified",
+          actor: "records-operator",
+          reviewedAt: "2026-05-31T15:05:00.000Z",
+        },
+        observations: [
+          fieldObservation({
+            id: "observation.entity-1.status.registry",
+            field: "registrationStatus",
+            value: "ACTIVE",
+            rawSource: {
+              kind: "api-record",
+              sourceRef: "public-records://entity/entity-1",
+              observedAt: "2026-05-31T15:00:00.000Z",
+              locatorScheme: "structured-field",
+            },
+            extraction: {
+              confidence: 0.96,
+              locator: "json:$.registrationStatus",
+              extractor: "public-record-importer",
+              extractedAt: "2026-05-31T15:00:00.000Z",
+            },
+            candidate: { id: "candidate.registry", confidence: 0.96 },
+            claim: {
+              id: "claim.entity-1.status.registry",
+              subjectType: "public-record.entity",
+              subjectId: "entity-1",
+              surface: "public-record.profile",
+              claimType: "public-data.field",
+              status: "verified",
+              impactLevel: "medium",
+              collectedBy: "public-record-importer",
+            },
+          }),
+          fieldObservation({
+            id: "observation.entity-1.status.archive",
+            field: "registrationStatus",
+            value: "INACTIVE",
+            rawSource: {
+              kind: "web-page",
+              sourceRef: "https://records.example.test/entities/entity-1/archive",
+              observedAt: "2026-05-31T14:00:00.000Z",
+              locatorScheme: "html",
+            },
+            extraction: {
+              confidence: 0.71,
+              locator: "css:#registration-status",
+              extractor: "records-crawler",
+              extractedAt: "2026-05-31T14:00:00.000Z",
+            },
+            candidate: { id: "candidate.archive", confidence: 0.71 },
+            claim: {
+              id: "claim.entity-1.status.archive",
+              subjectType: "public-record.entity",
+              subjectId: "entity-1",
+              surface: "public-record.profile",
+              claimType: "public-data.field",
+              status: "superseded",
+              impactLevel: "medium",
+              collectedBy: "records-crawler",
+            },
+          }),
+        ],
+      }),
+      /conflicting selected and review candidate ids/,
+    );
+  });
+
+  it("rejects selected candidate ids outside the candidate set", () => {
+    assert.throws(
+      () => candidateReviewRecord({
+        id: "candidate-set.entity-1.registration-status",
+        target: "registrationStatus",
+        selectedCandidateId: "candidate.missing",
+        observations: [
+          fieldObservation({
+            id: "observation.entity-1.status.registry",
+            field: "registrationStatus",
+            value: "ACTIVE",
+            rawSource: {
+              kind: "api-record",
+              sourceRef: "public-records://entity/entity-1",
+              observedAt: "2026-05-31T15:00:00.000Z",
+              locatorScheme: "structured-field",
+            },
+            extraction: {
+              confidence: 0.96,
+              locator: "json:$.registrationStatus",
+              extractor: "public-record-importer",
+              extractedAt: "2026-05-31T15:00:00.000Z",
+            },
+            candidate: { id: "candidate.registry", confidence: 0.96 },
+            claim: {
+              id: "claim.entity-1.status.registry",
+              subjectType: "public-record.entity",
+              subjectId: "entity-1",
+              surface: "public-record.profile",
+              claimType: "public-data.field",
+              status: "verified",
+              impactLevel: "medium",
+              collectedBy: "public-record-importer",
+            },
+          }),
+        ],
+      }),
+      /does not contain selected candidate candidate\.missing/,
+    );
+  });
+
+  it("rejects candidate review records without observations", () => {
+    assert.throws(
+      () => candidateReviewRecord({
+        id: "candidate-set.entity-1.empty",
+        target: "registrationStatus",
+        observations: [],
+      }),
+      /needs at least one observation/,
+    );
   });
 
   it("merges scalar field metadata without overwriting producer survey metadata", () => {
