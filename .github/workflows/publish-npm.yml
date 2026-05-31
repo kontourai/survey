@@ -89,6 +89,10 @@ jobs:
             echo "published=false" >> "${GITHUB_OUTPUT}"
           fi
 
+      - name: Build Package
+        if: steps.published.outputs.published != 'true'
+        run: npm run build
+
       - name: Publish
         if: steps.published.outputs.published != 'true'
         run: npm publish --access public
