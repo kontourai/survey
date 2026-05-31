@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { buildTrustReport, validateTrustInput } from "@kontourai/surface";
 import { correctedDocumentCandidatesFixture } from "../fixtures/corrected-document-candidates.js";
 import { publicFieldReviewFixture } from "../fixtures/public-field-review.js";
-import { buildSurveyTrustInput, repeatedObservation, SurveyInputBuilder } from "../src/index.js";
+import { buildSurveyTrustInput, fieldObservation, repeatedObservation, SurveyInputBuilder } from "../src/index.js";
 
 describe("Survey Surface projection", () => {
   it("projects a reviewed public field into valid Surface trust input", () => {
@@ -159,7 +159,10 @@ describe("Survey Surface projection", () => {
         },
         metadata: {
           producerField: "aliases",
-          survey: { producerNote: "kept" },
+          survey: {
+            producerNote: "kept",
+            repeated: { sourceCollection: "aliases" },
+          },
         },
       }))
       .build();
@@ -167,7 +170,7 @@ describe("Survey Surface projection", () => {
     const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
     const claim = report.claims[0]!;
     const surveyMetadata = claim.metadata?.survey as {
-      repeated?: { representation?: string; itemCount?: number };
+      repeated?: { representation?: string; itemCount?: number; sourceCollection?: string };
       producerNote?: string;
       claimNote?: string;
     } | undefined;
@@ -181,7 +184,194 @@ describe("Survey Surface projection", () => {
     assert.equal(surveyMetadata?.producerNote, "kept");
     assert.equal(surveyMetadata?.repeated?.representation, "aggregate-array");
     assert.equal(surveyMetadata?.repeated?.itemCount, 2);
+    assert.equal(surveyMetadata?.repeated?.sourceCollection, "aliases");
     assert.equal(report.evidence[0]?.excerptOrSummary, "knownAliases: 2 item(s)");
+  });
+
+  it("builds a verified scalar field observation", () => {
+    const input = new SurveyInputBuilder({
+      source: "survey.field.fixture",
+      generatedAt: "2026-05-31T16:00:00.000Z",
+    })
+      .addObservation(fieldObservation({
+        id: "observation.entity-1.registration-status.current",
+        field: "registrationStatus",
+        value: "ACTIVE",
+        rawSource: {
+          kind: "api-record",
+          sourceRef: "public-records://entity/entity-1",
+          observedAt: "2026-05-31T15:00:00.000Z",
+          locatorScheme: "structured-field",
+        },
+        extraction: {
+          confidence: 0.97,
+          locator: "json:$.registrationStatus",
+          extractor: "public-record-importer",
+          extractedAt: "2026-05-31T15:00:00.000Z",
+        },
+        reviewOutcome: {
+          status: "verified",
+          actor: "records-operator",
+          reviewedAt: "2026-05-31T15:05:00.000Z",
+        },
+        claim: {
+          subjectType: "public-record.entity",
+          subjectId: "entity-1",
+          surface: "public-record.profile",
+          claimType: "public-data.field",
+          status: "verified",
+          impactLevel: "medium",
+          collectedBy: "public-record-importer",
+        },
+      }))
+      .build();
+
+    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const claim = report.claims[0]!;
+    const surveyMetadata = claim.metadata?.survey as {
+      field?: { representation?: string };
+    } | undefined;
+
+    assert.equal(report.summary.byStatus.verified, 1);
+    assert.equal(claim.fieldOrBehavior, "registrationStatus");
+    assert.equal(claim.value, "ACTIVE");
+    assert.equal(surveyMetadata?.field?.representation, "scalar");
+    assert.equal(report.evidence[0]?.excerptOrSummary, "registrationStatus: ACTIVE");
+  });
+
+  it("builds a proposed scalar field observation candidate", () => {
+    const input = new SurveyInputBuilder({
+      source: "survey.field.fixture",
+      generatedAt: "2026-05-31T16:00:00.000Z",
+    })
+      .addObservation(fieldObservation({
+        id: "observation.entity-1.license-count.proposed",
+        field: "licenseCount",
+        value: 3,
+        rawSource: {
+          kind: "web-page",
+          sourceRef: "https://records.example.test/entities/entity-1",
+          observedAt: "2026-05-31T15:00:00.000Z",
+          locatorScheme: "html",
+        },
+        extraction: {
+          target: "licenseCountCandidate",
+          confidence: 0.72,
+          locator: "css:#license-count",
+          excerpt: "Three listed licenses.",
+          extractor: "records-crawler",
+          extractedAt: "2026-05-31T15:00:00.000Z",
+        },
+        candidateSet: {
+          status: "needs-review",
+          rationale: "New scalar candidate pending operator review.",
+        },
+        candidate: {
+          confidence: 0.72,
+          sourceRank: 1,
+        },
+        claim: {
+          subjectType: "public-record.entity",
+          subjectId: "entity-1",
+          surface: "public-record.profile",
+          claimType: "public-data.field-candidate",
+          fieldOrBehavior: "licenses.activeCount",
+          impactLevel: "high",
+          collectedBy: "records-crawler",
+        },
+      }))
+      .build();
+
+    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const claim = report.claims[0]!;
+
+    assert.equal(report.summary.byStatus.proposed, 1);
+    assert.equal(claim.fieldOrBehavior, "licenses.activeCount");
+    assert.equal(claim.value, 3);
+    assert.equal(report.evidence[0]?.excerptOrSummary, "Three listed licenses.");
+  });
+
+  it("merges scalar field metadata without overwriting producer survey metadata", () => {
+    const observation = fieldObservation({
+      id: "observation.entity-1.status.current",
+      field: "status",
+      value: "OPEN",
+      rawSource: {
+        kind: "manual-entry",
+        sourceRef: "operator://entry/entity-1",
+        observedAt: "2026-05-31T15:00:00.000Z",
+        locatorScheme: "structured-field",
+      },
+      extraction: {
+        extractor: "operator-entry",
+        extractedAt: "2026-05-31T15:00:00.000Z",
+      },
+      claim: {
+        subjectType: "public-record.entity",
+        subjectId: "entity-1",
+        surface: "public-record.profile",
+        claimType: "public-data.field",
+        impactLevel: "low",
+        collectedBy: "operator-entry",
+        metadata: {
+          claimScope: "profile",
+          survey: {
+            claimNote: "also kept",
+            field: { claimScope: "profile-field" },
+          },
+        },
+      },
+      metadata: {
+        producerField: "status",
+        survey: {
+          producerNote: "kept",
+          field: { sourceColumn: "status_code" },
+        },
+      },
+    });
+    const surveyMetadata = observation.claim.metadata?.survey as {
+      field?: { representation?: string; claimScope?: string; sourceColumn?: string };
+      producerNote?: string;
+      claimNote?: string;
+    } | undefined;
+
+    assert.equal(observation.claim.metadata?.claimScope, "profile");
+    assert.equal(observation.claim.metadata?.producerField, "status");
+    assert.equal(surveyMetadata?.claimNote, "also kept");
+    assert.equal(surveyMetadata?.producerNote, "kept");
+    assert.equal(surveyMetadata?.field?.representation, "scalar");
+    assert.equal(surveyMetadata?.field?.claimScope, "profile-field");
+    assert.equal(surveyMetadata?.field?.sourceColumn, "status_code");
+  });
+
+  it("defaults scalar target, fieldOrBehavior, and empty excerpt", () => {
+    const observation = fieldObservation({
+      id: "observation.entity-1.optional-code.current",
+      field: "optionalCode",
+      value: null,
+      rawSource: {
+        kind: "manual-entry",
+        sourceRef: "operator://entry/entity-1",
+        observedAt: "2026-05-31T15:00:00.000Z",
+        locatorScheme: "structured-field",
+      },
+      extraction: {
+        extractor: "operator-entry",
+        extractedAt: "2026-05-31T15:00:00.000Z",
+      },
+      claim: {
+        subjectType: "public-record.entity",
+        subjectId: "entity-1",
+        surface: "public-record.profile",
+        claimType: "public-data.field",
+        impactLevel: "low",
+        collectedBy: "operator-entry",
+      },
+    });
+
+    assert.equal(observation.extraction.target, "optionalCode");
+    assert.equal(observation.claim.fieldOrBehavior, "optionalCode");
+    assert.equal(observation.extraction.excerpt, "optionalCode: <empty>");
   });
 
   it("builds a proposed repeated candidate observation", () => {

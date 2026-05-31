@@ -64,6 +64,71 @@ const trustInput = validateTrustInput(buildSurveyTrustInput(surveyInput));
 const report = buildTrustReport(trustInput);
 ```
 
+## Field observations
+
+Use `fieldObservation` when a producer wants to describe one scalar field value
+without hand-assembling the repeated source, extraction, candidate, review, and
+claim defaults. The helper returns a normal `SurveyObservationInput`, so it
+works with `SurveyInputBuilder.addObservation` and the same Surface projection
+path.
+
+```ts
+import {
+  buildSurveyTrustInput,
+  fieldObservation,
+  SurveyInputBuilder,
+} from "@kontourai/survey";
+
+const surveyInput = new SurveyInputBuilder({
+  source: "example-producer:run-1",
+})
+  .addObservation(fieldObservation({
+    id: "entity-123.status.current",
+    field: "registrationStatus",
+    value: "ACTIVE",
+    rawSource: {
+      kind: "api-record",
+      sourceRef: "example-records://entity/entity-123",
+      observedAt: new Date().toISOString(),
+      locatorScheme: "structured-field",
+    },
+    extraction: {
+      confidence: 0.97,
+      locator: "json:$.registrationStatus",
+      extractor: "example-extractor",
+      extractedAt: new Date().toISOString(),
+    },
+    reviewOutcome: {
+      status: "verified",
+      actor: "records-operator",
+      reviewedAt: new Date().toISOString(),
+    },
+    claim: {
+      subjectType: "public-record.entity",
+      subjectId: "entity-123",
+      surface: "example.profile",
+      claimType: "public-data.field",
+      status: "verified",
+      impactLevel: "medium",
+      collectedBy: "example-extractor",
+    },
+    metadata: {
+      producerField: "registration_status",
+    },
+  }))
+  .build();
+
+const trustInput = buildSurveyTrustInput(surveyInput);
+```
+
+`fieldObservation` sets `extraction.target` and `claim.fieldOrBehavior` from
+`field` when omitted, uses the scalar as both the extraction and claim value,
+and adds neutral helper metadata at
+`metadata.survey.field = { representation: "scalar" }`. Producer metadata is
+preserved. Producers still own scalar semantics, validation, candidate ranking,
+review policy, and whether a value should be verified, proposed, rejected, or
+assumed.
+
 ## Repeated observations
 
 Use `repeatedObservation` when a producer wants to describe a repeated field or
