@@ -1,10 +1,10 @@
 import type { SurveyObservationInput } from "./builder.js";
 import { buildObservation } from "./observation-helper.js";
 
-export interface RepeatedObservationInput<TItem> {
+export interface FieldObservationInput<TValue> {
   id: string;
   field: string;
-  value: readonly TItem[];
+  value: TValue;
   rawSource: SurveyObservationInput["rawSource"];
   extraction: Omit<SurveyObservationInput["extraction"], "target" | "value" | "excerpt"> & {
     target?: string;
@@ -16,25 +16,25 @@ export interface RepeatedObservationInput<TItem> {
   };
   candidate?: SurveyObservationInput["candidate"];
   candidateSet?: SurveyObservationInput["candidateSet"];
-  representation?: "aggregate-array";
+  representation?: "scalar";
   metadata?: Record<string, unknown>;
 }
 
-export function repeatedObservation<TItem>(
-  input: RepeatedObservationInput<TItem>,
+export function fieldObservation<TValue>(
+  input: FieldObservationInput<TValue>,
 ): SurveyObservationInput {
-  const representation = input.representation ?? "aggregate-array";
-  const value = [...input.value];
+  const representation = input.representation ?? "scalar";
 
   return buildObservation({
     ...input,
-    value,
     surveyMetadata: {
-      repeated: {
-        representation,
-        itemCount: value.length,
-      },
+      field: { representation },
     },
-    defaultExcerpt: `${input.field}: ${value.length} item(s)`,
+    defaultExcerpt: `${input.field}: ${valueSummary(input.value)}`,
   });
+}
+
+function valueSummary(value: unknown): string {
+  if (value === null || value === undefined) return "<empty>";
+  return String(value);
 }
