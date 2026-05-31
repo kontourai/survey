@@ -1,0 +1,32 @@
+{
+  "name": "@kontourai/survey",
+  "version": "0.0.0",
+  "description": "Producer-side source, extraction, candidate, and review contracts for projecting verified claims into Surface.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./dist/src/index.js"
+  },
+  "files": [
+    "dist/src/",
+    "fixtures/",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test dist/tests/*.test.js",
+    "verify": "npm run typecheck && npm test"
+  },
+  "dependencies": {
+    "@kontourai/surface": "file:../surface"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "typescript": "^5.8.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
