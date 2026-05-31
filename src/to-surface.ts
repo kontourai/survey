@@ -51,6 +51,7 @@ export function buildSurveyTrustInput(input: SurveyInput): TrustInput {
         reviewerAuthority: status === "verified" || status === "assumed" ? "operator" : "none",
         evidenceStrength: status === "verified" || status === "assumed" ? "moderate" : "weak",
         impactLevel: projection.impactLevel,
+        ...projection.confidenceBasis,
       },
       metadata: {
         ...projection.metadata,
@@ -76,6 +77,9 @@ export function buildSurveyTrustInput(input: SurveyInput): TrustInput {
       collectedBy: projection.collectedBy,
       integrityRef: rawSource.checksum,
       metadata: {
+        ...rawSource.metadata,
+        ...extraction.metadata,
+        ...candidate.metadata,
         rawSourceKind: rawSource.kind,
         locatorScheme: rawSource.locatorScheme,
         confidence: candidate.confidence ?? extraction.confidence,

@@ -1,4 +1,4 @@
-import type { EvidenceMethod, EvidenceType, ImpactLevel, TrustStatus } from "@kontourai/surface";
+import type { ConfidenceBasis, EvidenceMethod, EvidenceType, ImpactLevel, TrustStatus } from "@kontourai/surface";
 
 export type RawSourceKind = "uploaded-document" | "web-page" | "api-record" | "manual-entry";
 export type LocatorScheme = "pdf" | "text" | "html" | "structured-field";
@@ -78,6 +78,7 @@ export interface ClaimTarget {
   updatedAt?: string;
   evidenceType?: EvidenceType;
   evidenceMethod?: EvidenceMethod;
+  confidenceBasis?: ConfidenceBasis;
   collectedBy: string;
   actor?: string;
   eventMethod?: string;
