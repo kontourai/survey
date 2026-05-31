@@ -198,6 +198,103 @@ Producer metadata is preserved. Producers still own item semantics,
 validation, candidate ranking, review policy, and whether a value should be
 verified, proposed, rejected, or assumed.
 
+## Candidate review records
+
+Use `candidateReviewRecord` when a producer has multiple candidate observations
+for the same target and wants Survey to assemble the shared candidate set,
+candidate links, and optional review outcome.
+
+```ts
+import {
+  candidateReviewRecord,
+  fieldObservation,
+  SurveyInputBuilder,
+} from "@kontourai/survey";
+
+const observations = [
+  fieldObservation({
+    id: "entity-123.status.registry",
+    field: "registrationStatus",
+    value: "ACTIVE",
+    rawSource: {
+      kind: "api-record",
+      sourceRef: "example-records://entity/entity-123",
+      observedAt: new Date().toISOString(),
+      locatorScheme: "structured-field",
+    },
+    extraction: {
+      confidence: 0.97,
+      locator: "json:$.registrationStatus",
+      extractor: "example-extractor",
+      extractedAt: new Date().toISOString(),
+    },
+    candidate: { id: "candidate.registry", confidence: 0.97 },
+    claim: {
+      id: "claim.entity-123.status.registry",
+      subjectType: "public-record.entity",
+      subjectId: "entity-123",
+      surface: "example.profile",
+      claimType: "public-data.field",
+      status: "verified",
+      impactLevel: "medium",
+      collectedBy: "example-extractor",
+    },
+  }),
+  fieldObservation({
+    id: "entity-123.status.archive",
+    field: "registrationStatus",
+    value: "INACTIVE",
+    rawSource: {
+      kind: "web-page",
+      sourceRef: "https://records.example.test/entity-123",
+      observedAt: new Date().toISOString(),
+      locatorScheme: "html",
+    },
+    extraction: {
+      confidence: 0.71,
+      locator: "css:#registration-status",
+      extractor: "example-crawler",
+      extractedAt: new Date().toISOString(),
+    },
+    candidate: { id: "candidate.archive", confidence: 0.71 },
+    claim: {
+      id: "claim.entity-123.status.archive",
+      subjectType: "public-record.entity",
+      subjectId: "entity-123",
+      surface: "example.profile",
+      claimType: "public-data.field",
+      status: "superseded",
+      impactLevel: "medium",
+      collectedBy: "example-crawler",
+    },
+  }),
+];
+
+const surveyInput = new SurveyInputBuilder({ source: "example-producer:run-1" })
+  .addClaimRecords(candidateReviewRecord({
+    id: "candidate-set.entity-123.registration-status",
+    target: "registrationStatus",
+    selectedCandidateId: "candidate.registry",
+    status: "resolved",
+    rationale: "Registry source wins over archive source.",
+    reviewOutcome: {
+      status: "verified",
+      actor: "records-operator",
+      reviewedAt: new Date().toISOString(),
+    },
+    observations,
+  }))
+  .build();
+```
+
+`candidateReviewRecord` does not choose the winning candidate or status. The
+producer still supplies candidate ids, selected candidate id, claim ids, review
+status, rationale, and all domain policy. Survey only assembles the generic
+record graph and tolerates repeated references to identical raw sources or the
+shared candidate set while rejecting conflicting duplicate ids. Duplicate
+conflict checks assume Survey records are JSON-shaped data, which is the same
+shape expected by Surface validation and reports.
+
 ## Product Boundary
 
 Survey does not crawl pages, parse PDFs, rank candidates, decide review policy,
