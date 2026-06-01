@@ -1,7 +1,7 @@
 # Kontour Survey
 
-Survey is the producer-side contract for turning raw observations into
-Surface-ready trust records.
+Survey is the producer-side contract for turning producer observations into
+Surface-ready `TrustInput`.
 
 This repo is intentionally small right now. It is a proof package, not an
 ingestion platform:
@@ -10,8 +10,8 @@ ingestion platform:
 - Survey owns source, extraction, candidate, and review record shapes;
 - `buildSurveyTrustInput` projects those records into `@kontourai/surface`
   `TrustInput`;
-- Surface owns trust reporting, derivation, console projections, and downstream
-  transparency.
+- Surface owns Claim, Subject, Claim Type, Evidence, Status, Claim Dependency,
+  TrustInput, trust reporting, console projections, and downstream transparency.
 
 The first success criterion is that generic corrected-document and public-field
 fixtures can pass through Survey and produce valid Surface reports without
@@ -294,6 +294,22 @@ record graph and tolerates repeated references to identical raw sources or the
 shared candidate set while rejecting conflicting duplicate ids. Duplicate
 conflict checks assume Survey records are JSON-shaped data, which is the same
 shape expected by Surface validation and reports.
+
+A candidate set with status `"conflict"` represents a Survey-side Candidate
+Conflict before review has resolved which candidate should win. When no review
+outcome overrides it, `buildSurveyTrustInput` projects the claim to Surface
+status `"disputed"` and records a `"candidate-conflict"` verification event.
+
+## Computed values
+
+Computed values are normal `ClaimTarget` entries in `claims`. Producers should
+link them to their inputs with Surface Claim Dependency fields:
+`derivedFrom` for simple claim-id links, or `derivationEdges` when the link
+needs method, role, support-strength, rationale, or metadata.
+
+Survey passes those fields through to Surface while keeping the same
+source -> extraction -> candidate -> review -> claim projection path. Surface
+owns dependency semantics such as recompute pressure and status ceilings.
 
 ## Product Boundary
 

@@ -1,0 +1,47 @@
+{
+  "definition_of_done": "The Survey package exposes and documents computed claims as normal ClaimTarget entries with Surface derivationEdges Claim Dependencies, with no public DerivedClaimTarget, derivedClaims, or addDerivedClaim API remaining. README and tests use the CONTEXT.md boundary language, and npm run verify passes with coverage proving Candidate Conflict projects to a Surface disputed claim.",
+  "criteria": [
+    {
+      "id": "AC1",
+      "name": "Public API cleanup",
+      "status": "pass",
+      "description": "src/index.ts no longer exports DerivedClaimTarget, and repository source/docs/tests have no remaining DerivedClaimTarget, derivedClaims, or addDerivedClaim references.",
+      "evidence_expected": "rg -n \"DerivedClaimTarget|derivedClaims|addDerivedClaim\" src fixtures tests README.md CONTEXT.md package.json returns no matches."
+    },
+    {
+      "id": "AC2",
+      "name": "Claim Dependency representation",
+      "status": "pass",
+      "description": "ClaimTarget supports Surface dependency fields needed for computed claims, especially derivationEdges with Surface-compatible edge shape.",
+      "evidence_expected": "TypeScript compiles and generated TrustInput computed claims include expected derivationEdges."
+    },
+    {
+      "id": "AC3",
+      "name": "Projection behavior preserved",
+      "status": "pass",
+      "description": "Corrected-document fixture still projects six claims, preserves superseded/proposed counts, and still produces Surface recompute pressure such as input-superseded.",
+      "evidence_expected": "Updated contract test passes and asserts computed statement-position claims are normal claims with dependency edges."
+    },
+    {
+      "id": "AC4",
+      "name": "Candidate Conflict coverage",
+      "status": "pass",
+      "description": "A test constructs a Candidate Conflict and verifies it projects to a Surface disputed claim with candidate-conflict event method.",
+      "evidence_expected": "Named contract test passes in tests/contracts.test.ts."
+    },
+    {
+      "id": "AC5",
+      "name": "Documentation alignment",
+      "status": "pass",
+      "description": "README uses CONTEXT.md boundary language for Survey, TrustInput, Candidate Conflict, and Claim Dependency without Survey-branded terms for Surface-owned concepts.",
+      "evidence_expected": "README avoids derived claim as a Survey concept and explains computed values as Claims with Claim Dependencies."
+    },
+    {
+      "id": "AC6",
+      "name": "Verification",
+      "status": "pass",
+      "description": "Package checks pass.",
+      "evidence_expected": "npm run verify exits 0."
+    }
+  ]
+}

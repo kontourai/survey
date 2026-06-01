@@ -3,7 +3,6 @@ export type {
   Candidate,
   CandidateSet,
   ClaimTarget,
-  DerivedClaimTarget,
   Extraction,
   LocatorScheme,
   RawSource,

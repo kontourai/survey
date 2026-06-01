@@ -24,15 +24,117 @@ describe("Survey Surface projection", () => {
     assert.equal(report.claims[0]?.metadata?.survey && typeof report.claims[0].metadata.survey, "object");
   });
 
-  it("projects corrected document candidates and preserves derived recompute pressure", () => {
+  it("projects corrected document candidates and preserves Claim Dependency recompute pressure", () => {
     const input = buildSurveyTrustInput(correctedDocumentCandidatesFixture);
     const valid = validateTrustInput(input);
     const report = buildTrustReport(valid);
+    const currentPosition = report.claims.find((claim) => claim.id === "document.entity-1.statement-position.current");
+    const originalPosition = report.claims.find((claim) => claim.id === "document.entity-1.statement-position.original");
 
     assert.equal(report.claims.length, 6);
     assert.ok(report.summary.byStatus.superseded >= 2);
     assert.equal(report.summary.byStatus.proposed, 3);
+    assert.equal(currentPosition?.claimType, "computed-field");
+    assert.deepEqual(currentPosition?.derivedFrom, [
+      "document.entity-1.statement.amount.corrected",
+      "document.entity-1.statement.credit.corrected",
+    ]);
+    assert.deepEqual(currentPosition?.derivationEdges?.map((edge) => edge.inputClaimId), [
+      "document.entity-1.statement.amount.corrected",
+      "document.entity-1.statement.credit.corrected",
+    ]);
+    assert.equal(originalPosition?.derivationEdges?.[0]?.supportStrength, "strong");
     assert.ok(report.changeRecords.some((record) => record.reason === "input-superseded"));
+  });
+
+  it("projects Candidate Conflict to a disputed claim with candidate-conflict event", () => {
+    const input = buildSurveyTrustInput({
+      source: "survey.candidate-conflict.fixture",
+      generatedAt: "2026-05-31T16:00:00.000Z",
+      rawSources: [
+        {
+          id: "source.registry",
+          kind: "api-record",
+          sourceRef: "records://entity-1/registry",
+          observedAt: "2026-05-31T15:00:00.000Z",
+          locatorScheme: "structured-field",
+        },
+        {
+          id: "source.archive",
+          kind: "web-page",
+          sourceRef: "https://records.example.test/entity-1/archive",
+          observedAt: "2026-05-31T14:00:00.000Z",
+          locatorScheme: "html",
+        },
+      ],
+      extractions: [
+        {
+          id: "extraction.registry.status",
+          sourceId: "source.registry",
+          target: "registrationStatus",
+          value: "ACTIVE",
+          confidence: 0.89,
+          locator: "json:$.registrationStatus",
+          extractor: "records-importer",
+          extractedAt: "2026-05-31T15:00:00.000Z",
+        },
+        {
+          id: "extraction.archive.status",
+          sourceId: "source.archive",
+          target: "registrationStatus",
+          value: "INACTIVE",
+          confidence: 0.87,
+          locator: "css:#registration-status",
+          extractor: "records-crawler",
+          extractedAt: "2026-05-31T14:00:00.000Z",
+        },
+      ],
+      candidateSets: [
+        {
+          id: "candidate-set.entity-1.registration-status",
+          target: "registrationStatus",
+          status: "conflict",
+          rationale: "Registry and archive disagree and no review has resolved the candidate conflict.",
+          candidates: [
+            {
+              id: "candidate.registry.status",
+              extractionId: "extraction.registry.status",
+              value: "ACTIVE",
+              confidence: 0.89,
+              sourceRank: 1,
+            },
+            {
+              id: "candidate.archive.status",
+              extractionId: "extraction.archive.status",
+              value: "INACTIVE",
+              confidence: 0.87,
+              sourceRank: 1,
+            },
+          ],
+        },
+      ],
+      reviewOutcomes: [],
+      claims: [
+        {
+          id: "claim.entity-1.registration-status.registry",
+          candidateSetId: "candidate-set.entity-1.registration-status",
+          candidateId: "candidate.registry.status",
+          subjectType: "public-record.entity",
+          subjectId: "entity-1",
+          surface: "public-record.profile",
+          claimType: "public-data.field",
+          fieldOrBehavior: "registrationStatus",
+          impactLevel: "high",
+          collectedBy: "records-importer",
+        },
+      ],
+    });
+    const valid = validateTrustInput(input);
+    const report = buildTrustReport(valid);
+
+    assert.equal(report.summary.byStatus.disputed, 1);
+    assert.equal(report.claims[0]?.status, "disputed");
+    assert.equal(report.events[0]?.method, "candidate-conflict");
   });
 
   it("rejects verified claims without review authority", () => {
