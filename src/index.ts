@@ -18,6 +18,8 @@ export type {
   SurveyInputBuilderArgs,
   SurveyObservationInput,
 } from "./builder.js";
+export { reviewedCandidateResolution } from "./reviewed-candidate-resolution.js";
+export type { ReviewedCandidateResolutionInput } from "./reviewed-candidate-resolution.js";
 export { buildSurveyTrustInput } from "./to-surface.js";
 export { fieldObservation } from "./field-observation.js";
 export type { FieldObservationInput } from "./field-observation.js";

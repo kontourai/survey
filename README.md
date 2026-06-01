@@ -183,6 +183,20 @@ preserved. Producers still own scalar semantics, validation, candidate ranking,
 review policy, and whether a value should be verified, proposed, rejected, or
 assumed.
 
+## Reviewed candidate resolutions
+
+Use `reviewedCandidateResolution` when a producer has multiple candidate
+observations for the same target and a review outcome selects one candidate.
+The helper wraps `candidateReviewRecord`, attaches the review outcome to the
+selected candidate, defaults the candidate set to `resolved`, defaults the
+selected claim status from the review outcome, and defaults unselected
+candidates to `superseded`. Producers can override selected or unselected claim
+statuses when their domain workflow needs a different posture.
+
+This is useful for corrected documents, source-of-truth choices, and review
+queues where losing candidates should remain visible for transparency rather
+than disappearing from the trust trail.
+
 ## Repeated observations
 
 Use `repeatedObservation` when a producer wants to describe a repeated field or

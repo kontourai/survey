@@ -10,6 +10,7 @@ import {
   fieldObservation,
   manualEntrySource,
   repeatedObservation,
+  reviewedCandidateResolution,
   SurveyInputBuilder,
   uploadedDocumentSource,
   webPageSource,
@@ -235,6 +236,104 @@ describe("Survey Surface projection", () => {
     assert.equal(report.summary.byStatus.disputed, 1);
     assert.equal(report.claims[0]?.status, "disputed");
     assert.equal(report.events[0]?.method, "candidate-conflict");
+  });
+
+  it("builds a reviewed candidate resolution with superseded unselected candidates", () => {
+    const observedAt = "2026-05-31T15:00:00.000Z";
+    const originalSource = uploadedDocumentSource({
+      id: "source.original",
+      sourceRef: "documents://entity-1/original.pdf",
+      observedAt,
+      checksum: "original",
+      locatorScheme: "structured-field",
+    });
+    const correctedSource = uploadedDocumentSource({
+      id: "source.corrected",
+      sourceRef: "documents://entity-1/corrected.pdf",
+      observedAt,
+      checksum: "corrected",
+      locatorScheme: "structured-field",
+    });
+    const records = reviewedCandidateResolution({
+      id: "candidate-set.entity-1.amount",
+      target: "reportedAmount",
+      selectedCandidateId: "candidate.corrected",
+      rationale: "Reviewer selected the corrected document.",
+      reviewOutcome: {
+        status: "verified",
+        actor: "records-operator",
+        reviewedAt: "2026-05-31T15:05:00.000Z",
+        rationale: "Corrected document supersedes the original document.",
+      },
+      observations: [
+        fieldObservation({
+          id: "observation.entity-1.amount.original",
+          field: "reportedAmount",
+          value: 82000,
+          rawSource: originalSource,
+          extraction: {
+            confidence: 0.94,
+            locator: "structured-field:amount",
+            extractor: "document-parser",
+            extractedAt: observedAt,
+          },
+          candidate: {
+            id: "candidate.original",
+            confidence: 0.94,
+          },
+          claim: {
+            id: "claim.entity-1.amount.original",
+            subjectType: "record.entity",
+            subjectId: "entity-1",
+            surface: "record.profile",
+            claimType: "record.field-candidate",
+            impactLevel: "high",
+            collectedBy: "document-parser",
+          },
+        }),
+        fieldObservation({
+          id: "observation.entity-1.amount.corrected",
+          field: "reportedAmount",
+          value: 86000,
+          rawSource: correctedSource,
+          extraction: {
+            confidence: 0.96,
+            locator: "structured-field:amount",
+            extractor: "document-parser",
+            extractedAt: observedAt,
+          },
+          candidate: {
+            id: "candidate.corrected",
+            confidence: 0.96,
+          },
+          claim: {
+            id: "claim.entity-1.amount.corrected",
+            subjectType: "record.entity",
+            subjectId: "entity-1",
+            surface: "record.profile",
+            claimType: "record.field-candidate",
+            impactLevel: "high",
+            collectedBy: "document-parser",
+          },
+        }),
+      ],
+    });
+    const input = new SurveyInputBuilder({
+      source: "survey.reviewed-candidate-resolution.fixture",
+      generatedAt: "2026-05-31T16:00:00.000Z",
+    }).addClaimRecords(records).build();
+
+    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const selected = report.claims.find((claim) => claim.id === "claim.entity-1.amount.corrected");
+    const unselected = report.claims.find((claim) => claim.id === "claim.entity-1.amount.original");
+
+    assert.equal(report.summary.byStatus.verified, 1);
+    assert.equal(report.summary.byStatus.superseded, 1);
+    assert.equal(selected?.status, "verified");
+    assert.equal(selected?.confidenceBasis?.reviewerAuthority, "operator");
+    assert.equal(unselected?.status, "superseded");
+    assert.equal(input.candidateSets[0]?.selectedCandidateId, "candidate.corrected");
+    assert.equal(input.reviewOutcomes[0]?.candidateId, "candidate.corrected");
   });
 
   it("rejects verified claims without review authority", () => {
