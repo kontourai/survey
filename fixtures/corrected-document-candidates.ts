@@ -22,16 +22,22 @@ export const correctedDocumentCandidatesFixture: SurveyInput = {
       checksum: "sha256:corrected",
       locatorScheme: "pdf",
     },
+    computationSource("current"),
+    computationSource("original"),
   ],
   extractions: [
     documentExtraction("original:amount", "document:source:original", "statement.totalAmount", 82000, "pdf:page=1;box=1"),
     documentExtraction("original:credit", "document:source:original", "statement.creditAmount", 8600, "pdf:page=1;box=2"),
     documentExtraction("corrected:amount", "document:source:corrected", "statement.totalAmount", 84000, "pdf:page=1;box=1"),
     documentExtraction("corrected:credit", "document:source:corrected", "statement.creditAmount", 9100, "pdf:page=1;box=2"),
+    computationExtraction("current", 84000, 9100),
+    computationExtraction("original", 82000, 8600),
   ],
   candidateSets: [
     documentCandidateSet("amount", "original:amount", 82000, "corrected:amount", 84000),
     documentCandidateSet("credit", "original:credit", 8600, "corrected:credit", 9100),
+    computationCandidateSet("current", 84000, 9100),
+    computationCandidateSet("original", 82000, 8600),
   ],
   reviewOutcomes: [],
   claims: [
@@ -39,58 +45,24 @@ export const correctedDocumentCandidatesFixture: SurveyInput = {
     documentClaim("document.entity-1.statement.credit.original", "credit", "original:credit", "statement.creditAmount", "superseded"),
     documentClaim("document.entity-1.statement.amount.corrected", "amount", "corrected:amount", "statement.totalAmount", "proposed"),
     documentClaim("document.entity-1.statement.credit.corrected", "credit", "corrected:credit", "statement.creditAmount", "proposed"),
-  ],
-  derivedClaims: [
-    {
-      id: "document.entity-1.statement-position.current",
-      subjectType: "verified-record.period",
-      subjectId: "entity-1:2026",
-      surface: "document-review",
-      claimType: "derived-field",
-      fieldOrBehavior: "statementPosition",
-      value: {
-        totalAmount: 84000,
-        creditAmount: 9100,
-        position: "credit-present",
-      },
-      status: "proposed",
-      impactLevel: "high",
-      inputClaimIds: [
-        { claimId: "document.entity-1.statement.amount.corrected", role: "amount-input", supportStrength: "strong" },
-        { claimId: "document.entity-1.statement.credit.corrected", role: "credit-input", supportStrength: "strong" },
-      ],
-      createdAt: generatedAt,
-      updatedAt: generatedAt,
-      evidenceSummary: "Derived statement position from corrected source fields.",
-      sourceRef: "documents://entities/entity-1/periods/2026/resolved-fields/statement",
-      collectedBy: "survey-document-fixture",
-    },
-    {
-      id: "document.entity-1.statement-position.original",
-      subjectType: "verified-record.period",
-      subjectId: "entity-1:2026",
-      surface: "document-review",
-      claimType: "derived-field",
-      fieldOrBehavior: "statementPosition",
-      value: {
-        totalAmount: 82000,
-        creditAmount: 8600,
-        position: "credit-present",
-      },
-      status: "stale",
-      impactLevel: "high",
-      inputClaimIds: [
-        { claimId: "document.entity-1.statement.amount.original", role: "amount-input", supportStrength: "strong" },
-        { claimId: "document.entity-1.statement.credit.original", role: "credit-input", supportStrength: "strong" },
-      ],
-      createdAt: generatedAt,
-      updatedAt: generatedAt,
-      evidenceSummary: "Prior statement position derived from original source fields.",
-      sourceRef: "documents://entities/entity-1/periods/2026/resolved-fields/statement",
-      collectedBy: "survey-document-fixture",
-    },
+    computationClaim("current", "proposed", [
+      "document.entity-1.statement.amount.corrected",
+      "document.entity-1.statement.credit.corrected",
+    ]),
+    computationClaim("original", "stale", [
+      "document.entity-1.statement.amount.original",
+      "document.entity-1.statement.credit.original",
+    ]),
   ],
 };
+
+function statementPosition(totalAmount: number, creditAmount: number) {
+  return {
+    totalAmount,
+    creditAmount,
+    position: "credit-present",
+  };
+}
 
 function documentExtraction(id: string, sourceId: string, target: string, value: number, locator: string) {
   return {
@@ -132,6 +104,48 @@ function documentCandidateSet(target: string, originalId: string, originalValue:
   };
 }
 
+function computationSource(id: "current" | "original") {
+  return {
+    id: `document:source:statement-position:${id}`,
+    kind: "manual-entry" as const,
+    sourceRef: "documents://entities/entity-1/periods/2026/resolved-fields/statement",
+    observedAt: generatedAt,
+    locatorScheme: "structured-field" as const,
+  };
+}
+
+function computationExtraction(id: "current" | "original", totalAmount: number, creditAmount: number) {
+  return {
+    id: `document:extraction:statement-position:${id}`,
+    sourceId: `document:source:statement-position:${id}`,
+    target: "statementPosition",
+    value: statementPosition(totalAmount, creditAmount),
+    confidence: 0.96,
+    extractor: "statement-position-rule",
+    extractedAt: generatedAt,
+    excerpt: `${id} statement position from source fields.`,
+  };
+}
+
+function computationCandidateSet(id: "current" | "original", totalAmount: number, creditAmount: number) {
+  return {
+    id: `document:candidates:statement-position:${id}`,
+    target: "statementPosition",
+    selectedCandidateId: `document:candidate:statement-position:${id}`,
+    status: "needs-review" as const,
+    rationale: "Statement position is computed from statement amount and credit fields.",
+    candidates: [
+      {
+        id: `document:candidate:statement-position:${id}`,
+        extractionId: `document:extraction:statement-position:${id}`,
+        value: statementPosition(totalAmount, creditAmount),
+        confidence: 0.96,
+        sourceRank: 1,
+      },
+    ],
+  };
+}
+
 function documentClaim(id: string, target: string, candidateId: string, fieldOrBehavior: string, status: "proposed" | "superseded") {
   return {
     id,
@@ -145,5 +159,32 @@ function documentClaim(id: string, target: string, candidateId: string, fieldOrB
     status,
     impactLevel: "high" as const,
     collectedBy: "document-field-parser",
+  };
+}
+
+function computationClaim(id: "current" | "original", status: "proposed" | "stale", inputClaimIds: string[]) {
+  const roles = ["amount-input", "credit-input"];
+  return {
+    id: `document.entity-1.statement-position.${id}`,
+    candidateSetId: `document:candidates:statement-position:${id}`,
+    candidateId: `document:candidate:statement-position:${id}`,
+    subjectType: "verified-record.period",
+    subjectId: "entity-1:2026",
+    surface: "document-review",
+    claimType: "computed-field",
+    fieldOrBehavior: "statementPosition",
+    status,
+    impactLevel: "high" as const,
+    evidenceType: "calculation_trace" as const,
+    evidenceMethod: "validation" as const,
+    collectedBy: "survey-document-fixture",
+    eventMethod: "rule-application",
+    derivedFrom: inputClaimIds,
+    derivationEdges: inputClaimIds.map((inputClaimId, index) => ({
+      inputClaimId,
+      method: "rule-application" as const,
+      role: roles[index],
+      supportStrength: "strong" as const,
+    })),
   };
 }

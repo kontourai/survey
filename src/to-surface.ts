@@ -3,7 +3,6 @@ import type {
   Candidate,
   CandidateSet,
   ClaimTarget,
-  DerivedClaimTarget,
   Extraction,
   RawSource,
   ReviewOutcome,
@@ -45,6 +44,8 @@ export function buildSurveyTrustInput(input: SurveyInput): TrustInput {
       createdAt,
       updatedAt,
       impactLevel: projection.impactLevel,
+      derivedFrom: projection.derivedFrom,
+      derivationEdges: projection.derivationEdges,
       confidenceBasis: {
         sourceQuality: "moderate",
         extractionConfidence: candidate.confidence ?? extraction.confidence,
@@ -100,10 +101,6 @@ export function buildSurveyTrustInput(input: SurveyInput): TrustInput {
     });
   }
 
-  for (const derived of input.derivedClaims ?? []) {
-    addDerivedClaim({ derived, claims, evidence, events });
-  }
-
   return {
     schemaVersion: 3,
     source: input.source,
@@ -112,56 +109,6 @@ export function buildSurveyTrustInput(input: SurveyInput): TrustInput {
     policies: [],
     events,
   };
-}
-
-function addDerivedClaim(input: {
-  derived: DerivedClaimTarget;
-  claims: Claim[];
-  evidence: Evidence[];
-  events: VerificationEvent[];
-}): void {
-  const { derived } = input;
-  input.claims.push({
-    id: derived.id,
-    subjectType: derived.subjectType,
-    subjectId: derived.subjectId,
-    surface: derived.surface,
-    claimType: derived.claimType,
-    fieldOrBehavior: derived.fieldOrBehavior,
-    value: derived.value,
-    status: derived.status,
-    createdAt: derived.createdAt,
-    updatedAt: derived.updatedAt,
-    impactLevel: derived.impactLevel,
-    derivationEdges: derived.inputClaimIds.map((edge) => ({
-      inputClaimId: edge.claimId,
-      method: "rule-application",
-      role: edge.role,
-      supportStrength: edge.supportStrength,
-    })),
-    metadata: derived.metadata,
-  });
-  const evidenceId = `${derived.id}.evidence.calculation`;
-  input.evidence.push({
-    id: evidenceId,
-    claimId: derived.id,
-    evidenceType: "calculation_trace",
-    method: "validation",
-    sourceRef: derived.sourceRef,
-    excerptOrSummary: derived.evidenceSummary,
-    observedAt: derived.updatedAt,
-    collectedBy: derived.collectedBy,
-  });
-  input.events.push({
-    id: `${derived.id}.event.${derived.status}`,
-    claimId: derived.id,
-    status: derived.status,
-    actor: derived.collectedBy,
-    method: "rule-application",
-    evidenceIds: [evidenceId],
-    createdAt: derived.updatedAt,
-    verifiedAt: derived.status === "verified" ? derived.updatedAt : undefined,
-  });
 }
 
 function statusFor(input: {

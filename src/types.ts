@@ -1,4 +1,4 @@
-import type { ConfidenceBasis, EvidenceMethod, EvidenceType, ImpactLevel, TrustStatus } from "@kontourai/surface";
+import type { ConfidenceBasis, DerivationEdge, EvidenceMethod, EvidenceType, ImpactLevel, TrustStatus } from "@kontourai/surface";
 
 export type RawSourceKind = "uploaded-document" | "web-page" | "api-record" | "manual-entry";
 export type LocatorScheme = "pdf" | "text" | "html" | "structured-field";
@@ -79,32 +79,11 @@ export interface ClaimTarget {
   evidenceType?: EvidenceType;
   evidenceMethod?: EvidenceMethod;
   confidenceBasis?: ConfidenceBasis;
+  derivedFrom?: string[];
+  derivationEdges?: DerivationEdge[];
   collectedBy: string;
   actor?: string;
   eventMethod?: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface DerivedClaimTarget {
-  id: string;
-  subjectType: string;
-  subjectId: string;
-  surface: string;
-  claimType: string;
-  fieldOrBehavior: string;
-  value: unknown;
-  status: TrustStatus;
-  impactLevel: ImpactLevel;
-  inputClaimIds: Array<{
-    claimId: string;
-    role?: string;
-    supportStrength?: "weak" | "moderate" | "strong";
-  }>;
-  createdAt: string;
-  updatedAt: string;
-  evidenceSummary: string;
-  sourceRef: string;
-  collectedBy: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -116,5 +95,4 @@ export interface SurveyInput {
   candidateSets: CandidateSet[];
   reviewOutcomes: ReviewOutcome[];
   claims: ClaimTarget[];
-  derivedClaims?: DerivedClaimTarget[];
 }

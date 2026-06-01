@@ -2,7 +2,6 @@ import type {
   Candidate,
   CandidateSet,
   ClaimTarget,
-  DerivedClaimTarget,
   Extraction,
   ReviewStatus,
   RawSource,
@@ -65,7 +64,6 @@ export class SurveyInputBuilder {
   private readonly candidateSets = new Map<string, CandidateSet>();
   private readonly reviewOutcomes = new Map<string, ReviewOutcome>();
   private readonly claims = new Map<string, ClaimTarget>();
-  private readonly derivedClaims = new Map<string, DerivedClaimTarget>();
 
   constructor(args: SurveyInputBuilderArgs) {
     this.source = args.source;
@@ -94,11 +92,6 @@ export class SurveyInputBuilder {
 
   addClaim(claim: ClaimTarget): this {
     addUnique(this.claims, claim, "claim target");
-    return this;
-  }
-
-  addDerivedClaim(derivedClaim: DerivedClaimTarget): this {
-    addUnique(this.derivedClaims, derivedClaim, "derived claim target");
     return this;
   }
 
@@ -134,7 +127,6 @@ export class SurveyInputBuilder {
       candidateSets: [...this.candidateSets.values()],
       reviewOutcomes: [...this.reviewOutcomes.values()],
       claims: [...this.claims.values()],
-      derivedClaims: [...this.derivedClaims.values()],
     };
   }
 

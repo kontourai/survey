@@ -1,0 +1,35 @@
+{
+  "goal": "Align @kontourai/survey public API and docs with CONTEXT.md boundary language by removing/renaming the DerivedClaimTarget/derivedClaims/addDerivedClaim concept, representing computed claims as normal Claims with Claim Dependencies, and adding Candidate Conflict -> disputed coverage.",
+  "plan_artifact": ".agents/flow-agents/survey-context-api-alignment/plan.md",
+  "state_artifact": ".agents/flow-agents/survey-context-api-alignment/state.json",
+  "acceptance_artifact": ".agents/flow-agents/survey-context-api-alignment/acceptance.json",
+  "current_phase": "ready_for_implementation",
+  "repo_context": {
+    "root": "/Users/brian/dev/github/kontourai/survey",
+    "context_file": "CONTEXT.md",
+    "verification_command": "npm run verify",
+    "surface_dependency_field": "Claim.derivationEdges"
+  },
+  "important_files": [
+    "src/types.ts",
+    "src/to-surface.ts",
+    "src/builder.ts",
+    "src/index.ts",
+    "fixtures/corrected-document-candidates.ts",
+    "tests/contracts.test.ts",
+    "README.md"
+  ],
+  "known_findings": [
+    "Candidate Conflict already maps to disputed in statusFor(), but lacks direct tests.",
+    "Surface supports derivationEdges on Claim; use README language Claim Dependency while keeping the actual Surface field name.",
+    "The current derivedClaims path creates calculation_trace evidence and validation events; preserving this behavior through normal claims may require computation-trace source/extraction/candidate records in the fixture.",
+    "CONTEXT.md is untracked and should be respected, not removed."
+  ],
+  "stop_short_risks": [
+    "Avoid replacing DerivedClaimTarget with another Survey-branded computed claim concept.",
+    "Avoid making Survey own Surface dependency semantics; Surface owns recompute pressure, cycle detection, and status ceilings.",
+    "Avoid hand-editing dist; let npm run build regenerate it."
+  ],
+  "next_agent_instructions": "Read the plan artifact first, then implement Wave 1 and Wave 2 together or with tight coordination. Update README in Wave 3. Finish by running the grep check and npm run verify, then update acceptance statuses with evidence."
+}
+
