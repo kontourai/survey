@@ -6,6 +6,10 @@ Use Surface language when Survey is preparing a one-to-one Surface concept. Use 
 
 ## Language
 
+**Kontour Resource Shape**:
+The shared convention for new portable Kontour records: `apiVersion`, `kind`, `metadata`, `spec`, optional `status`, and optional `proof`. Canonical doc: https://github.com/kontourai/kontourai.io/blob/main/docs/kontour-resource-shape.md. Survey-specific use: durable review/provenance records should use the shape when they cross product boundaries or need to be inspected by Surface, agents, or external systems. Review records should be immutable once emitted; if a review changes, emit a new record. Survey `proof` anchors the canonical review trail and projection, not the real-world truth of the source.
+_Avoid_: Duplicating Surface integrity semantics, hiding review outcomes in metadata, treating a Survey proof as source veracity
+
 **Producer**:
 The upstream system or operator workflow that gathers observations and packages them into Survey records. A **Producer** owns acquisition, parsing, ranking, review UX, materiality, and domain policy.
 _Avoid_: Client, crawler, ingestion platform
