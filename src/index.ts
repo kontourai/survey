@@ -23,3 +23,17 @@ export { fieldObservation } from "./field-observation.js";
 export type { FieldObservationInput } from "./field-observation.js";
 export { repeatedObservation } from "./repeated-observation.js";
 export type { RepeatedObservationInput } from "./repeated-observation.js";
+export {
+  apiRecordSource,
+  manualEntrySource,
+  uploadedDocumentSource,
+  webPageSource,
+} from "./raw-source.js";
+export type {
+  ApiRecordSourceInput,
+  ChecksumInput,
+  ManualEntrySourceInput,
+  RawSourceInput,
+  UploadedDocumentSourceInput,
+  WebPageSourceInput,
+} from "./raw-source.js";

@@ -6,9 +6,13 @@ import { publicFieldReviewFixture } from "../fixtures/public-field-review.js";
 import {
   buildSurveyTrustInput,
   candidateReviewRecord,
+  apiRecordSource,
   fieldObservation,
+  manualEntrySource,
   repeatedObservation,
   SurveyInputBuilder,
+  uploadedDocumentSource,
+  webPageSource,
 } from "../src/index.js";
 
 describe("Survey Surface projection", () => {
@@ -45,6 +49,102 @@ describe("Survey Surface projection", () => {
     ]);
     assert.equal(originalPosition?.derivationEdges?.[0]?.supportStrength, "strong");
     assert.ok(report.changeRecords.some((record) => record.reason === "input-superseded"));
+  });
+
+  it("builds generic raw sources with stable identities and checksum normalization", () => {
+    const observedAt = "2026-05-31T15:00:00.000Z";
+    const uploaded = uploadedDocumentSource({
+      id: "source.document.entity-1",
+      sourceRef: "documents://entity-1/profile.pdf",
+      observedAt,
+      checksum: "abc123",
+      locatorScheme: "pdf",
+      metadata: { fileName: "profile.pdf" },
+    });
+    const api = apiRecordSource({
+      sourceRef: "public-records://entity/entity-1",
+      observedAt,
+      checksum: { algorithm: "sha512", value: "def456" },
+      metadata: { provider: "registry" },
+    });
+    const page = webPageSource({
+      sourceRef: "https://records.example.test/entities/entity-1",
+      observedAt,
+      fetchedAt: "2026-05-31T15:01:00.000Z",
+      checksum: "sha256:already-normalized",
+    });
+    const manual = manualEntrySource({
+      sourceRef: "operator://entity/entity-1/status",
+      observedAt,
+      metadata: { entryReason: "operator attestation" },
+    });
+
+    assert.equal(uploaded.id, "source.document.entity-1");
+    assert.equal(uploaded.kind, "uploaded-document");
+    assert.equal(uploaded.checksum, "sha256:abc123");
+    assert.equal(uploaded.locatorScheme, "pdf");
+    assert.equal(uploaded.metadata?.fileName, "profile.pdf");
+    assert.equal(api.id, "api-record:public-records://entity/entity-1");
+    assert.equal(api.kind, "api-record");
+    assert.equal(api.checksum, "sha512:def456");
+    assert.equal(api.locatorScheme, "structured-field");
+    assert.equal(page.kind, "web-page");
+    assert.equal(page.checksum, "sha256:already-normalized");
+    assert.equal(page.locatorScheme, "html");
+    assert.equal(manual.kind, "manual-entry");
+    assert.equal(manual.locatorScheme, "structured-field");
+  });
+
+  it("uses raw source helpers in scalar observations projected to Surface", () => {
+    const observedAt = "2026-05-31T15:00:00.000Z";
+    const rawSource = apiRecordSource({
+      sourceRef: "public-records://entity/entity-1",
+      observedAt,
+      checksum: "abc123",
+      metadata: { provider: "registry" },
+    });
+    const input = new SurveyInputBuilder({
+      source: "survey.raw-source.fixture",
+      generatedAt: "2026-05-31T16:00:00.000Z",
+    })
+      .addObservation(fieldObservation({
+        id: "observation.entity-1.registration-status",
+        field: "registrationStatus",
+        value: "ACTIVE",
+        rawSource,
+        extraction: {
+          confidence: 0.97,
+          locator: "json:$.registrationStatus",
+          extractor: "public-record-importer",
+          extractedAt: observedAt,
+        },
+        reviewOutcome: {
+          status: "verified",
+          actor: "records-operator",
+          reviewedAt: "2026-05-31T15:05:00.000Z",
+        },
+        claim: {
+          id: "claim.entity-1.registration-status",
+          subjectType: "public-record.entity",
+          subjectId: "entity-1",
+          surface: "public-record.profile",
+          claimType: "public-data.field",
+          status: "verified",
+          impactLevel: "medium",
+          collectedBy: "public-record-importer",
+        },
+      }))
+      .build();
+
+    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const evidence = report.evidence.find((item) => item.claimId === "claim.entity-1.registration-status");
+
+    assert.equal(input.rawSources[0]?.id, "api-record:public-records://entity/entity-1");
+    assert.equal(evidence?.sourceRef, rawSource.sourceRef);
+    assert.equal(evidence?.integrityRef, "sha256:abc123");
+    assert.equal(evidence?.metadata?.rawSourceKind, "api-record");
+    assert.equal(evidence?.metadata?.locatorScheme, "structured-field");
+    assert.equal(evidence?.metadata?.provider, "registry");
   });
 
   it("projects Candidate Conflict to a disputed claim with candidate-conflict event", () => {

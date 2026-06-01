@@ -64,6 +64,60 @@ const trustInput = validateTrustInput(buildSurveyTrustInput(surveyInput));
 const report = buildTrustReport(trustInput);
 ```
 
+## Raw sources
+
+Use raw-source helpers when a producer wants Survey to shape source identity
+before building observations. The helpers do not fetch, crawl, parse, or judge
+the source; they only produce stable `RawSource` records with explicit source
+references, observed times, locator schemes, checksums, and producer metadata.
+
+```ts
+import {
+  apiRecordSource,
+  fieldObservation,
+  SurveyInputBuilder,
+} from "@kontourai/survey";
+
+const rawSource = apiRecordSource({
+  sourceRef: "example-records://entity/entity-123",
+  observedAt: new Date().toISOString(),
+  checksum: "abc123",
+  metadata: {
+    provider: "example-records",
+  },
+});
+
+const surveyInput = new SurveyInputBuilder({ source: "example-producer:run-1" })
+  .addObservation(fieldObservation({
+    id: "entity-123.status.current",
+    field: "registrationStatus",
+    value: "ACTIVE",
+    rawSource,
+    extraction: {
+      confidence: 0.97,
+      locator: "json:$.registrationStatus",
+      extractor: "example-extractor",
+      extractedAt: new Date().toISOString(),
+    },
+    claim: {
+      subjectType: "public-record.entity",
+      subjectId: "entity-123",
+      surface: "example.profile",
+      claimType: "public-data.field",
+      status: "proposed",
+      impactLevel: "medium",
+      collectedBy: "example-extractor",
+    },
+  }))
+  .build();
+```
+
+Survey exports `uploadedDocumentSource`, `apiRecordSource`, `webPageSource`,
+and `manualEntrySource`. Producer-provided `id` values are preserved; otherwise
+Survey derives a stable id from source kind and `sourceRef`. Bare checksum
+values are normalized to `sha256:<value>`, while already-prefixed checksum
+values are preserved. Producer metadata is copied through to Surface evidence.
+
 ## Field observations
 
 Use `fieldObservation` when a producer wants to describe one scalar field value
