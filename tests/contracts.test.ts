@@ -11,6 +11,7 @@ import {
   manualEntrySource,
   repeatedObservation,
   reviewedCandidateResolution,
+  reviewedCurrentProposedResolution,
   SurveyInputBuilder,
   uploadedDocumentSource,
   webPageSource,
@@ -334,6 +335,94 @@ describe("Survey Surface projection", () => {
     assert.equal(unselected?.status, "superseded");
     assert.equal(input.candidateSets[0]?.selectedCandidateId, "candidate.corrected");
     assert.equal(input.reviewOutcomes[0]?.candidateId, "candidate.corrected");
+  });
+
+  it("builds a reviewed current/proposed resolution with a retained current value", () => {
+    const observedAt = "2026-05-31T15:00:00.000Z";
+    const reviewedAt = "2026-05-31T15:05:00.000Z";
+    const records = reviewedCurrentProposedResolution({
+      id: "candidate-set.entity-1.contact-phone",
+      target: "contactPhone",
+      selectedCandidateRole: "current",
+      selectedClaimId: "claim.entity-1.contact-phone",
+      rationale: "Reviewer kept the current value because the proposed source was ambiguous.",
+      reviewOutcome: {
+        status: "verified",
+        actor: "records-operator",
+        reviewedAt,
+        rationale: "The proposed contact phone belongs to a different location.",
+      },
+      unselectedClaimStatus: "rejected",
+      currentObservation: fieldObservation({
+        id: "observation.entity-1.contact-phone.current",
+        field: "contactPhone",
+        value: "303-555-0000",
+        rawSource: manualEntrySource({
+          id: "source.entity-1.contact-phone.current",
+          sourceRef: "records://entity-1/current/contact-phone",
+          observedAt: reviewedAt,
+        }),
+        extraction: {
+          locator: "structured-field:contactPhone",
+          extractor: "current-record",
+          extractedAt: reviewedAt,
+        },
+        claim: {
+          id: "claim.entity-1.contact-phone.current-candidate",
+          subjectType: "public-record.entity",
+          subjectId: "entity-1",
+          surface: "public-record.profile",
+          claimType: "public-data.field",
+          impactLevel: "medium",
+          collectedBy: "current-record",
+        },
+      }),
+      proposedObservation: fieldObservation({
+        id: "observation.entity-1.contact-phone.proposed",
+        field: "contactPhone",
+        value: "303-555-0100",
+        rawSource: webPageSource({
+          id: "source.entity-1.contact-phone.proposed",
+          sourceRef: "https://records.example.test/entity-1/contact",
+          observedAt,
+        }),
+        extraction: {
+          confidence: 0.64,
+          locator: "html:field=contactPhone",
+          excerpt: "Call 303-555-0100",
+          extractor: "records-crawler",
+          extractedAt: observedAt,
+        },
+        claim: {
+          id: "claim.entity-1.contact-phone.proposed-candidate",
+          subjectType: "public-record.entity",
+          subjectId: "entity-1",
+          surface: "public-record.profile",
+          claimType: "public-data.field-candidate",
+          impactLevel: "medium",
+          collectedBy: "records-crawler",
+        },
+      }),
+    });
+    const input = new SurveyInputBuilder({
+      source: "survey.reviewed-current-proposed-resolution.fixture",
+      generatedAt: "2026-05-31T16:00:00.000Z",
+    }).addClaimRecords(records).build();
+
+    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const selected = report.claims.find((claim) => claim.id === "claim.entity-1.contact-phone");
+    const unselected = report.claims.find((claim) => claim.id === "claim.entity-1.contact-phone.proposed-candidate");
+
+    assert.equal(report.summary.byStatus.verified, 1);
+    assert.equal(report.summary.byStatus.rejected, 1);
+    assert.equal(selected?.status, "verified");
+    assert.equal(selected?.value, "303-555-0000");
+    assert.equal(unselected?.status, "rejected");
+    assert.equal(unselected?.value, "303-555-0100");
+    assert.equal(input.candidateSets[0]?.selectedCandidateId, "candidate-set.entity-1.contact-phone.current.candidate");
+    assert.equal(input.reviewOutcomes[0]?.candidateId, "candidate-set.entity-1.contact-phone.current.candidate");
+    assert.equal(report.evidence.find((item) => item.claimId === selected?.id)?.metadata?.candidateRole, "current");
+    assert.equal(report.evidence.find((item) => item.claimId === unselected?.id)?.metadata?.candidateRole, "proposed");
   });
 
   it("rejects verified claims without review authority", () => {

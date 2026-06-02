@@ -197,6 +197,22 @@ This is useful for corrected documents, source-of-truth choices, and review
 queues where losing candidates should remain visible for transparency rather
 than disappearing from the trust trail.
 
+## Reviewed current/proposed resolutions
+
+Use `reviewedCurrentProposedResolution` when a producer has exactly two
+candidate roles for the same target: the current value the producer would keep
+absent a change, and a proposed value introduced by new source material,
+extraction, or review work. The helper consumes full observations, selects
+either the current or proposed candidate through `selectedCandidateRole`, and
+wraps the result with `reviewedCandidateResolution`.
+
+The helper may promote the selected candidate to a caller-supplied
+`selectedClaimId`. The unselected observation keeps its caller-authored claim
+id, so producers can keep losing candidates as candidate-specific history.
+Survey does not decide producer policy: callers still own review status,
+selected and unselected claim statuses, source details, claim vocabulary, and
+domain metadata.
+
 ## Repeated observations
 
 Use `repeatedObservation` when a producer wants to describe a repeated field or

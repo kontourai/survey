@@ -20,6 +20,11 @@ export type {
 } from "./builder.js";
 export { reviewedCandidateResolution } from "./reviewed-candidate-resolution.js";
 export type { ReviewedCandidateResolutionInput } from "./reviewed-candidate-resolution.js";
+export { reviewedCurrentProposedResolution } from "./reviewed-current-proposed-resolution.js";
+export type {
+  CurrentProposedCandidateRole,
+  ReviewedCurrentProposedResolutionInput,
+} from "./reviewed-current-proposed-resolution.js";
 export { buildSurveyTrustInput } from "./to-surface.js";
 export { fieldObservation } from "./field-observation.js";
 export type { FieldObservationInput } from "./field-observation.js";
