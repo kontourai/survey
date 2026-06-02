@@ -395,6 +395,146 @@ Survey passes those fields through to Surface while keeping the same
 source -> extraction -> candidate -> review -> claim projection path. Surface
 owns dependency semantics such as recompute pressure and status ceilings.
 
+## Adversarial passes
+
+Producers that run a second adversarial pass — whether an LLM judge, a rules
+engine, or a second human reviewer — emit their output into Survey as a normal
+producer pass with a distinct `extractor` id. Survey does not know or care that
+a second pass ran; it sees two producers disagreeing on the same target, which
+is exactly what `conflict` and escalation records are for.
+
+Two patterns cover the adversary's output:
+
+**Conflicting candidate.** The adversary disagrees with the first-pass extraction
+value. Add the adversary's extraction as a second candidate to the same candidate
+set using `candidateReviewRecord` with `status: "conflict"`. Survey projects the
+conflict to a `disputed` claim in Surface.
+
+```ts
+import { candidateReviewRecord, fieldObservation, SurveyInputBuilder } from "@kontourai/survey";
+
+const records = candidateReviewRecord({
+  id: "candidate-set.entity-1.registration-status",
+  target: "registrationStatus",
+  status: "conflict",
+  rationale: "First pass and adversary disagree; human review required.",
+  observations: [
+    fieldObservation({
+      id: "observation.entity-1.status.first-pass",
+      field: "registrationStatus",
+      value: "ACTIVE",
+      rawSource: {
+        kind: "api-record",
+        sourceRef: "records://entity-1/registry",
+        observedAt: new Date().toISOString(),
+        locatorScheme: "structured-field",
+      },
+      extraction: {
+        confidence: 0.91,
+        locator: "json:$.registrationStatus",
+        extractor: "agent-v1",
+        extractedAt: new Date().toISOString(),
+      },
+      candidate: { id: "candidate.first-pass", confidence: 0.91 },
+      claim: {
+        subjectType: "public-record.entity",
+        subjectId: "entity-1",
+        surface: "public-record.profile",
+        claimType: "public-data.field",
+        impactLevel: "high",
+        collectedBy: "agent-v1",
+      },
+    }),
+    fieldObservation({
+      id: "observation.entity-1.status.adversary",
+      field: "registrationStatus",
+      value: "INACTIVE",
+      rawSource: {
+        kind: "api-record",
+        sourceRef: "records://entity-1/registry",
+        observedAt: new Date().toISOString(),
+        locatorScheme: "structured-field",
+      },
+      extraction: {
+        confidence: 0.84,
+        locator: "json:$.registrationStatus",
+        extractor: "adversary-v1",
+        extractedAt: new Date().toISOString(),
+      },
+      candidate: { id: "candidate.adversary", confidence: 0.84 },
+      claim: {
+        subjectType: "public-record.entity",
+        subjectId: "entity-1",
+        surface: "public-record.profile",
+        claimType: "public-data.field",
+        impactLevel: "high",
+        collectedBy: "adversary-v1",
+      },
+    }),
+  ],
+});
+```
+
+**Framing challenge.** The adversary identifies a target that was not addressed
+at all — a missed standard, an unconsidered alternative, or a misframed question.
+Use `addEscalation` to record the challenge. Attach it to the closest relevant
+claim with `attachToClaimId`; Survey projects it as an additional `disputed`
+verification event on that claim so the reviewer sees it prominently.
+
+```ts
+import { SurveyInputBuilder, fieldObservation } from "@kontourai/survey";
+
+const builder = new SurveyInputBuilder({ source: "example-producer:run-2" });
+
+// First-pass observation
+builder.addObservation(fieldObservation({ /* ... */ }));
+
+// Adversary raises a framing challenge
+builder.addEscalation({
+  id: "escalation.entity-1.fair-value.completeness",
+  target: "fairValue",
+  dimension: "completeness",
+  reason: "Measurement standard Level 3 inputs were not documented; sensitivity range and unobservable input assumptions are missing.",
+  raisedBy: "adversary-v1",
+  raisedAt: new Date().toISOString(),
+  attachToClaimId: "claim.entity-1.fair-value",
+});
+```
+
+If a subsequent first-pass or human-review pass resolves the challenge, set
+`resolvedBy` to the id of the observation that closes it. Survey will not project
+a `disputed` event for resolved escalations.
+
+Escalation dimensions follow the adversary's attack surface: `framing` (wrong
+question framed), `completeness` (missing standards, alternatives, or evidence),
+`conclusion` (reasoning would not survive challenge), and `citation` (cited
+sources do not support the claims attached to them).
+
+Framing challenges without an `attachToClaimId` are carried in `SurveyInput`
+for producer tooling but are not projected to Surface. If the adversary cannot
+identify a target claim to attach a framing challenge to, emit a candidate set
+with `status: "escalated"` for the affected target — that projects to `disputed`
+in Surface with a `candidate-escalation` event.
+
+## Comfort zone flags
+
+Use `withinComfortZone: false` on a `ReviewOutcome` when the reviewer is
+recording a decision outside their domain expertise or is flagging that the
+conclusion requires a different authority to confirm. The flag and optional
+`comfortZoneNote` are carried forward to the Surface verification event `notes`
+so the reviewer chain sees the signal without having to read into the rationale.
+
+```ts
+reviewOutcome: {
+  status: "assumed",
+  actor: "records-operator",
+  reviewedAt: new Date().toISOString(),
+  rationale: "Assumed from registry source pending specialist review.",
+  withinComfortZone: false,
+  comfortZoneNote: "Renewal clause interpretation requires specialist counsel.",
+},
+```
+
 ## Product Boundary
 
 Survey does not crawl pages, parse PDFs, rank candidates, decide review policy,
