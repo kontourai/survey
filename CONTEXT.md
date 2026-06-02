@@ -70,6 +70,22 @@ _Avoid_: Verified candidate, winner
 The producer's recorded review decision for a **Candidate Set** or a specific **Candidate**. A **Review Outcome** can verify, assume, reject, or leave a candidate proposed, but it belongs to the producer workflow rather than Survey policy.
 _Avoid_: Review, approval when the status may not be verified, policy decision
 
+**Comfort Zone Flag**:
+An optional `withinComfortZone: false` marker on a **Review Outcome**, paired with an optional `comfortZoneNote`, indicating the reviewer recorded a posture outside their domain expertise or is flagging that the conclusion requires a different authority to confirm. Without this flag, producers have no way to distinguish "I reviewed this confidently" from "I recorded a posture but a specialist should confirm" — both look like a normal **Review Outcome**. Survey carries the flag forward to the Surface verification event so the reviewer chain sees the signal rather than having to read into the rationale body.
+_Avoid_: Encoding uncertainty only in rationale text, using a low-confidence extraction as a proxy for reviewer uncertainty, conflating extraction confidence with reviewer comfort zone
+
+**Escalation Record**:
+A durable record of a challenge raised against a target that was not fully addressed by the originating producer pass. An **Escalation Record** captures what a second-pass producer — whether an automated adversary, a rules engine, or a human reviewer — flagged as a gap: a missing consideration, a misframed question, a conclusion that would not survive challenge, or a citation mismatch. The problem it solves: without a first-class slot for "this target was not addressed," producers have no option except to paper over genuine uncertainty with a confident-looking claim or to silently omit the target entirely. An **Escalation Record** makes the gap part of the provenance trail. Unresolved escalations attached to a claim project to Surface as additional **Disputed** verification events so the reviewer sees the challenge alongside the claim rather than discovering it later. Resolved escalations (with `resolvedBy` set to the observation that closed them) are carried in the record without projecting an event.
+_Avoid_: Open question as a comment in rationale, treating raised challenges as errors rather than as legitimate posture, conflating escalation with a failed extraction
+
+**Escalation Dimension**:
+The category of a challenge raised in an **Escalation Record**: `framing` (the wrong question was framed or the wrong unit of analysis was chosen), `completeness` (a required standard, alternative, or evidence was not addressed), `conclusion` (the reasoning would not survive a competent reviewer's challenge), or `citation` (cited sources do not support the claims attached to them). The dimension guides the reviewer toward the kind of response the escalation requires — a framing challenge asks the producer to re-examine the question, while a completeness challenge asks them to extend the record.
+_Avoid_: Generic "issue type", collapsing all dimensions into a single flag, using dimension as a severity score
+
+**Adversarial Pass**:
+A second producer run that challenges a first-pass producer by adding conflicting candidates, raising escalation records, or both. An **Adversarial Pass** is a producer convention, not a Survey concept: Survey sees two producers disagreeing on the same target, which is what **Candidate Conflict** and **Escalation Record** are designed to carry. The adversary is identified by a distinct `extractor` id; Survey does not need to know it is an LLM, a rules engine, or a human. Use **Candidate Conflict** when the adversary disagrees on the extracted value. Use **Escalation Record** when the adversary identifies a target that was not addressed at all.
+_Avoid_: Wiring LLM-specific logic into Survey, treating the adversary as a special Survey actor, conflating the adversary with the human reviewer
+
 **Claim**:
 A Surface claim prepared from Survey records. Survey uses Surface's **Claim** semantics; Survey-specific language should only explain how producer-side **Raw Sources**, **Extractions**, **Candidates**, and **Review Outcomes** project into claims.
 _Avoid_: Extraction, candidate, fact
@@ -108,6 +124,10 @@ _Avoid_: Conflict without qualification, dispute when referring to the candidate
 A candidate-set status meaning candidates exist but the producer has not completed the review workflow needed for verified or assumed status.
 _Avoid_: Unresolved, pending claim
 
+**Escalated**:
+A candidate-set status meaning the producer was unable to produce a reliable candidate for the target and is requesting specialist framing before any value can be proposed. **Escalated** is distinct from **Needs Review** (candidates exist but need selection) and from **Candidate Conflict** (candidates exist and disagree); it signals that the target itself is uncertain before a candidate could be formed. Projects to a **Disputed** claim in Surface with a `candidate-escalation` verification event. Use **Escalation Record** instead when the gap is identified by a second-pass producer rather than the originating producer.
+_Avoid_: Treating escalated as a higher-severity version of needs-review, using escalated when candidates do exist
+
 **Resolved**:
 A candidate-set status meaning the producer has selected a candidate for the target. **Resolved** is not the same as **Verified**; the selected candidate may still project as proposed without a **Review Outcome**.
 _Avoid_: Verified, completed
@@ -135,6 +155,9 @@ These are helper shapes for authoring **Observations**, not separate domain conc
 **Target**:
 "Target" is ambiguous unless qualified. Use **Extraction Target** for source-side extraction and **Field or Behavior** for claim-side meaning.
 
+**Escalated vs. Needs Review vs. Candidate Conflict**:
+These three candidate-set statuses address different problems and should not be used interchangeably. **Needs Review** means candidates exist and are waiting for a human to select one. **Candidate Conflict** means candidates exist and a second source or pass disagrees on the value — the producer has a selection problem. **Escalated** means the producing pass could not form a reliable candidate at all and needs specialist framing before the question can even be answered — there is no selection problem yet because there is nothing reliable to select from. An **Escalation Record** is the second-pass analog to **Escalated**: use it when a second producer, not the originating one, identifies the gap.
+
 **Diff**:
 Use only as an analogy for explaining **Current/Proposed Candidate Set** behavior. In Survey domain language, the durable concepts are **Candidate**, **Candidate Set**, **Selected Candidate**, and **Review Outcome**.
 
@@ -160,3 +183,11 @@ Domain expert: "That should become a Candidate in a Candidate Set with Needs Rev
 Developer: "A corrected document replaced an original amount field."
 
 Domain expert: "Keep the original Claim as Superseded, create a Proposed Claim from the corrected Candidate, and connect any computed Claim to its input Claims through Claim Dependencies."
+
+Developer: "An agent extracted a fair value figure but I'm not sure it considered all the required inputs. A second agent reviewed the first agent's output and flagged a gap."
+
+Domain expert: "The second agent is an Adversarial Pass — it's a second Producer with a distinct extractor id. If it disagrees on the extracted value, add its Extraction as a second Candidate and set the Candidate Set to Conflict. If it identified a target the first pass didn't address at all, add an Escalation Record with dimension 'completeness' and attach it to the closest relevant Claim. Either way, Survey carries both producers' posture and the reviewer sees the disagreement in Surface rather than a silently confident claim."
+
+Developer: "The reviewer approved the fair value figure but told me they're not a specialist in this area."
+
+Domain expert: "Set withinComfortZone to false on the Review Outcome and add a comfortZoneNote. The Comfort Zone Flag travels with the Review Outcome to Surface so the next reviewer in the chain sees it on the verification event — they don't have to read the rationale to know this conclusion is waiting for specialist confirmation."
