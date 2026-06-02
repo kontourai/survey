@@ -14,6 +14,7 @@ import {
   repeatedObservation,
   reviewedCandidateResolution,
   reviewedCurrentProposedResolution,
+  sourceOfAuthorityObservation,
   SurveyInputBuilder,
   uploadedDocumentSource,
   webPageSource,
@@ -189,6 +190,222 @@ describe("Survey Surface projection", () => {
     assert.equal(evidence?.metadata?.rawSourceKind, "api-record");
     assert.equal(evidence?.metadata?.locatorScheme, "structured-field");
     assert.equal(evidence?.metadata?.provider, "registry");
+  });
+
+  it("projects a verified regulated source-of-authority observation through Surface evidence metadata", () => {
+    const observedAt = "2026-06-01T10:00:00.000Z";
+    const rawSource = uploadedDocumentSource({
+      id: "source.irs.publication-2026",
+      sourceRef: "https://irs.example.test/pub/2026-standard-deduction.pdf",
+      observedAt,
+      checksum: "rule-source",
+      locatorScheme: "pdf",
+      metadata: { publication: "IRS Publication Example" },
+    });
+    const input = new SurveyInputBuilder({
+      source: "survey.source-of-authority.regulated-rule",
+      generatedAt: "2026-06-01T11:00:00.000Z",
+    })
+      .addObservation(sourceOfAuthorityObservation({
+        id: "observation.rule.standard-deduction.mfj.2026",
+        field: "federal.standardDeduction.mfj.2026",
+        value: 30000,
+        sourceAuthority: {
+          authorityClass: "official_publication",
+          scope: {
+            jurisdiction: "federal",
+            productArea: "regulated-rule",
+            taxYear: 2026,
+          },
+          effectiveFrom: "2026-01-01",
+          effectiveUntil: "2026-12-31",
+          sourceVersion: "2026-draft",
+          sourceOwner: "irs.example.test",
+          declaredBy: "regulated-rule-importer",
+        },
+        rawSource,
+        extraction: {
+          confidence: 0.94,
+          locator: "pdf:page=12;table=standard-deduction;row=mfj",
+          extractor: "regulated-rule-importer",
+          extractedAt: observedAt,
+        },
+        reviewOutcome: {
+          status: "verified",
+          actor: "rule-reviewer@example.test",
+          reviewedAt: "2026-06-01T10:15:00.000Z",
+          rationale: "Reviewer accepted the extracted standard deduction row.",
+        },
+        claim: {
+          id: "claim.rule.standard-deduction.mfj.2026",
+          subjectType: "regulated-rule",
+          subjectId: "federal:standard-deduction:mfj:2026",
+          surface: "regulated.rules",
+          claimType: "regulated.rule-value",
+          status: "verified",
+          impactLevel: "high",
+          evidenceType: "policy_rule",
+          evidenceMethod: "extraction",
+          collectedBy: "regulated-rule-importer",
+        },
+      }))
+      .build();
+
+    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const claim = report.claims.find((item) => item.id === "claim.rule.standard-deduction.mfj.2026");
+    const evidence = report.evidence.find((item) => item.claimId === claim?.id);
+
+    assert.equal(claim?.status, "verified");
+    assert.equal(claim?.metadata?.survey && typeof claim.metadata.survey, "object");
+    assert.equal(
+      (claim?.metadata?.survey as { sourceOfAuthority?: { authorityClass?: string } } | undefined)?.sourceOfAuthority?.authorityClass,
+      "official_publication",
+    );
+    assert.equal(evidence?.evidenceType, "policy_rule");
+    assert.equal(evidence?.metadata?.sourceAuthority && typeof evidence.metadata.sourceAuthority, "object");
+    assert.equal(
+      (evidence?.metadata?.sourceAuthority as { authorityClass?: string } | undefined)?.authorityClass,
+      "official_publication",
+    );
+    assert.deepEqual(
+      (evidence?.metadata?.sourceAuthority as { scope?: Record<string, unknown> } | undefined)?.scope,
+      {
+        jurisdiction: "federal",
+        productArea: "regulated-rule",
+        taxYear: 2026,
+      },
+    );
+    assert.equal(report.authorityTrace?.length ?? 0, 0);
+  });
+
+  it("projects a proposed public-directory source-of-authority observation without reviewer authority", () => {
+    const observedAt = "2026-06-01T09:00:00.000Z";
+    const rawSource = webPageSource({
+      sourceRef: "https://camp.example.test/summer/session-1",
+      observedAt,
+      fetchedAt: "2026-06-01T09:01:00.000Z",
+      checksum: "camp-page",
+      metadata: { provider: "Example Camp" },
+    });
+    const input = new SurveyInputBuilder({
+      source: "survey.source-of-authority.public-directory",
+      generatedAt: "2026-06-01T09:10:00.000Z",
+    })
+      .addObservation(sourceOfAuthorityObservation({
+        id: "observation.camp.session-1.age-range",
+        field: "camp.session.ageRange",
+        value: { min: 7, max: 12 },
+        sourceAuthority: {
+          authorityClass: "publisher_owned_page",
+          scope: {
+            productArea: "camp-listing",
+            providerId: "provider.example-camp",
+            sessionId: "session-1",
+          },
+          sourceOwner: "Example Camp",
+          declaredBy: "camp-crawler",
+        },
+        rawSource,
+        extraction: {
+          confidence: 0.88,
+          locator: "css:[data-field='age-range']",
+          extractor: "camp-crawler",
+          extractedAt: observedAt,
+          excerpt: "Ages 7-12",
+        },
+        claim: {
+          id: "claim.camp.session-1.age-range.proposed",
+          subjectType: "camp-session",
+          subjectId: "session-1",
+          surface: "public-directory.camps",
+          claimType: "published-field",
+          status: "proposed",
+          impactLevel: "medium",
+          collectedBy: "camp-crawler",
+        },
+      }))
+      .build();
+
+    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const claim = report.claims.find((item) => item.id === "claim.camp.session-1.age-range.proposed");
+    const evidence = report.evidence.find((item) => item.claimId === claim?.id);
+
+    assert.equal(claim?.status, "proposed");
+    assert.equal(evidence?.metadata?.sourceAuthority && typeof evidence.metadata.sourceAuthority, "object");
+    assert.equal(
+      (evidence?.metadata?.sourceAuthority as { authorityClass?: string } | undefined)?.authorityClass,
+      "publisher_owned_page",
+    );
+    assert.equal(report.authorityTrace?.length ?? 0, 0);
+  });
+
+  it("rejects verified source-of-authority observations without source posture and review posture", () => {
+    const observedAt = "2026-06-01T10:00:00.000Z";
+    const rawSource = webPageSource({
+      sourceRef: "https://policy.example.test/rules",
+      observedAt,
+      checksum: "policy-page",
+    });
+    const base = {
+      id: "observation.policy.status",
+      field: "policy.status",
+      value: "ACTIVE",
+      sourceAuthority: {
+        authorityClass: "policy_document" as const,
+        scope: { productArea: "policy" },
+        declaredBy: "policy-importer",
+      },
+      rawSource,
+      extraction: {
+        confidence: 0.9,
+        locator: "css:#status",
+        extractor: "policy-importer",
+        extractedAt: observedAt,
+      },
+      reviewOutcome: {
+        status: "verified" as const,
+        actor: "policy-reviewer",
+        reviewedAt: "2026-06-01T10:05:00.000Z",
+      },
+      claim: {
+        subjectType: "policy",
+        subjectId: "policy-1",
+        surface: "policy.library",
+        claimType: "policy-field",
+        status: "verified" as const,
+        impactLevel: "medium" as const,
+        collectedBy: "policy-importer",
+      },
+    };
+
+    assert.throws(
+      () => sourceOfAuthorityObservation({
+        ...base,
+        sourceAuthority: { ...base.sourceAuthority, scope: {} },
+      }),
+      /needs sourceAuthority\.scope/,
+    );
+    assert.throws(
+      () => sourceOfAuthorityObservation({
+        ...base,
+        extraction: { ...base.extraction, locator: undefined },
+      }),
+      /without a source locator/,
+    );
+    assert.throws(
+      () => sourceOfAuthorityObservation({
+        ...base,
+        reviewOutcome: { ...base.reviewOutcome, actor: undefined },
+      }),
+      /without review actor authority/,
+    );
+    assert.throws(
+      () => sourceOfAuthorityObservation({
+        ...base,
+        reviewOutcome: { ...base.reviewOutcome, reviewedAt: undefined },
+      }),
+      /without reviewedAt/,
+    );
   });
 
   it("projects Candidate Conflict to a disputed claim with candidate-conflict event", () => {
