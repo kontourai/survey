@@ -183,6 +183,94 @@ preserved. Producers still own scalar semantics, validation, candidate ranking,
 review policy, and whether a value should be verified, proposed, rejected, or
 assumed.
 
+## Source-of-authority observations
+
+Use `sourceOfAuthorityObservation` when a producer treats the raw source as
+authoritative for the extracted target: an official publication, registration
+platform page, policy document, contract record, or system-of-record response.
+The helper does not decide whether the source is truly authoritative. It
+enforces record discipline around the producer's declared source posture.
+
+Verified or assumed source-of-authority observations require:
+
+- source reference
+- source locator
+- source-authority class
+- source-authority scope
+- review actor
+- reviewed time
+
+Source-authority metadata projects through Surface Evidence metadata under
+`sourceAuthority`. It does not project to Surface `authorityTrace`, which is
+reserved for actor, credential, role, organization, policy, or system authority.
+
+```ts
+import {
+  buildSurveyTrustInput,
+  sourceOfAuthorityObservation,
+  SurveyInputBuilder,
+  uploadedDocumentSource,
+} from "@kontourai/survey";
+
+const observedAt = new Date().toISOString();
+const rawSource = uploadedDocumentSource({
+  sourceRef: "https://rules.example.test/standard-deduction.pdf",
+  observedAt,
+  checksum: "abc123",
+  locatorScheme: "pdf",
+});
+
+const surveyInput = new SurveyInputBuilder({
+  source: "rule-producer:run-1",
+})
+  .addObservation(sourceOfAuthorityObservation({
+    id: "rule.standard-deduction.mfj.2026",
+    field: "federal.standardDeduction.mfj.2026",
+    value: 30000,
+    sourceAuthority: {
+      authorityClass: "official_publication",
+      scope: {
+        jurisdiction: "federal",
+        productArea: "regulated-rule",
+        taxYear: 2026,
+      },
+      sourceVersion: "2026",
+      declaredBy: "rule-producer",
+    },
+    rawSource,
+    extraction: {
+      confidence: 0.94,
+      locator: "pdf:page=12;table=standard-deduction;row=mfj",
+      extractor: "rule-producer",
+      extractedAt: observedAt,
+    },
+    reviewOutcome: {
+      status: "verified",
+      actor: "rule-reviewer",
+      reviewedAt: new Date().toISOString(),
+    },
+    claim: {
+      subjectType: "regulated-rule",
+      subjectId: "federal:standard-deduction:mfj:2026",
+      surface: "regulated.rules",
+      claimType: "regulated.rule-value",
+      status: "verified",
+      impactLevel: "high",
+      evidenceType: "policy_rule",
+      evidenceMethod: "extraction",
+      collectedBy: "rule-producer",
+    },
+  }))
+  .build();
+
+const trustInput = buildSurveyTrustInput(surveyInput);
+```
+
+Contextual claims such as "this return position is compliant" or "this camp is
+eligible for an 8-year-old in June" are not source-of-authority observations.
+They are Surface claims with Claim Dependencies on source-of-authority claims
+and other product facts. The vertical product owns that domain logic.
+
 ## Reviewed candidate resolutions
 
 Use `reviewedCandidateResolution` when a producer has multiple candidate
