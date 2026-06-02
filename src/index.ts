@@ -26,6 +26,17 @@ export type {
   ReviewedCurrentProposedResolutionInput,
 } from "./reviewed-current-proposed-resolution.js";
 export { buildSurveyTrustInput } from "./to-surface.js";
+export type { BuildSurveyTrustInputOptions } from "./to-surface.js";
+export {
+  buildCanonicalReviewProofPayload,
+  buildReviewProofAnchor,
+  canonicalReviewProofJson,
+  hashCanonicalReviewProofPayload,
+} from "./review-proof.js";
+export type {
+  CanonicalReviewProofPayload,
+  ReviewProofInput,
+} from "./review-proof.js";
 export { fieldObservation } from "./field-observation.js";
 export type { FieldObservationInput } from "./field-observation.js";
 export { repeatedObservation } from "./repeated-observation.js";

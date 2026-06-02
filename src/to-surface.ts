@@ -1,4 +1,5 @@
 import type { Claim, Evidence, TrustInput, TrustStatus, VerificationEvent } from "@kontourai/surface";
+import { buildReviewProofAnchor } from "./review-proof.js";
 import type {
   Candidate,
   CandidateSet,
@@ -9,7 +10,11 @@ import type {
   SurveyInput,
 } from "./types.js";
 
-export function buildSurveyTrustInput(input: SurveyInput): TrustInput {
+export interface BuildSurveyTrustInputOptions {
+  reviewProofs?: boolean;
+}
+
+export function buildSurveyTrustInput(input: SurveyInput, options: BuildSurveyTrustInputOptions = {}): TrustInput {
   const rawSources = indexById(input.rawSources, "raw source");
   const extractions = indexById(input.extractions, "extraction");
   const candidateSets = indexById(input.candidateSets, "candidate set");
@@ -32,7 +37,7 @@ export function buildSurveyTrustInput(input: SurveyInput): TrustInput {
     const updatedAt = projection.updatedAt ?? review?.reviewedAt ?? input.generatedAt;
     const evidenceId = `${projection.id}.evidence.source`;
 
-    claims.push({
+    const claim: Claim = {
       id: projection.id,
       subjectType: projection.subjectType,
       subjectId: projection.subjectId,
@@ -65,7 +70,24 @@ export function buildSurveyTrustInput(input: SurveyInput): TrustInput {
           reviewOutcomeId: review?.id,
         },
       },
-    });
+    };
+
+    if (options.reviewProofs && review) {
+      claim.currentIntegrityAnchor = buildReviewProofAnchor({
+        rawSource,
+        extraction,
+        candidate,
+        candidateSet,
+        reviewOutcome: review,
+        claim: {
+          ...projection,
+          value: claimValue,
+          status,
+        },
+      });
+    }
+
+    claims.push(claim);
 
     evidence.push({
       id: evidenceId,
