@@ -54,6 +54,14 @@ _Avoid_: Claim, answer, final value
 The producer's grouping of candidate values for the same target. A **Candidate Set** has one or more **Candidates** and may identify a selected candidate while still needing review.
 _Avoid_: Choice list, ranking, review queue
 
+**Current/Proposed Candidate Set**:
+A **Candidate Set** with exactly two producer roles for the same target: the current candidate the producer would keep absent a change, and the proposed candidate introduced by new source material, extraction, or review work. The pattern is similar to a code diff, but Survey language should keep the focus on candidate roles and review outcome rather than patches or approvals.
+_Avoid_: Diff, approved field, rejected field, current-vs-proposed field
+
+**Reviewed Current/Proposed Resolution**:
+A reviewed producer decision over a **Current/Proposed Candidate Set** that selects either the current candidate or the proposed candidate and records the durable **Review Outcome**. Use this term for the action-oriented helper shape; it is a specialization of reviewed candidate resolution, not a separate review policy.
+_Avoid_: Current proposed helper, approval resolution, diff application
+
 **Selected Candidate**:
 The candidate the **Producer** currently prefers within a **Candidate Set**. Selection is not the same as verification.
 _Avoid_: Verified candidate, winner
@@ -126,6 +134,9 @@ These are helper shapes for authoring **Observations**, not separate domain conc
 
 **Target**:
 "Target" is ambiguous unless qualified. Use **Extraction Target** for source-side extraction and **Field or Behavior** for claim-side meaning.
+
+**Diff**:
+Use only as an analogy for explaining **Current/Proposed Candidate Set** behavior. In Survey domain language, the durable concepts are **Candidate**, **Candidate Set**, **Selected Candidate**, and **Review Outcome**.
 
 **Survey-Branded Language**:
 Use Survey-specific terms only when the concept is unique to the producer-side source -> extraction -> candidate -> review chain. When a concept maps one-to-one to Surface, reuse the Surface term.
