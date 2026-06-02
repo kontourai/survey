@@ -31,7 +31,8 @@
     "build": "rm -rf dist && tsc",
     "typecheck": "tsc --noEmit",
     "test": "npm run build && node --test dist/tests/*.test.js",
-    "verify": "npm run typecheck && npm test"
+    "verify": "node scripts/check-content-boundary.cjs && npm run typecheck && npm test",
+    "check:content-boundary": "node scripts/check-content-boundary.cjs"
   },
   "dependencies": {
     "@kontourai/surface": "^0.5.0"
