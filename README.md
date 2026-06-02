@@ -384,6 +384,53 @@ Conflict before review has resolved which candidate should win. When no review
 outcome overrides it, `buildSurveyTrustInput` projects the claim to Surface
 status `"disputed"` and records a `"candidate-conflict"` verification event.
 
+## Review proofs
+
+Use review proof helpers when a producer wants a Surface-compatible integrity
+anchor for one reviewed Survey source -> extraction -> candidate -> review ->
+claim path.
+
+```ts
+import {
+  buildCanonicalReviewProofPayload,
+  buildReviewProofAnchor,
+  canonicalReviewProofJson,
+  hashCanonicalReviewProofPayload,
+} from "@kontourai/survey";
+
+const proofInput = {
+  rawSource,
+  extraction,
+  candidate,
+  candidateSet,
+  reviewOutcome,
+  claim,
+};
+
+const payload = buildCanonicalReviewProofPayload(proofInput);
+const canonicalJson = canonicalReviewProofJson(payload);
+const hash = hashCanonicalReviewProofPayload(payload);
+const anchor = buildReviewProofAnchor(proofInput);
+```
+
+`buildReviewProofAnchor` returns a hash-only Surface `IntegrityAnchor` for the
+canonical payload. The lower-level payload, JSON, and hash helpers are exported
+so producers can store or recompute the exact canonical proof material used for
+the anchor. Producer metadata is not part of the canonical payload; any
+non-portable context belongs outside the hash, such as anchor metadata.
+
+When the Surface projection proof option is enabled, `buildSurveyTrustInput`
+will attach the same kind of anchor to the projected reviewed claim:
+
+```ts
+const trustInput = buildSurveyTrustInput(surveyInput, { reviewProofs: true });
+```
+
+The proof provides hash-only tamper evidence for the Survey review/provenance
+trail in the canonical payload. It does not authenticate an actor, sign the
+payload, or prove the real-world truth of the claim. Non-goals include JWT/JWS
+signing, key management, a transparency log, and any veracity guarantee.
+
 ## Computed values
 
 Computed values are normal `ClaimTarget` entries in `claims`. Producers should

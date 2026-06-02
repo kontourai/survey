@@ -4,10 +4,12 @@ import { buildTrustReport, validateTrustInput } from "@kontourai/surface";
 import { correctedDocumentCandidatesFixture } from "../fixtures/corrected-document-candidates.js";
 import { publicFieldReviewFixture } from "../fixtures/public-field-review.js";
 import {
+  buildCanonicalReviewProofPayload,
   buildSurveyTrustInput,
   candidateReviewRecord,
   apiRecordSource,
   fieldObservation,
+  hashCanonicalReviewProofPayload,
   manualEntrySource,
   repeatedObservation,
   reviewedCandidateResolution,
@@ -28,6 +30,46 @@ describe("Survey Surface projection", () => {
     assert.equal(report.summary.byStatus.verified, 1);
     assert.equal(report.summary.byStatus.proposed, 1);
     assert.equal(report.claims[0]?.metadata?.survey && typeof report.claims[0].metadata.survey, "object");
+  });
+
+  it("optionally attaches recomputable review proof anchors to reviewed Surface claims", () => {
+    const input = buildSurveyTrustInput(publicFieldReviewFixture, { reviewProofs: true });
+    const valid = validateTrustInput(input);
+    const report = buildTrustReport(valid);
+    const claim = report.claims.find((item) => item.id === "public-field.entity-123.availability-status.current");
+    const proposedClaim = report.claims.find((item) => item.id === "public-field.entity-123.availability-status.proposal-456");
+    const rawSource = publicFieldReviewFixture.rawSources[0]!;
+    const extraction = publicFieldReviewFixture.extractions[0]!;
+    const candidateSet = publicFieldReviewFixture.candidateSets[0]!;
+    const candidate = candidateSet.candidates[0]!;
+    const reviewOutcome = publicFieldReviewFixture.reviewOutcomes[0]!;
+    const projection = publicFieldReviewFixture.claims[0]!;
+    const payload = buildCanonicalReviewProofPayload({
+      rawSource,
+      extraction,
+      candidate,
+      candidateSet,
+      reviewOutcome,
+      claim: {
+        ...projection,
+        value: candidate.value,
+        status: reviewOutcome.status,
+      },
+    });
+    const expectedHash = hashCanonicalReviewProofPayload(payload);
+
+    assert.equal(claim?.currentIntegrityAnchor?.kind, "hash");
+    assert.equal(claim?.currentIntegrityAnchor?.algorithm, "sha256");
+    assert.equal(claim?.currentIntegrityAnchor?.value, expectedHash);
+    assert.equal(claim?.currentIntegrityAnchor?.sourceRef, rawSource.sourceRef);
+    assert.equal(claim?.currentIntegrityAnchor?.observedAt, reviewOutcome.reviewedAt);
+    assert.equal(proposedClaim?.currentIntegrityAnchor, undefined);
+    assert.equal(claim?.metadata?.producer && typeof claim.metadata.producer, "object");
+    assert.equal(claim?.currentIntegrityAnchor?.metadata, undefined);
+
+    const mutatedPayload = structuredClone(payload);
+    mutatedPayload.reviewOutcome!.rationale = "Mutated canonical review rationale.";
+    assert.notEqual(hashCanonicalReviewProofPayload(mutatedPayload), claim?.currentIntegrityAnchor?.value);
   });
 
   it("projects corrected document candidates and preserves Claim Dependency recompute pressure", () => {
