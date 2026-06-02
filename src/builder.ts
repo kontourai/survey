@@ -2,6 +2,7 @@ import type {
   Candidate,
   CandidateSet,
   ClaimTarget,
+  EscalationRecord,
   Extraction,
   ReviewStatus,
   RawSource,
@@ -64,6 +65,7 @@ export class SurveyInputBuilder {
   private readonly candidateSets = new Map<string, CandidateSet>();
   private readonly reviewOutcomes = new Map<string, ReviewOutcome>();
   private readonly claims = new Map<string, ClaimTarget>();
+  private readonly escalations = new Map<string, EscalationRecord>();
 
   constructor(args: SurveyInputBuilderArgs) {
     this.source = args.source;
@@ -92,6 +94,11 @@ export class SurveyInputBuilder {
 
   addClaim(claim: ClaimTarget): this {
     addUnique(this.claims, claim, "claim target");
+    return this;
+  }
+
+  addEscalation(escalation: EscalationRecord): this {
+    addUnique(this.escalations, escalation, "escalation");
     return this;
   }
 
@@ -127,6 +134,7 @@ export class SurveyInputBuilder {
       candidateSets: [...this.candidateSets.values()],
       reviewOutcomes: [...this.reviewOutcomes.values()],
       claims: [...this.claims.values()],
+      escalations: this.escalations.size > 0 ? [...this.escalations.values()] : undefined,
     };
   }
 

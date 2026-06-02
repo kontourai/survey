@@ -1126,6 +1126,246 @@ describe("Survey Surface projection", () => {
     );
   });
 
+  it("projects an escalated candidate set to a disputed claim with candidate-escalation event", () => {
+    const input = buildSurveyTrustInput({
+      source: "survey.escalated.fixture",
+      generatedAt: "2026-05-31T16:00:00.000Z",
+      rawSources: [{
+        id: "source.registry",
+        kind: "api-record",
+        sourceRef: "records://entity-1/registry",
+        observedAt: "2026-05-31T15:00:00.000Z",
+        locatorScheme: "structured-field",
+      }],
+      extractions: [{
+        id: "extraction.registry.status",
+        sourceId: "source.registry",
+        target: "registrationStatus",
+        value: "ACTIVE",
+        confidence: 0.61,
+        locator: "json:$.registrationStatus",
+        extractor: "records-importer",
+        extractedAt: "2026-05-31T15:00:00.000Z",
+      }],
+      candidateSets: [{
+        id: "candidate-set.entity-1.registration-status",
+        target: "registrationStatus",
+        status: "escalated",
+        rationale: "Low confidence extraction requires specialist review before any status can be proposed.",
+        candidates: [{
+          id: "candidate.registry.status",
+          extractionId: "extraction.registry.status",
+          value: "ACTIVE",
+          confidence: 0.61,
+        }],
+      }],
+      reviewOutcomes: [],
+      claims: [{
+        id: "claim.entity-1.registration-status",
+        candidateSetId: "candidate-set.entity-1.registration-status",
+        candidateId: "candidate.registry.status",
+        subjectType: "public-record.entity",
+        subjectId: "entity-1",
+        surface: "public-record.profile",
+        claimType: "public-data.field",
+        fieldOrBehavior: "registrationStatus",
+        impactLevel: "high",
+        collectedBy: "records-importer",
+      }],
+    });
+    const report = buildTrustReport(validateTrustInput(input));
+
+    assert.equal(report.summary.byStatus.disputed, 1);
+    assert.equal(report.claims[0]?.status, "disputed");
+    assert.equal(report.events[0]?.method, "candidate-escalation");
+  });
+
+  it("projects a comfort-zone flag to the verification event notes", () => {
+    const input = buildSurveyTrustInput({
+      source: "survey.comfort-zone.fixture",
+      generatedAt: "2026-05-31T16:00:00.000Z",
+      rawSources: [{
+        id: "source.registry",
+        kind: "api-record",
+        sourceRef: "records://entity-1/registry",
+        observedAt: "2026-05-31T15:00:00.000Z",
+        locatorScheme: "structured-field",
+      }],
+      extractions: [{
+        id: "extraction.registry.status",
+        sourceId: "source.registry",
+        target: "registrationStatus",
+        value: "ACTIVE",
+        confidence: 0.9,
+        locator: "json:$.registrationStatus",
+        extractor: "records-importer",
+        extractedAt: "2026-05-31T15:00:00.000Z",
+      }],
+      candidateSets: [{
+        id: "candidate-set.entity-1.registration-status",
+        target: "registrationStatus",
+        status: "resolved",
+        selectedCandidateId: "candidate.registry.status",
+        candidates: [{
+          id: "candidate.registry.status",
+          extractionId: "extraction.registry.status",
+          value: "ACTIVE",
+          confidence: 0.9,
+        }],
+      }],
+      reviewOutcomes: [{
+        id: "review.registry.status",
+        candidateSetId: "candidate-set.entity-1.registration-status",
+        candidateId: "candidate.registry.status",
+        status: "assumed",
+        actor: "records-operator",
+        reviewedAt: "2026-05-31T15:05:00.000Z",
+        rationale: "Assumed from registry source.",
+        withinComfortZone: false,
+        comfortZoneNote: "Renewal clause interpretation requires specialist counsel.",
+      }],
+      claims: [{
+        id: "claim.entity-1.registration-status",
+        candidateSetId: "candidate-set.entity-1.registration-status",
+        candidateId: "candidate.registry.status",
+        subjectType: "public-record.entity",
+        subjectId: "entity-1",
+        surface: "public-record.profile",
+        claimType: "public-data.field",
+        fieldOrBehavior: "registrationStatus",
+        impactLevel: "medium",
+        collectedBy: "records-importer",
+      }],
+    });
+    const report = buildTrustReport(validateTrustInput(input));
+    const event = report.events[0];
+
+    assert.equal(report.claims[0]?.status, "assumed");
+    assert.ok(event?.notes?.includes("[outside comfort zone]"));
+    assert.ok(event?.notes?.includes("Renewal clause interpretation requires specialist counsel."));
+    assert.ok(event?.notes?.includes("Assumed from registry source."));
+  });
+
+  it("projects an unresolved attached escalation record as a disputed event on the target claim", () => {
+    const builder = new SurveyInputBuilder({
+      source: "survey.escalation.fixture",
+      generatedAt: "2026-05-31T16:00:00.000Z",
+    });
+    builder.addObservation(fieldObservation({
+      id: "observation.entity-1.fair-value.current",
+      field: "fairValue",
+      value: 1200000,
+      rawSource: {
+        kind: "api-record",
+        sourceRef: "records://entity-1/valuation",
+        observedAt: "2026-05-31T15:00:00.000Z",
+        locatorScheme: "structured-field",
+      },
+      extraction: {
+        confidence: 0.85,
+        locator: "json:$.fairValue",
+        extractor: "valuation-importer",
+        extractedAt: "2026-05-31T15:00:00.000Z",
+      },
+      claim: {
+        id: "claim.entity-1.fair-value",
+        subjectType: "public-record.entity",
+        subjectId: "entity-1",
+        surface: "public-record.profile",
+        claimType: "public-data.field",
+        impactLevel: "high",
+        collectedBy: "valuation-importer",
+      },
+    }));
+    builder.addEscalation({
+      id: "escalation.entity-1.fair-value.completeness",
+      target: "fairValue",
+      dimension: "completeness",
+      reason: "ASC 820 Level 3 inputs were not documented; sensitivity range and unobservable input assumptions are missing.",
+      raisedBy: "adversary-v1",
+      raisedAt: "2026-05-31T15:30:00.000Z",
+      attachToClaimId: "claim.entity-1.fair-value",
+    });
+
+    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(builder.build())));
+    const escalationEvent = report.events.find((e) => e.method === "candidate-escalation");
+
+    assert.ok(escalationEvent, "escalation event should exist");
+    assert.equal(escalationEvent?.claimId, "claim.entity-1.fair-value");
+    assert.equal(escalationEvent?.status, "disputed");
+    assert.ok(escalationEvent?.notes?.includes("[completeness]"));
+    assert.ok(escalationEvent?.notes?.includes("ASC 820 Level 3 inputs were not documented"));
+  });
+
+  it("does not project a resolved escalation record", () => {
+    const builder = new SurveyInputBuilder({
+      source: "survey.resolved-escalation.fixture",
+      generatedAt: "2026-05-31T16:00:00.000Z",
+    });
+    builder.addObservation(fieldObservation({
+      id: "observation.entity-1.fair-value.current",
+      field: "fairValue",
+      value: 1200000,
+      rawSource: {
+        kind: "api-record",
+        sourceRef: "records://entity-1/valuation",
+        observedAt: "2026-05-31T15:00:00.000Z",
+        locatorScheme: "structured-field",
+      },
+      extraction: {
+        confidence: 0.91,
+        locator: "json:$.fairValue",
+        extractor: "valuation-importer",
+        extractedAt: "2026-05-31T15:00:00.000Z",
+      },
+      claim: {
+        id: "claim.entity-1.fair-value",
+        subjectType: "public-record.entity",
+        subjectId: "entity-1",
+        surface: "public-record.profile",
+        claimType: "public-data.field",
+        impactLevel: "high",
+        collectedBy: "valuation-importer",
+      },
+    }));
+    builder.addEscalation({
+      id: "escalation.entity-1.fair-value.completeness",
+      target: "fairValue",
+      dimension: "completeness",
+      reason: "Level 3 inputs not documented.",
+      raisedBy: "adversary-v1",
+      raisedAt: "2026-05-31T15:30:00.000Z",
+      attachToClaimId: "claim.entity-1.fair-value",
+      resolvedBy: "observation.entity-1.fair-value.current",
+    });
+
+    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(builder.build())));
+    const escalationEvent = report.events.find((e) => e.method === "candidate-escalation");
+
+    assert.equal(escalationEvent, undefined, "resolved escalation should not generate an event");
+  });
+
+  it("rejects escalation records that reference unknown claims", () => {
+    const builder = new SurveyInputBuilder({
+      source: "survey.bad-escalation.fixture",
+      generatedAt: "2026-05-31T16:00:00.000Z",
+    });
+    builder.addEscalation({
+      id: "escalation.missing-claim",
+      target: "someField",
+      dimension: "framing",
+      reason: "Wrong question was framed.",
+      raisedBy: "adversary-v1",
+      raisedAt: "2026-05-31T15:30:00.000Z",
+      attachToClaimId: "claim.does-not-exist",
+    });
+
+    assert.throws(
+      () => buildSurveyTrustInput(builder.build()),
+      /references unknown claim claim\.does-not-exist/,
+    );
+  });
+
   it("rejects candidate review records without observations", () => {
     assert.throws(
       () => candidateReviewRecord({

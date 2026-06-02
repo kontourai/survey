@@ -27,7 +27,8 @@ export interface Extraction {
   metadata?: Record<string, unknown>;
 }
 
-export type CandidateSetStatus = "resolved" | "needs-review" | "conflict";
+export type CandidateSetStatus = "resolved" | "needs-review" | "conflict" | "escalated";
+export type EscalationDimension = "framing" | "completeness" | "conclusion" | "citation";
 
 export interface Candidate {
   id: string;
@@ -59,6 +60,20 @@ export interface ReviewOutcome {
   reviewedAt?: string;
   rationale?: string;
   evidenceIds?: string[];
+  withinComfortZone?: boolean;
+  comfortZoneNote?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface EscalationRecord {
+  id: string;
+  target: string;
+  dimension: EscalationDimension;
+  reason: string;
+  raisedBy: string;
+  raisedAt: string;
+  attachToClaimId?: string;
+  resolvedBy?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -95,4 +110,5 @@ export interface SurveyInput {
   candidateSets: CandidateSet[];
   reviewOutcomes: ReviewOutcome[];
   claims: ClaimTarget[];
+  escalations?: EscalationRecord[];
 }

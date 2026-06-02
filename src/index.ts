@@ -3,6 +3,8 @@ export type {
   Candidate,
   CandidateSet,
   ClaimTarget,
+  EscalationDimension,
+  EscalationRecord,
   Extraction,
   LocatorScheme,
   RawSource,

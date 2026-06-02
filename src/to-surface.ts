@@ -88,6 +88,10 @@ export function buildSurveyTrustInput(input: SurveyInput): TrustInput {
       },
     });
 
+    const rationale = review?.rationale ?? candidateSet.rationale;
+    const comfortZoneNote = review?.withinComfortZone === false
+      ? `[outside comfort zone] ${review.comfortZoneNote ?? "reviewer flagged this as outside their comfort zone"}`
+      : undefined;
     events.push({
       id: `${projection.id}.event.${status}`,
       claimId: projection.id,
@@ -97,8 +101,29 @@ export function buildSurveyTrustInput(input: SurveyInput): TrustInput {
       evidenceIds: review?.evidenceIds?.length ? review.evidenceIds : [evidenceId],
       createdAt: review?.reviewedAt ?? input.generatedAt,
       verifiedAt: status === "verified" || status === "assumed" ? review?.reviewedAt ?? input.generatedAt : undefined,
-      notes: review?.rationale ?? candidateSet.rationale,
+      notes: [rationale, comfortZoneNote].filter(Boolean).join(" | ") || undefined,
     });
+  }
+
+  if (input.escalations) {
+    const claimIds = new Set(claims.map((c) => c.id));
+    for (const escalation of input.escalations) {
+      if (escalation.resolvedBy) continue;
+      if (!escalation.attachToClaimId) continue;
+      if (!claimIds.has(escalation.attachToClaimId)) {
+        throw new Error(`Escalation ${escalation.id} references unknown claim ${escalation.attachToClaimId}`);
+      }
+      events.push({
+        id: `${escalation.id}.event`,
+        claimId: escalation.attachToClaimId,
+        status: "disputed",
+        actor: escalation.raisedBy,
+        method: "candidate-escalation",
+        evidenceIds: [],
+        createdAt: escalation.raisedAt,
+        notes: `[${escalation.dimension}] ${escalation.reason}`,
+      });
+    }
   }
 
   return {
@@ -121,6 +146,7 @@ function statusFor(input: {
     return "proposed";
   }
   if (input.candidateSet.status === "conflict") return "disputed";
+  if (input.candidateSet.status === "escalated") return "disputed";
   return "proposed";
 }
 
@@ -169,6 +195,7 @@ function eventMethodFor(status: TrustStatus, candidateSet: CandidateSet): string
   if (status === "assumed") return "survey-assumption";
   if (status === "rejected") return "survey-rejection";
   if (candidateSet.status === "conflict") return "candidate-conflict";
+  if (candidateSet.status === "escalated") return "candidate-escalation";
   return "candidate-proposal";
 }
 
