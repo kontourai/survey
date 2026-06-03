@@ -45,8 +45,9 @@ is proposed, assumed, verified, disputed, or stale.
    rather than hiding that signal in prose.
 
 5. Project through Survey.
-   Use `sourceOfAuthorityObservation` for each reviewed source-authority value,
-   then `buildSurveyTrustInput` to produce Surface `TrustInput`.
+   Use `sourceOfAuthorityObservationBuilder` for each reviewed
+   source-authority value, then `buildSurveyTrustInput` to produce Surface
+   `TrustInput`.
 
 6. Inspect through Surface.
    Surface reports show claims, evidence, status, gaps, and metadata. Producers
@@ -110,10 +111,11 @@ Examples:
   source-of-authority observation.
 - "This submission complies with the applicable rule set" is a derived product
   claim.
-- "This camp accepts 7-12 year olds" is a source/public-record claim.
-- "This camp is eligible for an 8-year-old in June" is a derived eligibility
-  claim that depends on age-range, date, registration, and product policy
-  inputs.
+- "This provider listing includes a published eligibility range" is a
+  source/public-record claim.
+- "This listing is eligible for a specific requester and date" is a derived
+  eligibility claim that depends on published ranges, date, registration, and
+  product policy inputs.
 
 ## First Implementation Pattern
 

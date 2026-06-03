@@ -185,11 +185,13 @@ assumed.
 
 ## Source-of-authority observations
 
-Use `sourceOfAuthorityObservation` when a producer treats the raw source as
-authoritative for the extracted target: an official publication, registration
-platform page, policy document, contract record, or system-of-record response.
-The helper does not decide whether the source is truly authoritative. It
-enforces record discipline around the producer's declared source posture.
+Use `sourceOfAuthorityObservationBuilder` when a producer treats the raw source
+as authoritative for the extracted target: an official publication,
+registration platform page, policy document, contract record, or
+system-of-record response. The builder does not decide whether the source is
+truly authoritative. It guides producers through the source, extraction,
+source-authority posture, review outcome, and claim fields that make the
+declared source posture auditable.
 
 Verified or assumed source-of-authority observations require:
 
@@ -207,14 +209,14 @@ reserved for actor, credential, role, organization, policy, or system authority.
 ```ts
 import {
   buildSurveyTrustInput,
-  sourceOfAuthorityObservation,
+  sourceOfAuthorityObservationBuilder,
   SurveyInputBuilder,
   uploadedDocumentSource,
 } from "@kontourai/survey";
 
 const observedAt = new Date().toISOString();
 const rawSource = uploadedDocumentSource({
-  sourceRef: "https://rules.example.test/standard-deduction.pdf",
+  sourceRef: "https://rules.example.test/thresholds.pdf",
   observedAt,
   checksum: "abc123",
   locatorScheme: "pdf",
@@ -223,35 +225,36 @@ const rawSource = uploadedDocumentSource({
 const surveyInput = new SurveyInputBuilder({
   source: "rule-producer:run-1",
 })
-  .addObservation(sourceOfAuthorityObservation({
-    id: "rule.standard-deduction.mfj.2026",
-    field: "federal.standardDeduction.mfj.2026",
-    value: 30000,
-    sourceAuthority: {
+  .addObservation(sourceOfAuthorityObservationBuilder({
+    id: "rule.threshold.primary.2026",
+    field: "regulatedRule.threshold.primary.2026",
+    value: 1200,
+  })
+    .withSourceAuthority({
       authorityClass: "official_publication",
       scope: {
-        jurisdiction: "federal",
+        jurisdiction: "example",
         productArea: "regulated-rule",
-        taxYear: 2026,
+        effectiveYear: 2026,
       },
       sourceVersion: "2026",
       declaredBy: "rule-producer",
-    },
-    rawSource,
-    extraction: {
+    })
+    .fromSource(rawSource)
+    .withExtraction({
       confidence: 0.94,
-      locator: "pdf:page=12;table=standard-deduction;row=mfj",
+      locator: "pdf:page=12;table=thresholds;row=primary",
       extractor: "rule-producer",
       extractedAt: observedAt,
-    },
-    reviewOutcome: {
+    })
+    .withReviewOutcome({
       status: "verified",
       actor: "rule-reviewer",
       reviewedAt: new Date().toISOString(),
-    },
-    claim: {
+    })
+    .forClaim({
       subjectType: "regulated-rule",
-      subjectId: "federal:standard-deduction:mfj:2026",
+      subjectId: "example:threshold:primary:2026",
       surface: "regulated.rules",
       claimType: "regulated.rule-value",
       status: "verified",
@@ -259,15 +262,18 @@ const surveyInput = new SurveyInputBuilder({
       evidenceType: "policy_rule",
       evidenceMethod: "extraction",
       collectedBy: "rule-producer",
-    },
-  }))
+    })
+    .build())
   .build();
 
 const trustInput = buildSurveyTrustInput(surveyInput);
 ```
 
-Contextual claims such as "this return position is compliant" or "this camp is
-eligible for an 8-year-old in June" are not source-of-authority observations.
+`sourceOfAuthorityObservation` remains available as the lower-level object
+factory when a producer already has the full observation input assembled.
+
+Contextual claims such as "this submission is compliant" or "this listing is
+eligible for a specific requester" are not source-of-authority observations.
 They are Surface claims with Claim Dependencies on source-of-authority claims
 and other product facts. The vertical product owns that domain logic.
 
