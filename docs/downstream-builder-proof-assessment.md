@@ -221,3 +221,5 @@ producer-facing API for source-authority observations.
 Do not add another Survey builder yet. Use the public-directory and
 regulated-rule proofs as the baseline for evaluating the next extraction after
 one more downstream call site shows repeated friction.
+
+Track that future evidence in [Next Proof Backlog](next-proof-backlog.md).
