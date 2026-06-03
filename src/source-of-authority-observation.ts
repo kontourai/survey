@@ -40,6 +40,79 @@ export interface SourceOfAuthorityObservationInput<TValue> {
   metadata?: Record<string, unknown>;
 }
 
+export interface SourceOfAuthorityObservationBuilderArgs<TValue> {
+  id: string;
+  field: string;
+  value: TValue;
+}
+
+type SourceOfAuthorityObservationBuilderState<TValue> = Partial<SourceOfAuthorityObservationInput<TValue>> &
+  SourceOfAuthorityObservationBuilderArgs<TValue>;
+
+export class SourceOfAuthorityObservationBuilder<TValue> {
+  private readonly state: SourceOfAuthorityObservationBuilderState<TValue>;
+
+  constructor(args: SourceOfAuthorityObservationBuilderArgs<TValue>) {
+    this.state = { ...args };
+  }
+
+  static create<TValue>(
+    args: SourceOfAuthorityObservationBuilderArgs<TValue>,
+  ): SourceOfAuthorityObservationBuilder<TValue> {
+    return new SourceOfAuthorityObservationBuilder(args);
+  }
+
+  withSourceAuthority(sourceAuthority: SourceAuthorityMetadata): this {
+    this.state.sourceAuthority = sourceAuthority;
+    return this;
+  }
+
+  fromSource(rawSource: SourceOfAuthorityObservationInput<TValue>["rawSource"]): this {
+    this.state.rawSource = rawSource;
+    return this;
+  }
+
+  withExtraction(extraction: SourceOfAuthorityObservationInput<TValue>["extraction"]): this {
+    this.state.extraction = extraction;
+    return this;
+  }
+
+  withReviewOutcome(reviewOutcome: SourceOfAuthorityObservationInput<TValue>["reviewOutcome"]): this {
+    this.state.reviewOutcome = reviewOutcome;
+    return this;
+  }
+
+  forClaim(claim: SourceOfAuthorityObservationInput<TValue>["claim"]): this {
+    this.state.claim = claim;
+    return this;
+  }
+
+  withCandidate(candidate: SourceOfAuthorityObservationInput<TValue>["candidate"]): this {
+    this.state.candidate = candidate;
+    return this;
+  }
+
+  withCandidateSet(candidateSet: SourceOfAuthorityObservationInput<TValue>["candidateSet"]): this {
+    this.state.candidateSet = candidateSet;
+    return this;
+  }
+
+  withMetadata(metadata: Record<string, unknown>): this {
+    this.state.metadata = metadata;
+    return this;
+  }
+
+  build(): SurveyObservationInput {
+    return sourceOfAuthorityObservation(completeBuilderState(this.state));
+  }
+}
+
+export function sourceOfAuthorityObservationBuilder<TValue>(
+  args: SourceOfAuthorityObservationBuilderArgs<TValue>,
+): SourceOfAuthorityObservationBuilder<TValue> {
+  return SourceOfAuthorityObservationBuilder.create(args);
+}
+
 export function sourceOfAuthorityObservation<TValue>(
   input: SourceOfAuthorityObservationInput<TValue>,
 ): SurveyObservationInput {
@@ -70,6 +143,35 @@ export function sourceOfAuthorityObservation<TValue>(
     },
     defaultExcerpt: `${input.field}: ${valueSummary(input.value)}`,
   });
+}
+
+function completeBuilderState<TValue>(
+  state: SourceOfAuthorityObservationBuilderState<TValue>,
+): SourceOfAuthorityObservationInput<TValue> {
+  return {
+    id: state.id,
+    field: state.field,
+    value: state.value,
+    sourceAuthority: requireBuilderField(state.sourceAuthority, state.id, "sourceAuthority"),
+    rawSource: requireBuilderField(state.rawSource, state.id, "rawSource"),
+    extraction: requireBuilderField(state.extraction, state.id, "extraction"),
+    reviewOutcome: state.reviewOutcome,
+    claim: requireBuilderField(state.claim, state.id, "claim"),
+    candidate: state.candidate,
+    candidateSet: state.candidateSet,
+    metadata: state.metadata,
+  };
+}
+
+function requireBuilderField<TValue>(
+  value: TValue | undefined,
+  observationId: string,
+  field: string,
+): TValue {
+  if (value === undefined) {
+    throw new Error(`Source-of-authority observation ${observationId} builder needs ${field}`);
+  }
+  return value;
 }
 
 function assertSourceAuthority(sourceAuthority: SourceAuthorityMetadata, observationId: string): void {

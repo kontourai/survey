@@ -15,6 +15,7 @@ import {
   reviewedCandidateResolution,
   reviewedCurrentProposedResolution,
   sourceOfAuthorityObservation,
+  sourceOfAuthorityObservationBuilder,
   SurveyInputBuilder,
   uploadedDocumentSource,
   webPageSource,
@@ -195,38 +196,38 @@ describe("Survey Surface projection", () => {
   it("projects a verified regulated source-of-authority observation through Surface evidence metadata", () => {
     const observedAt = "2026-06-01T10:00:00.000Z";
     const rawSource = uploadedDocumentSource({
-      id: "source.irs.publication-2026",
-      sourceRef: "https://irs.example.test/pub/2026-standard-deduction.pdf",
+      id: "source.authority.publication-2026",
+      sourceRef: "https://authority.example.test/pub/2026-threshold.pdf",
       observedAt,
       checksum: "rule-source",
       locatorScheme: "pdf",
-      metadata: { publication: "IRS Publication Example" },
+      metadata: { publication: "Authority Publication Example" },
     });
     const input = new SurveyInputBuilder({
       source: "survey.source-of-authority.regulated-rule",
       generatedAt: "2026-06-01T11:00:00.000Z",
     })
       .addObservation(sourceOfAuthorityObservation({
-        id: "observation.rule.standard-deduction.mfj.2026",
-        field: "federal.standardDeduction.mfj.2026",
+        id: "observation.rule.threshold.primary.2026",
+        field: "regulatedRule.threshold.primary.2026",
         value: 30000,
         sourceAuthority: {
           authorityClass: "official_publication",
           scope: {
-            jurisdiction: "federal",
+            jurisdiction: "example",
             productArea: "regulated-rule",
-            taxYear: 2026,
+            effectiveYear: 2026,
           },
           effectiveFrom: "2026-01-01",
           effectiveUntil: "2026-12-31",
           sourceVersion: "2026-draft",
-          sourceOwner: "irs.example.test",
+          sourceOwner: "authority.example.test",
           declaredBy: "regulated-rule-importer",
         },
         rawSource,
         extraction: {
           confidence: 0.94,
-          locator: "pdf:page=12;table=standard-deduction;row=mfj",
+          locator: "pdf:page=12;table=thresholds;row=primary",
           extractor: "regulated-rule-importer",
           extractedAt: observedAt,
         },
@@ -234,12 +235,12 @@ describe("Survey Surface projection", () => {
           status: "verified",
           actor: "rule-reviewer@example.test",
           reviewedAt: "2026-06-01T10:15:00.000Z",
-          rationale: "Reviewer accepted the extracted standard deduction row.",
+          rationale: "Reviewer accepted the extracted threshold row.",
         },
         claim: {
-          id: "claim.rule.standard-deduction.mfj.2026",
+          id: "claim.rule.threshold.primary.2026",
           subjectType: "regulated-rule",
-          subjectId: "federal:standard-deduction:mfj:2026",
+          subjectId: "example:threshold:primary:2026",
           surface: "regulated.rules",
           claimType: "regulated.rule-value",
           status: "verified",
@@ -252,7 +253,7 @@ describe("Survey Surface projection", () => {
       .build();
 
     const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
-    const claim = report.claims.find((item) => item.id === "claim.rule.standard-deduction.mfj.2026");
+    const claim = report.claims.find((item) => item.id === "claim.rule.threshold.primary.2026");
     const evidence = report.evidence.find((item) => item.claimId === claim?.id);
 
     assert.equal(claim?.status, "verified");
@@ -270,64 +271,279 @@ describe("Survey Surface projection", () => {
     assert.deepEqual(
       (evidence?.metadata?.sourceAuthority as { scope?: Record<string, unknown> } | undefined)?.scope,
       {
-        jurisdiction: "federal",
+        jurisdiction: "example",
         productArea: "regulated-rule",
-        taxYear: 2026,
+        effectiveYear: 2026,
       },
     );
     assert.equal(report.authorityTrace?.length ?? 0, 0);
   });
 
+  it("builds source-of-authority observations through the producer-facing builder", () => {
+    const observedAt = "2026-06-02T14:00:00.000Z";
+    const observation = sourceOfAuthorityObservationBuilder({
+      id: "observation.rule.maximum-value.2026",
+      field: "regulatedRule.maximumValue.2026",
+      value: 1200,
+    })
+      .withSourceAuthority({
+        authorityClass: "official_publication",
+        scope: {
+          productArea: "regulated-rule",
+          ruleSet: "example",
+          effectiveYear: 2026,
+        },
+        sourceVersion: "2026",
+        declaredBy: "regulated-rule-importer",
+      })
+      .fromSource(uploadedDocumentSource({
+        sourceRef: "https://rules.example.test/2026-maximum-value.pdf",
+        observedAt,
+        checksum: "maximum-value-source",
+        locatorScheme: "pdf",
+      }))
+      .withExtraction({
+        confidence: 0.96,
+        locator: "pdf:page=4;table=limits;row=maximum",
+        extractor: "regulated-rule-importer",
+        extractedAt: observedAt,
+      })
+      .withReviewOutcome({
+        status: "verified",
+        actor: "rule-reviewer@example.test",
+        reviewedAt: "2026-06-02T14:15:00.000Z",
+      })
+      .forClaim({
+        id: "claim.rule.maximum-value.2026",
+        subjectType: "regulated-rule",
+        subjectId: "example:maximum-value:2026",
+        surface: "regulated.rules",
+        claimType: "regulated.rule-value",
+        status: "verified",
+        impactLevel: "high",
+        evidenceType: "policy_rule",
+        evidenceMethod: "extraction",
+        collectedBy: "regulated-rule-importer",
+      })
+      .build();
+
+    const input = new SurveyInputBuilder({
+      source: "survey.source-of-authority.builder",
+      generatedAt: "2026-06-02T15:00:00.000Z",
+    })
+      .addObservation(observation)
+      .build();
+
+    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const claim = report.claims.find((item) => item.id === "claim.rule.maximum-value.2026");
+    const evidence = report.evidence.find((item) => item.claimId === claim?.id);
+
+    assert.equal(input.claims[0]?.fieldOrBehavior, "regulatedRule.maximumValue.2026");
+    assert.equal(claim?.status, "verified");
+    assert.equal(evidence?.metadata?.sourceAuthority && typeof evidence.metadata.sourceAuthority, "object");
+    assert.equal(
+      (evidence?.metadata?.sourceAuthority as { scope?: { effectiveYear?: number } } | undefined)?.scope?.effectiveYear,
+      2026,
+    );
+    assert.equal(report.authorityTrace?.length ?? 0, 0);
+  });
+
+  it("rejects incomplete source-of-authority builder chains before projection", () => {
+    const observedAt = "2026-06-02T14:00:00.000Z";
+    const builder = () => sourceOfAuthorityObservationBuilder({
+      id: "observation.incomplete",
+      field: "regulatedRule.status",
+      value: "ACTIVE",
+    });
+    const rawSource = webPageSource({
+      sourceRef: "https://policy.example.test/rules",
+      observedAt,
+      checksum: "policy-page",
+    });
+
+    assert.throws(
+      () => builder()
+        .withSourceAuthority({
+          authorityClass: "policy_document",
+          scope: { productArea: "regulated-rule" },
+          declaredBy: "regulated-rule-importer",
+        })
+        .build(),
+      /builder needs rawSource/,
+    );
+    assert.throws(
+      () => builder()
+        .withSourceAuthority({
+          authorityClass: "policy_document",
+          scope: {},
+          declaredBy: "regulated-rule-importer",
+        })
+        .fromSource(rawSource)
+        .withExtraction({
+          confidence: 0.9,
+          locator: "css:#status",
+          extractor: "regulated-rule-importer",
+          extractedAt: observedAt,
+        })
+        .withReviewOutcome({
+          status: "verified",
+          actor: "rule-reviewer@example.test",
+          reviewedAt: "2026-06-02T14:15:00.000Z",
+        })
+        .forClaim({
+          subjectType: "regulated-rule",
+          subjectId: "example:status:2026",
+          surface: "regulated.rules",
+          claimType: "regulated.rule-value",
+          status: "verified",
+          impactLevel: "high",
+          collectedBy: "regulated-rule-importer",
+        })
+        .build(),
+      /needs sourceAuthority\.scope/,
+    );
+    assert.throws(
+      () => builder()
+        .withSourceAuthority({
+          authorityClass: "policy_document",
+          scope: { productArea: "regulated-rule" },
+          declaredBy: "regulated-rule-importer",
+        })
+        .fromSource(rawSource)
+        .withExtraction({
+          confidence: 0.9,
+          extractor: "regulated-rule-importer",
+          extractedAt: observedAt,
+        })
+        .withReviewOutcome({
+          status: "verified",
+          actor: "rule-reviewer@example.test",
+          reviewedAt: "2026-06-02T14:15:00.000Z",
+        })
+        .forClaim({
+          subjectType: "regulated-rule",
+          subjectId: "example:status:2026",
+          surface: "regulated.rules",
+          claimType: "regulated.rule-value",
+          status: "verified",
+          impactLevel: "high",
+          collectedBy: "regulated-rule-importer",
+        })
+        .build(),
+      /without a source locator/,
+    );
+    assert.throws(
+      () => builder()
+        .withSourceAuthority({
+          authorityClass: "policy_document",
+          scope: { productArea: "regulated-rule" },
+          declaredBy: "regulated-rule-importer",
+        })
+        .fromSource(rawSource)
+        .withExtraction({
+          confidence: 0.9,
+          locator: "css:#status",
+          extractor: "regulated-rule-importer",
+          extractedAt: observedAt,
+        })
+        .withReviewOutcome({
+          status: "verified",
+          reviewedAt: "2026-06-02T14:15:00.000Z",
+        })
+        .forClaim({
+          subjectType: "regulated-rule",
+          subjectId: "example:status:2026",
+          surface: "regulated.rules",
+          claimType: "regulated.rule-value",
+          status: "verified",
+          impactLevel: "high",
+          collectedBy: "regulated-rule-importer",
+        })
+        .build(),
+      /without review actor authority/,
+    );
+    assert.throws(
+      () => builder()
+        .withSourceAuthority({
+          authorityClass: "policy_document",
+          scope: { productArea: "regulated-rule" },
+          declaredBy: "regulated-rule-importer",
+        })
+        .fromSource(rawSource)
+        .withExtraction({
+          confidence: 0.9,
+          locator: "css:#status",
+          extractor: "regulated-rule-importer",
+          extractedAt: observedAt,
+        })
+        .withReviewOutcome({
+          status: "verified",
+          actor: "rule-reviewer@example.test",
+        })
+        .forClaim({
+          subjectType: "regulated-rule",
+          subjectId: "example:status:2026",
+          surface: "regulated.rules",
+          claimType: "regulated.rule-value",
+          status: "verified",
+          impactLevel: "high",
+          collectedBy: "regulated-rule-importer",
+        })
+        .build(),
+      /without reviewedAt/,
+    );
+  });
+
   it("projects a proposed public-directory source-of-authority observation without reviewer authority", () => {
     const observedAt = "2026-06-01T09:00:00.000Z";
     const rawSource = webPageSource({
-      sourceRef: "https://camp.example.test/summer/session-1",
+      sourceRef: "https://publisher.example.test/listings/item-1",
       observedAt,
       fetchedAt: "2026-06-01T09:01:00.000Z",
-      checksum: "camp-page",
-      metadata: { provider: "Example Camp" },
+      checksum: "listing-page",
+      metadata: { provider: "Example Publisher" },
     });
     const input = new SurveyInputBuilder({
       source: "survey.source-of-authority.public-directory",
       generatedAt: "2026-06-01T09:10:00.000Z",
     })
       .addObservation(sourceOfAuthorityObservation({
-        id: "observation.camp.session-1.age-range",
-        field: "camp.session.ageRange",
+        id: "observation.listing.item-1.eligibility-range",
+        field: "listing.item.eligibilityRange",
         value: { min: 7, max: 12 },
         sourceAuthority: {
           authorityClass: "publisher_owned_page",
           scope: {
-            productArea: "camp-listing",
-            providerId: "provider.example-camp",
-            sessionId: "session-1",
+            productArea: "provider-listing",
+            providerId: "provider.example-publisher",
+            listingId: "item-1",
           },
-          sourceOwner: "Example Camp",
-          declaredBy: "camp-crawler",
+          sourceOwner: "Example Publisher",
+          declaredBy: "listing-crawler",
         },
         rawSource,
         extraction: {
           confidence: 0.88,
-          locator: "css:[data-field='age-range']",
-          extractor: "camp-crawler",
+          locator: "css:[data-field='eligibility-range']",
+          extractor: "listing-crawler",
           extractedAt: observedAt,
-          excerpt: "Ages 7-12",
+          excerpt: "Eligibility range 7-12",
         },
         claim: {
-          id: "claim.camp.session-1.age-range.proposed",
-          subjectType: "camp-session",
-          subjectId: "session-1",
-          surface: "public-directory.camps",
+          id: "claim.listing.item-1.eligibility-range.proposed",
+          subjectType: "provider-listing",
+          subjectId: "item-1",
+          surface: "public-directory.listings",
           claimType: "published-field",
           status: "proposed",
           impactLevel: "medium",
-          collectedBy: "camp-crawler",
+          collectedBy: "listing-crawler",
         },
       }))
       .build();
 
     const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
-    const claim = report.claims.find((item) => item.id === "claim.camp.session-1.age-range.proposed");
+    const claim = report.claims.find((item) => item.id === "claim.listing.item-1.eligibility-range.proposed");
     const evidence = report.evidence.find((item) => item.claimId === claim?.id);
 
     assert.equal(claim?.status, "proposed");
