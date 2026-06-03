@@ -271,6 +271,10 @@ eligible for an 8-year-old in June" are not source-of-authority observations.
 They are Surface claims with Claim Dependencies on source-of-authority claims
 and other product facts. The vertical product owns that domain logic.
 
+For the reusable producer workflow, including manual confirmation state,
+source references, Survey review outcomes, and Surface report boundaries, see
+[Source-Authority Review Pattern](docs/source-authority-review-pattern.md).
+
 ## Reviewed candidate resolutions
 
 Use `reviewedCandidateResolution` when a producer has multiple candidate
