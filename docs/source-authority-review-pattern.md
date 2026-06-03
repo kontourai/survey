@@ -16,9 +16,9 @@ is proposed, assumed, verified, disputed, or stale.
 - Survey owns the portable source -> extraction -> candidate -> review shape
   before the Surface boundary.
 - Surface owns claims, evidence, status derivation, dependency behavior,
-  trust reports, and console/inspection surfaces.
-- Veritas or another governance product may verify whether the producer
-  workflow followed policy, but it does not replace the Survey record.
+  trust reports, and public reporting surfaces.
+- Separate producer governance or audit systems may verify whether a producer
+  workflow followed policy, but they do not replace the Survey record.
 
 ## Canonical Flow
 
@@ -51,7 +51,8 @@ is proposed, assumed, verified, disputed, or stale.
 
 6. Inspect through Surface.
    Surface reports show claims, evidence, status, gaps, and metadata. Producers
-   should pass the resulting report to their admin UI or console workflow.
+   can pass the resulting report to any product-owned review or reporting
+   experience.
 
 ## Source Authority vs. Authority Trace
 
@@ -68,11 +69,10 @@ For example:
   in Surface `authorityTrace` if the producer can emit a portable authority
   record.
 
-## Confirmation Workflows
+## Confirmation Records
 
-When a product has an admin confirmation action, keep the operational
-confirmation state in the product and project the reviewed evidence through
-Survey.
+When a producer has a confirmation action, keep the operational confirmation
+state in the producer system and project the reviewed evidence through Survey.
 
 Recommended producer state:
 
@@ -94,8 +94,8 @@ Recommended Survey projection:
 - keep `authorityTrace` empty unless a separate actor/system authority record
   exists
 
-If source context is missing, do not invent authority evidence. The product may
-still update operational state, but the Survey projection should produce no
+If source context is missing, do not invent authority evidence. The producer
+may still update operational state, but the Survey projection should produce no
 reviewed source-authority claim and should expose a warning or gap to the
 operator.
 
@@ -111,17 +111,17 @@ Examples:
   source-of-authority observation.
 - "This submission complies with the applicable rule set" is a derived product
   claim.
-- "This provider listing includes a published eligibility range" is a
+- "This public record includes a published eligibility range" is a
   source/public-record claim.
-- "This listing is eligible for a specific requester and date" is a derived
+- "This record is eligible for a specific requester and date" is a derived
   eligibility claim that depends on published ranges, date, registration, and
   product policy inputs.
 
-## First Implementation Pattern
+## Public Implementation Pattern
 
-A regulated-rule admin flow is the first concrete implementation pattern. It
-keeps product-local rule-management state in its own status store, then
-projects confirmed source context through Survey into a Surface
-`sourceAuthorityTrustReport`. Manual file overrides are valid source
-references; they remain source context and do not become Surface Authority
-Trace records.
+A producer-owned confirmation flow keeps operational state in its own status
+store, then projects confirmed source context through Survey into Surface
+`TrustInput`. Surface validation and report APIs can then inspect the public
+claim, evidence, status, gap, and metadata records. Manual file references are
+valid source references; they remain source context and do not become Surface
+Authority Trace records.

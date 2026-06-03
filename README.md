@@ -11,7 +11,7 @@ ingestion platform:
 - `buildSurveyTrustInput` projects those records into `@kontourai/surface`
   `TrustInput`;
 - Surface owns Claim, Subject, Claim Type, Evidence, Status, Claim Dependency,
-  TrustInput, trust reporting, console projections, and downstream transparency.
+  TrustInput, trust reporting, and public reporting surfaces.
 
 The first success criterion is that generic corrected-document and public-field
 fixtures can pass through Survey and produce valid Surface reports without
@@ -63,6 +63,45 @@ const surveyInput = new SurveyInputBuilder({
 const trustInput = validateTrustInput(buildSurveyTrustInput(surveyInput));
 const report = buildTrustReport(trustInput);
 ```
+
+## Contributor checks
+
+Install the repo-owned Git hooks once per clone:
+
+```bash
+npm run setup:repo-hooks
+```
+
+The setup command is idempotent. It sets this repo's local `core.hooksPath` to
+`.githooks` and does not require global Git configuration.
+
+Use the same checks directly when you want to validate hook drift or package
+health before pushing:
+
+```bash
+npm run validate:repo-hooks
+npm run verify
+```
+
+The committed pre-push hook runs both commands from the repo root.
+
+## Producer validation path
+
+Survey producers validate through public `@kontourai/survey` and
+`@kontourai/surface` contracts:
+
+1. Build Survey observations with source, extraction, candidate, review, and
+   claim records.
+2. Call `buildSurveyTrustInput` to project the Survey records into Surface
+   `TrustInput`.
+3. Call Surface `validateTrustInput` on the projected input.
+4. Optionally call public Surface report APIs such as `buildTrustReport` to
+   inspect claims, evidence, status, gaps, and metadata.
+
+Keep producer operational state outside Survey. Queue status, reviewer form
+state, retries, source caches, and product policy decisions belong in the
+producer's own data model. Survey carries only the portable source,
+extraction, candidate, review, and claim projection records needed by Surface.
 
 ## Raw sources
 
@@ -272,10 +311,10 @@ const trustInput = buildSurveyTrustInput(surveyInput);
 `sourceOfAuthorityObservation` remains available as the lower-level object
 factory when a producer already has the full observation input assembled.
 
-Contextual claims such as "this submission is compliant" or "this listing is
+Contextual claims such as "this submission is compliant" or "this record is
 eligible for a specific requester" are not source-of-authority observations.
 They are Surface claims with Claim Dependencies on source-of-authority claims
-and other product facts. The vertical product owns that domain logic.
+and other producer facts. The producer owns that domain logic.
 
 For the reusable producer workflow, including manual confirmation state,
 source references, Survey review outcomes, and Surface report boundaries, see

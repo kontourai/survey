@@ -32,7 +32,9 @@
     "typecheck": "tsc --noEmit",
     "test": "npm run build && node --test dist/tests/*.test.js",
     "verify": "node scripts/check-content-boundary.cjs && npm run typecheck && npm test",
-    "check:content-boundary": "node scripts/check-content-boundary.cjs"
+    "check:content-boundary": "node scripts/check-content-boundary.cjs",
+    "setup:repo-hooks": "node scripts/setup-repo-hooks.cjs",
+    "validate:repo-hooks": "node scripts/validate-repo-hooks.cjs"
   },
   "dependencies": {
     "@kontourai/surface": "^0.5.1"

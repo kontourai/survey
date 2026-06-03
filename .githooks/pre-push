@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+set -eu
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+echo "Survey pre-push validation: repo hook drift"
+npm run validate:repo-hooks
+
+echo "Survey pre-push validation: package verification"
+npm run verify
