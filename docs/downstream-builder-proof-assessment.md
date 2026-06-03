@@ -175,6 +175,44 @@ Before building it, collect one more concrete downstream example where the
 existing `reviewedCurrentProposedResolution` helper is correct but the call site
 is still hard to read or easy to misuse.
 
+## Post-Merge Current/Proposed Inspection
+
+After the first two downstream builder integrations merged, the remaining
+current/proposed call sites were inspected.
+
+Public-directory admin review:
+
+- uses `reviewedCurrentProposedResolution`
+- owns accept/reject policy
+- owns the meaning of keeping the current value
+- owns decision-effect metadata and learning-signal metadata
+- owns canonical claim promotion and candidate claim ids
+
+Regulated-document correction review:
+
+- uses `reviewedCurrentProposedResolution`
+- first detects whether a two-candidate set is truly current/proposed
+- owns source-candidate classification
+- owns document-specific correction semantics
+- falls back to generic reviewed-candidate or candidate-review records when the
+  current/proposed shape does not apply
+
+Assessment:
+
+- The existing Survey helper is still doing the generic work: current/proposed
+  roles, selected-candidate wiring, candidate-set construction, and review
+  outcome wiring.
+- The remaining complexity is mostly producer policy, candidate
+  classification, and product-specific metadata.
+- A new builder would mostly repackage product-owned decisions unless another
+  downstream example shows repeated Survey-shape friction.
+
+Decision:
+
+Do not build `ReviewedCurrentProposedResolutionBuilder` yet. Keep
+`reviewedCurrentProposedResolution` as the Survey API until one more downstream
+call site shows that the helper is correct but still hard to use safely.
+
 ## Decision
 
 Treat `sourceOfAuthorityObservationBuilder` as the current recommended
