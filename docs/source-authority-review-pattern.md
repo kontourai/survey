@@ -45,8 +45,8 @@ is proposed, assumed, verified, disputed, or stale.
    rather than hiding that signal in prose.
 
 5. Project through Survey.
-   Use `sourceOfAuthorityObservationBuilder` for each reviewed
-   source-authority value, then `buildSurveyTrustInput` to produce Surface
+   Use `sourceOfAuthorityObservationBuilder` for each source-authority value,
+   reviewed or proposed, then `buildSurveyTrustInput` to produce Surface
    `TrustInput`.
 
 6. Inspect through Surface.
@@ -125,3 +125,7 @@ store, then projects confirmed source context through Survey into Surface
 claim, evidence, status, gap, and metadata records. Manual file references are
 valid source references; they remain source context and do not become Surface
 Authority Trace records.
+
+For the first downstream proof assessment across public-directory and
+regulated-rule producers, see
+[Downstream Builder Proof Assessment](downstream-builder-proof-assessment.md).
