@@ -13,6 +13,28 @@ export type {
   ReviewStatus,
   SurveyInput,
 } from "./types.js";
+export { reviewResourceApiVersion } from "./review-resource.js";
+export type {
+  CandidateRole,
+  ClaimTargetHint,
+  ExtractionReference,
+  ResourceEnvelope,
+  ResourceMetadata,
+  ReviewActor,
+  ReviewCandidate,
+  ReviewDecision,
+  ReviewDecisionSpec,
+  ReviewDecisionStatus,
+  ReviewItem,
+  ReviewItemSpec,
+  ReviewItemStatus,
+  ReviewLocator,
+  ReviewResource,
+  ReviewResourceApiVersion,
+  ReviewResourceKind,
+  SourceReference,
+  SurveyRecordProjectionHint,
+} from "./review-resource.js";
 export { candidateReviewRecord, SurveyInputBuilder } from "./builder.js";
 export type {
   CandidateReviewRecordInput,

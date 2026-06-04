@@ -157,6 +157,15 @@ Survey derives a stable id from source kind and `sourceRef`. Bare checksum
 values are normalized to `sha256:<value>`, while already-prefixed checksum
 values are preserved. Producer metadata is copied through to Surface evidence.
 
+## Review resources
+
+Survey also exports producer-neutral `ReviewItem`, `ReviewCandidate`, and
+`ReviewDecision` TypeScript resource shapes for review UI and adapter fixtures.
+They use `apiVersion`, `kind`, `metadata`, `spec`, and `status` fields while
+mapping back to the existing Survey record layer. See
+[`docs/review-resource-contract.md`](docs/review-resource-contract.md) for
+field ownership, mapping hints, and the `ReviewSession` non-goal.
+
 ## Field observations
 
 Use `fieldObservation` when a producer wants to describe one scalar field value
