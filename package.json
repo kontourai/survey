@@ -33,8 +33,10 @@
     "build": "rm -rf dist && tsc",
     "typecheck": "tsc --noEmit",
     "test": "npm run build && node --test dist/tests/*.test.js",
-    "verify": "node scripts/check-content-boundary.cjs && npm run typecheck && npm test",
+    "verify": "node scripts/check-content-boundary.cjs && npm run typecheck && npm test && npm run check:review-workbench",
     "check:content-boundary": "node scripts/check-content-boundary.cjs",
+    "check:review-workbench": "npm run check:review-workbench:static",
+    "check:review-workbench:static": "npm run build && node scripts/check-review-workbench.cjs",
     "setup:repo-hooks": "node scripts/setup-repo-hooks.cjs",
     "validate:repo-hooks": "node scripts/validate-repo-hooks.cjs"
   },
