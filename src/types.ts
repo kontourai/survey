@@ -39,6 +39,7 @@ export interface Candidate {
   value: unknown;
   confidence?: number;
   sourceRank?: number;
+  rejectionReason?: string;
   metadata?: Record<string, unknown>;
 }
 

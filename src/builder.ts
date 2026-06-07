@@ -32,6 +32,7 @@ export interface SurveyObservationInput {
     id?: string;
     confidence?: number;
     sourceRank?: number;
+    rejectionReason?: string;
     metadata?: Record<string, unknown>;
   };
   candidateSet?: {
@@ -256,6 +257,7 @@ function observationToClaimRecord(observation: SurveyObservationInput): SurveyCl
         value,
         confidence,
         sourceRank: observation.candidate?.sourceRank,
+        rejectionReason: observation.candidate?.rejectionReason,
         metadata: observation.candidate?.metadata,
       }],
     },

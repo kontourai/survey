@@ -1279,6 +1279,7 @@ describe("Survey Surface projection", () => {
           candidate: {
             id: "candidate.original",
             confidence: 0.94,
+            rejectionReason: "Corrected source superseded the earlier amount.",
           },
           claim: {
             id: "claim.entity-1.amount.original",
@@ -1325,6 +1326,12 @@ describe("Survey Surface projection", () => {
     const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
     const selected = report.claims.find((claim) => claim.id === "claim.entity-1.amount.corrected");
     const unselected = report.claims.find((claim) => claim.id === "claim.entity-1.amount.original");
+    const selectedSurveyMetadata = selected?.metadata?.survey as
+      | { candidate?: { rejectionReason?: string } }
+      | undefined;
+    const unselectedSurveyMetadata = unselected?.metadata?.survey as
+      | { candidate?: { rejectionReason?: string } }
+      | undefined;
 
     assert.equal(report.summary.byStatus.verified, 1);
     assert.equal(report.summary.byStatus.superseded, 1);
@@ -1332,7 +1339,89 @@ describe("Survey Surface projection", () => {
     assert.equal(selected?.confidenceBasis?.reviewerAuthority, "operator");
     assert.equal(unselected?.status, "superseded");
     assert.equal(input.candidateSets[0]?.selectedCandidateId, "candidate.corrected");
+    assert.equal(
+      input.candidateSets[0]?.candidates.find((candidate) => candidate.id === "candidate.original")?.rejectionReason,
+      "Corrected source superseded the earlier amount.",
+    );
+    assert.equal(unselectedSurveyMetadata?.candidate?.rejectionReason, "Corrected source superseded the earlier amount.");
+    assert.equal(selectedSurveyMetadata?.candidate?.rejectionReason, undefined);
     assert.equal(input.reviewOutcomes[0]?.candidateId, "candidate.corrected");
+  });
+
+  it("nests candidate rejection reason without overwriting producer survey metadata", () => {
+    const input = new SurveyInputBuilder({
+      source: "survey.candidate-rejection-reason.metadata-collision.fixture",
+      generatedAt: "2026-05-31T16:00:00.000Z",
+    })
+      .addRawSource(
+        uploadedDocumentSource({
+          id: "source.original",
+          sourceRef: "documents://entity-1/original.pdf",
+          observedAt: "2026-05-31T15:00:00.000Z",
+          checksum: "original",
+          locatorScheme: "structured-field",
+        }),
+      )
+      .addExtraction({
+        id: "extraction.original.amount",
+        sourceId: "source.original",
+        target: "reportedAmount",
+        value: 82000,
+        confidence: 0.94,
+        locator: "structured-field:amount",
+        extractor: "document-parser",
+        extractedAt: "2026-05-31T15:00:00.000Z",
+      })
+      .addCandidateSet({
+        id: "candidate-set.entity-1.amount",
+        target: "reportedAmount",
+        status: "resolved",
+        candidates: [
+          {
+            id: "candidate.original",
+            extractionId: "extraction.original.amount",
+            value: 82000,
+            confidence: 0.94,
+            rejectionReason: "",
+          },
+        ],
+      })
+      .addClaim({
+        id: "claim.entity-1.amount.original",
+        candidateSetId: "candidate-set.entity-1.amount",
+        candidateId: "candidate.original",
+        subjectType: "record.entity",
+        subjectId: "entity-1",
+        surface: "record.profile",
+        claimType: "record.field-candidate",
+        fieldOrBehavior: "reportedAmount",
+        impactLevel: "high",
+        collectedBy: "document-parser",
+        metadata: {
+          survey: {
+            rejectionReason: "producer-owned-top-level-value",
+            producerFlag: true,
+            candidate: {
+              producerCandidateFlag: true,
+            },
+          },
+        },
+      })
+      .build();
+
+    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const surveyMetadata = report.claims[0]?.metadata?.survey as
+      | {
+          rejectionReason?: string;
+          producerFlag?: boolean;
+          candidate?: { rejectionReason?: string; producerCandidateFlag?: boolean };
+        }
+      | undefined;
+
+    assert.equal(surveyMetadata?.rejectionReason, "producer-owned-top-level-value");
+    assert.equal(surveyMetadata?.producerFlag, true);
+    assert.equal(surveyMetadata?.candidate?.producerCandidateFlag, true);
+    assert.equal(surveyMetadata?.candidate?.rejectionReason, "");
   });
 
   it("builds a reviewed current/proposed resolution with a retained current value", () => {
