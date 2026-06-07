@@ -37,9 +37,19 @@ async function main() {
   assertIncludes(css, ".workbench-shell");
   assertIncludes(dataJs, "publicDirectoryReviewItemFixture");
   assertIncludes(js, "buildReviewDecision");
+  assertIncludes(js, "buildSurfaceProjectionPreview");
+  assertIncludes(js, "Surface preview");
+  assertIncludes(js, "authorityTrace");
+  assertIncludes(dataJs, "sourceAuthority");
   assertIncludes(js, "mountReviewWorkbench");
   assertExcludes(js, "node:");
+  assertExcludes(js, "@kontourai/surface");
+  assertExcludes(js, "src/to-surface");
+  assertExcludes(js, "src/review-proof");
   assertExcludes(dataJs, "node:");
+  assertExcludes(dataJs, "@kontourai/surface");
+  assertExcludes(dataJs, "src/to-surface");
+  assertExcludes(dataJs, "src/review-proof");
   await assertBrowserDataMatchesCanonicalFixture();
 
   console.log("Review workbench static artifact and fixture provenance check passed.");

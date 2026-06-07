@@ -36,7 +36,8 @@ textarea {
 .topbar,
 .decision-row,
 .candidate-card,
-.payload-panel {
+.payload-panel,
+.surface-preview {
   border: 1px solid #d8dde6;
   background: #ffffff;
 }
@@ -183,8 +184,67 @@ h1 {
 }
 
 .decision-row,
-.payload-panel {
+.payload-panel,
+.surface-preview {
   padding: 16px;
+}
+
+.surface-preview {
+  display: grid;
+  gap: 12px;
+}
+
+.surface-head {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.surface-head h2 {
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.preview-disclaimer {
+  border-left: 3px solid #52677a;
+  padding-left: 10px;
+  color: #3f4a58;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.preview-section-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.preview-section {
+  min-width: 0;
+  border: 1px solid #e4e8ee;
+  padding: 10px;
+  background: #fbfcfd;
+}
+
+.preview-section h3 {
+  margin-bottom: 8px;
+  color: #19202a;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.field-stack.compact {
+  gap: 8px;
+}
+
+.compact .field-value {
+  font-size: 13px;
+}
+
+.preview-section.is-neutral {
+  border-color: #d7dce3;
+  background: #f7f8fa;
 }
 
 .decision-buttons {

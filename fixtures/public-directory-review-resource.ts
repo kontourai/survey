@@ -63,6 +63,13 @@ export const publicDirectoryReviewItemFixture = {
           reviewOutcomeId: "public-field:review:approved",
           claimId: "public-field.entity-123.availability-status.current",
         },
+        producer: {
+          sourceAuthority: {
+            authorityClass: "public-directory-listing",
+            declaredBy: "Example Program public directory",
+            scope: "availabilityStatus field on entity-123",
+          },
+        },
       },
       {
         id: "public-directory:candidate:proposed",
@@ -109,6 +116,11 @@ export const publicDirectoryReviewItemFixture = {
         producer: {
           proposalId: "proposal-456",
           oldValue: "AVAILABLE",
+          sourceAuthority: {
+            authorityClass: "public-directory-listing",
+            declaredBy: "Example Program public directory crawler",
+            scope: "availabilityStatus field on entity-123",
+          },
         },
       },
     ],

@@ -4,6 +4,7 @@ import { publicDirectoryReviewItemFixture } from "../fixtures/public-directory-r
 import { reviewResourceApiVersion } from "../src/index.js";
 import {
   buildReviewDecision,
+  buildSurfaceProjectionPreview,
   initialReviewWorkbenchState,
   mountReviewWorkbench,
   renderReviewWorkbenchHtml,
@@ -108,16 +109,189 @@ describe("review workbench prototype", () => {
     assert.match(keptHtml, /data-testid="candidate-proposed" data-outcome="unselected"/);
   });
 
-  it("updates the mounted payload when the reviewer enters a note", () => {
-    const root = new ReviewWorkbenchTestRoot();
+  it("AC1 builds different Surface previews for accept-proposed and keep-current decisions", () => {
+    const acceptedState = {
+      ...initialReviewWorkbenchState(),
+      decision: "accept-proposed" as const,
+      note: "Accepted changed listing posture.",
+    };
+    const keptState = {
+      ...initialReviewWorkbenchState(),
+      decision: "keep-current" as const,
+      note: "Kept existing reviewed source.",
+    };
 
-    mountReviewWorkbench(root as unknown as HTMLElement);
-    root.clickDecision("accept-proposed");
-    root.textarea.value = "Checked the source excerpt.";
-    root.textarea.dispatch("input");
+    const accepted = buildSurfaceProjectionPreview(acceptedState.item, buildReviewDecision(acceptedState));
+    const kept = buildSurfaceProjectionPreview(keptState.item, buildReviewDecision(keptState));
+
+    assert.ok(accepted);
+    assert.ok(kept);
+    assert.equal(accepted.canonicalClaim.candidateId, "public-directory:candidate:proposed");
+    assert.equal(accepted.canonicalClaim.value, "WAITLIST");
+    assert.equal(kept.canonicalClaim.candidateId, "public-directory:candidate:current");
+    assert.equal(kept.canonicalClaim.value, "AVAILABLE");
+    assert.notDeepEqual(accepted, kept);
+  });
+
+  it("AC2 shows selected canonical claim and unselected candidate history for accept-proposed", () => {
+    const state = {
+      ...initialReviewWorkbenchState(),
+      decision: "accept-proposed" as const,
+    };
+
+    const preview = buildSurfaceProjectionPreview(state.item, buildReviewDecision(state));
+
+    assert.ok(preview);
+    assert.equal(preview.canonicalClaim.claimId, "public-field.entity-123.availability-status.proposal-456");
+    assert.equal(preview.canonicalClaim.status, "verified");
+    assert.deepEqual(preview.candidateHistory, [
+      {
+        candidateId: "public-directory:candidate:current",
+        value: "AVAILABLE",
+        historyLabel: "Unselected candidate history",
+      },
+    ]);
+
+    const html = renderReviewWorkbenchHtml(state);
+    assert.match(html, /data-testid="surface-canonical-claim"/);
+    assert.match(html, /Selected canonical claim/);
+    assert.match(html, /public-field\.entity-123\.availability-status\.proposal-456/);
+    assert.match(html, /data-testid="surface-candidate-history"/);
+    assert.match(html, /Unselected candidate history/);
+    assert.match(html, /public-directory:candidate:current/);
+  });
+
+  it("AC2 shows selected canonical claim and unselected candidate history for keep-current", () => {
+    const state = {
+      ...initialReviewWorkbenchState(),
+      decision: "keep-current" as const,
+      note: "Kept current source posture.",
+    };
+
+    const preview = buildSurfaceProjectionPreview(state.item, buildReviewDecision(state));
+
+    assert.ok(preview);
+    assert.equal(preview.canonicalClaim.candidateId, "public-directory:candidate:current");
+    assert.equal(preview.canonicalClaim.claimId, "public-field.entity-123.availability-status.current");
+    assert.equal(preview.canonicalClaim.value, "AVAILABLE");
+    assert.equal(preview.canonicalClaim.status, "verified");
+    assert.deepEqual(preview.candidateHistory, [
+      {
+        candidateId: "public-directory:candidate:proposed",
+        value: "WAITLIST",
+        historyLabel: "Unselected candidate history",
+      },
+    ]);
+
+    const html = renderReviewWorkbenchHtml(state);
+    assert.match(html, /public-field\.entity-123\.availability-status\.current/);
+    assert.match(html, /public-directory:candidate:proposed/);
+    assert.match(html, /WAITLIST/);
+  });
+
+  it("AC3 shows source evidence, sourceAuthority metadata, and review event for keep-current", () => {
+    const state = {
+      ...initialReviewWorkbenchState(),
+      decision: "keep-current" as const,
+      note: "Reviewed against approved page.",
+    };
+
+    const preview = buildSurfaceProjectionPreview(state.item, buildReviewDecision(state));
+
+    assert.ok(preview);
+    assert.equal(preview.sourceEvidence.sourceRef, "https://example.test/listings/example-program");
+    assert.equal(preview.sourceEvidence.sourceId, "public-field:source:approved-page");
+    assert.equal(preview.sourceEvidence.excerpt, "Availability is open for the example program.");
+    assert.equal(preview.sourceEvidence.extractionId, "public-field:extraction:approved");
+    assert.equal(preview.sourceEvidence.extractor, "example-field-review");
+    assert.equal(preview.sourceEvidence.observedAt, "2026-05-30T18:00:00.000Z");
+    assert.equal(preview.sourceEvidence.sourceAuthority?.authorityClass, "public-directory-listing");
+    assert.equal(preview.sourceEvidence.sourceAuthority?.declaredBy, "Example Program public directory");
+    assert.equal(preview.sourceEvidence.sourceAuthority?.scope, "availabilityStatus field on entity-123");
+    assert.equal(preview.reviewEvent?.actor, "review-workbench-operator");
+    assert.equal(preview.reviewEvent?.reviewedAt, "2026-06-04T00:00:00.000Z");
+    assert.equal(preview.reviewEvent?.status, "verified");
+    assert.equal(preview.reviewEvent?.rationale, "Reviewed against approved page.");
+    assert.equal(preview.reviewEvent?.reviewOutcomeId, "public-field:review:approved");
+
+    const html = renderReviewWorkbenchHtml(state);
+    assert.match(html, /data-testid="surface-source-evidence"/);
+    assert.match(html, /https:\/\/example\.test\/listings\/example-program/);
+    assert.match(html, /public-field:source:approved-page/);
+    assert.match(html, /Availability is open for the example program\./);
+    assert.match(html, /public-field:extraction:approved/);
+    assert.match(html, /example-field-review/);
+    assert.match(html, /2026-05-30T18:00:00\.000Z/);
+    assert.match(html, /Source authority class/);
+    assert.match(html, /Example Program public directory/);
+    assert.match(html, /data-testid="surface-review-event"/);
+    assert.match(html, /2026-06-04T00:00:00\.000Z/);
+    assert.match(html, /public-field:review:approved/);
+    assert.match(html, /Reviewed against approved page\./);
+  });
+
+  it("AC3 shows source evidence and review event for accept-proposed", () => {
+    const state = {
+      ...initialReviewWorkbenchState(),
+      decision: "accept-proposed" as const,
+      note: "Accepted source update.",
+    };
+
+    const preview = buildSurfaceProjectionPreview(state.item, buildReviewDecision(state));
+
+    assert.ok(preview);
+    assert.equal(preview.sourceEvidence.sourceRef, "https://example.test/listings/example-program");
+    assert.equal(preview.sourceEvidence.sourceId, "public-field:source:proposal-page");
+    assert.equal(preview.sourceEvidence.excerpt, "Join the waitlist for this listing.");
+    assert.equal(preview.sourceEvidence.extractionId, "public-field:extraction:proposal");
+    assert.equal(preview.sourceEvidence.extractor, "example-crawl");
+    assert.equal(preview.sourceEvidence.observedAt, "2026-05-31T15:00:00.000Z");
+    assert.equal(preview.reviewEvent?.status, "verified");
+    assert.equal(preview.reviewEvent?.reviewedAt, "2026-06-04T00:00:00.000Z");
+    assert.equal(preview.reviewEvent?.rationale, "Accepted source update.");
+    assert.equal(preview.reviewEvent?.reviewOutcomeId, "public-directory-availability:accept-proposed:review-outcome");
+  });
+
+  it("AC4 labels empty authorityTrace neutrally and keeps sourceAuthority separate", () => {
+    const state = {
+      ...initialReviewWorkbenchState(),
+      decision: "accept-proposed" as const,
+    };
+
+    const preview = buildSurfaceProjectionPreview(state.item, buildReviewDecision(state));
+
+    assert.ok(preview);
+    assert.equal(preview.authorityTrace.status, "empty");
+    assert.equal(preview.authorityTrace.label, "Empty / not provided");
+    assert.match(preview.authorityTrace.detail, /SourceAuthority metadata is shown as source evidence/);
+    assert.match(preview.postureDisclaimer, /does not validate real-world truth/);
+
+    const html = renderReviewWorkbenchHtml(state);
+    assert.match(html, /data-testid="surface-authority-trace"/);
+    assert.match(html, /Empty \/ not provided/);
+    assert.match(html, /is-neutral/);
+    assert.match(html, /Survey records source and review posture/);
+    assert.match(html, /does not validate real-world truth/);
+  });
+
+  it("updates the mounted payload and replaces Surface preview when the reviewer enters a note", () => {
+    const root = new ReviewWorkbenchTestRoot();
+    const documentRestore = installTestDocument();
+
+    try {
+      mountReviewWorkbench(root as unknown as HTMLElement);
+      root.clickDecision("accept-proposed");
+      root.textarea.value = "Checked the source excerpt.";
+      root.textarea.dispatch("input");
+    } finally {
+      documentRestore();
+    }
 
     assert.match(root.payload.textContent, /Checked the source excerpt\./);
     assert.match(root.payload.textContent, /"kind": "ReviewDecision"/);
+    assert.match(root.surfacePreview.html, /Checked the source excerpt\./);
+    assert.match(root.surfacePreview.html, /data-testid="surface-review-event"/);
+    assert.equal(root.surfacePreview.replaceCount, 1);
   });
 
   for (const entry of cases) {
@@ -144,12 +318,14 @@ class ReviewWorkbenchTestRoot {
   html = "";
   textarea = new TestTextAreaElement();
   payload = new TestPayloadElement();
+  surfacePreview = new TestSurfacePreviewElement(this);
   private buttons: TestButtonElement[] = [];
 
   set innerHTML(value: string) {
     this.html = value;
     this.textarea = new TestTextAreaElement(textareaValue(value));
     this.payload = new TestPayloadElement(payloadValue(value));
+    this.surfacePreview = new TestSurfacePreviewElement(this, surfacePreviewValue(value));
     this.buttons = decisionValues(value).map((decision) => new TestButtonElement(decision));
   }
 
@@ -166,6 +342,10 @@ class ReviewWorkbenchTestRoot {
       return this.payload as T;
     }
 
+    if (selector === "[data-testid='surface-preview']") {
+      return this.surfacePreview as T;
+    }
+
     return null;
   }
 
@@ -177,6 +357,30 @@ class ReviewWorkbenchTestRoot {
     const button = this.buttons.find((entry) => entry.dataset.decision === decision);
     assert.ok(button, `Missing test button for ${decision}`);
     button.click();
+  }
+}
+
+class TestSurfacePreviewElement {
+  replaceCount = 0;
+
+  constructor(
+    private readonly root: ReviewWorkbenchTestRoot,
+    public html = "",
+  ) {}
+
+  replaceWith(replacement: TestSurfacePreviewElement): void {
+    this.replaceCount += 1;
+    this.html = replacement.html;
+    this.root.surfacePreview = this;
+    this.root.html = replaceSurfacePreview(this.root.html, replacement.html);
+  }
+}
+
+class TestWrapperElement {
+  firstElementChild: TestSurfacePreviewElement | null = null;
+
+  set innerHTML(value: string) {
+    this.firstElementChild = new TestSurfacePreviewElement(new ReviewWorkbenchTestRoot(), value);
   }
 }
 
@@ -219,6 +423,28 @@ class TestPayloadElement {
   constructor(public textContent = "") {}
 }
 
+function installTestDocument(): () => void {
+  const previousDocument = globalThis.document;
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: {
+      createElement: () => new TestWrapperElement(),
+    },
+  });
+
+  return () => {
+    if (previousDocument === undefined) {
+      Reflect.deleteProperty(globalThis, "document");
+      return;
+    }
+
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: previousDocument,
+    });
+  };
+}
+
 function decisionValues(html: string): ReviewWorkbenchDecision[] {
   return [...html.matchAll(/data-decision="([^"]+)"/g)].map((match) => match[1] as ReviewWorkbenchDecision);
 }
@@ -229,6 +455,19 @@ function textareaValue(html: string): string {
 
 function payloadValue(html: string): string {
   return unescapeHtml(html.match(/<pre[^>]*data-testid="decision-payload"[^>]*>([\s\S]*?)<\/pre>/)?.[1] ?? "");
+}
+
+function surfacePreviewValue(html: string): string {
+  return html.match(/(<section class="surface-preview"[^>]*data-testid="surface-preview"[\s\S]*?)\s*<section class="payload-panel">/)?.[1]
+    ?? html.match(/<section class="surface-preview"[^>]*data-testid="surface-preview"[\s\S]*?<\/section>/)?.[0]
+    ?? "";
+}
+
+function replaceSurfacePreview(html: string, replacement: string): string {
+  return html.replace(
+    /<section class="surface-preview"[^>]*data-testid="surface-preview"[\s\S]*?(?=\s*<section class="payload-panel">)/,
+    `${replacement}\n      `,
+  );
 }
 
 function unescapeHtml(value: string): string {
