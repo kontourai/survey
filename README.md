@@ -759,6 +759,32 @@ reviewOutcome: {
 },
 ```
 
+## Learning projections
+
+Use `buildSurveyLearningProjections(input)` when producer or review tooling needs
+workflow/evaluation signals without changing Surface `TrustInput`.
+
+```ts
+import {
+  buildSurveyLearningProjections,
+  buildSurveyTrustInput,
+} from "@kontourai/survey";
+
+const learning = buildSurveyLearningProjections(surveyInput);
+const trustInput = buildSurveyTrustInput(surveyInput);
+```
+
+Learning projections are product-neutral `learning.*` records. Survey currently
+emits `learning.comfort-zone` from structured `ReviewOutcome.withinComfortZone
+=== false` data and `learning.escalation` from unresolved `EscalationRecord`s,
+including unattached records that producer tooling can route but Surface cannot
+attach to a claim event.
+
+These projections are producer/review workflow and evaluation signals. They are
+not claims about truth or veracity, not Surface claim status, not evidence, and
+not verification events. Calling `buildSurveyLearningProjections` does not alter
+`buildSurveyTrustInput`, trust status derivation, or escalation event projection.
+
 ## Product Boundary
 
 Survey does not crawl pages, parse PDFs, rank candidates, decide review policy,
