@@ -5,10 +5,18 @@ import type {
   CandidateSet,
   ClaimTarget,
   Extraction,
+  Interpretation,
   RawSource,
   ReviewOutcome,
   SurveyInput,
 } from "./types.js";
+
+type PolicyStandardFields = {
+  inlineText?: string;
+  standardVersion?: string;
+  paragraphRef?: string;
+  reference?: string;
+};
 
 export interface BuildSurveyTrustInputOptions {
   reviewProofs?: boolean;
@@ -120,6 +128,8 @@ export function buildSurveyTrustInput(input: SurveyInput, options: BuildSurveyTr
     });
   }
 
+  projectInterpretations({ input, rawSources, claims, evidence, events });
+
   if (input.escalations) {
     const claimIds = new Set(claims.map((c) => c.id));
     for (const escalation of input.escalations) {
@@ -149,6 +159,226 @@ export function buildSurveyTrustInput(input: SurveyInput, options: BuildSurveyTr
     policies: [],
     events,
   };
+}
+
+function projectInterpretations(input: {
+  input: SurveyInput;
+  rawSources: Map<string, RawSource>;
+  claims: Claim[];
+  evidence: Evidence[];
+  events: VerificationEvent[];
+}): void {
+  const interpretations = input.input.interpretations
+    ? [...indexById(input.input.interpretations, "interpretation").values()]
+    : [];
+  if (interpretations.length === 0) return;
+
+  const claimsById = new Map(input.claims.map((claim) => [claim.id, claim]));
+  for (const interpretation of interpretations) {
+    const projection = buildInterpretationProjection({
+      interpretation,
+      rawSources: input.rawSources,
+      claims: input.claims,
+      claimsById,
+      input: input.input,
+    });
+    input.evidence.push(projection.evidence);
+    input.events.push(projection.event);
+    attachInterpretationClaimMetadata({
+      claim: projection.claim,
+      interpretation,
+      anchorSource: projection.anchorSource,
+      evidenceId: projection.evidence.id,
+    });
+  }
+}
+
+function buildInterpretationProjection(input: {
+  interpretation: Interpretation;
+  rawSources: Map<string, RawSource>;
+  claims: Claim[];
+  claimsById: Map<string, Claim>;
+  input: SurveyInput;
+}): {
+  claim: Claim;
+  anchorSource: RawSource;
+  evidence: Evidence;
+  event: VerificationEvent;
+} {
+  const anchorSource = requirePolicyStandardAnchor(input.interpretation, input.rawSources);
+  const claim = resolveInterpretationClaim(input.interpretation, input.claims, input.input);
+  if (!input.claimsById.has(claim.id)) {
+    throw new Error(`Interpretation ${input.interpretation.id} resolved unknown claim ${claim.id}`);
+  }
+
+  const policyStandard = policyStandardFields(anchorSource);
+  const evidence = createInterpretationAnchorEvidence({
+    interpretation: input.interpretation,
+    claim,
+    anchorSource,
+    policyStandard,
+  });
+  return {
+    claim,
+    anchorSource,
+    evidence,
+    event: createInterpretationEvent({
+      interpretation: input.interpretation,
+      claim,
+      evidenceId: evidence.id,
+    }),
+  };
+}
+
+function requirePolicyStandardAnchor(interpretation: Interpretation, rawSources: Map<string, RawSource>): RawSource {
+  const anchorSource = requireMapValue(rawSources, interpretation.anchorsToSourceId, "interpretation anchor raw source");
+  if (anchorSource.kind !== "policy-standard") {
+    throw new Error(
+      `Interpretation ${interpretation.id} anchors to raw source ${anchorSource.id}, but expected policy-standard source`,
+    );
+  }
+  return anchorSource;
+}
+
+function createInterpretationAnchorEvidence(input: {
+  interpretation: Interpretation;
+  claim: Claim;
+  anchorSource: RawSource;
+  policyStandard?: PolicyStandardFields;
+}): Evidence {
+  return {
+    id: `${input.interpretation.id}.evidence.anchor`,
+    claimId: input.claim.id,
+    evidenceType: "policy_rule",
+    method: "anchoring",
+    sourceRef: input.anchorSource.sourceRef,
+    sourceLocator: input.interpretation.ruleLocator,
+    excerptOrSummary:
+      input.policyStandard?.inlineText ?? `Anchored policy-standard reading at ${input.interpretation.ruleLocator}.`,
+    observedAt: input.anchorSource.observedAt,
+    collectedBy: input.interpretation.actor,
+    integrityRef: input.anchorSource.checksum,
+    metadata: {
+      ...input.anchorSource.metadata,
+      ...(input.interpretation.metadata ? { interpretation: input.interpretation.metadata } : {}),
+      ...(input.policyStandard ? { policyStandard: input.policyStandard } : {}),
+      rawSourceKind: input.anchorSource.kind,
+      locatorScheme: input.anchorSource.locatorScheme,
+      anchorsToSourceId: input.anchorSource.id,
+      ruleLocator: input.interpretation.ruleLocator,
+    },
+  };
+}
+
+function createInterpretationEvent(input: {
+  interpretation: Interpretation;
+  claim: Claim;
+  evidenceId: string;
+}): VerificationEvent {
+  return {
+    id: `${input.interpretation.id}.event`,
+    claimId: input.claim.id,
+    status: input.claim.status ?? "proposed",
+    actor: input.interpretation.actor,
+    method: "survey-interpretation",
+    evidenceIds: [input.evidenceId],
+    createdAt: input.interpretation.recordedAt,
+    verifiedAt:
+      input.claim.status === "verified" || input.claim.status === "assumed" ? input.interpretation.recordedAt : undefined,
+    notes: input.interpretation.reading,
+  };
+}
+
+function attachInterpretationClaimMetadata(input: {
+  claim: Claim;
+  interpretation: Interpretation;
+  anchorSource: RawSource;
+  evidenceId: string;
+}): void {
+  const claimMetadata = isRecord(input.claim.metadata) ? input.claim.metadata : {};
+  const surveyMetadata = isRecord(claimMetadata.survey) ? claimMetadata.survey : {};
+  const existingInterpretations = Array.isArray(surveyMetadata.interpretations) ? surveyMetadata.interpretations : [];
+  input.claim.metadata = {
+    ...claimMetadata,
+    survey: {
+      ...surveyMetadata,
+      interpretations: [
+        ...existingInterpretations,
+        {
+          interpretationId: input.interpretation.id,
+          ruleLocator: input.interpretation.ruleLocator,
+          reading: input.interpretation.reading,
+          actor: input.interpretation.actor,
+          recordedAt: input.interpretation.recordedAt,
+          ...(input.interpretation.metadata ? { metadata: input.interpretation.metadata } : {}),
+          edges: [
+            {
+              type: "appliesTo",
+              targetKind: "claim",
+              targetId: input.claim.id,
+            },
+            {
+              type: "anchorsTo",
+              targetKind: "rawSource",
+              targetId: input.anchorSource.id,
+              evidenceId: input.evidenceId,
+              ruleLocator: input.interpretation.ruleLocator,
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+function resolveInterpretationClaim(interpretation: Interpretation, claims: Claim[], input: SurveyInput): Claim {
+  if (interpretation.appliesToClaimId) {
+    const claim = claims.find((item) => item.id === interpretation.appliesToClaimId);
+    if (!claim) {
+      throw new Error(`Interpretation ${interpretation.id} references unknown claim ${interpretation.appliesToClaimId}`);
+    }
+    if (interpretation.appliesToTarget) {
+      const targetClaim = resolveInterpretationTargetClaim(interpretation, claims, input);
+      if (targetClaim.id !== claim.id) {
+        throw new Error(
+          `Interpretation ${interpretation.id} has conflicting appliesToClaimId ${claim.id} and appliesToTarget ${interpretation.appliesToTarget} resolved to ${targetClaim.id}`,
+        );
+      }
+    }
+    return claim;
+  }
+
+  if (!interpretation.appliesToTarget) {
+    throw new Error(`Interpretation ${interpretation.id} needs appliesToClaimId or appliesToTarget`);
+  }
+
+  return resolveInterpretationTargetClaim(interpretation, claims, input);
+}
+
+function resolveInterpretationTargetClaim(interpretation: Interpretation, claims: Claim[], input: SurveyInput): Claim {
+  const candidateSetIdsByTarget = new Set(
+    input.candidateSets
+      .filter((candidateSet) => candidateSet.target === interpretation.appliesToTarget)
+      .map((candidateSet) => candidateSet.id),
+  );
+  const matches = input.claims.filter((claim) =>
+    claim.fieldOrBehavior === interpretation.appliesToTarget ||
+    candidateSetIdsByTarget.has(claim.candidateSetId),
+  );
+  const uniqueClaimIds = [...new Set(matches.map((claim) => claim.id))];
+
+  if (uniqueClaimIds.length === 0) {
+    throw new Error(`Interpretation ${interpretation.id} target ${interpretation.appliesToTarget} did not match any claim`);
+  }
+  if (uniqueClaimIds.length > 1) {
+    throw new Error(
+      `Interpretation ${interpretation.id} target ${interpretation.appliesToTarget} is ambiguous across claims: ${uniqueClaimIds.join(", ")}`,
+    );
+  }
+
+  const claim = claims.find((item) => item.id === uniqueClaimIds[0]);
+  if (!claim) throw new Error(`Interpretation ${interpretation.id} resolved unknown claim ${uniqueClaimIds[0]}`);
+  return claim;
 }
 
 function buildSurveyMetadata(input: {
@@ -232,12 +462,7 @@ function evidenceTypeFor(rawSource: RawSource): "document_citation" | "crawl_obs
   return "attestation";
 }
 
-function policyStandardFields(rawSource: RawSource): {
-  inlineText?: string;
-  standardVersion?: string;
-  paragraphRef?: string;
-  reference?: string;
-} | undefined {
+function policyStandardFields(rawSource: RawSource): PolicyStandardFields | undefined {
   const metadata = rawSource.metadata?.policyStandard;
   const metadataRecord = isRecord(metadata) ? metadata : {};
   const inlineText = rawSource.inlineText ?? stringValue(metadataRecord.inlineText) ?? stringValue(metadataRecord.text);

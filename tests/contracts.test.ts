@@ -287,6 +287,383 @@ describe("Survey Surface projection", () => {
     assert.equal(policyStandard?.reference, "Example Standard 2026 paragraph 9");
   });
 
+  it("projects interpretation records as Surface-compatible events and typed claim metadata", () => {
+    const observedAt = "2026-06-07T12:00:00.000Z";
+    const policyText = "A producer reading must cite the specific applied rule paragraph.";
+    const policySource = policyStandardSource({
+      id: "source.example.policy-standard.rule-1",
+      sourceRef: "policy-standard://example/rules/2026#rule-1",
+      observedAt,
+      checksum: "rule-1",
+      inlineText: policyText,
+      standardVersion: "2026.1",
+      paragraphRef: "rule-1",
+      reference: "Example Rules 2026 rule 1",
+      metadata: { publisher: "Example Standards Body" },
+    });
+    const input = new SurveyInputBuilder({
+      source: "survey.interpretation.fixture",
+      generatedAt: "2026-06-07T12:05:00.000Z",
+    })
+      .addObservation(fieldObservation({
+        id: "observation.example.policy-application",
+        field: "policyApplication.status",
+        value: "DOCUMENTED",
+        rawSource: apiRecordSource({
+          id: "source.example.application-record",
+          sourceRef: "example-records://application/application-1",
+          observedAt,
+          checksum: "application-1",
+        }),
+        extraction: {
+          target: "policyApplication.status",
+          locator: "json:$.policyApplication.status",
+          extractor: "example-extractor",
+          extractedAt: observedAt,
+        },
+        claim: {
+          id: "claim.example.policy-application",
+          subjectType: "example.application",
+          subjectId: "application-1",
+          surface: "example.review",
+          claimType: "policy-application.status",
+          impactLevel: "medium",
+          collectedBy: "example-extractor",
+        },
+      }))
+      .addRawSource(policySource)
+      .addInterpretation({
+        id: "interpretation.example.rule-1",
+        appliesToClaimId: "claim.example.policy-application",
+        anchorsToSourceId: policySource.id,
+        ruleLocator: "text:paragraph=rule-1",
+        reading: "The producer read rule 1 as requiring a documented policy application status.",
+        actor: "producer-operator",
+        recordedAt: "2026-06-07T12:04:00.000Z",
+        metadata: { readingKind: "producer-reading" },
+      })
+      .build();
+
+    assert.equal(input.interpretations?.length, 1);
+
+    const trustInput = buildSurveyTrustInput(input);
+    const valid = validateTrustInput(trustInput);
+    const report = buildTrustReport(valid);
+    const interpretationEvent = report.events.find((event) => event.method === "survey-interpretation");
+    const unsupportedEventKeys = Object.keys(interpretationEvent ?? {}).filter(
+      (key) => !["id", "claimId", "status", "actor", "method", "evidenceIds", "createdAt", "verifiedAt", "notes"].includes(key),
+    );
+    const claim = report.claims.find((item) => item.id === "claim.example.policy-application");
+    const surveyMetadata = claim?.metadata?.survey as {
+      interpretations?: Array<{
+        interpretationId?: string;
+        ruleLocator?: string;
+        reading?: string;
+        edges?: Array<Record<string, unknown>>;
+      }>;
+    } | undefined;
+    const interpretationMetadata = surveyMetadata?.interpretations?.[0];
+    const anchorEvidence = report.evidence.find((item) => item.id === "interpretation.example.rule-1.evidence.anchor");
+    const policyStandard = anchorEvidence?.metadata?.policyStandard as {
+      inlineText?: string;
+      standardVersion?: string;
+      paragraphRef?: string;
+      reference?: string;
+    } | undefined;
+
+    assert.equal(interpretationEvent?.id, "interpretation.example.rule-1.event");
+    assert.equal(interpretationEvent?.claimId, "claim.example.policy-application");
+    assert.deepEqual(interpretationEvent?.evidenceIds, ["interpretation.example.rule-1.evidence.anchor"]);
+    assert.deepEqual(unsupportedEventKeys, []);
+    assert.equal(anchorEvidence?.claimId, "claim.example.policy-application");
+    assert.equal(anchorEvidence?.evidenceType, "policy_rule");
+    assert.equal(anchorEvidence?.method, "anchoring");
+    assert.equal(anchorEvidence?.sourceLocator, "text:paragraph=rule-1");
+    assert.equal(policyStandard?.inlineText, policyText);
+    assert.equal(policyStandard?.standardVersion, "2026.1");
+    assert.equal(policyStandard?.paragraphRef, "rule-1");
+    assert.equal(policyStandard?.reference, "Example Rules 2026 rule 1");
+    assert.equal(interpretationMetadata?.interpretationId, "interpretation.example.rule-1");
+    assert.equal(interpretationMetadata?.ruleLocator, "text:paragraph=rule-1");
+    assert.equal(interpretationMetadata?.reading, "The producer read rule 1 as requiring a documented policy application status.");
+    assert.deepEqual(interpretationMetadata?.edges, [
+      {
+        type: "appliesTo",
+        targetKind: "claim",
+        targetId: "claim.example.policy-application",
+      },
+      {
+        type: "anchorsTo",
+        targetKind: "rawSource",
+        targetId: policySource.id,
+        evidenceId: "interpretation.example.rule-1.evidence.anchor",
+        ruleLocator: "text:paragraph=rule-1",
+      },
+    ]);
+  });
+
+  it("throws a clear error when an interpretation anchor raw source is missing", () => {
+    const input = new SurveyInputBuilder({
+      source: "survey.interpretation.missing-anchor",
+      generatedAt: "2026-06-07T12:05:00.000Z",
+    })
+      .addObservation(fieldObservation({
+        id: "observation.example.missing-anchor-target",
+        field: "policyApplication.status",
+        value: "DOCUMENTED",
+        rawSource: manualEntrySource({
+          id: "source.example.manual-policy-application",
+          sourceRef: "operator://application/application-1/policy-status",
+          observedAt: "2026-06-07T12:00:00.000Z",
+        }),
+        extraction: {
+          target: "policyApplication.status",
+          extractor: "example-operator",
+          extractedAt: "2026-06-07T12:00:00.000Z",
+        },
+        claim: {
+          id: "claim.example.missing-anchor-target",
+          subjectType: "example.application",
+          subjectId: "application-1",
+          surface: "example.review",
+          claimType: "policy-application.status",
+          impactLevel: "medium",
+          collectedBy: "example-operator",
+        },
+      }))
+      .addInterpretation({
+        id: "interpretation.example.missing-anchor",
+        appliesToClaimId: "claim.example.missing-anchor-target",
+        anchorsToSourceId: "source.example.unknown-policy-standard",
+        ruleLocator: "text:paragraph=rule-1",
+        reading: "The producer recorded a reading against a missing anchor.",
+        actor: "producer-operator",
+        recordedAt: "2026-06-07T12:04:00.000Z",
+      })
+      .build();
+
+    assert.throws(
+      () => buildSurveyTrustInput(input),
+      /Missing interpretation anchor raw source: source\.example\.unknown-policy-standard/,
+    );
+  });
+
+  it("throws a clear error for duplicate interpretation ids in raw Survey input", () => {
+    const policySource = policyStandardSource({
+      id: "source.example.policy-standard.duplicate-interpretation",
+      sourceRef: "policy-standard://example/rules/2026#duplicate-interpretation",
+      observedAt: "2026-06-07T12:00:00.000Z",
+      inlineText: "A producer reading must have one stable interpretation identifier.",
+      standardVersion: "2026.1",
+      paragraphRef: "duplicate-interpretation",
+    });
+    const input = new SurveyInputBuilder({
+      source: "survey.interpretation.duplicate-id",
+      generatedAt: "2026-06-07T12:05:00.000Z",
+    })
+      .addRawSource(policySource)
+      .addObservation(fieldObservation({
+        id: "observation.example.duplicate-interpretation",
+        field: "policyApplication.status",
+        value: "DOCUMENTED",
+        rawSource: manualEntrySource({
+          id: "source.example.duplicate-interpretation-manual",
+          sourceRef: "operator://application/application-1/policy-status",
+          observedAt: "2026-06-07T12:00:00.000Z",
+        }),
+        extraction: {
+          target: "policyApplication.status",
+          extractor: "example-operator",
+          extractedAt: "2026-06-07T12:00:00.000Z",
+        },
+        claim: {
+          id: "claim.example.duplicate-interpretation",
+          subjectType: "example.application",
+          subjectId: "application-1",
+          surface: "example.review",
+          claimType: "policy-application.status",
+          impactLevel: "medium",
+          collectedBy: "example-operator",
+        },
+      }))
+      .addInterpretation({
+        id: "interpretation.example.duplicate",
+        appliesToClaimId: "claim.example.duplicate-interpretation",
+        anchorsToSourceId: policySource.id,
+        ruleLocator: "text:paragraph=duplicate-interpretation",
+        reading: "The producer recorded the first reading.",
+        actor: "producer-operator",
+        recordedAt: "2026-06-07T12:04:00.000Z",
+      })
+      .build();
+
+    const duplicateInput = {
+      ...input,
+      interpretations: [
+        input.interpretations![0]!,
+        {
+          ...input.interpretations![0]!,
+          reading: "The producer recorded a duplicate reading with the same id.",
+        },
+      ],
+    };
+
+    assert.throws(
+      () => buildSurveyTrustInput(duplicateInput),
+      /Duplicate interpretation id: interpretation\.example\.duplicate/,
+    );
+  });
+
+  it("throws a clear error when interpretation claim id and target conflict", () => {
+    const policySource = policyStandardSource({
+      id: "source.example.policy-standard.conflicting-target",
+      sourceRef: "policy-standard://example/rules/2026#conflicting-target",
+      observedAt: "2026-06-07T12:00:00.000Z",
+      inlineText: "A producer reading must identify one matching claim target.",
+      standardVersion: "2026.1",
+      paragraphRef: "conflicting-target",
+    });
+    const input = new SurveyInputBuilder({
+      source: "survey.interpretation.conflicting-target",
+      generatedAt: "2026-06-07T12:05:00.000Z",
+    })
+      .addRawSource(policySource)
+      .addObservation(fieldObservation({
+        id: "observation.example.conflicting-target.status",
+        field: "policyApplication.status",
+        value: "DOCUMENTED",
+        rawSource: manualEntrySource({
+          id: "source.example.conflicting-target-status",
+          sourceRef: "operator://application/application-1/policy-status",
+          observedAt: "2026-06-07T12:00:00.000Z",
+        }),
+        extraction: {
+          target: "policyApplication.status",
+          extractor: "example-operator",
+          extractedAt: "2026-06-07T12:00:00.000Z",
+        },
+        claim: {
+          id: "claim.example.conflicting-target.status",
+          subjectType: "example.application",
+          subjectId: "application-1",
+          surface: "example.review",
+          claimType: "policy-application.status",
+          impactLevel: "medium",
+          collectedBy: "example-operator",
+        },
+      }))
+      .addObservation(fieldObservation({
+        id: "observation.example.conflicting-target.summary",
+        field: "policyApplication.summary",
+        value: "READY",
+        rawSource: manualEntrySource({
+          id: "source.example.conflicting-target-summary",
+          sourceRef: "operator://application/application-1/policy-summary",
+          observedAt: "2026-06-07T12:01:00.000Z",
+        }),
+        extraction: {
+          target: "policyApplication.summary",
+          extractor: "example-operator",
+          extractedAt: "2026-06-07T12:01:00.000Z",
+        },
+        claim: {
+          id: "claim.example.conflicting-target.summary",
+          subjectType: "example.application",
+          subjectId: "application-1",
+          surface: "example.review",
+          claimType: "policy-application.summary",
+          impactLevel: "medium",
+          collectedBy: "example-operator",
+        },
+      }))
+      .addInterpretation({
+        id: "interpretation.example.conflicting-target",
+        appliesToClaimId: "claim.example.conflicting-target.status",
+        appliesToTarget: "policyApplication.summary",
+        anchorsToSourceId: policySource.id,
+        ruleLocator: "text:paragraph=conflicting-target",
+        reading: "The producer reading intentionally references conflicting targets.",
+        actor: "producer-operator",
+        recordedAt: "2026-06-07T12:04:00.000Z",
+      })
+      .build();
+
+    assert.throws(
+      () => buildSurveyTrustInput(input),
+      /Interpretation interpretation\.example\.conflicting-target has conflicting appliesToClaimId claim\.example\.conflicting-target\.status and appliesToTarget policyApplication\.summary resolved to claim\.example\.conflicting-target\.summary/,
+    );
+  });
+
+  it("resolves interpretation target strings only when unambiguous", () => {
+    const policySource = policyStandardSource({
+      id: "source.example.policy-standard.target-resolution",
+      sourceRef: "policy-standard://example/rules/2026#target-resolution",
+      observedAt: "2026-06-07T12:00:00.000Z",
+      inlineText: "A producer reading may target one unambiguous claim.",
+      standardVersion: "2026.1",
+      paragraphRef: "target-resolution",
+    });
+    const builder = new SurveyInputBuilder({
+      source: "survey.interpretation.target-resolution",
+      generatedAt: "2026-06-07T12:05:00.000Z",
+    })
+      .addRawSource(policySource)
+      .addObservation(fieldObservation({
+        id: "observation.example.target-resolution",
+        field: "policyApplication.status",
+        value: "DOCUMENTED",
+        rawSource: manualEntrySource({
+          id: "source.example.target-resolution-manual",
+          sourceRef: "operator://application/application-1/policy-status",
+          observedAt: "2026-06-07T12:00:00.000Z",
+        }),
+        extraction: {
+          target: "policyApplication.status",
+          extractor: "example-operator",
+          extractedAt: "2026-06-07T12:00:00.000Z",
+        },
+        claim: {
+          id: "claim.example.target-resolution",
+          subjectType: "example.application",
+          subjectId: "application-1",
+          surface: "example.review",
+          claimType: "policy-application.status",
+          impactLevel: "medium",
+          collectedBy: "example-operator",
+        },
+      }))
+      .addInterpretation({
+        id: "interpretation.example.target-resolution",
+        appliesToTarget: "policyApplication.status",
+        anchorsToSourceId: policySource.id,
+        ruleLocator: "text:paragraph=target-resolution",
+        reading: "The producer reading targets the policy application status.",
+        actor: "producer-operator",
+        recordedAt: "2026-06-07T12:04:00.000Z",
+      });
+
+    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(builder.build())));
+    const event = report.events.find((item) => item.method === "survey-interpretation");
+
+    assert.equal(event?.claimId, "claim.example.target-resolution");
+
+    const ambiguousInput = {
+      ...builder.build(),
+      claims: [
+        ...builder.build().claims,
+        {
+          ...builder.build().claims[0]!,
+          id: "claim.example.target-resolution.second",
+        },
+      ],
+    };
+
+    assert.throws(
+      () => buildSurveyTrustInput(ambiguousInput),
+      /Interpretation interpretation\.example\.target-resolution target policyApplication\.status is ambiguous/,
+    );
+  });
+
   it("uses raw source helpers in scalar observations projected to Surface", () => {
     const observedAt = "2026-05-31T15:00:00.000Z";
     const rawSource = apiRecordSource({

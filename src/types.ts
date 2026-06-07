@@ -80,6 +80,18 @@ export interface EscalationRecord {
   metadata?: Record<string, unknown>;
 }
 
+export interface Interpretation {
+  id: string;
+  appliesToTarget?: string;
+  appliesToClaimId?: string;
+  anchorsToSourceId: string;
+  ruleLocator: string;
+  reading: string;
+  actor: string;
+  recordedAt: string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface ClaimTarget {
   id: string;
   candidateSetId: string;
@@ -114,4 +126,5 @@ export interface SurveyInput {
   reviewOutcomes: ReviewOutcome[];
   claims: ClaimTarget[];
   escalations?: EscalationRecord[];
+  interpretations?: Interpretation[];
 }
