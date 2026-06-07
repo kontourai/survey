@@ -1,4 +1,23 @@
-import { publicDirectoryReviewItemFixture } from "./review-workbench-data.js";
+import {
+  candidateForDecision,
+  currentReviewItem,
+  currentReviewWorkbenchState,
+  deriveQueueRowStatus,
+  initialReviewQueueSessionState,
+  initialReviewWorkbenchState,
+  nextUnresolvedItemName,
+  reviewSessionSummary,
+  selectedCandidateRole,
+  workbenchDecisionDefinitions,
+  type ReviewQueueSessionState,
+  type ReviewWorkbenchDecision,
+  type ReviewWorkbenchState,
+} from "./review-queue-session.js";
+import {
+  buildSurfaceProjectionPreview,
+  formatValue,
+  type SurfaceProjectionPreview,
+} from "./review-surface-preview.js";
 import {
   reviewResourceApiVersion,
   type ReviewCandidate,
@@ -6,124 +25,34 @@ import {
   type ReviewItem,
 } from "../../src/review-resource.js";
 
-export type ReviewWorkbenchDecision = "accept-proposed" | "keep-current" | "reject-proposed";
-
-export interface ReviewWorkbenchState {
-  readonly item: ReviewItem;
-  readonly note: string;
-  readonly decision?: ReviewWorkbenchDecision;
-  readonly reviewedAt: string;
-  readonly actorId: string;
-}
-
-export interface SurfaceProjectionPreview {
-  readonly canonicalClaim: PreviewClaim;
-  readonly candidateHistory: PreviewCandidateHistory[];
-  readonly sourceEvidence: PreviewSourceEvidence;
-  readonly reviewEvent?: PreviewReviewEvent;
-  readonly integrityPosture: PreviewIntegrityPosture;
-  readonly authorityTrace: PreviewAuthorityTrace;
-  readonly postureDisclaimer: string;
-}
-
-export interface PreviewClaim {
-  readonly candidateId: string;
-  readonly claimId: string;
-  readonly value: string;
-  readonly status: string;
-}
-
-export interface PreviewCandidateHistory {
-  readonly candidateId: string;
-  readonly value: string;
-  readonly historyLabel: string;
-}
-
-export interface PreviewSourceEvidence {
-  readonly sourceRef: string;
-  readonly sourceId: string;
-  readonly excerpt: string;
-  readonly extractionId: string;
-  readonly extractor: string;
-  readonly observedAt: string;
-  readonly sourceAuthority?: PreviewSourceAuthority;
-}
-
-export interface PreviewSourceAuthority {
-  readonly authorityClass: string;
-  readonly declaredBy: string;
-  readonly scope: string;
-}
-
-export interface PreviewReviewEvent {
-  readonly actor: string;
-  readonly reviewedAt: string;
-  readonly status: string;
-  readonly rationale: string;
-  readonly reviewOutcomeId: string;
-}
-
-export interface PreviewIntegrityPosture {
-  readonly candidateSetId: string;
-  readonly rawSourceId: string;
-  readonly extractionId: string;
-  readonly checksum: string;
-}
-
-export interface PreviewAuthorityTrace {
-  readonly status: "empty" | "provided";
-  readonly label: string;
-  readonly detail: string;
-}
-
-interface DecisionDefinition {
-  readonly label: string;
-  readonly effect: string;
-  readonly candidateRole: "current" | "proposed";
-  readonly status: ReviewDecision["spec"]["status"];
-}
-
-export const workbenchDecisionDefinitions = {
-  "accept-proposed": {
-    label: "Accept proposed",
-    effect: "Proposed value becomes the verified review outcome.",
-    candidateRole: "proposed",
-    status: "verified",
-  },
-  "keep-current": {
-    label: "Keep current",
-    effect: "Current value remains the verified review outcome.",
-    candidateRole: "current",
-    status: "verified",
-  },
-  "reject-proposed": {
-    label: "Reject proposed",
-    effect: "Proposed value is rejected and the current value remains unmodified.",
-    candidateRole: "proposed",
-    status: "rejected",
-  },
-} satisfies Record<ReviewWorkbenchDecision, DecisionDefinition>;
-
-export function initialReviewWorkbenchState(item: ReviewItem = publicDirectoryReviewItemFixture): ReviewWorkbenchState {
-  return {
-    item,
-    note: "",
-    decision: undefined,
-    reviewedAt: "2026-06-04T00:00:00.000Z",
-    actorId: "review-workbench-operator",
-  };
-}
-
-export function candidateForDecision(item: ReviewItem, decision: ReviewWorkbenchDecision): ReviewCandidate {
-  const definition = workbenchDecisionDefinitions[decision];
-  const candidate = item.spec.candidates.find((entry) => entry.role === definition.candidateRole);
-
-  if (!candidate) {
-    throw new Error(`ReviewItem ${item.metadata.name} has no ${definition.candidateRole} candidate.`);
-  }
-
-  return candidate;
-}
+export {
+  candidateForDecision,
+  currentReviewItem,
+  currentReviewWorkbenchState,
+  deriveQueueRowStatus,
+  initialReviewQueueSessionState,
+  initialReviewWorkbenchState,
+  nextUnresolvedItemName,
+  reviewSessionSummary,
+  selectedCandidateRole,
+  workbenchDecisionDefinitions,
+  type ReviewQueueRowStatus,
+  type ReviewQueueSessionState,
+  type ReviewSessionSummary,
+  type ReviewWorkbenchDecision,
+  type ReviewWorkbenchState,
+} from "./review-queue-session.js";
+export {
+  buildSurfaceProjectionPreview,
+  type PreviewAuthorityTrace,
+  type PreviewCandidateHistory,
+  type PreviewClaim,
+  type PreviewIntegrityPosture,
+  type PreviewReviewEvent,
+  type PreviewSourceAuthority,
+  type PreviewSourceEvidence,
+  type SurfaceProjectionPreview,
+} from "./review-surface-preview.js";
 
 export function buildReviewDecision(state: ReviewWorkbenchState): ReviewDecision | undefined {
   if (!state.decision) {
@@ -163,110 +92,11 @@ export function buildReviewDecision(state: ReviewWorkbenchState): ReviewDecision
   };
 }
 
-export function buildSurfaceProjectionPreview(
-  item: ReviewItem,
-  decision: ReviewDecision | undefined,
-): SurfaceProjectionPreview | undefined {
-  const selectedCandidate = selectedPreviewCandidate(item, decision);
-  if (!selectedCandidate || !decision) {
-    return undefined;
+export function renderReviewWorkbenchHtml(state: ReviewWorkbenchState | ReviewQueueSessionState): string {
+  if ("items" in state) {
+    return renderReviewQueueSessionHtml(state);
   }
 
-  const projection = decision.spec.projection ?? selectedCandidate.projection;
-
-  return {
-    canonicalClaim: buildPreviewClaim(selectedCandidate, decision, projection),
-    candidateHistory: buildCandidateHistory(item, selectedCandidate),
-    sourceEvidence: buildSourceEvidence(selectedCandidate),
-    reviewEvent: buildReviewEvent(decision, projection),
-    integrityPosture: buildIntegrityPosture(item, selectedCandidate, projection),
-    authorityTrace: portableAuthorityTrace(selectedCandidate.producer?.authorityTrace),
-    postureDisclaimer: postureDisclaimer(),
-  };
-}
-
-function selectedPreviewCandidate(
-  item: ReviewItem,
-  decision: ReviewDecision | undefined,
-): ReviewCandidate | undefined {
-  if (!decision?.spec.candidateId) {
-    return undefined;
-  }
-
-  const candidate = item.spec.candidates.find((entry) => entry.id === decision.spec.candidateId);
-  if (!candidate) {
-    throw new Error(`ReviewItem ${item.metadata.name} has no candidate ${decision.spec.candidateId}.`);
-  }
-
-  return candidate;
-}
-
-function buildPreviewClaim(
-  candidate: ReviewCandidate,
-  decision: ReviewDecision,
-  projection: ReviewDecision["spec"]["projection"] | ReviewCandidate["projection"],
-): PreviewClaim {
-  return {
-    candidateId: candidate.id,
-    claimId: projection?.claimId ?? candidate.claimTarget.claimId ?? candidate.claimTarget.fieldOrBehavior,
-    value: formatValue(candidate.value),
-    status: decision.spec.status,
-  };
-}
-
-function buildCandidateHistory(item: ReviewItem, selectedCandidate: ReviewCandidate): PreviewCandidateHistory[] {
-  return item.spec.candidates
-    .filter((candidate) => candidate.id !== selectedCandidate.id)
-    .map((candidate) => ({
-      candidateId: candidate.id,
-      value: formatValue(candidate.value),
-      historyLabel: "Unselected candidate history",
-    }));
-}
-
-function buildSourceEvidence(candidate: ReviewCandidate): PreviewSourceEvidence {
-  return {
-    sourceRef: candidate.source.sourceRef,
-    sourceId: candidate.source.sourceId ?? candidate.source.sourceRef,
-    excerpt: candidate.locator?.excerpt ?? "No source excerpt provided.",
-    extractionId: candidate.extraction.extractionId ?? "not provided",
-    extractor: candidate.extraction.extractor ?? "unknown",
-    observedAt: candidate.source.observedAt ?? candidate.source.fetchedAt ?? "unknown",
-    sourceAuthority: sourceAuthorityFromProducer(candidate.producer?.sourceAuthority),
-  };
-}
-
-function buildReviewEvent(
-  decision: ReviewDecision,
-  projection: ReviewDecision["spec"]["projection"] | ReviewCandidate["projection"],
-): PreviewReviewEvent {
-  return {
-    actor: decision.spec.actor?.id ?? "unknown",
-    reviewedAt: decision.spec.reviewedAt ?? "not recorded",
-    status: decision.spec.status,
-    rationale: decision.spec.rationale || "No reviewer rationale provided.",
-    reviewOutcomeId: projection?.reviewOutcomeId ?? "not provided",
-  };
-}
-
-function buildIntegrityPosture(
-  item: ReviewItem,
-  candidate: ReviewCandidate,
-  projection: ReviewDecision["spec"]["projection"] | ReviewCandidate["projection"],
-): PreviewIntegrityPosture {
-  return {
-    candidateSetId: projection?.candidateSetId ?? item.spec.projection?.candidateSetId ?? "not provided",
-    rawSourceId: projection?.rawSourceId ?? candidate.source.sourceId ?? "not provided",
-    extractionId: projection?.extractionId ?? candidate.extraction.extractionId ?? "not provided",
-    checksum: candidate.source.checksum ?? "not provided",
-  };
-}
-
-function postureDisclaimer(): string {
-  return "Survey records source and review posture for projection; it does not validate real-world truth.";
-}
-
-export function renderReviewWorkbenchHtml(state: ReviewWorkbenchState): string {
   return `
     <section class="workbench-shell" aria-label="Survey review workbench">
       ${renderWorkbenchHeader(state)}
@@ -274,6 +104,70 @@ export function renderReviewWorkbenchHtml(state: ReviewWorkbenchState): string {
         ${renderCandidateComparison(state)}
         ${renderDecisionColumn(state)}
       </div>
+    </section>
+  `;
+}
+
+function renderReviewQueueSessionHtml(session: ReviewQueueSessionState): string {
+  const state = currentReviewWorkbenchState(session);
+
+  return `
+    <section class="workbench-shell" aria-label="Survey review workbench">
+      ${renderWorkbenchHeader(state)}
+      <div class="queue-layout">
+        <aside class="queue-panel" aria-label="Review queue">
+          ${renderQueueRows(session)}
+          ${renderSessionSummary(session)}
+        </aside>
+        <div class="content-grid">
+          ${renderCandidateComparison(state)}
+          ${renderDecisionColumn(state)}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderQueueRows(session: ReviewQueueSessionState): string {
+  return `
+    <section class="queue-list" data-testid="review-queue">
+      <div class="queue-head">
+        <h2>Review queue</h2>
+        <button class="next-button" type="button" data-testid="next-unresolved">Next unresolved</button>
+      </div>
+      ${session.items.map((item) => renderQueueRow(item, session)).join("")}
+    </section>
+  `;
+}
+
+function renderQueueRow(item: ReviewItem, session: ReviewQueueSessionState): string {
+  const status = deriveQueueRowStatus(item, session);
+  const isActive = item.metadata.name === session.activeItemName;
+
+  return `
+    <button class="queue-row${isActive ? " is-active" : ""}" type="button" data-item-name="${escapeHtml(item.metadata.name)}" data-testid="queue-row" data-queue-status="${status}">
+      <span class="queue-row-main">
+        <span class="queue-row-title">${escapeHtml(item.metadata.name)}</span>
+        <span class="queue-row-target">${escapeHtml(item.spec.target)}</span>
+      </span>
+      <span class="state-label">${escapeHtml(status)}</span>
+    </button>
+  `;
+}
+
+function renderSessionSummary(session: ReviewQueueSessionState): string {
+  const summary = reviewSessionSummary(session);
+
+  return `
+    <section class="session-summary" data-testid="session-summary">
+      <h2>Session summary</h2>
+      <dl class="summary-grid">
+        ${metaItem("Accepted", String(summary.accepted))}
+        ${metaItem("Kept current", String(summary.keptCurrent))}
+        ${metaItem("Rejected", String(summary.rejected))}
+        ${metaItem("Escalated", String(summary.escalated))}
+        ${metaItem("Unresolved", String(summary.unresolved))}
+      </dl>
     </section>
   `;
 }
@@ -333,7 +227,21 @@ function renderDecisionControls(state: ReviewWorkbenchState): string {
         <span class="field-label">Decision effect</span>
         <span class="field-value">${escapeHtml(activeDefinition?.effect ?? "No decision selected.")}</span>
       </div>
+      ${renderFeedbackTags(state)}
     </section>
+  `;
+}
+
+function renderFeedbackTags(state: ReviewWorkbenchState): string {
+  const tags = producerFeedbackTags(state.item);
+
+  return `
+    <div class="feedback-tags" data-testid="producer-feedback-tags">
+      <span class="field-label">Producer feedback tags</span>
+      <div class="tag-row">
+        ${tags.length === 0 ? "<span class=\"tag is-empty\">none</span>" : tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}
+      </div>
+    </div>
   `;
 }
 
@@ -484,75 +392,178 @@ function renderPreviewSection(
   `;
 }
 
-export function mountReviewWorkbench(root: HTMLElement, startState = initialReviewWorkbenchState()): void {
-  let state = startState;
+export function mountReviewWorkbench(
+  root: HTMLElement,
+  startState: ReviewQueueSessionState | ReviewWorkbenchState = initialReviewQueueSessionState(),
+): void {
+  const controller = createReviewWorkbenchController(root, startState);
 
-  const render = (): void => {
-    root.innerHTML = renderReviewWorkbenchHtml(state);
-    root.querySelector<HTMLTextAreaElement>("[data-testid='reviewer-note']")?.addEventListener("input", (event) => {
-      state = {
-        ...state,
-        note: (event.target as HTMLTextAreaElement).value,
-      };
-      const payload = root.querySelector<HTMLElement>("[data-testid='decision-payload']");
-      if (payload) {
-        payload.textContent = JSON.stringify(buildReviewDecision(state) ?? null, null, 2);
-      }
-      const preview = root.querySelector<HTMLElement>("[data-testid='surface-preview']");
-      if (preview) {
-        if (typeof document !== "undefined") {
-          const wrapper = document.createElement("div");
-          wrapper.innerHTML = renderSurfacePreview(state);
-          preview.replaceWith(wrapper.firstElementChild as HTMLElement);
-        } else {
-          render();
-        }
-      }
-    });
-    root.querySelectorAll<HTMLButtonElement>("[data-decision]").forEach((button) => {
-      button.addEventListener("click", () => {
-        state = {
-          ...state,
-          decision: button.dataset.decision as ReviewWorkbenchDecision,
-        };
-        render();
-      });
-    });
-  };
-
-  render();
+  controller.renderCurrentState();
 }
 
-function sourceAuthorityFromProducer(value: unknown): PreviewSourceAuthority | undefined {
-  if (!isRecord(value)) {
-    return undefined;
+interface ReviewWorkbenchController {
+  renderCurrentState(): void;
+}
+
+function createReviewWorkbenchController(
+  root: HTMLElement,
+  startState: ReviewQueueSessionState | ReviewWorkbenchState,
+): ReviewWorkbenchController {
+  let session = queueSessionFromStartState(startState);
+
+  const applySessionUpdate = (update: (current: ReviewQueueSessionState) => ReviewQueueSessionState): void => {
+    session = update(session);
+  };
+
+  const selectDecision = (decision: ReviewWorkbenchDecision): void => {
+    applySessionUpdate((current) => ({
+      ...current,
+      decisionsByItemName: {
+        ...current.decisionsByItemName,
+        [currentReviewItem(current).metadata.name]: decision,
+      },
+    }));
+  };
+
+  const controller = {
+    currentState: (): ReviewWorkbenchState => currentReviewWorkbenchState(session),
+    goToNextUnresolved: (): void => applyNextUnresolvedSessionUpdate(applySessionUpdate, session),
+    renderCurrentState: (): void => renderCurrentState(root, session, controller),
+    selectDecision,
+    selectQueueItem: (itemName: string): void => applySessionUpdate((current) => ({ ...current, activeItemName: itemName })),
+    updateReviewerNote: (note: string): void => applyReviewerNoteSessionUpdate(applySessionUpdate, session, note),
+  };
+
+  return controller;
+}
+
+interface ReviewWorkbenchControllerBindings extends ReviewWorkbenchController {
+  currentState(): ReviewWorkbenchState;
+  goToNextUnresolved(): void;
+  selectDecision(decision: ReviewWorkbenchDecision): void;
+  selectQueueItem(itemName: string): void;
+  updateReviewerNote(note: string): void;
+}
+
+function applyReviewerNoteSessionUpdate(
+  applySessionUpdate: (update: (current: ReviewQueueSessionState) => ReviewQueueSessionState) => void,
+  session: ReviewQueueSessionState,
+  note: string,
+): void {
+  const itemName = currentReviewItem(session).metadata.name;
+  applySessionUpdate((current) => ({
+    ...current,
+    notesByItemName: {
+      ...current.notesByItemName,
+      [itemName]: note,
+    },
+  }));
+}
+
+function applyNextUnresolvedSessionUpdate(
+  applySessionUpdate: (update: (current: ReviewQueueSessionState) => ReviewQueueSessionState) => void,
+  session: ReviewQueueSessionState,
+): void {
+  const next = nextUnresolvedItemName(session);
+  if (next) {
+    applySessionUpdate((current) => ({ ...current, activeItemName: next }));
+  }
+}
+
+function renderCurrentState(
+  root: HTMLElement,
+  session: ReviewQueueSessionState,
+  controller: ReviewWorkbenchControllerBindings,
+): void {
+  root.innerHTML = renderReviewWorkbenchHtml(session);
+  bindReviewerNote(root, controller.updateReviewerNote, controller.currentState, controller.renderCurrentState);
+  bindDecisionButtons(root, (decision) => {
+    controller.selectDecision(decision);
+    controller.renderCurrentState();
+  });
+  bindQueueRows(root, (itemName) => {
+    controller.selectQueueItem(itemName);
+    controller.renderCurrentState();
+  });
+  bindNextUnresolved(root, () => {
+    controller.goToNextUnresolved();
+    controller.renderCurrentState();
+  });
+}
+
+function queueSessionFromStartState(
+  startState: ReviewQueueSessionState | ReviewWorkbenchState,
+): ReviewQueueSessionState {
+  if ("items" in startState) {
+    return startState;
   }
 
   return {
-    authorityClass: String(value.authorityClass ?? "not provided"),
-    declaredBy: String(value.declaredBy ?? "not provided"),
-    scope: String(value.scope ?? "not provided"),
+    items: [startState.item],
+    activeItemName: startState.item.metadata.name,
+    notesByItemName: startState.note ? { [startState.item.metadata.name]: startState.note } : {},
+    decisionsByItemName: startState.decision ? { [startState.item.metadata.name]: startState.decision } : {},
+    reviewedAt: startState.reviewedAt,
+    actorId: startState.actorId,
   };
 }
 
-function portableAuthorityTrace(value: unknown): PreviewAuthorityTrace {
-  if (Array.isArray(value) && value.length > 0) {
-    return {
-      status: "provided",
-      label: "Portable authority trace provided",
-      detail: `${value.length} authority trace entr${value.length === 1 ? "y" : "ies"} supplied by the fixture.`,
-    };
+function bindReviewerNote(
+  root: HTMLElement,
+  updateReviewerNote: (note: string) => void,
+  currentState: () => ReviewWorkbenchState,
+  renderCurrentState: () => void,
+): void {
+  root.querySelector<HTMLTextAreaElement>("[data-testid='reviewer-note']")?.addEventListener("input", (event) => {
+    updateReviewerNote((event.target as HTMLTextAreaElement).value);
+    refreshDecisionOutputs(root, currentState(), renderCurrentState);
+  });
+}
+
+function bindDecisionButtons(root: HTMLElement, selectDecision: (decision: ReviewWorkbenchDecision) => void): void {
+  root.querySelectorAll<HTMLButtonElement>("[data-decision]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectDecision(button.dataset.decision as ReviewWorkbenchDecision);
+    });
+  });
+}
+
+function bindQueueRows(root: HTMLElement, selectQueueItem: (itemName: string) => void): void {
+  root.querySelectorAll<HTMLButtonElement>("[data-item-name]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectQueueItem(button.dataset.itemName ?? "");
+    });
+  });
+}
+
+function bindNextUnresolved(root: HTMLElement, goToNextUnresolved: () => void): void {
+  root.querySelector<HTMLButtonElement>("[data-testid='next-unresolved']")?.addEventListener("click", goToNextUnresolved);
+}
+
+function refreshDecisionOutputs(root: HTMLElement, state: ReviewWorkbenchState, renderCurrentState: () => void): void {
+  const payload = root.querySelector<HTMLElement>("[data-testid='decision-payload']");
+  if (payload) {
+    payload.textContent = JSON.stringify(buildReviewDecision(state) ?? null, null, 2);
   }
 
-  return {
-    status: "empty",
-    label: "Empty / not provided",
-    detail: "No portable authority trace is present. SourceAuthority metadata is shown as source evidence and is not promoted into authorityTrace.",
-  };
+  const preview = root.querySelector<HTMLElement>("[data-testid='surface-preview']");
+  if (!preview) {
+    return;
+  }
+
+  if (typeof document === "undefined") {
+    renderCurrentState();
+    return;
+  }
+
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = renderSurfacePreview(state);
+  preview.replaceWith(wrapper.firstElementChild as HTMLElement);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function producerFeedbackTags(item: ReviewItem): string[] {
+  const tags = item.spec.producerPolicy?.feedbackTags;
+  return Array.isArray(tags) ? tags.map(String) : [];
 }
 
 function renderCandidateCard(candidate: ReviewCandidate, state: ReviewWorkbenchState): string {
@@ -589,14 +600,6 @@ function renderCandidateCard(candidate: ReviewCandidate, state: ReviewWorkbenchS
   `;
 }
 
-function selectedCandidateRole(state: ReviewWorkbenchState): ReviewCandidate["role"] | undefined {
-  if (!state.decision) {
-    return undefined;
-  }
-
-  return state.decision === "keep-current" || state.decision === "reject-proposed" ? "current" : "proposed";
-}
-
 function candidateByRole(item: ReviewItem, role: "current" | "proposed"): ReviewCandidate {
   const candidate = item.spec.candidates.find((entry) => entry.role === role);
   if (!candidate) {
@@ -622,10 +625,6 @@ function fieldItem(label: string, value: string, extraClass = ""): string {
       <dd class="field-value">${escapeHtml(value)}</dd>
     </div>
   `;
-}
-
-function formatValue(value: unknown): string {
-  return typeof value === "string" ? value : JSON.stringify(value);
 }
 
 function formatConfidence(value: number): string {
