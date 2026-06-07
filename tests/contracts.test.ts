@@ -1655,7 +1655,7 @@ describe("Survey Surface projection", () => {
     assert.equal(report.events[0]?.method, "candidate-escalation");
   });
 
-  it("projects a comfort-zone flag to the verification event notes", () => {
+  it("projects a comfort-zone flag to structured claim metadata", () => {
     const input = buildSurveyTrustInput({
       source: "survey.comfort-zone.fixture",
       generatedAt: "2026-05-31T16:00:00.000Z",
@@ -1710,15 +1710,34 @@ describe("Survey Surface projection", () => {
         fieldOrBehavior: "registrationStatus",
         impactLevel: "medium",
         collectedBy: "records-importer",
+        metadata: {
+          survey: {
+            producerBatchId: "registry-import-2026-05-31",
+            existingReviewSignal: { source: "producer-supplied" },
+          },
+        },
       }],
     });
     const report = buildTrustReport(validateTrustInput(input));
     const event = report.events[0];
+    const surveyMetadata = report.claims[0]?.metadata?.survey as
+      | {
+          comfortZone?: { withinComfortZone?: boolean; note?: string };
+          existingReviewSignal?: { source?: string };
+          producerBatchId?: string;
+        }
+      | undefined;
 
     assert.equal(report.claims[0]?.status, "assumed");
-    assert.ok(event?.notes?.includes("[outside comfort zone]"));
-    assert.ok(event?.notes?.includes("Renewal clause interpretation requires specialist counsel."));
-    assert.ok(event?.notes?.includes("Assumed from registry source."));
+    assert.equal(event?.notes, "Assumed from registry source.");
+    assert.ok(!event?.notes?.includes("[outside comfort zone]"));
+    assert.ok(!event?.notes?.includes("Renewal clause interpretation requires specialist counsel."));
+    assert.equal(surveyMetadata?.producerBatchId, "registry-import-2026-05-31");
+    assert.deepEqual(surveyMetadata?.existingReviewSignal, { source: "producer-supplied" });
+    assert.deepEqual(surveyMetadata?.comfortZone, {
+      withinComfortZone: false,
+      note: "Renewal clause interpretation requires specialist counsel.",
+    });
   });
 
   it("projects an unresolved attached escalation record as a disputed event on the target claim", () => {

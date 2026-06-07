@@ -744,8 +744,9 @@ in Surface with a `candidate-escalation` event.
 Use `withinComfortZone: false` on a `ReviewOutcome` when the reviewer is
 recording a decision outside their domain expertise or is flagging that the
 conclusion requires a different authority to confirm. The flag and optional
-`comfortZoneNote` are carried forward to the Surface verification event `notes`
-so the reviewer chain sees the signal without having to read into the rationale.
+`comfortZoneNote` are carried forward as structured Survey metadata on the
+projected Surface claim at `metadata.survey.comfortZone`. Verification event
+`notes` carry the normal review or candidate-set rationale only.
 
 ```ts
 reviewOutcome: {
