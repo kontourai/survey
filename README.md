@@ -565,6 +565,30 @@ so producers can store or recompute the exact canonical proof material used for
 the anchor. Producer metadata is not part of the canonical payload; any
 non-portable context belongs outside the hash, such as anchor metadata.
 
+The canonical payload is the portable review proof contract. It contains:
+
+| Field | Purpose |
+| --- | --- |
+| `schemaVersion` / `proof.schema` / `proof.schemaVersion` | Stable Survey review proof schema identity. |
+| `proof.packageName` / `proof.packageVersion` | Review proof contract identity. `proof.packageVersion` is the proof contract version, not the npm package release version. Package releases do not change canonical proof hashes unless this explicit proof contract version or another canonical field changes. |
+| `proof.issuer` | Survey producer identity, derived from the claim collector. |
+| `proof.producer` | Extraction producer identity, derived from the extractor id. |
+| `proof.issuedAt` | Proof envelope time, derived from review time, then claim update time, then extraction time. |
+| `proof.subject` | Claim identity: claim id, candidate set id, reviewed candidate id, subject, surface, claim type, and field/behavior. If the claim also names a candidate id, it must match the reviewed candidate id. |
+| `proof.sourcePayload` / `rawSource.checksum` | Source payload identity, ref, and producer-supplied checksum when present. |
+| `extraction` | Extracted target, value, locator, excerpt, extractor, confidence, and extraction time. |
+| `candidate` / `candidateSet` | Candidate identity/value plus the ordered candidate set, selected candidate, status, and rationale. |
+| `reviewOutcome` | Review decision/status, actor, review time, rationale, and evidence ids. |
+| `claim` | Projected claim identity, status/value, impact, evidence method, derivation links, collector, actor, and event method. |
+
+To recompute the anchor value, rebuild the same canonical payload from the
+reviewed Survey records, call `canonicalReviewProofJson(payload)`, and compute
+SHA-256 over that JSON. The result should equal
+`claim.currentIntegrityAnchor.value`. The Surface anchor remains generic:
+`kind: "hash"`, `algorithm: "sha256"`, `verificationStatus: "unverified"`, no
+Survey-specific anchor metadata, and a source/time pointer for display. Claims
+without a selected review outcome are not anchored by `{ reviewProofs: true }`.
+
 When the Surface projection proof option is enabled, `buildSurveyTrustInput`
 will attach the same kind of anchor to the projected reviewed claim:
 
@@ -576,6 +600,12 @@ The proof provides hash-only tamper evidence for the Survey review/provenance
 trail in the canonical payload. It does not authenticate an actor, sign the
 payload, or prove the real-world truth of the claim. Non-goals include JWT/JWS
 signing, key management, a transparency log, and any veracity guarantee.
+
+JWT-adjacent words in the payload are process-envelope vocabulary, not a v0 JWT
+implementation. `issuer` identifies the Survey producer for recomputation,
+`subject` identifies the claim being reviewed, and `issuedAt` records the review
+proof time. Audience restrictions, expiry, cryptographic signing, key discovery,
+and legal non-repudiation are deferred concepts for a future signed envelope.
 
 ## Computed values
 

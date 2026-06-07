@@ -56,6 +56,10 @@ export {
   buildReviewProofAnchor,
   canonicalReviewProofJson,
   hashCanonicalReviewProofPayload,
+  REVIEW_PROOF_CONTRACT_VERSION,
+  REVIEW_PROOF_PACKAGE_NAME,
+  REVIEW_PROOF_SCHEMA,
+  REVIEW_PROOF_SCHEMA_VERSION,
 } from "./review-proof.js";
 export type {
   CanonicalReviewProofPayload,
