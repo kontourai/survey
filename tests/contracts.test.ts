@@ -70,7 +70,7 @@ describe("Survey Surface projection", () => {
     assert.equal(claim?.currentIntegrityAnchor?.metadata, undefined);
 
     const mutatedPayload = structuredClone(payload);
-    mutatedPayload.reviewOutcome!.rationale = "Mutated canonical review rationale.";
+    mutatedPayload.reviewOutcome!.status = "rejected";
     assert.notEqual(hashCanonicalReviewProofPayload(mutatedPayload), claim?.currentIntegrityAnchor?.value);
   });
 
