@@ -82,6 +82,8 @@ export function buildSurveyTrustInput(input: SurveyInput, options: BuildSurveyTr
 
     claims.push(claim);
 
+    const policyStandard = policyStandardFields(rawSource);
+
     evidence.push({
       id: evidenceId,
       claimId: projection.id,
@@ -89,7 +91,7 @@ export function buildSurveyTrustInput(input: SurveyInput, options: BuildSurveyTr
       method: projection.evidenceMethod ?? "extraction",
       sourceRef: rawSource.sourceRef,
       sourceLocator: extraction.locator,
-      excerptOrSummary: extraction.excerpt ?? `Extracted ${projection.fieldOrBehavior} from ${rawSource.kind}.`,
+      excerptOrSummary: evidenceExcerptOrSummary({ rawSource, extraction, projection, policyStandard }),
       observedAt: rawSource.observedAt,
       collectedBy: projection.collectedBy,
       integrityRef: rawSource.checksum,
@@ -97,6 +99,7 @@ export function buildSurveyTrustInput(input: SurveyInput, options: BuildSurveyTr
         ...rawSource.metadata,
         ...extraction.metadata,
         ...candidate.metadata,
+        ...(policyStandard ? { policyStandard } : {}),
         rawSourceKind: rawSource.kind,
         locatorScheme: rawSource.locatorScheme,
         confidence: candidate.confidence ?? extraction.confidence,
@@ -222,10 +225,48 @@ function selectReview(reviews: ReviewOutcome[], candidateId: string): ReviewOutc
   return reviews.find((review) => review.candidateId === candidateId) ?? reviews.find((review) => !review.candidateId);
 }
 
-function evidenceTypeFor(rawSource: RawSource): "document_citation" | "crawl_observation" | "attestation" {
+function evidenceTypeFor(rawSource: RawSource): "document_citation" | "crawl_observation" | "attestation" | "policy_rule" {
+  if (rawSource.kind === "policy-standard") return "policy_rule";
   if (rawSource.kind === "uploaded-document") return "document_citation";
   if (rawSource.kind === "web-page") return "crawl_observation";
   return "attestation";
+}
+
+function policyStandardFields(rawSource: RawSource): {
+  inlineText?: string;
+  standardVersion?: string;
+  paragraphRef?: string;
+  reference?: string;
+} | undefined {
+  const metadata = rawSource.metadata?.policyStandard;
+  const metadataRecord = isRecord(metadata) ? metadata : {};
+  const inlineText = rawSource.inlineText ?? stringValue(metadataRecord.inlineText) ?? stringValue(metadataRecord.text);
+  const standardVersion = rawSource.standardVersion ?? stringValue(metadataRecord.standardVersion) ?? stringValue(metadataRecord.version);
+  const paragraphRef = rawSource.paragraphRef ?? stringValue(metadataRecord.paragraphRef);
+  const reference = stringValue(metadataRecord.reference);
+  if (!inlineText && !standardVersion && !paragraphRef && !reference) return undefined;
+  return {
+    inlineText,
+    standardVersion,
+    paragraphRef,
+    reference,
+  };
+}
+
+function evidenceExcerptOrSummary(input: {
+  rawSource: RawSource;
+  extraction: Extraction;
+  projection: ClaimTarget;
+  policyStandard?: { inlineText?: string };
+}): string {
+  if (input.rawSource.kind === "policy-standard" && input.policyStandard?.inlineText) {
+    return input.policyStandard.inlineText;
+  }
+  return input.extraction.excerpt ?? `Extracted ${input.projection.fieldOrBehavior} from ${input.rawSource.kind}.`;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
 }
 
 function eventMethodFor(status: TrustStatus, candidateSet: CandidateSet): string {

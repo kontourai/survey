@@ -1,6 +1,6 @@
 import type { ConfidenceBasis, DerivationEdge, EvidenceMethod, EvidenceType, ImpactLevel, TrustStatus } from "@kontourai/surface";
 
-export type RawSourceKind = "uploaded-document" | "web-page" | "api-record" | "manual-entry";
+export type RawSourceKind = "uploaded-document" | "web-page" | "api-record" | "manual-entry" | "policy-standard";
 export type LocatorScheme = "pdf" | "text" | "html" | "structured-field";
 
 export interface RawSource {
@@ -11,6 +11,9 @@ export interface RawSource {
   fetchedAt?: string;
   checksum?: string;
   locatorScheme: LocatorScheme;
+  inlineText?: string;
+  standardVersion?: string;
+  paragraphRef?: string;
   metadata?: Record<string, unknown>;
 }
 

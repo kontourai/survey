@@ -90,6 +90,7 @@ export type {
 export {
   apiRecordSource,
   manualEntrySource,
+  policyStandardSource,
   uploadedDocumentSource,
   webPageSource,
 } from "./raw-source.js";
@@ -97,6 +98,8 @@ export type {
   ApiRecordSourceInput,
   ChecksumInput,
   ManualEntrySourceInput,
+  PolicyStandardMetadata,
+  PolicyStandardSourceInput,
   RawSourceInput,
   UploadedDocumentSourceInput,
   WebPageSourceInput,
