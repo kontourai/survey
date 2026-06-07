@@ -16,6 +16,66 @@ export interface ReviewWorkbenchState {
   readonly actorId: string;
 }
 
+export interface SurfaceProjectionPreview {
+  readonly canonicalClaim: PreviewClaim;
+  readonly candidateHistory: PreviewCandidateHistory[];
+  readonly sourceEvidence: PreviewSourceEvidence;
+  readonly reviewEvent?: PreviewReviewEvent;
+  readonly integrityPosture: PreviewIntegrityPosture;
+  readonly authorityTrace: PreviewAuthorityTrace;
+  readonly postureDisclaimer: string;
+}
+
+export interface PreviewClaim {
+  readonly candidateId: string;
+  readonly claimId: string;
+  readonly value: string;
+  readonly status: string;
+}
+
+export interface PreviewCandidateHistory {
+  readonly candidateId: string;
+  readonly value: string;
+  readonly historyLabel: string;
+}
+
+export interface PreviewSourceEvidence {
+  readonly sourceRef: string;
+  readonly sourceId: string;
+  readonly excerpt: string;
+  readonly extractionId: string;
+  readonly extractor: string;
+  readonly observedAt: string;
+  readonly sourceAuthority?: PreviewSourceAuthority;
+}
+
+export interface PreviewSourceAuthority {
+  readonly authorityClass: string;
+  readonly declaredBy: string;
+  readonly scope: string;
+}
+
+export interface PreviewReviewEvent {
+  readonly actor: string;
+  readonly reviewedAt: string;
+  readonly status: string;
+  readonly rationale: string;
+  readonly reviewOutcomeId: string;
+}
+
+export interface PreviewIntegrityPosture {
+  readonly candidateSetId: string;
+  readonly rawSourceId: string;
+  readonly extractionId: string;
+  readonly checksum: string;
+}
+
+export interface PreviewAuthorityTrace {
+  readonly status: "empty" | "provided";
+  readonly label: string;
+  readonly detail: string;
+}
+
 interface DecisionDefinition {
   readonly label: string;
   readonly effect: string;
@@ -103,6 +163,109 @@ export function buildReviewDecision(state: ReviewWorkbenchState): ReviewDecision
   };
 }
 
+export function buildSurfaceProjectionPreview(
+  item: ReviewItem,
+  decision: ReviewDecision | undefined,
+): SurfaceProjectionPreview | undefined {
+  const selectedCandidate = selectedPreviewCandidate(item, decision);
+  if (!selectedCandidate || !decision) {
+    return undefined;
+  }
+
+  const projection = decision.spec.projection ?? selectedCandidate.projection;
+
+  return {
+    canonicalClaim: buildPreviewClaim(selectedCandidate, decision, projection),
+    candidateHistory: buildCandidateHistory(item, selectedCandidate),
+    sourceEvidence: buildSourceEvidence(selectedCandidate),
+    reviewEvent: buildReviewEvent(decision, projection),
+    integrityPosture: buildIntegrityPosture(item, selectedCandidate, projection),
+    authorityTrace: portableAuthorityTrace(selectedCandidate.producer?.authorityTrace),
+    postureDisclaimer: postureDisclaimer(),
+  };
+}
+
+function selectedPreviewCandidate(
+  item: ReviewItem,
+  decision: ReviewDecision | undefined,
+): ReviewCandidate | undefined {
+  if (!decision?.spec.candidateId) {
+    return undefined;
+  }
+
+  const candidate = item.spec.candidates.find((entry) => entry.id === decision.spec.candidateId);
+  if (!candidate) {
+    throw new Error(`ReviewItem ${item.metadata.name} has no candidate ${decision.spec.candidateId}.`);
+  }
+
+  return candidate;
+}
+
+function buildPreviewClaim(
+  candidate: ReviewCandidate,
+  decision: ReviewDecision,
+  projection: ReviewDecision["spec"]["projection"] | ReviewCandidate["projection"],
+): PreviewClaim {
+  return {
+    candidateId: candidate.id,
+    claimId: projection?.claimId ?? candidate.claimTarget.claimId ?? candidate.claimTarget.fieldOrBehavior,
+    value: formatValue(candidate.value),
+    status: decision.spec.status,
+  };
+}
+
+function buildCandidateHistory(item: ReviewItem, selectedCandidate: ReviewCandidate): PreviewCandidateHistory[] {
+  return item.spec.candidates
+    .filter((candidate) => candidate.id !== selectedCandidate.id)
+    .map((candidate) => ({
+      candidateId: candidate.id,
+      value: formatValue(candidate.value),
+      historyLabel: "Unselected candidate history",
+    }));
+}
+
+function buildSourceEvidence(candidate: ReviewCandidate): PreviewSourceEvidence {
+  return {
+    sourceRef: candidate.source.sourceRef,
+    sourceId: candidate.source.sourceId ?? candidate.source.sourceRef,
+    excerpt: candidate.locator?.excerpt ?? "No source excerpt provided.",
+    extractionId: candidate.extraction.extractionId ?? "not provided",
+    extractor: candidate.extraction.extractor ?? "unknown",
+    observedAt: candidate.source.observedAt ?? candidate.source.fetchedAt ?? "unknown",
+    sourceAuthority: sourceAuthorityFromProducer(candidate.producer?.sourceAuthority),
+  };
+}
+
+function buildReviewEvent(
+  decision: ReviewDecision,
+  projection: ReviewDecision["spec"]["projection"] | ReviewCandidate["projection"],
+): PreviewReviewEvent {
+  return {
+    actor: decision.spec.actor?.id ?? "unknown",
+    reviewedAt: decision.spec.reviewedAt ?? "not recorded",
+    status: decision.spec.status,
+    rationale: decision.spec.rationale || "No reviewer rationale provided.",
+    reviewOutcomeId: projection?.reviewOutcomeId ?? "not provided",
+  };
+}
+
+function buildIntegrityPosture(
+  item: ReviewItem,
+  candidate: ReviewCandidate,
+  projection: ReviewDecision["spec"]["projection"] | ReviewCandidate["projection"],
+): PreviewIntegrityPosture {
+  return {
+    candidateSetId: projection?.candidateSetId ?? item.spec.projection?.candidateSetId ?? "not provided",
+    rawSourceId: projection?.rawSourceId ?? candidate.source.sourceId ?? "not provided",
+    extractionId: projection?.extractionId ?? candidate.extraction.extractionId ?? "not provided",
+    checksum: candidate.source.checksum ?? "not provided",
+  };
+}
+
+function postureDisclaimer(): string {
+  return "Survey records source and review posture for projection; it does not validate real-world truth.";
+}
+
 export function renderReviewWorkbenchHtml(state: ReviewWorkbenchState): string {
   return `
     <section class="workbench-shell" aria-label="Survey review workbench">
@@ -148,6 +311,7 @@ function renderDecisionColumn(state: ReviewWorkbenchState): string {
   return `
     <aside class="decision-column" aria-label="Review decision">
       ${renderDecisionControls(state)}
+      ${renderSurfacePreview(state)}
       ${renderDecisionPayload(state)}
     </aside>
   `;
@@ -192,6 +356,134 @@ function renderDecisionPayload(state: ReviewWorkbenchState): string {
   `;
 }
 
+function renderSurfacePreview(state: ReviewWorkbenchState): string {
+  const preview = buildSurfaceProjectionPreview(state.item, buildReviewDecision(state));
+
+  return preview ? renderPopulatedSurfacePreview(preview) : renderPendingSurfacePreview();
+}
+
+function renderPendingSurfacePreview(): string {
+  return `
+    <section class="surface-preview" data-testid="surface-preview" aria-label="Surface preview">
+      <div class="surface-head">
+        <h2>Surface preview</h2>
+        <span class="state-label">pending</span>
+      </div>
+      <p class="preview-disclaimer">Choose a review decision to preview the source and review posture that would project toward Surface. Survey does not validate real-world truth.</p>
+    </section>
+  `;
+}
+
+function renderPopulatedSurfacePreview(preview: SurfaceProjectionPreview): string {
+  return `
+    <section class="surface-preview" data-testid="surface-preview" aria-label="Surface preview">
+      <div class="surface-head">
+        <h2>Surface preview</h2>
+        <span class="state-label">local preview</span>
+      </div>
+      <p class="preview-disclaimer" data-testid="surface-preview-disclaimer">${escapeHtml(preview.postureDisclaimer)}</p>
+      <div class="preview-section-grid">
+        ${renderSurfacePreviewSections(preview)}
+      </div>
+    </section>
+  `;
+}
+
+function renderSurfacePreviewSections(preview: SurfaceProjectionPreview): string {
+  return [
+    renderCanonicalClaim(preview),
+    renderCandidateHistory(preview),
+    renderSourceEvidence(preview),
+    renderReviewEvent(preview),
+    renderIntegrityPosture(preview),
+    renderAuthorityTrace(preview),
+  ].join("");
+}
+
+function renderCanonicalClaim(preview: SurfaceProjectionPreview): string {
+  return renderPreviewSection("Selected canonical claim", "surface-canonical-claim", [
+    ["Candidate", preview.canonicalClaim.candidateId],
+    ["Claim", preview.canonicalClaim.claimId],
+    ["Value", preview.canonicalClaim.value],
+    ["Review status", preview.canonicalClaim.status],
+  ]);
+}
+
+function renderReviewEvent(preview: SurfaceProjectionPreview): string {
+  return renderPreviewSection("Review event", "surface-review-event", [
+    ["Actor", preview.reviewEvent?.actor ?? "unknown"],
+    ["Reviewed at", preview.reviewEvent?.reviewedAt ?? "not recorded"],
+    ["Status", preview.reviewEvent?.status ?? "pending"],
+    ["Rationale", preview.reviewEvent?.rationale ?? "No reviewer rationale provided."],
+    ["Outcome", preview.reviewEvent?.reviewOutcomeId ?? "not provided"],
+  ]);
+}
+
+function renderIntegrityPosture(preview: SurfaceProjectionPreview): string {
+  return renderPreviewSection("Integrity posture", "surface-integrity-posture", [
+    ["Candidate set", preview.integrityPosture.candidateSetId],
+    ["Raw source", preview.integrityPosture.rawSourceId],
+    ["Extraction", preview.integrityPosture.extractionId],
+    ["Checksum", preview.integrityPosture.checksum],
+  ]);
+}
+
+function renderAuthorityTrace(preview: SurfaceProjectionPreview): string {
+  return renderPreviewSection("Authority trace", "surface-authority-trace", [
+    ["Status", preview.authorityTrace.label],
+    ["Detail", preview.authorityTrace.detail],
+  ], preview.authorityTrace.status === "empty" ? " is-neutral" : "");
+}
+
+function renderCandidateHistory(preview: SurfaceProjectionPreview): string {
+  const rows: Array<readonly [string, string]> = preview.candidateHistory.length === 0
+    ? [["History", "No unselected candidates."]]
+    : preview.candidateHistory.flatMap((candidate) => [
+      ["History", candidate.historyLabel],
+      ["Candidate", candidate.candidateId],
+      ["Value", candidate.value],
+    ] as Array<readonly [string, string]>);
+
+  return renderPreviewSection("Unselected candidate history", "surface-candidate-history", rows);
+}
+
+function renderSourceEvidence(preview: SurfaceProjectionPreview): string {
+  const rows: Array<readonly [string, string]> = [
+    ["Source URL", preview.sourceEvidence.sourceRef],
+    ["Source ref", preview.sourceEvidence.sourceId],
+    ["Excerpt", preview.sourceEvidence.excerpt],
+    ["Extraction", preview.sourceEvidence.extractionId],
+    ["Extractor", preview.sourceEvidence.extractor],
+    ["Observed", preview.sourceEvidence.observedAt],
+  ];
+
+  if (preview.sourceEvidence.sourceAuthority) {
+    rows.push(
+      ["Source authority class", preview.sourceEvidence.sourceAuthority.authorityClass],
+      ["Declared by", preview.sourceEvidence.sourceAuthority.declaredBy],
+      ["Authority scope", preview.sourceEvidence.sourceAuthority.scope],
+    );
+  }
+
+  return renderPreviewSection("Source evidence", "surface-source-evidence", rows);
+}
+
+function renderPreviewSection(
+  title: string,
+  testId: string,
+  rows: ReadonlyArray<readonly [string, string]>,
+  extraClass = "",
+): string {
+  return `
+    <section class="preview-section${extraClass}" data-testid="${testId}">
+      <h3>${escapeHtml(title)}</h3>
+      <dl class="field-stack compact">
+        ${rows.map(([label, value]) => fieldItem(label, value)).join("")}
+      </dl>
+    </section>
+  `;
+}
+
 export function mountReviewWorkbench(root: HTMLElement, startState = initialReviewWorkbenchState()): void {
   let state = startState;
 
@@ -206,6 +498,16 @@ export function mountReviewWorkbench(root: HTMLElement, startState = initialRevi
       if (payload) {
         payload.textContent = JSON.stringify(buildReviewDecision(state) ?? null, null, 2);
       }
+      const preview = root.querySelector<HTMLElement>("[data-testid='surface-preview']");
+      if (preview) {
+        if (typeof document !== "undefined") {
+          const wrapper = document.createElement("div");
+          wrapper.innerHTML = renderSurfacePreview(state);
+          preview.replaceWith(wrapper.firstElementChild as HTMLElement);
+        } else {
+          render();
+        }
+      }
     });
     root.querySelectorAll<HTMLButtonElement>("[data-decision]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -219,6 +521,38 @@ export function mountReviewWorkbench(root: HTMLElement, startState = initialRevi
   };
 
   render();
+}
+
+function sourceAuthorityFromProducer(value: unknown): PreviewSourceAuthority | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  return {
+    authorityClass: String(value.authorityClass ?? "not provided"),
+    declaredBy: String(value.declaredBy ?? "not provided"),
+    scope: String(value.scope ?? "not provided"),
+  };
+}
+
+function portableAuthorityTrace(value: unknown): PreviewAuthorityTrace {
+  if (Array.isArray(value) && value.length > 0) {
+    return {
+      status: "provided",
+      label: "Portable authority trace provided",
+      detail: `${value.length} authority trace entr${value.length === 1 ? "y" : "ies"} supplied by the fixture.`,
+    };
+  }
+
+  return {
+    status: "empty",
+    label: "Empty / not provided",
+    detail: "No portable authority trace is present. SourceAuthority metadata is shown as source evidence and is not promoted into authorityTrace.",
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function renderCandidateCard(candidate: ReviewCandidate, state: ReviewWorkbenchState): string {

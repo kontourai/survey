@@ -11,7 +11,8 @@ and `npm run check:review-workbench` fails if its `ReviewItem` data drifts from
 the canonical `fixtures/public-directory-review-resource.ts` fixture. The page
 renders the current and proposed candidates, source URL and source ref, locator
 and excerpt, extraction confidence, candidate values, reviewer note, decision
-controls, decision effect, and generated JSON payload.
+controls, decision effect, a compact Surface preview, and generated JSON
+payload.
 
 ## Running Locally
 
@@ -55,6 +56,41 @@ All generated payloads use the resource contract from
 `metadata.name`, `spec.reviewItemName`, `spec.candidateId`, `spec.status`,
 `spec.actor`, `spec.reviewedAt`, `spec.rationale`, `spec.projection`, and
 `status.appliedToClaimIds`.
+
+## Surface Preview
+
+After a reviewer chooses a decision, the workbench builds a browser-safe Surface
+preview from the active `ReviewItem` plus the locally generated
+`ReviewDecision`. Accepting the proposed candidate and keeping the current
+candidate produce different previews because the selected canonical claim,
+source evidence, candidate history, and review event are derived from the
+decision candidate.
+
+The preview is intentionally small and labelled. It shows:
+
+- Selected canonical claim: candidate id, claim id, selected value, and review
+  status.
+- Unselected candidate history: the candidate values not selected by the
+  decision.
+- Source evidence: source URL/ref, excerpt, extraction details, and visible
+  `sourceAuthority` metadata when the fixture provides it.
+- Review event: actor, review time, status, rationale, and projected review
+  outcome id.
+- Integrity posture: candidate set, raw source, extraction, and checksum fields
+  when present.
+- Authority trace: an empty/not-provided neutral state unless portable
+  authority trace data is actually present.
+
+`sourceAuthority` is evidence metadata about the source, such as authority
+class, declaring system, and scope. It is displayed in source evidence but is
+not promoted into `authorityTrace`. An empty `authorityTrace` is not an error in
+this prototype; it means the fixture does not include portable actor/system
+authority trace data.
+
+The preview records source and review posture for projection. It does not
+validate leaf truth or assert that the selected value is true in the real world.
+It is not a Surface Console replacement, trust graph view, persistence flow, or
+production API.
 
 ## Non-Goals
 
