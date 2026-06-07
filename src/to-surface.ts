@@ -389,13 +389,23 @@ function buildSurveyMetadata(input: {
   candidate: Candidate;
   review?: ReviewOutcome;
 }): Record<string, unknown> {
+  const producerSurveyMetadata = isRecord(input.projection.metadata?.survey) ? input.projection.metadata.survey : {};
+  const producerCandidateMetadata = isRecord(producerSurveyMetadata.candidate) ? producerSurveyMetadata.candidate : {};
   return {
-    ...(isRecord(input.projection.metadata?.survey) ? input.projection.metadata.survey : {}),
+    ...producerSurveyMetadata,
     rawSourceId: input.rawSource.id,
     extractionId: input.extraction.id,
     candidateSetId: input.candidateSet.id,
     candidateId: input.candidate.id,
     reviewOutcomeId: input.review?.id,
+    ...(input.candidate.rejectionReason !== undefined
+      ? {
+          candidate: {
+            ...producerCandidateMetadata,
+            rejectionReason: input.candidate.rejectionReason,
+          },
+        }
+      : {}),
     ...(input.review?.withinComfortZone === false
       ? {
           comfortZone: {

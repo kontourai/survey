@@ -82,6 +82,7 @@ export interface ReviewCandidate {
   value: unknown;
   confidence?: number;
   sourceRank?: number;
+  rejectionReason?: string;
   source: SourceReference;
   locator?: ReviewLocator;
   extraction: ExtractionReference;

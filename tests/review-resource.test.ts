@@ -120,6 +120,7 @@ function assertReviewCandidateMapsToSurveyRecord(candidate: ReviewCandidate, sur
   assert.equal(surveyCandidate.extractionId, extraction.id);
   assert.deepEqual(surveyCandidate.value, candidate.value);
   assert.equal(surveyCandidate.confidence, candidate.confidence);
+  assert.equal(surveyCandidate.rejectionReason, candidate.rejectionReason);
 
   const claim = findById<ClaimTarget>(surveyInput.claims, projection.claimId, "claim");
   assert.equal(candidate.claimTarget.claimId, claim.id);

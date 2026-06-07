@@ -427,6 +427,13 @@ This is useful for corrected documents, source-of-truth choices, and review
 queues where losing candidates should remain visible for transparency rather
 than disappearing from the trust trail.
 
+Candidates may include an optional `rejectionReason` when a producer wants to
+record why a non-selected alternative was superseded or rejected. Survey
+preserves that producer-provided rationale on the candidate and projects it to
+Surface claim `metadata.survey.candidate.rejectionReason` for that candidate
+while preserving producer-provided `metadata.survey` keys. Survey does not rank
+candidates, choose winners, or define rejection policy.
+
 ## Reviewed current/proposed resolutions
 
 Use `reviewedCurrentProposedResolution` when a producer has exactly two
@@ -608,6 +615,12 @@ record graph and tolerates repeated references to identical raw sources or the
 shared candidate set while rejecting conflicting duplicate ids. Duplicate
 conflict checks assume Survey records are JSON-shaped data, which is the same
 shape expected by Surface validation and reports.
+
+If an observation candidate includes `rejectionReason`, `candidateReviewRecord`
+preserves it in the shared candidate set. Use this only for producer-authored
+rationale about a candidate that the producer already treats as non-selected,
+superseded, or rejected; it does not affect selected candidate behavior or
+status projection.
 
 A candidate set with status `"conflict"` represents a Survey-side Candidate
 Conflict before review has resolved which candidate should win. When no review

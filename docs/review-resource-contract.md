@@ -55,6 +55,7 @@ Field ownership:
 | `candidate.source` | producer declares, Survey maps | Maps to `RawSource` when an adapter emits Survey records. |
 | `candidate.locator`, `candidate.extraction` | producer declares, Survey maps | Maps to `Extraction`, including locator, excerpt, confidence, extractor, and extracted time. |
 | `candidate.role`, `spec.selectedCandidateId` | producer declares | Survey does not enforce current/proposed-only policy. |
+| `candidate.rejectionReason` | producer declares | Optional rationale for a candidate the producer already treats as non-selected, superseded, or rejected; Survey records it without ranking candidates or defining rejection policy. |
 | `candidate.claimTarget` | shared boundary | Producer identifies the desired Surface claim target; Survey preserves compatible `ClaimTarget` fields. |
 | `ReviewDecision.spec` | producer reviewer event | Maps to `ReviewOutcome` without bringing producer queues into Survey. |
 | `projection` hints | Survey-readable | Optional ids linking resources to `RawSource`, `Extraction`, `CandidateSet`, `ReviewOutcome`, and `ClaimTarget` records. |
@@ -65,7 +66,7 @@ Field ownership:
 | --- | --- |
 | `ReviewCandidate.source.sourceRef`, `kind`, `observedAt`, `checksum`, `locatorScheme` | `RawSource` |
 | `ReviewCandidate.extraction.target`, `confidence`, `extractor`, `extractedAt` plus `locator` | `Extraction` |
-| `ReviewItem.spec.target`, `candidates`, `selectedCandidateId`, `candidateSetStatus`, `rationale` | `CandidateSet` and `Candidate` |
+| `ReviewItem.spec.target`, `candidates`, `selectedCandidateId`, `candidateSetStatus`, `rationale`, `candidate.rejectionReason` | `CandidateSet` and `Candidate` |
 | `ReviewDecision.spec.status`, `actor`, `reviewedAt`, `rationale`, `evidenceIds`, `withinComfortZone` | `ReviewOutcome` |
 | `ReviewCandidate.claimTarget` | `ClaimTarget` |
 | `projection` | Optional id bridge for tests and adapters |
