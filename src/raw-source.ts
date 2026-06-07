@@ -32,6 +32,22 @@ export interface ManualEntrySourceInput extends Omit<RawSourceInput, "checksum" 
   locatorScheme?: LocatorScheme;
 }
 
+export interface PolicyStandardMetadata {
+  inlineText: string;
+  standardVersion: string;
+  paragraphRef?: string;
+  reference?: string;
+}
+
+export interface PolicyStandardSourceInput extends Omit<RawSourceInput, "locatorScheme" | "metadata"> {
+  inlineText: string;
+  standardVersion: string;
+  paragraphRef?: string;
+  reference?: string;
+  locatorScheme?: LocatorScheme;
+  metadata?: Record<string, unknown>;
+}
+
 export function uploadedDocumentSource(input: UploadedDocumentSourceInput): RawSource {
   return rawSource("uploaded-document", input);
 }
@@ -55,6 +71,31 @@ export function manualEntrySource(input: ManualEntrySourceInput): RawSource {
     locatorScheme: "structured-field",
     ...input,
   });
+}
+
+export function policyStandardSource(input: PolicyStandardSourceInput): RawSource {
+  const policyStandard: PolicyStandardMetadata = {
+    inlineText: input.inlineText,
+    standardVersion: input.standardVersion,
+    paragraphRef: input.paragraphRef,
+    reference: input.reference,
+  };
+
+  const source = rawSource("policy-standard", {
+    locatorScheme: "text",
+    ...input,
+    metadata: {
+      ...input.metadata,
+      policyStandard,
+    },
+  });
+
+  return {
+    ...source,
+    inlineText: input.inlineText,
+    standardVersion: input.standardVersion,
+    paragraphRef: input.paragraphRef,
+  };
 }
 
 function rawSource(kind: RawSourceKind, input: RawSourceInput): RawSource {

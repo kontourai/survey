@@ -152,10 +152,17 @@ const surveyInput = new SurveyInputBuilder({ source: "example-producer:run-1" })
 ```
 
 Survey exports `uploadedDocumentSource`, `apiRecordSource`, `webPageSource`,
-and `manualEntrySource`. Producer-provided `id` values are preserved; otherwise
-Survey derives a stable id from source kind and `sourceRef`. Bare checksum
-values are normalized to `sha256:<value>`, while already-prefixed checksum
-values are preserved. Producer metadata is copied through to Surface evidence.
+`manualEntrySource`, and `policyStandardSource`. Producer-provided `id` values
+are preserved; otherwise Survey derives a stable id from source kind and
+`sourceRef`. Bare checksum values are normalized to `sha256:<value>`, while
+already-prefixed checksum values are preserved. Producer metadata is copied
+through to Surface evidence.
+
+Use `policyStandardSource` when the observed material is the applied standard
+itself. It records `inlineText`, `standardVersion`, and optional `paragraphRef`
+on the `RawSource` and projects to Surface `policy_rule` evidence by default.
+Survey only preserves the producer-applied standard text/version; it does not
+decide whether that standard is correct for the producer's domain.
 
 ## Review resources
 

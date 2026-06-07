@@ -11,6 +11,7 @@ import {
   fieldObservation,
   hashCanonicalReviewProofPayload,
   manualEntrySource,
+  policyStandardSource,
   repeatedObservation,
   reviewedCandidateResolution,
   reviewedCurrentProposedResolution,
@@ -124,6 +125,16 @@ describe("Survey Surface projection", () => {
       observedAt,
       metadata: { entryReason: "operator attestation" },
     });
+    const policyStandard = policyStandardSource({
+      sourceRef: "policy-standard://example/rules/2026#paragraph-4",
+      observedAt,
+      checksum: "policy-standard-text",
+      inlineText: "Applications must include a complete evidence reference.",
+      standardVersion: "2026-06-01",
+      paragraphRef: "paragraph-4",
+      reference: "Example Rules 2026 paragraph 4",
+      metadata: { publisher: "Example Standards Body" },
+    });
 
     assert.equal(uploaded.id, "source.document.entity-1");
     assert.equal(uploaded.kind, "uploaded-document");
@@ -139,6 +150,141 @@ describe("Survey Surface projection", () => {
     assert.equal(page.locatorScheme, "html");
     assert.equal(manual.kind, "manual-entry");
     assert.equal(manual.locatorScheme, "structured-field");
+    assert.equal(policyStandard.id, "policy-standard:policy-standard://example/rules/2026#paragraph-4");
+    assert.equal(policyStandard.kind, "policy-standard");
+    assert.equal(policyStandard.checksum, "sha256:policy-standard-text");
+    assert.equal(policyStandard.locatorScheme, "text");
+    assert.equal(policyStandard.inlineText, "Applications must include a complete evidence reference.");
+    assert.equal(policyStandard.standardVersion, "2026-06-01");
+    assert.equal(policyStandard.paragraphRef, "paragraph-4");
+    assert.equal(policyStandard.metadata?.publisher, "Example Standards Body");
+    assert.deepEqual(policyStandard.metadata?.policyStandard, {
+      inlineText: "Applications must include a complete evidence reference.",
+      standardVersion: "2026-06-01",
+      paragraphRef: "paragraph-4",
+      reference: "Example Rules 2026 paragraph 4",
+    });
+  });
+
+  it("round-trips policy-standard raw sources through the Survey input builder", () => {
+    const observedAt = "2026-06-07T12:00:00.000Z";
+    const text = "The producer must cite the applied standard paragraph.";
+    const rawSource = policyStandardSource({
+      sourceRef: "policy-standard://example/standard/2026#section-2.1",
+      observedAt,
+      inlineText: text,
+      standardVersion: "2026.1",
+      paragraphRef: "section-2.1",
+      reference: "Example Standard 2026 section 2.1",
+    });
+
+    const input = new SurveyInputBuilder({
+      source: "survey.policy-standard.roundtrip",
+      generatedAt: "2026-06-07T12:05:00.000Z",
+    })
+      .addObservation(fieldObservation({
+        id: "observation.example.standard.section-2-1",
+        field: "appliedStandard.text",
+        value: text,
+        rawSource,
+        extraction: {
+          target: "appliedStandard.text",
+          locator: "text:paragraph=section-2.1",
+          extractor: "standard-loader",
+          extractedAt: observedAt,
+        },
+        claim: {
+          id: "claim.example.standard.section-2-1",
+          subjectType: "policy-standard",
+          subjectId: "example-standard-2026",
+          surface: "policy.library",
+          claimType: "applied-standard.text",
+          impactLevel: "medium",
+          collectedBy: "standard-loader",
+        },
+      }))
+      .build();
+
+    const policyStandard = input.rawSources[0]?.metadata?.policyStandard as {
+      inlineText?: string;
+      standardVersion?: string;
+      paragraphRef?: string;
+      reference?: string;
+    } | undefined;
+
+    assert.equal(input.rawSources[0]?.kind, "policy-standard");
+    assert.equal(input.rawSources[0]?.inlineText, text);
+    assert.equal(input.rawSources[0]?.standardVersion, "2026.1");
+    assert.equal(input.rawSources[0]?.paragraphRef, "section-2.1");
+    assert.equal(policyStandard?.inlineText, text);
+    assert.equal(policyStandard?.standardVersion, "2026.1");
+    assert.equal(policyStandard?.paragraphRef, "section-2.1");
+    assert.equal(policyStandard?.reference, "Example Standard 2026 section 2.1");
+    assert.equal(input.extractions[0]?.sourceId, input.rawSources[0]?.id);
+  });
+
+  it("projects policy-standard sources to Surface policy_rule evidence by default", () => {
+    const observedAt = "2026-06-07T12:00:00.000Z";
+    const text = "The producer must retain the applied standard text and version.";
+    const rawSource = policyStandardSource({
+      id: "source.example.policy-standard.2026",
+      sourceRef: "policy-standard://example/standard/2026#paragraph-9",
+      observedAt,
+      checksum: "standard-paragraph-9",
+      inlineText: text,
+      standardVersion: "2026.2",
+      paragraphRef: "paragraph-9",
+      reference: "Example Standard 2026 paragraph 9",
+      metadata: { standardFamily: "example-standard" },
+    });
+    const input = new SurveyInputBuilder({
+      source: "survey.policy-standard.projection",
+      generatedAt: "2026-06-07T12:05:00.000Z",
+    })
+      .addObservation(fieldObservation({
+        id: "observation.example.policy-standard.paragraph-9",
+        field: "appliedStandard.paragraph9",
+        value: text,
+        rawSource,
+        extraction: {
+          target: "appliedStandard.paragraph9",
+          locator: "text:paragraph=paragraph-9",
+          extractor: "standard-loader",
+          extractedAt: observedAt,
+        },
+        claim: {
+          id: "claim.example.policy-standard.paragraph-9",
+          subjectType: "policy-standard",
+          subjectId: "example-standard-2026",
+          surface: "policy.library",
+          claimType: "applied-standard.rule-text",
+          impactLevel: "medium",
+          collectedBy: "standard-loader",
+        },
+      }))
+      .build();
+
+    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const evidence = report.evidence.find((item) => item.claimId === "claim.example.policy-standard.paragraph-9");
+    const policyStandard = evidence?.metadata?.policyStandard as {
+      inlineText?: string;
+      standardVersion?: string;
+      paragraphRef?: string;
+      reference?: string;
+    } | undefined;
+
+    assert.equal(evidence?.evidenceType, "policy_rule");
+    assert.equal(evidence?.sourceRef, rawSource.sourceRef);
+    assert.equal(evidence?.sourceLocator, "text:paragraph=paragraph-9");
+    assert.equal(evidence?.excerptOrSummary, text);
+    assert.equal(evidence?.integrityRef, "sha256:standard-paragraph-9");
+    assert.equal(evidence?.metadata?.rawSourceKind, "policy-standard");
+    assert.equal(evidence?.metadata?.locatorScheme, "text");
+    assert.equal(evidence?.metadata?.standardFamily, "example-standard");
+    assert.equal(policyStandard?.inlineText, text);
+    assert.equal(policyStandard?.standardVersion, "2026.2");
+    assert.equal(policyStandard?.paragraphRef, "paragraph-9");
+    assert.equal(policyStandard?.reference, "Example Standard 2026 paragraph 9");
   });
 
   it("uses raw source helpers in scalar observations projected to Surface", () => {
