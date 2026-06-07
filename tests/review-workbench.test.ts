@@ -5,11 +5,17 @@ import { reviewResourceApiVersion } from "../src/index.js";
 import {
   buildReviewDecision,
   buildSurfaceProjectionPreview,
+  currentReviewWorkbenchState,
+  deriveQueueRowStatus,
   initialReviewWorkbenchState,
+  initialReviewQueueSessionState,
   mountReviewWorkbench,
+  nextUnresolvedItemName,
   renderReviewWorkbenchHtml,
+  reviewSessionSummary,
   type ReviewWorkbenchDecision,
 } from "../examples/review-workbench/review-workbench.js";
+import { reviewWorkbenchQueueFixtures } from "../examples/review-workbench/review-workbench-data.js";
 
 describe("review workbench prototype", () => {
   const cases: Array<{
@@ -93,6 +99,101 @@ describe("review workbench prototype", () => {
     assert.match(html, /Reject proposed/);
   });
 
+  it("AC37-1 derives queue row statuses from ReviewItem status and local decisions", () => {
+    const session = {
+      ...initialReviewQueueSessionState(),
+      activeItemName: "public-directory-hours",
+      decisionsByItemName: {
+        "public-directory-address": "reject-proposed" as const,
+      },
+    };
+
+    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueFixtures[0], session), "in-review");
+    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueFixtures[1], session), "pending");
+    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueFixtures[2], session), "resolved");
+    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueFixtures[3], session), "rejected");
+    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueFixtures[4], session), "escalated");
+
+    const html = renderReviewWorkbenchHtml(session);
+    assert.match(html, /data-testid="queue-row" data-queue-status="in-review"/);
+    assert.match(html, /data-testid="queue-row" data-queue-status="pending"/);
+    assert.match(html, /data-testid="queue-row" data-queue-status="resolved"/);
+    assert.match(html, /data-testid="queue-row" data-queue-status="rejected"/);
+    assert.match(html, /data-testid="queue-row" data-queue-status="escalated"/);
+  });
+
+  it("AC37-2 retains local decisions and notes by ReviewItem name while navigating", () => {
+    const session = {
+      ...initialReviewQueueSessionState(),
+      activeItemName: "public-directory-phone",
+      notesByItemName: {
+        "public-directory-hours": "Hours checked.",
+        "public-directory-phone": "Phone source reviewed.",
+      },
+      decisionsByItemName: {
+        "public-directory-hours": "accept-proposed" as const,
+        "public-directory-phone": "keep-current" as const,
+      },
+    };
+
+    assert.equal(currentReviewWorkbenchState(session).note, "Phone source reviewed.");
+    assert.equal(currentReviewWorkbenchState(session).decision, "keep-current");
+    assert.equal(nextUnresolvedItemName(session), "public-directory-address");
+
+    const returnedSession = {
+      ...session,
+      activeItemName: "public-directory-hours",
+    };
+    assert.equal(currentReviewWorkbenchState(returnedSession).note, "Hours checked.");
+    assert.equal(currentReviewWorkbenchState(returnedSession).decision, "accept-proposed");
+  });
+
+  it("AC37-3 summarizes accepted, kept-current, rejected, escalated, and unresolved items", () => {
+    const summary = reviewSessionSummary({
+      ...initialReviewQueueSessionState(),
+      decisionsByItemName: {
+        "public-directory-hours": "accept-proposed",
+        "public-directory-phone": "keep-current",
+        "public-directory-address": "reject-proposed",
+      },
+    });
+
+    assert.deepEqual(summary, {
+      accepted: 2,
+      keptCurrent: 1,
+      rejected: 1,
+      escalated: 1,
+      unresolved: 0,
+    });
+
+    const html = renderReviewWorkbenchHtml(initialReviewQueueSessionState());
+    assert.match(html, /Session summary/);
+    assert.match(html, /Accepted/);
+    assert.match(html, /Kept current/);
+    assert.match(html, /Rejected/);
+    assert.match(html, /Escalated/);
+    assert.match(html, /Unresolved/);
+  });
+
+  it("AC37-4 displays producer feedback tags as producer vocabulary", () => {
+    const session = initialReviewQueueSessionState();
+    const html = renderReviewWorkbenchHtml(session);
+
+    assert.match(html, /Producer feedback tags/);
+    assert.match(html, /hours-change/);
+    assert.match(html, /crawler-suggested/);
+
+    const decidedHtml = renderReviewWorkbenchHtml({
+      ...session,
+      decisionsByItemName: {
+        "public-directory-hours": "accept-proposed",
+      },
+    });
+
+    assert.match(decidedHtml, /hours-change/);
+    assert.doesNotMatch(decidedHtml, /<span class="tag">resolved<\/span>/);
+  });
+
   it("marks selected and unselected outcomes after a decision", () => {
     const acceptedHtml = renderReviewWorkbenchHtml({
       ...initialReviewWorkbenchState(),
@@ -102,11 +203,43 @@ describe("review workbench prototype", () => {
       ...initialReviewWorkbenchState(),
       decision: "keep-current",
     });
+    const rejectedHtml = renderReviewWorkbenchHtml({
+      ...initialReviewWorkbenchState(),
+      decision: "reject-proposed",
+    });
 
     assert.match(acceptedHtml, /data-testid="candidate-proposed" data-outcome="selected"/);
     assert.match(acceptedHtml, /data-testid="candidate-current" data-outcome="unselected"/);
     assert.match(keptHtml, /data-testid="candidate-current" data-outcome="selected"/);
     assert.match(keptHtml, /data-testid="candidate-proposed" data-outcome="unselected"/);
+    assert.match(rejectedHtml, /data-testid="candidate-proposed" data-outcome="selected"/);
+    assert.match(rejectedHtml, /data-testid="candidate-current" data-outcome="unselected"/);
+    assert.doesNotMatch(rejectedHtml, /data-testid="candidate-current" data-outcome="selected"/);
+  });
+
+  it("keeps reject-proposed visually distinct from keep-current", () => {
+    const rejectedState = {
+      ...initialReviewWorkbenchState(),
+      decision: "reject-proposed" as const,
+    };
+    const keptState = {
+      ...initialReviewWorkbenchState(),
+      decision: "keep-current" as const,
+    };
+
+    const rejectedDecision = buildReviewDecision(rejectedState);
+    const keptDecision = buildReviewDecision(keptState);
+
+    assert.equal(rejectedDecision?.spec.candidateId, "public-directory:candidate:proposed");
+    assert.equal(rejectedDecision?.spec.status, "rejected");
+    assert.equal(keptDecision?.spec.candidateId, "public-directory:candidate:current");
+    assert.equal(keptDecision?.spec.status, "verified");
+
+    const rejectedHtml = renderReviewWorkbenchHtml(rejectedState);
+    const keptHtml = renderReviewWorkbenchHtml(keptState);
+
+    assert.match(rejectedHtml, /data-testid="candidate-proposed" data-outcome="selected"/);
+    assert.match(keptHtml, /data-testid="candidate-current" data-outcome="selected"/);
   });
 
   it("AC1 builds different Surface previews for accept-proposed and keep-current decisions", () => {
@@ -294,11 +427,52 @@ describe("review workbench prototype", () => {
     assert.equal(root.surfacePreview.replaceCount, 1);
   });
 
+  it("preserves the mounted single-item start state behavior", () => {
+    const root = new ReviewWorkbenchTestRoot();
+
+    mountReviewWorkbench(root as unknown as HTMLElement, {
+      ...initialReviewWorkbenchState(),
+      decision: "reject-proposed",
+      note: "Rejected proposed source.",
+    });
+
+    assert.equal(root.textarea.value, "Rejected proposed source.");
+    assert.match(root.html, /decision-button is-active" type="button" data-decision="reject-proposed"/);
+    assert.match(root.payload.textContent, /"candidateId": "public-directory:candidate:proposed"/);
+    assert.match(root.payload.textContent, /"status": "rejected"/);
+    assert.match(root.html, /data-testid="candidate-proposed" data-outcome="selected"/);
+  });
+
+  it("AC37-2 handles mounted queue navigation without losing local note or decision", () => {
+    const root = new ReviewWorkbenchTestRoot();
+    const documentRestore = installTestDocument();
+
+    try {
+      mountReviewWorkbench(root as unknown as HTMLElement);
+      root.clickDecision("accept-proposed");
+      root.textarea.value = "Accepted the hours update.";
+      root.textarea.dispatch("input");
+      root.clickNextUnresolved();
+      assert.match(root.html, /public-directory-phone/);
+      root.clickDecision("keep-current");
+      root.textarea.value = "Kept the listed phone.";
+      root.textarea.dispatch("input");
+      root.clickQueueRow("public-directory-hours");
+    } finally {
+      documentRestore();
+    }
+
+    assert.equal(root.textarea.value, "Accepted the hours update.");
+    assert.match(root.html, /decision-button is-active" type="button" data-decision="accept-proposed"/);
+    assert.match(root.html, /data-queue-status="resolved"/);
+    assert.match(root.html, /Kept current/);
+  });
+
   for (const entry of cases) {
     it(`handles mounted ${entry.decision} button clicks`, () => {
       const root = new ReviewWorkbenchTestRoot();
 
-      mountReviewWorkbench(root as unknown as HTMLElement);
+      mountReviewWorkbench(root as unknown as HTMLElement, initialReviewQueueSessionState([publicDirectoryReviewItemFixture]));
       root.clickDecision(entry.decision);
 
       assert.match(root.html, new RegExp(escapeRegExp(entry.selectedText)));
@@ -320,6 +494,8 @@ class ReviewWorkbenchTestRoot {
   payload = new TestPayloadElement();
   surfacePreview = new TestSurfacePreviewElement(this);
   private buttons: TestButtonElement[] = [];
+  private queueRows: TestQueueRowElement[] = [];
+  private nextButton = new TestNextButtonElement();
 
   set innerHTML(value: string) {
     this.html = value;
@@ -327,6 +503,8 @@ class ReviewWorkbenchTestRoot {
     this.payload = new TestPayloadElement(payloadValue(value));
     this.surfacePreview = new TestSurfacePreviewElement(this, surfacePreviewValue(value));
     this.buttons = decisionValues(value).map((decision) => new TestButtonElement(decision));
+    this.queueRows = queueItemNames(value).map((itemName) => new TestQueueRowElement(itemName));
+    this.nextButton = new TestNextButtonElement();
   }
 
   get innerHTML(): string {
@@ -346,17 +524,39 @@ class ReviewWorkbenchTestRoot {
       return this.surfacePreview as T;
     }
 
+    if (selector === "[data-testid='next-unresolved']") {
+      return this.nextButton as T;
+    }
+
     return null;
   }
 
   querySelectorAll<T>(selector: string): T[] {
-    return selector === "[data-decision]" ? this.buttons as T[] : [];
+    if (selector === "[data-decision]") {
+      return this.buttons as T[];
+    }
+
+    if (selector === "[data-item-name]") {
+      return this.queueRows as T[];
+    }
+
+    return [];
   }
 
   clickDecision(decision: ReviewWorkbenchDecision): void {
     const button = this.buttons.find((entry) => entry.dataset.decision === decision);
     assert.ok(button, `Missing test button for ${decision}`);
     button.click();
+  }
+
+  clickQueueRow(itemName: string): void {
+    const row = this.queueRows.find((entry) => entry.dataset.itemName === itemName);
+    assert.ok(row, `Missing test queue row for ${itemName}`);
+    row.click();
+  }
+
+  clickNextUnresolved(): void {
+    this.nextButton.click();
   }
 }
 
@@ -419,6 +619,39 @@ class TestButtonElement {
   }
 }
 
+class TestQueueRowElement {
+  readonly dataset: { itemName: string };
+  private readonly listeners = new Map<string, Array<() => void>>();
+
+  constructor(itemName: string) {
+    this.dataset = { itemName };
+  }
+
+  addEventListener(type: string, listener: () => void): void {
+    this.listeners.set(type, [...this.listeners.get(type) ?? [], listener]);
+  }
+
+  click(): void {
+    for (const listener of this.listeners.get("click") ?? []) {
+      listener();
+    }
+  }
+}
+
+class TestNextButtonElement {
+  private readonly listeners = new Map<string, Array<() => void>>();
+
+  addEventListener(type: string, listener: () => void): void {
+    this.listeners.set(type, [...this.listeners.get(type) ?? [], listener]);
+  }
+
+  click(): void {
+    for (const listener of this.listeners.get("click") ?? []) {
+      listener();
+    }
+  }
+}
+
 class TestPayloadElement {
   constructor(public textContent = "") {}
 }
@@ -447,6 +680,10 @@ function installTestDocument(): () => void {
 
 function decisionValues(html: string): ReviewWorkbenchDecision[] {
   return [...html.matchAll(/data-decision="([^"]+)"/g)].map((match) => match[1] as ReviewWorkbenchDecision);
+}
+
+function queueItemNames(html: string): string[] {
+  return [...html.matchAll(/data-item-name="([^"]+)"/g)].map((match) => unescapeHtml(match[1]));
 }
 
 function textareaValue(html: string): string {

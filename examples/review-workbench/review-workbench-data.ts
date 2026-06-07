@@ -132,3 +132,107 @@ export const publicDirectoryReviewItemFixture = {
     reviewDecisionName: "public-directory-availability-operator-decision",
   },
 } satisfies ReviewItem;
+
+function queueFixture(
+  name: string,
+  target: string,
+  currentValue: string,
+  proposedValue: string,
+  candidateSetStatus: ReviewItem["spec"]["candidateSetStatus"],
+  feedbackTags: string[],
+): ReviewItem {
+  return {
+    ...publicDirectoryReviewItemFixture,
+    metadata: {
+      ...publicDirectoryReviewItemFixture.metadata,
+      name,
+    },
+    spec: {
+      ...publicDirectoryReviewItemFixture.spec,
+      target,
+      selectedCandidateId: `${name}:candidate:current`,
+      candidateSetStatus,
+      producerPolicy: {
+        feedbackTags,
+      },
+      rationale: `Fixture-backed local review queue item for ${target}.`,
+      candidates: publicDirectoryReviewItemFixture.spec.candidates.map((candidate) => {
+        const role = candidate.role ?? "candidate";
+        const value = role === "proposed" ? proposedValue : currentValue;
+
+        return {
+          ...candidate,
+          id: `${name}:candidate:${role}`,
+          value,
+          source: {
+            ...candidate.source,
+            sourceId: `${name}:source:${role}`,
+          },
+          extraction: {
+            ...candidate.extraction,
+            extractionId: `${name}:extraction:${role}`,
+            target,
+          },
+          claimTarget: {
+            ...candidate.claimTarget,
+            claimId: `public-field.entity-123.${target}.${role}`,
+            fieldOrBehavior: target,
+          },
+          projection: {
+            ...candidate.projection,
+            rawSourceId: `${name}:source:${role}`,
+            extractionId: `${name}:extraction:${role}`,
+            candidateSetId: `${name}:candidate-set`,
+            candidateId: `${name}:projection:${role}`,
+            reviewOutcomeId: role === "current" && candidateSetStatus === "resolved" ? `${name}:review:resolved` : undefined,
+            claimId: `public-field.entity-123.${target}.${role}`,
+          },
+          producer: {
+            ...candidate.producer,
+          },
+        };
+      }),
+    },
+    status: {
+      observedCandidateCount: publicDirectoryReviewItemFixture.status?.observedCandidateCount,
+      selectedCandidateId: `${name}:candidate:current`,
+      reviewDecisionName: candidateSetStatus === "resolved" ? `${name}-resolved-decision` : undefined,
+    },
+  };
+}
+
+export const reviewWorkbenchQueueFixtures = [
+  queueFixture(
+    "public-directory-hours",
+    "hours",
+    "Weekdays 9am-5pm",
+    "Weekdays 8am-6pm",
+    "needs-review",
+    ["hours-change", "crawler-suggested"],
+  ),
+  queueFixture(
+    "public-directory-phone",
+    "phoneNumber",
+    "+1-555-0100",
+    "+1-555-0199",
+    "needs-review",
+    ["contact-field", "source-conflict"],
+  ),
+  publicDirectoryReviewItemFixture,
+  queueFixture(
+    "public-directory-address",
+    "streetAddress",
+    "100 Main Street",
+    "102 Main Street",
+    "needs-review",
+    ["address-change", "producer-escalation-candidate"],
+  ),
+  queueFixture(
+    "public-directory-license",
+    "licenseStatus",
+    "ACTIVE",
+    "EXPIRED",
+    "escalated",
+    ["licensing", "manual-review-required"],
+  ),
+] satisfies ReviewItem[];

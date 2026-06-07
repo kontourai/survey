@@ -7,10 +7,16 @@ const requiredFiles = [
   "examples/review-workbench/index.html",
   "examples/review-workbench/review-workbench.css",
   "examples/review-workbench/review-workbench-data.ts",
+  "examples/review-workbench/review-queue-session.ts",
+  "examples/review-workbench/review-surface-preview.ts",
   "examples/review-workbench/review-workbench.ts",
   "dist/examples/review-workbench/review-workbench-data.js",
+  "dist/examples/review-workbench/review-queue-session.js",
+  "dist/examples/review-workbench/review-surface-preview.js",
   "dist/examples/review-workbench/review-workbench.js",
   "dist/examples/review-workbench/review-workbench.d.ts",
+  "dist/examples/review-workbench/review-queue-session.d.ts",
+  "dist/examples/review-workbench/review-surface-preview.d.ts",
 ];
 
 for (const file of requiredFiles) {
@@ -23,6 +29,8 @@ for (const file of requiredFiles) {
 const html = fs.readFileSync(path.join(root, "examples/review-workbench/index.html"), "utf8");
 const css = fs.readFileSync(path.join(root, "examples/review-workbench/review-workbench.css"), "utf8");
 const dataJs = fs.readFileSync(path.join(root, "dist/examples/review-workbench/review-workbench-data.js"), "utf8");
+const queueSessionJs = fs.readFileSync(path.join(root, "dist/examples/review-workbench/review-queue-session.js"), "utf8");
+const surfacePreviewJs = fs.readFileSync(path.join(root, "dist/examples/review-workbench/review-surface-preview.js"), "utf8");
 const js = fs.readFileSync(path.join(root, "dist/examples/review-workbench/review-workbench.js"), "utf8");
 
 main().catch((error) => {
@@ -32,15 +40,35 @@ main().catch((error) => {
 
 async function main() {
   assertIncludes(html, "id=\"review-workbench\"");
+  assertIncludes(html, "rel=\"icon\"");
+  assertIncludes(html, "data:image/svg+xml");
   assertIncludes(html, "../../dist/examples/review-workbench/review-workbench.js");
   assertIncludes(css, "@media (max-width: 980px)");
   assertIncludes(css, ".workbench-shell");
+  assertIncludes(css, "grid-template-columns: minmax(0, 1fr) minmax(0, 520px)");
+  assertIncludes(css, "overflow-wrap: anywhere");
   assertIncludes(dataJs, "publicDirectoryReviewItemFixture");
+  assertIncludes(dataJs, "reviewWorkbenchQueueFixtures");
+  assertIncludes(queueSessionJs, "initialReviewQueueSessionState");
+  assertIncludes(queueSessionJs, "deriveQueueRowStatus");
+  assertIncludes(queueSessionJs, "reviewSessionSummary");
+  assertIncludes(queueSessionJs, "nextUnresolvedItemName");
+  assertIncludes(queueSessionJs, "selectedCandidateRole");
+  assertIncludes(queueSessionJs, "candidateRole: \"proposed\"");
   assertIncludes(js, "buildReviewDecision");
-  assertIncludes(js, "buildSurfaceProjectionPreview");
+  assertIncludes(surfacePreviewJs, "buildSurfaceProjectionPreview");
+  assertIncludes(js, "renderCurrentState");
+  assertIncludes(js, "updateReviewerNote");
+  assertIncludes(js, "selectDecision");
+  assertIncludes(js, "selectQueueItem");
+  assertIncludes(js, "goToNextUnresolved");
+  assertIncludes(js, "Review queue");
+  assertIncludes(js, "Session summary");
+  assertIncludes(js, "Producer feedback tags");
   assertIncludes(js, "Surface preview");
   assertIncludes(js, "authorityTrace");
   assertIncludes(dataJs, "sourceAuthority");
+  assertIncludes(dataJs, "feedbackTags");
   assertIncludes(js, "mountReviewWorkbench");
   assertExcludes(js, "node:");
   assertExcludes(js, "@kontourai/surface");
@@ -50,6 +78,14 @@ async function main() {
   assertExcludes(dataJs, "@kontourai/surface");
   assertExcludes(dataJs, "src/to-surface");
   assertExcludes(dataJs, "src/review-proof");
+  assertExcludes(queueSessionJs, "node:");
+  assertExcludes(queueSessionJs, "@kontourai/surface");
+  assertExcludes(queueSessionJs, "src/to-surface");
+  assertExcludes(queueSessionJs, "src/review-proof");
+  assertExcludes(surfacePreviewJs, "node:");
+  assertExcludes(surfacePreviewJs, "@kontourai/surface");
+  assertExcludes(surfacePreviewJs, "src/to-surface");
+  assertExcludes(surfacePreviewJs, "src/review-proof");
   await assertBrowserDataMatchesCanonicalFixture();
 
   console.log("Review workbench static artifact and fixture provenance check passed.");
