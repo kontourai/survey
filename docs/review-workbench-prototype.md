@@ -40,6 +40,11 @@ separately with Playwright.
 `npm run verify` includes the content boundary check, typecheck, tests, and this
 static review workbench guard.
 
+The downstream-boundary dogfood proof in
+[`downstream-adapter-dogfood-proof.md`](./downstream-adapter-dogfood-proof.md)
+shows how a sanitized copied producer proposal can be adapted into the same
+`ReviewItem` shape without adding product-specific workbench branches.
+
 ## Decision Mapping
 
 The prototype keeps reviewer note and selected decision state only in browser
