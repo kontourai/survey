@@ -75,7 +75,7 @@ The producer's recorded review decision for a **Candidate Set** or a specific **
 _Avoid_: Review, approval when the status may not be verified, policy decision
 
 **Comfort Zone Flag**:
-An optional `withinComfortZone: false` marker on a **Review Outcome**, paired with an optional `comfortZoneNote`, indicating the reviewer recorded a posture outside their domain expertise or is flagging that the conclusion requires a different authority to confirm. Without this flag, producers have no way to distinguish "I reviewed this confidently" from "I recorded a posture but a specialist should confirm" — both look like a normal **Review Outcome**. Survey carries the flag forward to the Surface verification event so the reviewer chain sees the signal rather than having to read into the rationale body.
+An optional `withinComfortZone: false` marker on a **Review Outcome**, paired with an optional `comfortZoneNote`, indicating the reviewer recorded a posture outside their domain expertise or is flagging that the conclusion requires a different authority to confirm. Without this flag, producers have no way to distinguish "I reviewed this confidently" from "I recorded a posture but a specialist should confirm" — both look like a normal **Review Outcome**. Survey carries the flag forward as structured `metadata.survey.comfortZone` on the projected Surface claim so the reviewer chain sees the signal without parsing verification event rationale.
 _Avoid_: Encoding uncertainty only in rationale text, using a low-confidence extraction as a proxy for reviewer uncertainty, conflating extraction confidence with reviewer comfort zone
 
 **Escalation Record**:
@@ -194,4 +194,4 @@ Domain expert: "The second agent is an Adversarial Pass — it's a second Produc
 
 Developer: "The reviewer approved the fair value figure but told me they're not a specialist in this area."
 
-Domain expert: "Set withinComfortZone to false on the Review Outcome and add a comfortZoneNote. The Comfort Zone Flag travels with the Review Outcome to Surface so the next reviewer in the chain sees it on the verification event — they don't have to read the rationale to know this conclusion is waiting for specialist confirmation."
+Domain expert: "Set withinComfortZone to false on the Review Outcome and add a comfortZoneNote. The Comfort Zone Flag travels to Surface as structured Survey metadata on the claim, while the verification event notes remain the review rationale."

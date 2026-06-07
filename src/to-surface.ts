@@ -61,14 +61,7 @@ export function buildSurveyTrustInput(input: SurveyInput, options: BuildSurveyTr
       },
       metadata: {
         ...projection.metadata,
-        survey: {
-          ...(isRecord(projection.metadata?.survey) ? projection.metadata.survey : {}),
-          rawSourceId: rawSource.id,
-          extractionId: extraction.id,
-          candidateSetId: candidateSet.id,
-          candidateId: candidate.id,
-          reviewOutcomeId: review?.id,
-        },
+        survey: buildSurveyMetadata({ projection, rawSource, extraction, candidateSet, candidate, review }),
       },
     };
 
@@ -111,9 +104,6 @@ export function buildSurveyTrustInput(input: SurveyInput, options: BuildSurveyTr
     });
 
     const rationale = review?.rationale ?? candidateSet.rationale;
-    const comfortZoneNote = review?.withinComfortZone === false
-      ? `[outside comfort zone] ${review.comfortZoneNote ?? "reviewer flagged this as outside their comfort zone"}`
-      : undefined;
     events.push({
       id: `${projection.id}.event.${status}`,
       claimId: projection.id,
@@ -123,7 +113,7 @@ export function buildSurveyTrustInput(input: SurveyInput, options: BuildSurveyTr
       evidenceIds: review?.evidenceIds?.length ? review.evidenceIds : [evidenceId],
       createdAt: review?.reviewedAt ?? input.generatedAt,
       verifiedAt: status === "verified" || status === "assumed" ? review?.reviewedAt ?? input.generatedAt : undefined,
-      notes: [rationale, comfortZoneNote].filter(Boolean).join(" | ") || undefined,
+      notes: rationale,
     });
   }
 
@@ -155,6 +145,32 @@ export function buildSurveyTrustInput(input: SurveyInput, options: BuildSurveyTr
     evidence,
     policies: [],
     events,
+  };
+}
+
+function buildSurveyMetadata(input: {
+  projection: ClaimTarget;
+  rawSource: RawSource;
+  extraction: Extraction;
+  candidateSet: CandidateSet;
+  candidate: Candidate;
+  review?: ReviewOutcome;
+}): Record<string, unknown> {
+  return {
+    ...(isRecord(input.projection.metadata?.survey) ? input.projection.metadata.survey : {}),
+    rawSourceId: input.rawSource.id,
+    extractionId: input.extraction.id,
+    candidateSetId: input.candidateSet.id,
+    candidateId: input.candidate.id,
+    reviewOutcomeId: input.review?.id,
+    ...(input.review?.withinComfortZone === false
+      ? {
+          comfortZone: {
+            withinComfortZone: false,
+            ...(input.review.comfortZoneNote ? { note: input.review.comfortZoneNote } : {}),
+          },
+        }
+      : {}),
   };
 }
 
