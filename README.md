@@ -164,6 +164,83 @@ on the `RawSource` and projects to Surface `policy_rule` evidence by default.
 Survey only preserves the producer-applied standard text/version; it does not
 decide whether that standard is correct for the producer's domain.
 
+## Interpretation records
+
+Use `addInterpretation` when a producer records how an actor read a
+`policy-standard` paragraph for one claim. Interpretations are flat provenance
+records with an `appliesTo` edge to a claim and an `anchorsTo` edge to a
+policy-standard raw source; they are not nested claim derivations or rejection
+reasons.
+
+```ts
+import {
+  apiRecordSource,
+  buildSurveyTrustInput,
+  fieldObservation,
+  policyStandardSource,
+  SurveyInputBuilder,
+} from "@kontourai/survey";
+
+const observedAt = new Date().toISOString();
+const standard = policyStandardSource({
+  id: "source.example.policy-standard.rule-1",
+  sourceRef: "policy-standard://example/rules/2026#rule-1",
+  observedAt,
+  inlineText: "A producer reading must cite the applied rule paragraph.",
+  standardVersion: "2026.1",
+  paragraphRef: "rule-1",
+});
+
+const surveyInput = new SurveyInputBuilder({ source: "example-producer:run-1" })
+  .addRawSource(standard)
+  .addObservation(fieldObservation({
+    id: "observation.example.policy-application",
+    field: "policyApplication.status",
+    value: "DOCUMENTED",
+    rawSource: apiRecordSource({
+      id: "source.example.application-record",
+      sourceRef: "example-records://application/application-1",
+      observedAt,
+      checksum: "application-1",
+    }),
+    extraction: {
+      target: "policyApplication.status",
+      locator: "json:$.policyApplication.status",
+      extractor: "example-extractor",
+      extractedAt: observedAt,
+    },
+    claim: {
+      id: "claim.example.policy-application",
+      subjectType: "example.application",
+      subjectId: "application-1",
+      surface: "example.review",
+      claimType: "policy-application.status",
+      impactLevel: "medium",
+      collectedBy: "example-extractor",
+    },
+  }))
+  .addInterpretation({
+    id: "interpretation.example.rule-1",
+    appliesToClaimId: "claim.example.policy-application",
+    anchorsToSourceId: standard.id,
+    ruleLocator: "text:paragraph=rule-1",
+    reading: "The producer read rule 1 as applying to the claim.",
+    actor: "producer-operator",
+    recordedAt: observedAt,
+  })
+  .build();
+
+const trustInput = buildSurveyTrustInput(surveyInput);
+```
+
+Projection emits a normal Surface verification event with
+`method: "survey-interpretation"`, the existing `claimId`, and anchor
+`evidenceIds`. Because current Surface verification events reject unsupported
+keys, typed edge details are preserved on the projected claim at
+`metadata.survey.interpretations[]`. The anchor evidence uses
+`evidenceType: "policy_rule"`, `method: "anchoring"`, the interpretation
+`ruleLocator` as `sourceLocator`, and the policy-standard text/version metadata.
+
 ## Review resources
 
 Survey also exports producer-neutral `ReviewItem`, `ReviewCandidate`, and

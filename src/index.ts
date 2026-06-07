@@ -6,6 +6,7 @@ export type {
   EscalationDimension,
   EscalationRecord,
   Extraction,
+  Interpretation,
   LocatorScheme,
   RawSource,
   RawSourceKind,
