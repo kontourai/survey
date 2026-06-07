@@ -51,6 +51,13 @@ export type {
 } from "./reviewed-current-proposed-resolution.js";
 export { buildSurveyTrustInput } from "./to-surface.js";
 export type { BuildSurveyTrustInputOptions } from "./to-surface.js";
+export { buildSurveyLearningProjections } from "./learning-projections.js";
+export type {
+  LearningProjection,
+  LearningProjectionKind,
+  LearningProjectionSeverity,
+  LearningProjectionSignal,
+} from "./learning-projections.js";
 export {
   buildCanonicalReviewProofPayload,
   buildReviewProofAnchor,
