@@ -42,7 +42,11 @@ async function main() {
   assertIncludes(html, "id=\"review-workbench\"");
   assertIncludes(html, "rel=\"icon\"");
   assertIncludes(html, "data:image/svg+xml");
+  assertIncludes(html, "class=\"theme-survey\"");
+  assertIncludes(html, "./vendor/console-kit/tokens/index.css");
   assertIncludes(html, "../../dist/examples/review-workbench/review-workbench.js");
+  assertIncludes(css, "--ink-900: var(--k-bg)");
+  assertIncludes(css, "--verify: var(--k-positive)");
   assertIncludes(css, "@media (max-width: 980px)");
   assertIncludes(css, ".workbench-shell");
   assertIncludes(css, "grid-template-columns: minmax(0, 1fr) minmax(0, 520px)");
