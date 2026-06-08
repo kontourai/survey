@@ -101,6 +101,7 @@ export function renderReviewWorkbenchHtml(state: ReviewWorkbenchState | ReviewQu
     <section class="workbench-shell" aria-label="Survey review workbench">
       ${renderWorkbenchHeader(state)}
       <div class="content-grid">
+        ${renderReviewFocus(state)}
         ${renderCandidateComparison(state)}
         ${renderDecisionColumn(state)}
       </div>
@@ -114,12 +115,14 @@ function renderReviewQueueSessionHtml(session: ReviewQueueSessionState): string 
   return `
     <section class="workbench-shell" aria-label="Survey review workbench">
       ${renderWorkbenchHeader(state)}
+      ${renderActiveReviewStrip(session, state)}
       <div class="queue-layout">
         <aside class="queue-panel" aria-label="Review queue">
           ${renderQueueRows(session)}
           ${renderSessionSummary(session)}
         </aside>
         <div class="content-grid">
+          ${renderReviewFocus(state)}
           ${renderCandidateComparison(state)}
           ${renderDecisionColumn(state)}
         </div>
@@ -172,20 +175,96 @@ function renderSessionSummary(session: ReviewQueueSessionState): string {
   `;
 }
 
+function renderActiveReviewStrip(session: ReviewQueueSessionState, state: ReviewWorkbenchState): string {
+  const activeIndex = session.items.findIndex((item) => item.metadata.name === session.activeItemName);
+  const position = activeIndex >= 0 ? activeIndex + 1 : 1;
+  const status = deriveQueueRowStatus(state.item, session);
+
+  return `
+    <section class="active-review-strip" data-testid="active-review-strip" aria-label="Active review item">
+      <div class="active-review-copy">
+        <span class="field-label">Review ${position} of ${session.items.length}</span>
+        <strong>${escapeHtml(state.item.metadata.name)}</strong>
+        <span>${escapeHtml(state.item.spec.target)}</span>
+      </div>
+      <div class="active-review-actions">
+        <span class="state-label">${escapeHtml(status)}</span>
+        <button class="next-button" type="button" data-testid="active-next-unresolved">Next unresolved</button>
+      </div>
+      <div class="active-review-decisions" aria-label="Quick review decision">
+        ${renderDecisionButtons(state)}
+      </div>
+    </section>
+  `;
+}
+
 function renderWorkbenchHeader(state: ReviewWorkbenchState): string {
+  const current = candidateByRole(state.item, "current");
+  const proposed = candidateByRole(state.item, "proposed");
+
   return `
     <header class="topbar">
       <div>
         <p class="eyebrow">${escapeHtml(String(state.item.metadata.producer?.displayName ?? "Survey"))}</p>
-        <h1>${escapeHtml(state.item.metadata.name)}</h1>
+        <h1>Review candidate update</h1>
+        <p class="review-question">For <strong>${escapeHtml(state.item.spec.target)}</strong>, decide whether <strong>${escapeHtml(formatValue(proposed.value))}</strong> should replace <strong>${escapeHtml(formatValue(current.value))}</strong>.</p>
       </div>
       <dl class="meta-grid">
-        ${metaItem("Target", state.item.spec.target)}
+        ${metaItem("Item", state.item.metadata.name)}
         ${metaItem("Status", state.item.spec.candidateSetStatus ?? "unresolved")}
         ${metaItem("Selected", state.item.spec.selectedCandidateId ?? "none")}
         ${metaItem("Candidate count", String(state.item.status?.observedCandidateCount ?? state.item.spec.candidates.length))}
       </dl>
     </header>
+  `;
+}
+
+function renderReviewMain(state: ReviewWorkbenchState): string {
+  return `
+    <div class="review-main">
+      ${renderReviewFocus(state)}
+      ${renderCandidateComparison(state)}
+    </div>
+  `;
+}
+
+function renderReviewFocus(state: ReviewWorkbenchState): string {
+  const current = candidateByRole(state.item, "current");
+  const proposed = candidateByRole(state.item, "proposed");
+  const proposedConfidence = proposed.extraction.confidence ?? proposed.confidence;
+  const currentConfidence = current.extraction.confidence ?? current.confidence;
+
+  return `
+    <section class="review-focus" data-testid="review-focus" aria-label="Active review focus">
+      <div class="focus-head">
+        <span class="field-label">Active review</span>
+        <span class="state-label">${escapeHtml(state.item.spec.candidateSetStatus ?? "unresolved")}</span>
+      </div>
+      <div class="focus-values">
+        ${focusValue("Current", current, currentConfidence, "current")}
+        ${focusValue("Proposed", proposed, proposedConfidence, "proposed")}
+      </div>
+      <dl class="focus-evidence">
+        ${fieldItem("Target", state.item.spec.target)}
+        ${fieldItem("Proposed source", proposed.source.sourceRef)}
+        ${fieldItem("Proposed excerpt", proposed.locator?.excerpt ?? "none", "excerpt")}
+      </dl>
+    </section>
+  `;
+}
+
+function focusValue(
+  label: string,
+  candidate: ReviewCandidate,
+  confidence: number | undefined,
+  tone: "current" | "proposed",
+): string {
+  return `
+    <div class="focus-value is-${tone}">
+      <span class="field-label">${escapeHtml(label)}</span>
+      <strong>${escapeHtml(formatValue(candidate.value))}</strong>
+      <span>${escapeHtml(confidence === undefined ? "confidence unknown" : formatConfidence(confidence))}</span>
+    </div>
   `;
 }
 
@@ -532,12 +611,31 @@ function bindQueueRows(root: HTMLElement, selectQueueItem: (itemName: string) =>
   root.querySelectorAll<HTMLButtonElement>("[data-item-name]").forEach((button) => {
     button.addEventListener("click", () => {
       selectQueueItem(button.dataset.itemName ?? "");
+      scrollActiveReviewIntoView(root);
     });
   });
 }
 
 function bindNextUnresolved(root: HTMLElement, goToNextUnresolved: () => void): void {
-  root.querySelector<HTMLButtonElement>("[data-testid='next-unresolved']")?.addEventListener("click", goToNextUnresolved);
+  root
+    .querySelectorAll<HTMLButtonElement>("[data-testid='next-unresolved'], [data-testid='active-next-unresolved']")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        goToNextUnresolved();
+        scrollActiveReviewIntoView(root);
+      });
+    });
+}
+
+function scrollActiveReviewIntoView(root: HTMLElement): void {
+  if (typeof window === "undefined" || !window.matchMedia("(max-width: 980px)").matches) {
+    return;
+  }
+
+  root.querySelector<HTMLElement>("[data-testid='active-review-strip']")?.scrollIntoView({
+    block: "start",
+    behavior: "smooth",
+  });
 }
 
 function refreshDecisionOutputs(root: HTMLElement, state: ReviewWorkbenchState, renderCurrentState: () => void): void {

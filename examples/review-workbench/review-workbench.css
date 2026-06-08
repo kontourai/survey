@@ -160,6 +160,20 @@ h1 {
   color: var(--paper);
 }
 
+.review-question {
+  max-width: 720px;
+  margin-top: 10px;
+  color: var(--paper-dim);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.review-question strong {
+  color: var(--paper);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.95em;
+}
+
 .meta-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(110px, 1fr));
@@ -208,6 +222,10 @@ h1 {
   gap: 18px;
   position: sticky;
   top: 18px;
+}
+
+.active-review-strip {
+  display: none;
 }
 
 .queue-list,
@@ -370,13 +388,101 @@ h1 {
 .content-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(360px, 440px);
+  grid-template-areas:
+    "focus decision"
+    "candidates decision";
   gap: 22px;
   align-items: start;
+}
+
+.review-main {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+/* ---- Active review focus ---------------------------------------------- */
+
+.review-focus {
+  grid-area: focus;
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  border: 1px solid rgba(92, 224, 198, 0.28);
+  border-radius: var(--radius);
+  padding: 18px;
+  background:
+    linear-gradient(135deg, rgba(92, 224, 198, 0.12), transparent 34%),
+    linear-gradient(180deg, var(--ink-800), var(--ink-850));
+  box-shadow: 0 26px 60px -42px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.focus-head,
+.focus-values {
+  display: grid;
+  gap: 12px;
+}
+
+.focus-head {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.focus-values {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.focus-value {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 13px 14px;
+  background: rgba(6, 9, 13, 0.56);
+}
+
+.focus-value strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--paper);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: clamp(22px, 3vw, 34px);
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.focus-value span:last-child {
+  display: block;
+  margin-top: 8px;
+  color: var(--paper-faint);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.focus-value.is-proposed {
+  border-color: rgba(122, 162, 255, 0.34);
+  background: linear-gradient(180deg, rgba(122, 162, 255, 0.1), rgba(6, 9, 13, 0.56));
+}
+
+.focus-value.is-proposed strong {
+  color: var(--proposed);
+}
+
+.focus-evidence {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.65fr) minmax(0, 1.2fr) minmax(0, 1.4fr);
+  gap: 12px;
+  margin: 0;
+}
+
+.focus-evidence .field {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
 }
 
 /* ---- Candidate comparison: the hero of the console -------------------- */
 
 .candidate-grid {
+  grid-area: candidates;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
@@ -559,6 +665,7 @@ h1 {
 /* ---- Decision column -------------------------------------------------- */
 
 .decision-column {
+  grid-area: decision;
   display: grid;
   gap: 18px;
   animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -806,9 +913,89 @@ pre {
 @media (max-width: 980px) {
   .topbar,
   .queue-layout,
-  .content-grid,
+  .focus-evidence,
   .candidate-grid {
     grid-template-columns: 1fr;
+  }
+
+  .content-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "focus"
+      "decision"
+      "candidates";
+  }
+
+  .queue-layout {
+    grid-template-areas:
+      "content"
+      "queue";
+  }
+
+  .active-review-strip {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+    border: 1px solid var(--line-strong);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 13px 14px;
+    background:
+      linear-gradient(90deg, rgba(92, 224, 198, 0.12), transparent 46%),
+      linear-gradient(180deg, var(--ink-800), var(--ink-850));
+    box-shadow: 0 18px 44px -36px rgba(0, 0, 0, 0.9);
+  }
+
+  .active-review-copy,
+  .active-review-actions,
+  .active-review-decisions {
+    min-width: 0;
+  }
+
+  .active-review-copy {
+    display: grid;
+    gap: 4px;
+  }
+
+  .active-review-copy strong {
+    overflow-wrap: anywhere;
+    color: var(--paper);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 13px;
+  }
+
+  .active-review-copy span:last-child {
+    overflow-wrap: anywhere;
+    color: var(--paper-dim);
+    font-size: 13px;
+  }
+
+  .active-review-actions {
+    display: grid;
+    gap: 8px;
+    justify-items: end;
+  }
+
+  .active-review-decisions {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .active-review-decisions .decision-button {
+    min-height: 38px;
+    padding: 7px 8px;
+    font-size: 11px;
+  }
+
+  .queue-panel {
+    grid-area: queue;
+  }
+
+  .content-grid {
+    grid-area: content;
   }
 
   .candidate-grid::before {
@@ -820,6 +1007,7 @@ pre {
   }
 
   .content-grid,
+  .review-main,
   .candidate-grid,
   .decision-column {
     min-width: 0;
@@ -844,6 +1032,7 @@ pre {
   }
 
   .topbar,
+  .active-review-strip,
   .queue-list,
   .session-summary,
   .candidate-card,
@@ -858,13 +1047,35 @@ pre {
     gap: 14px;
   }
 
+  .topbar .meta-grid {
+    display: none;
+  }
+
+  .active-review-strip {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .active-review-actions {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: stretch;
+  }
+
+  .active-review-actions .state-label {
+    justify-self: start;
+  }
+
+  .review-question {
+    font-size: 13px;
+  }
+
   h1 {
     font-size: 25px;
     line-height: 1.08;
   }
 
-  .meta-grid,
   .summary-grid,
+  .focus-values,
   .decision-buttons {
     grid-template-columns: 1fr;
   }
@@ -900,6 +1111,19 @@ pre {
     font-size: 19px;
   }
 
+  .review-focus {
+    border-radius: 10px;
+    padding: 14px;
+  }
+
+  .focus-head {
+    grid-template-columns: 1fr;
+  }
+
+  .focus-value strong {
+    font-size: clamp(22px, 10vw, 32px);
+  }
+
   .candidate-value .field-value {
     font-size: clamp(21px, 9vw, 30px);
     line-height: 1.12;
@@ -932,6 +1156,18 @@ pre {
     line-height: 1.1;
   }
 
+  .topbar {
+    padding: 12px;
+  }
+
+  .topbar .meta-grid {
+    gap: 8px;
+  }
+
+  .topbar .meta-item {
+    padding: 9px 10px;
+  }
+
   .candidate-card .field-stack .field-value,
   .compact .field-value {
     display: block;
@@ -959,8 +1195,10 @@ pre {
   }
 
   .topbar,
+  .active-review-strip,
   .queue-list,
   .session-summary,
+  .review-focus,
   .candidate-card,
   .decision-row,
   .payload-panel,
@@ -969,7 +1207,34 @@ pre {
   }
 
   h1 {
-    font-size: 21px;
+    font-size: 20px;
+  }
+
+  .review-question {
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .topbar .meta-grid {
+    display: none;
+  }
+
+  .review-focus {
+    gap: 10px;
+  }
+
+  .focus-value {
+    padding: 10px;
+  }
+
+  .focus-value strong {
+    margin-top: 6px;
+    font-size: 24px;
+    line-height: 1.05;
+  }
+
+  .focus-value span:last-child {
+    margin-top: 6px;
   }
 
   .candidate-value .field-value {
