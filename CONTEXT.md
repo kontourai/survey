@@ -82,6 +82,10 @@ _Avoid_: Encoding uncertainty only in rationale text, using a low-confidence ext
 A Survey-local `learning.*` record derived from structured Survey producer/review data for workflow routing, evaluation, and producer feedback. A **Learning Projection** is separate from Surface `TrustInput`: it is not a truth or veracity assertion, not a **Claim**, not **Evidence**, not a **Verification Event**, and not a claim status. Use `learning.comfort-zone` for structured comfort-zone review signals and `learning.escalation` for unresolved **Escalation Records**, including unattached escalations that producer tooling can route even when Surface cannot attach an event to a claim.
 _Avoid_: Treating `learning.*` as Surface state, hiding learning signals in verification event notes, adding product-specific routing names to Survey
 
+**Rejected Candidate Learning**:
+A producer-learning signal for an ordinary rejected **Candidate**, usually because a reviewer selected a different candidate, kept the current value, or decided an extraction did not support the proposed value. Rejected candidate feedback is not the same as a **Comfort Zone Flag**. A rejected candidate can be a confident reviewer decision, while `withinComfortZone: false` means the reviewer recorded that a different authority or domain specialist should confirm the conclusion. Survey should carry rejected-candidate reasons as candidate/review provenance and should add a first-class `learning.rejected-candidate` projection before downstream producers depend on Survey for ordinary rejection learning. Until that projection exists, producers should keep ordinary rejection learning local or explicit; they must not set `withinComfortZone: false` just to get a Survey learning projection.
+_Avoid_: Modeling every rejected candidate as `learning.comfort-zone`, treating rejection as proof the current value is true, using product-specific feedback tags as Survey vocabulary
+
 **Escalation Record**:
 A durable record of a challenge raised against a target that was not fully addressed by the originating producer pass. An **Escalation Record** captures what a second-pass producer — whether an automated adversary, a rules engine, or a human reviewer — flagged as a gap: a missing consideration, a misframed question, a conclusion that would not survive challenge, or a citation mismatch. The problem it solves: without a first-class slot for "this target was not addressed," producers have no option except to paper over genuine uncertainty with a confident-looking claim or to silently omit the target entirely. An **Escalation Record** makes the gap part of the provenance trail. Unresolved escalations attached to a claim project to Surface as additional **Disputed** verification events so the reviewer sees the challenge alongside the claim rather than discovering it later. Unresolved escalations can also emit separate `learning.escalation` **Learning Projections** for producer/review workflow evaluation. Resolved escalations (with `resolvedBy` set to the observation that closed them) are carried in the record without projecting an event or unresolved learning signal.
 _Avoid_: Open question as a comment in rationale, treating raised challenges as errors rather than as legitimate posture, conflating escalation with a failed extraction
@@ -173,6 +177,9 @@ These three candidate-set statuses address different problems and should not be 
 **Diff**:
 Use only as an analogy for explaining **Current/Proposed Candidate Set** behavior. In Survey domain language, the durable concepts are **Candidate**, **Candidate Set**, **Selected Candidate**, and **Review Outcome**.
 
+**Rejected Candidate vs. Comfort Zone**:
+A **Rejected Candidate** records a candidate selection/rejection result. A **Comfort Zone Flag** records reviewer authority or domain-expertise posture. These can coexist, but one does not imply the other. Do not emit `learning.comfort-zone` for an ordinary rejected candidate unless the review outcome explicitly says `withinComfortZone: false`.
+
 **Survey-Branded Language**:
 Use Survey-specific terms only when the concept is unique to the producer-side source -> extraction -> candidate -> review chain. When a concept maps one-to-one to Surface, reuse the Surface term.
 
@@ -203,3 +210,7 @@ Domain expert: "The second agent is an Adversarial Pass — it's a second Produc
 Developer: "The reviewer approved the fair value figure but told me they're not a specialist in this area."
 
 Domain expert: "Set withinComfortZone to false on the Review Outcome and add a comfortZoneNote. The Comfort Zone Flag travels to Surface as structured Survey metadata on the claim, while the verification event notes remain the review rationale."
+
+Developer: "The reviewer rejected a proposed phone number and kept the current value."
+
+Domain expert: "Record the proposed Candidate's rejectionReason and the Review Outcome. Do not set withinComfortZone to false unless the reviewer also says a different authority or domain specialist needs to confirm the decision."

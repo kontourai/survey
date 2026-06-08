@@ -108,12 +108,45 @@ Exit criteria:
 - If reuse is mostly mechanical, consider a source descriptor helper.
 - If reuse is mostly product policy, keep it explicit.
 
+## Committed Follow-Up: Rejected Candidate Learning Projection
+
+Question: should Survey add a first-class `learning.rejected-candidate`
+projection for ordinary candidate/extraction rejection feedback?
+
+The downstream public-directory 0.4.4 proof showed a real gap. Producers need a
+Survey-native way to route and evaluate rejected proposed values, but ordinary
+rejection is not the same as reviewer authority/domain discomfort. The first
+attempt to reuse `learning.comfort-zone` for every rejected proposal was
+incorrect because `withinComfortZone: false` means the reviewer explicitly
+recorded that a different authority or domain specialist should confirm the
+conclusion.
+
+Shape an additive projection that:
+
+- emits from structured rejected-candidate or rejected-review data, such as
+  `Candidate.rejectionReason` and/or a rejected `ReviewOutcome`
+- does not require `withinComfortZone: false`
+- keeps `learning.comfort-zone` limited to explicit comfort-zone posture
+- keeps `learning.escalation` limited to unresolved escalation records
+- carries product-neutral candidate, candidate-set, claim, review outcome,
+  reason, source, and target references
+
+Exit criteria:
+
+- ordinary rejected candidates can produce rejected-candidate learning without
+  emitting `learning.comfort-zone`
+- rejected candidates with explicit `withinComfortZone: false` keep the
+  comfort-zone signal distinct from rejected-candidate feedback
+- downstream producers no longer need product-local projection glue for this
+  generic learning case
+
 ## Current Priority
 
-1. Current/proposed review friction.
-2. Per-row repeated source authority.
-3. Portable Authority Trace.
-4. Source descriptor reuse.
+1. Rejected candidate learning projection.
+2. Current/proposed review friction.
+3. Per-row repeated source authority.
+4. Portable Authority Trace.
+5. Source descriptor reuse.
 
 This order reflects current evidence. Reorder it when downstream integrations
 produce stronger pain signals.
@@ -125,3 +158,4 @@ produce stronger pain signals.
 - Do not make Surface own producer-side review workflow.
 - Do not infer veracity from source posture.
 - Do not populate `authorityTrace` without portable authority evidence.
+- Do not model ordinary rejected candidates as comfort-zone failures.
