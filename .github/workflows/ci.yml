@@ -15,12 +15,6 @@ jobs:
         with:
           path: survey
 
-      - name: Checkout Console Kit
-        uses: actions/checkout@v6
-        with:
-          repository: kontourai/console-kit
-          path: console-kit
-
       - name: Setup Node
         uses: actions/setup-node@v6
         with:

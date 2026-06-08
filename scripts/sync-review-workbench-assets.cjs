@@ -3,7 +3,6 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const installedKitRoot = path.join(root, "node_modules", "@kontourai", "console-kit");
-const siblingKitRoots = [path.resolve(root, "..", "console-kit")];
 const target = path.join(root, "examples", "review-workbench", "vendor", "console-kit", "tokens");
 const checkOnly = process.argv.includes("--check");
 
@@ -29,13 +28,12 @@ async function main() {
 }
 
 async function resolveKitRoot() {
-  for (const candidate of [installedKitRoot, ...siblingKitRoots]) {
-    const stat = await fs.lstat(candidate).catch(() => undefined);
-    if (!stat?.isDirectory() && !stat?.isSymbolicLink()) continue;
-    await assertPackageName(candidate);
-    return candidate;
+  const stat = await fs.lstat(installedKitRoot).catch(() => undefined);
+  if (!stat?.isDirectory() && !stat?.isSymbolicLink()) {
+    throw new Error("Missing @kontourai/console-kit. Run npm install before syncing review workbench assets.");
   }
-  throw new Error("Missing @kontourai/console-kit. Install it or run from the kontourai workspace with ../console-kit present.");
+  await assertPackageName(installedKitRoot);
+  return installedKitRoot;
 }
 
 async function assertPackageName(candidate) {
