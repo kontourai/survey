@@ -194,6 +194,51 @@ describe("review workbench prototype", () => {
     assert.match(html, /Unresolved/);
   });
 
+  it("renders ReviewSession audit metadata, replay status, and ordered events", () => {
+    const session = {
+      ...initialReviewQueueSessionState(),
+      notesByItemName: {
+        "public-directory-hours": "Accepted longer posted hours.",
+      },
+      decisionsByItemName: {
+        "public-directory-hours": "accept-proposed" as const,
+      },
+    };
+    const events = buildReviewSessionEvents(session);
+    const html = renderReviewWorkbenchHtml(session, events);
+
+    assert.match(html, /data-testid="session-audit"/);
+    assert.match(html, /ReviewSession/);
+    assert.match(html, /review-workbench-session/);
+    assert.match(html, /replay ok/);
+    assert.match(html, /Events/);
+    assert.match(html, /Decisions/);
+    assert.match(html, /Actor/);
+    assert.match(html, /review-workbench-operator/);
+    assert.match(html, /data-testid="session-event-list"/);
+    assert.match(html, /session-started/);
+    assert.match(html, /item-selected/);
+    assert.match(html, /note-changed/);
+    assert.match(html, /decision-changed/);
+    assert.match(html, /decision-submitted/);
+    assert.match(html, /Session export/);
+    assert.match(html, /&quot;kind&quot;: &quot;ReviewSession&quot;/);
+    assert.match(html, /&quot;kind&quot;: &quot;ReviewSessionEvent&quot;/);
+  });
+
+  it("marks ReviewSession audit replay drift when events do not reconstruct the current session", () => {
+    const session = {
+      ...initialReviewQueueSessionState(),
+      decisionsByItemName: {
+        "public-directory-hours": "accept-proposed" as const,
+      },
+    };
+    const html = renderReviewWorkbenchHtml(session, []);
+
+    assert.match(html, /data-testid="session-audit"/);
+    assert.match(html, /replay drift/);
+  });
+
   it("AC37-4 displays producer feedback tags as producer vocabulary", () => {
     const session = initialReviewQueueSessionState();
     const html = renderReviewWorkbenchHtml(session);
@@ -585,11 +630,17 @@ describe("review workbench prototype", () => {
       "note-changed",
       "item-selected",
     ]);
+    assert.match(firstRoot.html, /data-testid="session-audit"/);
+    assert.match(firstRoot.html, /Events/);
+    assert.match(firstRoot.html, /03/);
+    assert.match(firstRoot.html, /note-changed/);
 
     const secondRoot = new ReviewWorkbenchTestRoot();
     mountReviewWorkbench(secondRoot as unknown as HTMLElement, initialReviewQueueSessionState(), { eventStore: store });
 
     assert.match(secondRoot.html, /public-directory-phone/);
+    assert.match(secondRoot.html, /replay ok/);
+    assert.match(secondRoot.html, /decision-changed/);
     secondRoot.clickQueueRow("public-directory-hours");
     assert.equal(secondRoot.textarea.value, "Accepted persisted hours.");
     assert.match(secondRoot.html, /decision-button is-active" type="button" data-decision="accept-proposed"/);

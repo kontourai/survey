@@ -229,7 +229,8 @@ h1 {
 }
 
 .queue-list,
-.session-summary {
+.session-summary,
+.session-audit {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: linear-gradient(180deg, var(--ink-800), var(--ink-850));
@@ -248,7 +249,8 @@ h1 {
 }
 
 .queue-head h2,
-.session-summary h2 {
+.session-summary h2,
+.session-audit h2 {
   font-family: "Fraunces", Georgia, serif;
   font-weight: 600;
   font-size: 18px;
@@ -381,6 +383,106 @@ h1 {
   font-weight: 700;
   line-height: 1;
   color: var(--paper);
+}
+
+/* ---- Session audit: replayable resource trail ------------------------- */
+
+.session-audit {
+  display: grid;
+  gap: 14px;
+  animation-delay: 0.08s;
+}
+
+.session-audit-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.session-audit-head h2 {
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+
+.audit-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.audit-grid .meta-value {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.session-event-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.session-event-list li {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 9px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 9px 10px;
+  background: rgba(6, 9, 13, 0.45);
+}
+
+.event-sequence {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--accent);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.session-event-list strong,
+.session-event-list small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.session-event-list strong {
+  color: var(--paper);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.session-event-list small {
+  margin-top: 3px;
+  color: var(--paper-faint);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.session-export {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.session-export summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.session-export pre {
+  max-height: 300px;
 }
 
 /* ---- Content grid ----------------------------------------------------- */
@@ -1035,6 +1137,7 @@ pre {
   .active-review-strip,
   .queue-list,
   .session-summary,
+  .session-audit,
   .candidate-card,
   .decision-row,
   .payload-panel,
@@ -1198,6 +1301,7 @@ pre {
   .active-review-strip,
   .queue-list,
   .session-summary,
+  .session-audit,
   .review-focus,
   .candidate-card,
   .decision-row,

@@ -186,9 +186,12 @@ export function createLocalStorageReviewSessionEventStore(
   };
 }
 
-export function renderReviewWorkbenchHtml(state: ReviewWorkbenchState | ReviewQueueSessionState): string {
+export function renderReviewWorkbenchHtml(
+  state: ReviewWorkbenchState | ReviewQueueSessionState,
+  events?: readonly ReviewSessionEvent[],
+): string {
   if ("items" in state) {
-    return renderReviewQueueSessionHtml(state);
+    return renderReviewQueueSessionHtml(state, events);
   }
 
   return `
@@ -203,8 +206,9 @@ export function renderReviewWorkbenchHtml(state: ReviewWorkbenchState | ReviewQu
   `;
 }
 
-function renderReviewQueueSessionHtml(session: ReviewQueueSessionState): string {
+function renderReviewQueueSessionHtml(session: ReviewQueueSessionState, events?: readonly ReviewSessionEvent[]): string {
   const state = currentReviewWorkbenchState(session);
+  const sessionExport = buildReviewWorkbenchSessionExport(session, events);
 
   return `
     <section class="workbench-shell" aria-label="Survey review workbench">
@@ -214,6 +218,7 @@ function renderReviewQueueSessionHtml(session: ReviewQueueSessionState): string 
         <aside class="queue-panel" aria-label="Review queue">
           ${renderQueueRows(session)}
           ${renderSessionSummary(session)}
+          ${renderSessionAudit(session, sessionExport)}
         </aside>
         <div class="content-grid">
           ${renderReviewFocus(state)}
@@ -222,6 +227,71 @@ function renderReviewQueueSessionHtml(session: ReviewQueueSessionState): string 
         </div>
       </div>
     </section>
+  `;
+}
+
+function renderSessionAudit(session: ReviewQueueSessionState, sessionExport: ReviewWorkbenchSessionExport): string {
+  const lastEvents = sessionExport.events.slice(-6);
+  const replayed = replayReviewSessionEvents({
+    ...session,
+    activeItemName: session.items[0]?.metadata.name ?? session.activeItemName,
+    notesByItemName: {},
+    decisionsByItemName: {},
+  }, sessionExport.events);
+  const replayMatchesSession = sameStringRecord(replayed.decisionsByItemName, session.decisionsByItemName)
+    && sameStringRecord(replayed.notesByItemName, session.notesByItemName);
+
+  return `
+    <section class="session-audit" data-testid="session-audit" aria-label="Review session audit trail">
+      <div class="session-audit-head">
+        <div>
+          <span class="field-label">ReviewSession</span>
+          <h2>${escapeHtml(sessionExport.session.metadata.name)}</h2>
+        </div>
+        <span class="state-label">${escapeHtml(replayMatchesSession ? "replay ok" : "replay drift")}</span>
+      </div>
+      <dl class="summary-grid audit-grid">
+        ${metaItem("Events", String(sessionExport.events.length))}
+        ${metaItem("Decisions", String(sessionExport.decisions.length))}
+        ${metaItem("Active item", sessionExport.session.status?.activeItemName ?? "none")}
+        ${metaItem("Actor", sessionExport.session.spec.actor?.id ?? "unknown")}
+      </dl>
+      <ol class="session-event-list" data-testid="session-event-list">
+        ${lastEvents.length === 0
+          ? "<li><span class=\"field-label\">No events</span><span>No persisted review activity yet.</span></li>"
+          : lastEvents.map(renderSessionEventRow).join("")}
+      </ol>
+      <details class="session-export" data-testid="session-export">
+        <summary>Session export</summary>
+        <pre>${escapeHtml(JSON.stringify(sessionExport, null, 2))}</pre>
+      </details>
+    </section>
+  `;
+}
+
+function sameStringRecord(left: Readonly<Record<string, string>>, right: Readonly<Record<string, string>>): boolean {
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  return leftKeys.length === rightKeys.length
+    && leftKeys.every((key, index) => key === rightKeys[index] && left[key] === right[key]);
+}
+
+function renderSessionEventRow(event: ReviewSessionEvent): string {
+  const target = event.spec.reviewItemName ?? event.spec.activeItemName ?? event.spec.sessionName;
+  const detail = [
+    event.spec.status,
+    event.spec.candidateId,
+    event.spec.rationale,
+  ].filter(Boolean).join(" - ");
+
+  return `
+    <li>
+      <span class="event-sequence">${escapeHtml(String(event.spec.sequence).padStart(2, "0"))}</span>
+      <span>
+        <strong>${escapeHtml(event.spec.eventType)}</strong>
+        <small>${escapeHtml(target)}${detail ? ` - ${escapeHtml(detail)}` : ""}</small>
+      </span>
+    </li>
   `;
 }
 
@@ -635,6 +705,8 @@ function createReviewWorkbenchController(
 
   const controller = {
     currentState: (): ReviewWorkbenchState => currentReviewWorkbenchState(session),
+    currentSession: (): ReviewQueueSessionState => session,
+    currentSessionExport: (): ReviewWorkbenchSessionExport => buildReviewWorkbenchSessionExport(session, events),
     goToNextUnresolved: (): void => {
       applyNextUnresolvedSessionUpdate(applySessionUpdate, session);
       appendEvent("item-selected");
@@ -659,6 +731,8 @@ function createReviewWorkbenchController(
 
 interface ReviewWorkbenchControllerBindings extends ReviewWorkbenchController {
   currentState(): ReviewWorkbenchState;
+  currentSession(): ReviewQueueSessionState;
+  currentSessionExport(): ReviewWorkbenchSessionExport;
   goToNextUnresolved(): void;
   selectDecision(decision: ReviewWorkbenchDecision): void;
   selectQueueItem(itemName: string): void;
@@ -708,8 +782,15 @@ function renderCurrentState(
   session: ReviewQueueSessionState,
   controller: ReviewWorkbenchControllerBindings,
 ): void {
-  root.innerHTML = renderReviewWorkbenchHtml(session);
-  bindReviewerNote(root, controller.updateReviewerNote, controller.currentState, controller.renderCurrentState);
+  root.innerHTML = renderReviewWorkbenchHtml(session, controller.currentSessionExport().events);
+  bindReviewerNote(
+    root,
+    controller.updateReviewerNote,
+    controller.currentState,
+    controller.currentSession,
+    controller.currentSessionExport,
+    controller.renderCurrentState,
+  );
   bindDecisionButtons(root, (decision) => {
     controller.selectDecision(decision);
     controller.renderCurrentState();
@@ -745,11 +826,14 @@ function bindReviewerNote(
   root: HTMLElement,
   updateReviewerNote: (note: string) => void,
   currentState: () => ReviewWorkbenchState,
+  currentSession: () => ReviewQueueSessionState,
+  currentSessionExport: () => ReviewWorkbenchSessionExport,
   renderCurrentState: () => void,
 ): void {
   root.querySelector<HTMLTextAreaElement>("[data-testid='reviewer-note']")?.addEventListener("input", (event) => {
     updateReviewerNote((event.target as HTMLTextAreaElement).value);
     refreshDecisionOutputs(root, currentState(), renderCurrentState);
+    refreshSessionAudit(root, currentSession(), currentSessionExport(), renderCurrentState);
   });
 }
 
@@ -811,6 +895,27 @@ function refreshDecisionOutputs(root: HTMLElement, state: ReviewWorkbenchState, 
   const wrapper = document.createElement("div");
   wrapper.innerHTML = renderSurfacePreview(state);
   preview.replaceWith(wrapper.firstElementChild as HTMLElement);
+}
+
+function refreshSessionAudit(
+  root: HTMLElement,
+  session: ReviewQueueSessionState,
+  sessionExport: ReviewWorkbenchSessionExport,
+  renderCurrentState: () => void,
+): void {
+  const audit = root.querySelector<HTMLElement>("[data-testid='session-audit']");
+  if (!audit) {
+    return;
+  }
+
+  if (typeof document === "undefined") {
+    renderCurrentState();
+    return;
+  }
+
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = renderSessionAudit(session, sessionExport);
+  audit.replaceWith(wrapper.firstElementChild as HTMLElement);
 }
 
 function producerFeedbackTags(item: ReviewItem): string[] {
