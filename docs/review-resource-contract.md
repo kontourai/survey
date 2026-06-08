@@ -55,7 +55,7 @@ Field ownership:
 | `candidate.source` | producer declares, Survey maps | Maps to `RawSource` when an adapter emits Survey records. |
 | `candidate.locator`, `candidate.extraction` | producer declares, Survey maps | Maps to `Extraction`, including locator, excerpt, confidence, extractor, and extracted time. |
 | `candidate.role`, `spec.selectedCandidateId` | producer declares | Survey does not enforce current/proposed-only policy. |
-| `candidate.rejectionReason` | producer declares | Optional rationale for a candidate the producer already treats as non-selected, superseded, or rejected; Survey records it without ranking candidates or defining rejection policy. |
+| `candidate.rejectionReason` | producer declares | Optional rationale for a candidate the producer already treats as non-selected, superseded, or rejected; Survey records it without ranking candidates or defining rejection policy. A rejection reason is not a comfort-zone signal by itself. |
 | `candidate.claimTarget` | shared boundary | Producer identifies the desired Surface claim target; Survey preserves compatible `ClaimTarget` fields. |
 | `ReviewDecision.spec` | producer reviewer event | Maps to `ReviewOutcome` without bringing producer queues into Survey. |
 | `projection` hints | Survey-readable | Optional ids linking resources to `RawSource`, `Extraction`, `CandidateSet`, `ReviewOutcome`, and `ClaimTarget` records. |
@@ -74,6 +74,14 @@ Field ownership:
 Adapters should emit normal `SurveyInput` records and then call
 `buildSurveyTrustInput`. Review resources are a durable neutral contract for
 review payloads, not a second Surface projection path.
+
+Rejected candidates and comfort-zone review posture are separate signals.
+Ordinary rejected-candidate feedback should stay on the candidate/review record
+and, when Survey supports it, project as rejected-candidate learning. It should
+not be modeled as `withinComfortZone: false` just to produce
+`learning.comfort-zone`. Use `withinComfortZone: false` only when the reviewer
+explicitly records that the conclusion is outside their authority or domain
+comfort and needs a different authority to confirm.
 
 ## Fixtures
 
