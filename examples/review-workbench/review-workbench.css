@@ -8,24 +8,6 @@
 :root {
   color-scheme: dark;
 
-  --k-bg: #06080b;
-  --k-panel: #111824;
-  --k-panel-raised: #16202d;
-  --k-line: rgba(150, 180, 210, 0.12);
-  --k-line-strong: rgba(150, 180, 210, 0.22);
-  --k-text: #eef3f8;
-  --k-text-muted: #aebccb;
-  --k-text-faint: #6f8095;
-  --k-brand: #5ce0c6;
-  --k-positive: #34d399;
-  --k-caution: #f3b14b;
-  --k-negative: #ff6f6f;
-  --k-active: #7aa2ff;
-  --k-radius-md: 14px;
-  --k-radius-sm: 9px;
-  --k-font-ui: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --k-font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-
   /* Local aliases preserve the existing workbench selectors while the values
      come from the shared Console Kit token contract. */
   --ink-1000: var(--k-bg);

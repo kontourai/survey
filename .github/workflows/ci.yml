@@ -12,18 +12,30 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          path: survey
+
+      - name: Checkout Console Kit
+        uses: actions/checkout@v6
+        with:
+          repository: kontourai/console-kit
+          path: console-kit
 
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
+          cache-dependency-path: survey/package-lock.json
 
       - name: Install
         run: npm ci
+        working-directory: survey
 
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
+        working-directory: survey
 
       - name: Verify
         run: npm run verify
+        working-directory: survey
