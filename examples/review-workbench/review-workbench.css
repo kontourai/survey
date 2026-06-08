@@ -224,6 +224,10 @@ h1 {
   top: 18px;
 }
 
+.active-review-strip {
+  display: none;
+}
+
 .queue-list,
 .session-summary {
   border: 1px solid var(--line);
@@ -384,6 +388,9 @@ h1 {
 .content-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(360px, 440px);
+  grid-template-areas:
+    "focus decision"
+    "candidates decision";
   gap: 22px;
   align-items: start;
 }
@@ -397,6 +404,7 @@ h1 {
 /* ---- Active review focus ---------------------------------------------- */
 
 .review-focus {
+  grid-area: focus;
   display: grid;
   gap: 16px;
   min-width: 0;
@@ -474,6 +482,7 @@ h1 {
 /* ---- Candidate comparison: the hero of the console -------------------- */
 
 .candidate-grid {
+  grid-area: candidates;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
@@ -656,6 +665,7 @@ h1 {
 /* ---- Decision column -------------------------------------------------- */
 
 .decision-column {
+  grid-area: decision;
   display: grid;
   gap: 18px;
   animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -903,16 +913,81 @@ pre {
 @media (max-width: 980px) {
   .topbar,
   .queue-layout,
-  .content-grid,
   .focus-evidence,
   .candidate-grid {
     grid-template-columns: 1fr;
+  }
+
+  .content-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "focus"
+      "decision"
+      "candidates";
   }
 
   .queue-layout {
     grid-template-areas:
       "content"
       "queue";
+  }
+
+  .active-review-strip {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+    border: 1px solid var(--line-strong);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 13px 14px;
+    background:
+      linear-gradient(90deg, rgba(92, 224, 198, 0.12), transparent 46%),
+      linear-gradient(180deg, var(--ink-800), var(--ink-850));
+    box-shadow: 0 18px 44px -36px rgba(0, 0, 0, 0.9);
+  }
+
+  .active-review-copy,
+  .active-review-actions,
+  .active-review-decisions {
+    min-width: 0;
+  }
+
+  .active-review-copy {
+    display: grid;
+    gap: 4px;
+  }
+
+  .active-review-copy strong {
+    overflow-wrap: anywhere;
+    color: var(--paper);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 13px;
+  }
+
+  .active-review-copy span:last-child {
+    overflow-wrap: anywhere;
+    color: var(--paper-dim);
+    font-size: 13px;
+  }
+
+  .active-review-actions {
+    display: grid;
+    gap: 8px;
+    justify-items: end;
+  }
+
+  .active-review-decisions {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .active-review-decisions .decision-button {
+    min-height: 38px;
+    padding: 7px 8px;
+    font-size: 11px;
   }
 
   .queue-panel {
@@ -957,6 +1032,7 @@ pre {
   }
 
   .topbar,
+  .active-review-strip,
   .queue-list,
   .session-summary,
   .candidate-card,
@@ -971,9 +1047,22 @@ pre {
     gap: 14px;
   }
 
-  .topbar .meta-item:nth-child(3),
-  .topbar .meta-item:nth-child(4) {
+  .topbar .meta-grid {
     display: none;
+  }
+
+  .active-review-strip {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .active-review-actions {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: stretch;
+  }
+
+  .active-review-actions .state-label {
+    justify-self: start;
   }
 
   .review-question {
@@ -985,15 +1074,10 @@ pre {
     line-height: 1.08;
   }
 
-  .meta-grid,
   .summary-grid,
   .focus-values,
   .decision-buttons {
     grid-template-columns: 1fr;
-  }
-
-  .topbar .meta-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .queue-head,
@@ -1111,6 +1195,7 @@ pre {
   }
 
   .topbar,
+  .active-review-strip,
   .queue-list,
   .session-summary,
   .review-focus,

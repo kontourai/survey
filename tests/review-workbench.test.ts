@@ -123,6 +123,10 @@ describe("review workbench prototype", () => {
     assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueFixtures[5], session), "pending");
 
     const html = renderReviewWorkbenchHtml(session);
+    assert.match(html, /data-testid="active-review-strip"/);
+    assert.match(html, /Review 1 of 6/);
+    assert.match(html, /data-testid="active-next-unresolved"/);
+    assert.match(html, /Quick review decision/);
     assert.match(html, /data-testid="queue-row" data-queue-status="in-review"/);
     assert.match(html, /data-testid="queue-row" data-queue-status="pending"/);
     assert.match(html, /data-testid="queue-row" data-queue-status="resolved"/);
@@ -530,7 +534,7 @@ class ReviewWorkbenchTestRoot {
   surfacePreview = new TestSurfacePreviewElement(this);
   private buttons: TestButtonElement[] = [];
   private queueRows: TestQueueRowElement[] = [];
-  private nextButton = new TestNextButtonElement();
+  private nextButtons: TestNextButtonElement[] = [];
 
   set innerHTML(value: string) {
     this.html = value;
@@ -539,7 +543,7 @@ class ReviewWorkbenchTestRoot {
     this.surfacePreview = new TestSurfacePreviewElement(this, surfacePreviewValue(value));
     this.buttons = decisionValues(value).map((decision) => new TestButtonElement(decision));
     this.queueRows = queueItemNames(value).map((itemName) => new TestQueueRowElement(itemName));
-    this.nextButton = new TestNextButtonElement();
+    this.nextButtons = nextButtonTestIds(value).map(() => new TestNextButtonElement());
   }
 
   get innerHTML(): string {
@@ -560,7 +564,7 @@ class ReviewWorkbenchTestRoot {
     }
 
     if (selector === "[data-testid='next-unresolved']") {
-      return this.nextButton as T;
+      return this.nextButtons[0] as T;
     }
 
     return null;
@@ -573,6 +577,10 @@ class ReviewWorkbenchTestRoot {
 
     if (selector === "[data-item-name]") {
       return this.queueRows as T[];
+    }
+
+    if (selector === "[data-testid='next-unresolved'], [data-testid='active-next-unresolved']") {
+      return this.nextButtons as T[];
     }
 
     return [];
@@ -591,7 +599,7 @@ class ReviewWorkbenchTestRoot {
   }
 
   clickNextUnresolved(): void {
-    this.nextButton.click();
+    this.nextButtons[0]?.click();
   }
 }
 
@@ -719,6 +727,10 @@ function decisionValues(html: string): ReviewWorkbenchDecision[] {
 
 function queueItemNames(html: string): string[] {
   return [...html.matchAll(/data-item-name="([^"]+)"/g)].map((match) => unescapeHtml(match[1]));
+}
+
+function nextButtonTestIds(html: string): string[] {
+  return [...html.matchAll(/data-testid="(?:next-unresolved|active-next-unresolved)"/g)].map((match) => match[0]);
 }
 
 function textareaValue(html: string): string {
