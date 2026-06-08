@@ -19,6 +19,8 @@ import {
   type ReviewDecision,
   type ReviewItem,
   type ReviewOutcome,
+  type ReviewSession,
+  type ReviewSessionEvent,
   type SurveyInput,
 } from "../src/index.js";
 
@@ -32,6 +34,52 @@ describe("Review resource contract", () => {
     assert.equal(decision.kind, "ReviewDecision");
     assert.equal(decision.spec.reviewItemName, item.metadata.name);
     assert.ok(item.spec.candidates.every(hasRequiredCandidateEvidence));
+  });
+
+  it("exports serializable ReviewSession and ReviewSessionEvent resources", () => {
+    const session: ReviewSession = {
+      apiVersion: reviewResourceApiVersion,
+      kind: "ReviewSession",
+      metadata: {
+        name: "example-review-session",
+      },
+      spec: {
+        reviewItemNames: [publicDirectoryReviewItemFixture.metadata.name],
+        actor: {
+          id: "reviewer-1",
+        },
+        startedAt: "2026-06-04T00:00:00.000Z",
+      },
+      status: {
+        activeItemName: publicDirectoryReviewItemFixture.metadata.name,
+        eventCount: 1,
+        decisionCount: 0,
+      },
+    };
+    const event: ReviewSessionEvent = {
+      apiVersion: reviewResourceApiVersion,
+      kind: "ReviewSessionEvent",
+      metadata: {
+        name: "example-review-session-0001-session-started",
+      },
+      spec: {
+        sessionName: session.metadata.name,
+        sequence: 1,
+        eventType: "session-started",
+        occurredAt: "2026-06-04T00:00:00.000Z",
+        actor: {
+          id: "reviewer-1",
+        },
+      },
+      status: {
+        replayed: true,
+      },
+    };
+
+    assert.equal(session.apiVersion, reviewResourceApiVersion);
+    assert.equal(session.kind, "ReviewSession");
+    assert.equal(event.kind, "ReviewSessionEvent");
+    assert.equal(event.spec.sessionName, session.metadata.name);
   });
 
   it("validates a public-directory current/proposed review resource against existing records", () => {

@@ -9,7 +9,7 @@ import type {
 export const reviewResourceApiVersion = "survey.kontourai.io/v1alpha1";
 
 export type ReviewResourceApiVersion = typeof reviewResourceApiVersion;
-export type ReviewResourceKind = "ReviewItem" | "ReviewDecision";
+export type ReviewResourceKind = "ReviewItem" | "ReviewDecision" | "ReviewSession" | "ReviewSessionEvent";
 
 export interface ResourceMetadata {
   name: string;
@@ -133,4 +133,47 @@ export interface ReviewDecisionStatus {
 
 export type ReviewDecision = ResourceEnvelope<"ReviewDecision", ReviewDecisionSpec, ReviewDecisionStatus>;
 
-export type ReviewResource = ReviewItem | ReviewDecision;
+export interface ReviewSessionSpec {
+  reviewItemNames: string[];
+  actor?: ReviewActor;
+  startedAt: string;
+  completedAt?: string;
+}
+
+export interface ReviewSessionStatus {
+  activeItemName?: string;
+  eventCount?: number;
+  decisionCount?: number;
+}
+
+export type ReviewSessionEventType =
+  | "session-started"
+  | "item-selected"
+  | "decision-changed"
+  | "note-changed"
+  | "decision-submitted"
+  | "session-completed";
+
+export interface ReviewSessionEventSpec {
+  sessionName: string;
+  sequence: number;
+  eventType: ReviewSessionEventType;
+  occurredAt: string;
+  actor?: ReviewActor;
+  reviewItemName?: string;
+  activeItemName?: string;
+  reviewDecisionName?: string;
+  candidateId?: string;
+  status?: ReviewOutcome["status"];
+  rationale?: string;
+  data?: Record<string, unknown>;
+}
+
+export interface ReviewSessionEventStatus {
+  replayed?: boolean;
+}
+
+export type ReviewSession = ResourceEnvelope<"ReviewSession", ReviewSessionSpec, ReviewSessionStatus>;
+export type ReviewSessionEvent = ResourceEnvelope<"ReviewSessionEvent", ReviewSessionEventSpec, ReviewSessionEventStatus>;
+
+export type ReviewResource = ReviewItem | ReviewDecision | ReviewSession | ReviewSessionEvent;
