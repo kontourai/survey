@@ -34,8 +34,10 @@
     "typecheck": "tsc --noEmit",
     "test": "npm run build && node --test dist/tests/*.test.js",
     "test:browser": "playwright test",
-    "verify": "node scripts/check-content-boundary.cjs && npm run typecheck && npm test && npm run check:review-workbench && npm run test:browser",
+    "verify": "node scripts/check-content-boundary.cjs && npm run typecheck && npm test && npm run check:review-workbench-assets && npm run check:review-workbench && npm run test:browser",
     "check:content-boundary": "node scripts/check-content-boundary.cjs",
+    "sync:review-workbench-assets": "node scripts/sync-review-workbench-assets.cjs",
+    "check:review-workbench-assets": "node scripts/sync-review-workbench-assets.cjs --check",
     "check:review-workbench": "npm run check:review-workbench:static",
     "check:review-workbench:static": "npm run build && node scripts/check-review-workbench.cjs",
     "setup:repo-hooks": "node scripts/setup-repo-hooks.cjs",
@@ -45,6 +47,7 @@
     "@kontourai/surface": "^0.5.1"
   },
   "devDependencies": {
+    "@kontourai/console-kit": "file:../console-kit",
     "@playwright/test": "^1.60.0",
     "@types/node": "^25.6.0",
     "typescript": "^5.8.0"

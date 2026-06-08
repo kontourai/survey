@@ -8,35 +8,47 @@
 :root {
   color-scheme: dark;
 
-  /* Ink — layered near-black with a cold blue-green cast. */
-  --ink-1000: #06080b;
+  --k-bg: #06080b;
+  --k-panel: #111824;
+  --k-panel-raised: #16202d;
+  --k-line: rgba(150, 180, 210, 0.12);
+  --k-line-strong: rgba(150, 180, 210, 0.22);
+  --k-text: #eef3f8;
+  --k-text-muted: #aebccb;
+  --k-text-faint: #6f8095;
+  --k-brand: #5ce0c6;
+  --k-positive: #34d399;
+  --k-caution: #f3b14b;
+  --k-negative: #ff6f6f;
+  --k-active: #7aa2ff;
+  --k-radius-md: 14px;
+  --k-radius-sm: 9px;
+  --k-font-ui: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --k-font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Local aliases preserve the existing workbench selectors while the values
+     come from the shared Console Kit token contract. */
+  --ink-1000: var(--k-bg);
   --ink-900: #0a0e13;
   --ink-850: #0d1219;
-  --ink-800: #111824;
-  --ink-750: #16202d;
+  --ink-800: var(--k-panel);
+  --ink-750: var(--k-panel-raised);
   --ink-700: #1d2937;
+  --paper: var(--k-text);
+  --paper-dim: var(--k-text-muted);
+  --paper-faint: var(--k-text-faint);
+  --line: var(--k-line);
+  --line-strong: var(--k-line-strong);
+  --accent: var(--k-brand);
+  --accent-deep: color-mix(in srgb, var(--k-brand) 34%, var(--k-bg));
+  --proposed: var(--k-active);
+  --verify: var(--k-positive);
+  --hold: var(--k-caution);
+  --reject: var(--k-negative);
+  --radius: var(--k-radius-md);
+  --radius-sm: var(--k-radius-sm);
 
-  /* Paper — text on ink. */
-  --paper: #eef3f8;
-  --paper-dim: #aebccb;
-  --paper-faint: #6f8095;
-
-  /* Lines. */
-  --line: rgba(150, 180, 210, 0.12);
-  --line-strong: rgba(150, 180, 210, 0.22);
-
-  /* Signal palette. */
-  --accent: #5ce0c6; /* electric mint — structure + eyebrows */
-  --accent-deep: #18605a;
-  --proposed: #7aa2ff; /* incoming candidate */
-  --verify: #34d399; /* accept / verified */
-  --hold: #f3b14b; /* keep current */
-  --reject: #ff6f6f; /* reject */
-
-  --radius: 14px;
-  --radius-sm: 9px;
-
-  font-family: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--k-font-ui);
   background: var(--ink-1000);
   color: var(--paper);
 }

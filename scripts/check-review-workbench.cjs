@@ -6,10 +6,15 @@ const root = process.cwd();
 const requiredFiles = [
   "examples/review-workbench/index.html",
   "examples/review-workbench/review-workbench.css",
+  "examples/review-workbench/vendor/console-kit/tokens/index.css",
+  "examples/review-workbench/vendor/console-kit/tokens/tokens.css",
+  "examples/review-workbench/vendor/console-kit/tokens/themes.css",
+  "examples/review-workbench/vendor/console-kit/tokens/fonts.css",
   "examples/review-workbench/review-workbench-data.ts",
   "examples/review-workbench/review-queue-session.ts",
   "examples/review-workbench/review-surface-preview.ts",
   "examples/review-workbench/review-workbench.ts",
+  "scripts/sync-review-workbench-assets.cjs",
   "dist/examples/review-workbench/review-workbench-data.js",
   "dist/examples/review-workbench/review-queue-session.js",
   "dist/examples/review-workbench/review-surface-preview.js",
@@ -40,6 +45,9 @@ main().catch((error) => {
 
 async function main() {
   assertIncludes(html, "id=\"review-workbench\"");
+  assertIncludes(html, "class=\"theme-survey\"");
+  assertIncludes(html, "./vendor/console-kit/tokens/index.css");
+  assertIncludes(html, "./review-workbench.css");
   assertIncludes(html, "rel=\"icon\"");
   assertIncludes(html, "data:image/svg+xml");
   assertIncludes(html, "../../dist/examples/review-workbench/review-workbench.js");
@@ -47,6 +55,8 @@ async function main() {
   assertIncludes(css, ".workbench-shell");
   assertIncludes(css, "grid-template-columns: minmax(0, 1fr) minmax(0, 520px)");
   assertIncludes(css, "overflow-wrap: anywhere");
+  assertIncludes(css, "--ink-1000: var(--k-bg)");
+  assertIncludes(css, "--accent: var(--k-brand)");
   assertIncludes(dataJs, "publicDirectoryReviewItemFixture");
   assertIncludes(dataJs, "reviewWorkbenchQueueFixtures");
   assertIncludes(queueSessionJs, "initialReviewQueueSessionState");
