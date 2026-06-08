@@ -10,18 +10,23 @@ const requiredFiles = [
   "examples/review-workbench/vendor/console-kit/tokens/tokens.css",
   "examples/review-workbench/vendor/console-kit/tokens/themes.css",
   "examples/review-workbench/vendor/console-kit/tokens/fonts.css",
-  "examples/review-workbench/review-workbench-data.ts",
-  "examples/review-workbench/review-queue-session.ts",
-  "examples/review-workbench/review-surface-preview.ts",
   "examples/review-workbench/review-workbench.ts",
+  "src/review-workbench/review-workbench-data.ts",
+  "src/review-workbench/review-queue-session.ts",
+  "src/review-workbench/review-surface-preview.ts",
+  "src/review-workbench/review-workbench.ts",
+  "scripts/copy-review-workbench-package-assets.cjs",
   "scripts/sync-review-workbench-assets.cjs",
-  "dist/examples/review-workbench/review-workbench-data.js",
-  "dist/examples/review-workbench/review-queue-session.js",
-  "dist/examples/review-workbench/review-surface-preview.js",
   "dist/examples/review-workbench/review-workbench.js",
-  "dist/examples/review-workbench/review-workbench.d.ts",
-  "dist/examples/review-workbench/review-queue-session.d.ts",
-  "dist/examples/review-workbench/review-surface-preview.d.ts",
+  "dist/src/review-workbench/review-workbench-data.js",
+  "dist/src/review-workbench/review-queue-session.js",
+  "dist/src/review-workbench/review-surface-preview.js",
+  "dist/src/review-workbench/review-workbench.js",
+  "dist/src/review-workbench/review-workbench.d.ts",
+  "dist/src/review-workbench/review-queue-session.d.ts",
+  "dist/src/review-workbench/review-surface-preview.d.ts",
+  "dist/src/review-workbench/review-workbench.css",
+  "dist/src/review-workbench/review-workbench.standalone.css",
 ];
 
 for (const file of requiredFiles) {
@@ -33,10 +38,11 @@ for (const file of requiredFiles) {
 
 const html = fs.readFileSync(path.join(root, "examples/review-workbench/index.html"), "utf8");
 const css = fs.readFileSync(path.join(root, "examples/review-workbench/review-workbench.css"), "utf8");
-const dataJs = fs.readFileSync(path.join(root, "dist/examples/review-workbench/review-workbench-data.js"), "utf8");
-const queueSessionJs = fs.readFileSync(path.join(root, "dist/examples/review-workbench/review-queue-session.js"), "utf8");
-const surfacePreviewJs = fs.readFileSync(path.join(root, "dist/examples/review-workbench/review-surface-preview.js"), "utf8");
-const js = fs.readFileSync(path.join(root, "dist/examples/review-workbench/review-workbench.js"), "utf8");
+const dataJs = fs.readFileSync(path.join(root, "dist/src/review-workbench/review-workbench-data.js"), "utf8");
+const queueSessionJs = fs.readFileSync(path.join(root, "dist/src/review-workbench/review-queue-session.js"), "utf8");
+const surfacePreviewJs = fs.readFileSync(path.join(root, "dist/src/review-workbench/review-surface-preview.js"), "utf8");
+const js = fs.readFileSync(path.join(root, "dist/src/review-workbench/review-workbench.js"), "utf8");
+const embedCss = fs.readFileSync(path.join(root, "dist/src/review-workbench/review-workbench.css"), "utf8");
 
 main().catch((error) => {
   console.error(error);
@@ -57,6 +63,14 @@ async function main() {
   assertIncludes(css, "overflow-wrap: anywhere");
   assertIncludes(css, "--ink-1000: var(--k-bg)");
   assertIncludes(css, "--accent: var(--k-brand)");
+  assertIncludes(embedCss, "Bundled, scoped Survey Review Workbench styles");
+  assertIncludes(embedCss, ".survey-workbench-embed");
+  assertIncludes(embedCss, ".survey-workbench-embed .workbench-shell");
+  assertIncludes(embedCss, ".survey-workbench-embed::before");
+  assertIncludes(embedCss, "position: absolute;");
+  assertExcludes(embedCss, "position: fixed;");
+  assertExcludes(embedCss, "\nbody {");
+  assertExcludes(embedCss, "\n:root {");
   assertIncludes(dataJs, "publicDirectoryReviewItemFixture");
   assertIncludes(dataJs, "reviewWorkbenchQueueFixtures");
   assertIncludes(queueSessionJs, "initialReviewQueueSessionState");
@@ -103,7 +117,7 @@ async function main() {
 
 async function assertBrowserDataMatchesCanonicalFixture() {
   const canonicalModule = await import(pathToFileURL(path.join(root, "dist/fixtures/public-directory-review-resource.js")).href);
-  const browserModule = await import(pathToFileURL(path.join(root, "dist/examples/review-workbench/review-workbench-data.js")).href);
+  const browserModule = await import(pathToFileURL(path.join(root, "dist/src/review-workbench/review-workbench-data.js")).href);
 
   const canonicalFixture = canonicalModule.publicDirectoryReviewItemFixture;
   const browserFixture = browserModule.publicDirectoryReviewItemFixture;

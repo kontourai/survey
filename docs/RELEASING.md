@@ -8,6 +8,10 @@ This document is the operator checklist for cutting a release of `@kontourai/sur
 - `npm pack --dry-run` shows only intended package files.
 - `@kontourai/surface` dependency points at a published compatible version.
 - package metadata in `package.json` is correct.
+- `@kontourai/survey/review-workbench` resolves from `dist/src/review-workbench`
+  and not from `dist/examples`.
+- `npm pack --dry-run` includes the scoped
+  `dist/src/review-workbench/review-workbench.css` asset.
 
 ## Release Flow
 
@@ -16,6 +20,11 @@ This document is the operator checklist for cutting a release of `@kontourai/sur
 3. Create and push a tag matching the package version, for example `v0.1.0`.
 4. Let `.github/workflows/publish-npm.yml` publish the package.
 5. Confirm the published tarball contents and README rendering on npm.
+
+Local `npm pack` readiness does not authorize publication by itself. A human
+with npm/GitHub release authority must approve the version bump, release commit,
+tag, and trusted-publishing run before downstream products switch from local
+proof dependencies to the published semver range.
 
 ## Trusted Publishing
 

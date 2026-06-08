@@ -7,7 +7,7 @@ import {
   buildSurfaceProjectionPreview,
   initialReviewWorkbenchState,
   renderReviewWorkbenchHtml,
-} from "../examples/review-workbench/review-workbench.js";
+} from "../src/review-workbench/review-workbench.js";
 import { reviewResourceApiVersion, type ReviewCandidate } from "../src/review-resource.js";
 
 describe("downstream public-directory adapter example", () => {

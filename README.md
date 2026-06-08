@@ -64,6 +64,29 @@ const trustInput = validateTrustInput(buildSurveyTrustInput(surveyInput));
 const report = buildTrustReport(trustInput);
 ```
 
+## Review Workbench Embed
+
+Survey also exposes a framework-neutral review workbench for downstream
+products that already produce `ReviewItem` queues.
+
+```ts
+import { mountReviewWorkbench } from "@kontourai/survey/review-workbench";
+import "@kontourai/survey/review-workbench.css";
+
+mountReviewWorkbench(element, reviewQueueSession);
+```
+
+The default stylesheet is scoped to `.survey-workbench-embed` and bundles the
+Console Kit tokens it needs, so importing it should not rewrite the host
+application's `body` or `:root` styles. Hosts should mount into an element like:
+
+```html
+<div class="survey-workbench-embed theme-survey"></div>
+```
+
+The package also exposes `@kontourai/survey/review-workbench/standalone.css` for
+the standalone demo page. Use that only when Survey owns the whole page.
+
 ## Contributor checks
 
 Install the repo-owned Git hooks once per clone:

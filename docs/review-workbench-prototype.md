@@ -4,15 +4,17 @@ The Survey review workbench prototype is a fixture-backed browser example for
 inspecting one current/proposed `ReviewItem` and generating a
 `ReviewDecision`-shaped payload in local memory.
 
-It lives under `examples/review-workbench/` and uses
-`publicDirectoryReviewItemFixture` from a browser-safe example data module. That
-module intentionally avoids package barrel imports and Node-only dependencies,
-and `npm run check:review-workbench` fails if its `ReviewItem` data drifts from
-the canonical `fixtures/public-directory-review-resource.ts` fixture. The page
-renders the current and proposed candidates, source URL and source ref, locator
-and excerpt, extraction confidence, candidate values, reviewer note, decision
-controls, decision effect, a compact Surface preview, and generated JSON
-payload.
+The reusable implementation lives under `src/review-workbench/` and is exported
+as `@kontourai/survey/review-workbench`. The standalone browser demo remains
+under `examples/review-workbench/` as a thin bootstrap plus page-owned assets.
+The workbench uses `publicDirectoryReviewItemFixture` from a browser-safe data
+module that intentionally avoids package barrel imports and Node-only
+dependencies, and `npm run check:review-workbench` fails if its `ReviewItem`
+data drifts from the canonical `fixtures/public-directory-review-resource.ts`
+fixture. The page renders the current and proposed candidates, source URL and
+source ref, locator and excerpt, extraction confidence, candidate values,
+reviewer note, decision controls, decision effect, a compact Surface preview,
+and generated JSON payload.
 
 ## Running Locally
 

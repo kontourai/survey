@@ -1,4 +1,4 @@
-import { type ReviewCandidate, type ReviewDecision, type ReviewItem } from "../../src/review-resource.js";
+import { type ReviewCandidate, type ReviewDecision, type ReviewItem } from "../review-resource.js";
 
 export interface SurfaceProjectionPreview {
   readonly canonicalClaim: PreviewClaim;

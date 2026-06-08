@@ -20,11 +20,11 @@ import {
   replayReviewSessionEvents,
   reviewSessionSummary,
   type ReviewWorkbenchDecision,
-} from "../examples/review-workbench/review-workbench.js";
+} from "../src/review-workbench/review-workbench.js";
 import {
   regulatedRuleConflictReviewItemFixture,
   reviewWorkbenchQueueFixtures,
-} from "../examples/review-workbench/review-workbench-data.js";
+} from "../src/review-workbench/review-workbench-data.js";
 import type { ReviewDecision, ReviewItem } from "../src/review-resource.js";
 
 describe("review workbench prototype", () => {

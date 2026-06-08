@@ -1,6 +1,6 @@
 {
   "name": "@kontourai/survey",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "description": "Producer-side source, extraction, candidate, and review contracts for projecting verified claims into Surface.",
   "license": "Apache-2.0",
   "type": "module",
@@ -18,6 +18,12 @@
   },
   "exports": {
     ".": "./dist/src/index.js",
+    "./review-workbench": {
+      "types": "./dist/src/review-workbench/review-workbench.d.ts",
+      "default": "./dist/src/review-workbench/review-workbench.js"
+    },
+    "./review-workbench.css": "./dist/src/review-workbench/review-workbench.css",
+    "./review-workbench/standalone.css": "./dist/src/review-workbench/review-workbench.standalone.css",
     "./fixtures/public-field-review": "./dist/fixtures/public-field-review.js",
     "./fixtures/corrected-document-candidates": "./dist/fixtures/corrected-document-candidates.js",
     "./fixtures/public-directory-review-resource": "./dist/fixtures/public-directory-review-resource.js",
@@ -30,7 +36,8 @@
     "README.md"
   ],
   "scripts": {
-    "build": "rm -rf dist && tsc",
+    "build": "rm -rf dist && tsc && node scripts/copy-review-workbench-package-assets.cjs",
+    "prepare": "npm run build",
     "typecheck": "tsc --noEmit",
     "test": "npm run build && node --test dist/tests/*.test.js",
     "test:browser": "playwright test",

@@ -1,4 +1,4 @@
-import { reviewResourceApiVersion, type ReviewItem } from "../../src/review-resource.js";
+import { reviewResourceApiVersion, type ReviewItem } from "../review-resource.js";
 
 // Browser-safe mirror of fixtures/public-directory-review-resource.ts.
 // scripts/check-review-workbench.cjs fails if this data drifts from the canonical fixture.
