@@ -15,7 +15,7 @@ The upstream system or operator workflow that gathers observations and packages 
 _Avoid_: Client, crawler, ingestion platform
 
 **Survey**:
-The contract boundary that carries producer evidence through a source -> extraction -> candidate -> review -> claim chain. **Survey** does not decide whether a real-world value is true; it preserves the producer's evidence and review posture for Surface.
+The contract boundary that carries producer evidence through a source -> extraction -> candidate -> review -> claim chain. **Survey** does not decide whether a real-world value is true; it preserves the producer's evidence and review posture for Surface. Survey is a foundational primitive: the producer side of Surface claims.
 _Avoid_: Ingestion platform, crawler, reviewer
 
 **Surface**:
