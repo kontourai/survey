@@ -87,6 +87,13 @@ application's `body` or `:root` styles. Hosts should mount into an element like:
 The package also exposes `@kontourai/survey/review-workbench/standalone.css` for
 the standalone demo page. Use that only when Survey owns the whole page.
 
+For the full consumer path from `ReviewItem` construction through persisted
+review events, exported results, and optional Surface projection, see
+[`docs/consumer-integration-guide.md`](docs/consumer-integration-guide.md).
+For the current decision on why Survey is not adding a generic review adapter
+builder yet, see
+[`docs/consumer-adapter-abstraction-assessment.md`](docs/consumer-adapter-abstraction-assessment.md).
+
 ## Contributor checks
 
 Install the repo-owned Git hooks once per clone:
