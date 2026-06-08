@@ -86,6 +86,10 @@ describe("review workbench prototype", () => {
   it("renders candidate and evidence context from the public directory fixture", () => {
     const html = renderReviewWorkbenchHtml(initialReviewWorkbenchState());
 
+    assert.match(html, /Review candidate update/);
+    assert.match(html, /decide whether/);
+    assert.match(html, /data-testid="review-focus"/);
+    assert.match(html, /Active review/);
     assert.match(html, /Current/);
     assert.match(html, /Proposed/);
     assert.match(html, /AVAILABLE/);

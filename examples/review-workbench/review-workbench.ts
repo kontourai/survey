@@ -101,7 +101,7 @@ export function renderReviewWorkbenchHtml(state: ReviewWorkbenchState | ReviewQu
     <section class="workbench-shell" aria-label="Survey review workbench">
       ${renderWorkbenchHeader(state)}
       <div class="content-grid">
-        ${renderCandidateComparison(state)}
+        ${renderReviewMain(state)}
         ${renderDecisionColumn(state)}
       </div>
     </section>
@@ -120,7 +120,7 @@ function renderReviewQueueSessionHtml(session: ReviewQueueSessionState): string 
           ${renderSessionSummary(session)}
         </aside>
         <div class="content-grid">
-          ${renderCandidateComparison(state)}
+          ${renderReviewMain(state)}
           ${renderDecisionColumn(state)}
         </div>
       </div>
@@ -173,19 +173,72 @@ function renderSessionSummary(session: ReviewQueueSessionState): string {
 }
 
 function renderWorkbenchHeader(state: ReviewWorkbenchState): string {
+  const current = candidateByRole(state.item, "current");
+  const proposed = candidateByRole(state.item, "proposed");
+
   return `
     <header class="topbar">
       <div>
         <p class="eyebrow">${escapeHtml(String(state.item.metadata.producer?.displayName ?? "Survey"))}</p>
-        <h1>${escapeHtml(state.item.metadata.name)}</h1>
+        <h1>Review candidate update</h1>
+        <p class="review-question">For <strong>${escapeHtml(state.item.spec.target)}</strong>, decide whether <strong>${escapeHtml(formatValue(proposed.value))}</strong> should replace <strong>${escapeHtml(formatValue(current.value))}</strong>.</p>
       </div>
       <dl class="meta-grid">
-        ${metaItem("Target", state.item.spec.target)}
+        ${metaItem("Item", state.item.metadata.name)}
         ${metaItem("Status", state.item.spec.candidateSetStatus ?? "unresolved")}
         ${metaItem("Selected", state.item.spec.selectedCandidateId ?? "none")}
         ${metaItem("Candidate count", String(state.item.status?.observedCandidateCount ?? state.item.spec.candidates.length))}
       </dl>
     </header>
+  `;
+}
+
+function renderReviewMain(state: ReviewWorkbenchState): string {
+  return `
+    <div class="review-main">
+      ${renderReviewFocus(state)}
+      ${renderCandidateComparison(state)}
+    </div>
+  `;
+}
+
+function renderReviewFocus(state: ReviewWorkbenchState): string {
+  const current = candidateByRole(state.item, "current");
+  const proposed = candidateByRole(state.item, "proposed");
+  const proposedConfidence = proposed.extraction.confidence ?? proposed.confidence;
+  const currentConfidence = current.extraction.confidence ?? current.confidence;
+
+  return `
+    <section class="review-focus" data-testid="review-focus" aria-label="Active review focus">
+      <div class="focus-head">
+        <span class="field-label">Active review</span>
+        <span class="state-label">${escapeHtml(state.item.spec.candidateSetStatus ?? "unresolved")}</span>
+      </div>
+      <div class="focus-values">
+        ${focusValue("Current", current, currentConfidence, "current")}
+        ${focusValue("Proposed", proposed, proposedConfidence, "proposed")}
+      </div>
+      <dl class="focus-evidence">
+        ${fieldItem("Target", state.item.spec.target)}
+        ${fieldItem("Proposed source", proposed.source.sourceRef)}
+        ${fieldItem("Proposed excerpt", proposed.locator?.excerpt ?? "none", "excerpt")}
+      </dl>
+    </section>
+  `;
+}
+
+function focusValue(
+  label: string,
+  candidate: ReviewCandidate,
+  confidence: number | undefined,
+  tone: "current" | "proposed",
+): string {
+  return `
+    <div class="focus-value is-${tone}">
+      <span class="field-label">${escapeHtml(label)}</span>
+      <strong>${escapeHtml(formatValue(candidate.value))}</strong>
+      <span>${escapeHtml(confidence === undefined ? "confidence unknown" : formatConfidence(confidence))}</span>
+    </div>
   `;
 }
 
