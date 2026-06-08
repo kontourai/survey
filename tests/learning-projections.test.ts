@@ -10,6 +10,230 @@ import {
 } from "../src/index.js";
 
 describe("Survey learning projections", () => {
+  it("emits a rejected-candidate signal from candidate rejection reason data", () => {
+    const input = rejectedCandidateSurveyInput();
+
+    const projections = buildSurveyLearningProjections(input);
+
+    assert.equal(projections.length, 1);
+    assertLearningKind(projections[0], "learning.rejected-candidate");
+    assert.equal(projections[0].source, "survey.learning.fixture");
+    assert.equal(projections[0].createdAt, "2026-05-31T15:02:00.000Z");
+    assert.equal(projections[0].target, "registrationStatus");
+    assert.equal(projections[0].claimId, "claim.registration-status.rejected");
+    assert.equal(projections[0].reviewOutcomeId, undefined);
+    assert.equal(projections[0].signal, "rejected-candidate.reason");
+    assert.equal(projections[0].severity, "info");
+    assert.deepEqual(projections[0].metadata?.rejectedCandidate, {
+      candidateId: "candidate.registration-status.rejected",
+      candidateSetId: "candidate-set.registration-status",
+      target: "registrationStatus",
+      rejectionReason: "Superseded by the registry ACTIVE value.",
+      claimId: "claim.registration-status.rejected",
+      extractionId: "extraction.registration-status.rejected",
+      selectedCandidateId: "candidate.registration-status",
+      candidateRejectionReason: "Superseded by the registry ACTIVE value.",
+    });
+  });
+
+  it("does not emit comfort-zone signals for ordinary rejected candidates", () => {
+    const input = rejectedCandidateSurveyInput();
+
+    const projections = buildSurveyLearningProjections(input);
+
+    assert.deepEqual(projections.map((projection) => projection.kind), ["learning.rejected-candidate"]);
+    assert.deepEqual(projections.filter((projection) => projection.kind === "learning.comfort-zone"), []);
+  });
+
+  it("emits rejected-candidate and comfort-zone signals as distinct meanings", () => {
+    const input = rejectedCandidateSurveyInput({
+      reviewOutcomes: [{
+        id: "review.registration-status.rejected",
+        candidateSetId: "candidate-set.registration-status",
+        candidateId: "candidate.registration-status.rejected",
+        status: "rejected",
+        actor: "records-operator",
+        reviewedAt: "2026-05-31T15:05:00.000Z",
+        rationale: "Rejected because the archived value is stale.",
+        withinComfortZone: false,
+        comfortZoneNote: "Specialist authority should confirm the stale-value conclusion.",
+      }],
+    });
+
+    const projections = buildSurveyLearningProjections(input);
+    const rejectedCandidate = projections.find((projection) => projection.kind === "learning.rejected-candidate");
+    const comfortZone = projections.find((projection) => projection.kind === "learning.comfort-zone");
+
+    assert.equal(projections.length, 2);
+    assertLearningKind(rejectedCandidate, "learning.rejected-candidate");
+    assertLearningKind(comfortZone, "learning.comfort-zone");
+    assert.equal(rejectedCandidate.reviewOutcomeId, "review.registration-status.rejected");
+    assert.equal(rejectedCandidate.signal, "rejected-candidate.reason");
+    assert.equal(comfortZone.signal, "comfort-zone.outside");
+    assert.deepEqual(rejectedCandidate.metadata?.rejectedCandidate, {
+      candidateId: "candidate.registration-status.rejected",
+      candidateSetId: "candidate-set.registration-status",
+      target: "registrationStatus",
+      rejectionReason: "Superseded by the registry ACTIVE value.",
+      reviewOutcomeId: "review.registration-status.rejected",
+      reviewStatus: "rejected",
+      claimId: "claim.registration-status.rejected",
+      extractionId: "extraction.registration-status.rejected",
+      selectedCandidateId: "candidate.registration-status",
+      candidateRejectionReason: "Superseded by the registry ACTIVE value.",
+      reviewRationale: "Rejected because the archived value is stale.",
+    });
+    assert.deepEqual(comfortZone.metadata?.comfortZone, {
+      withinComfortZone: false,
+      note: "Specialist authority should confirm the stale-value conclusion.",
+    });
+  });
+
+  it("avoids duplicate rejected-candidate signals when review and candidate data describe the same candidate", () => {
+    const input = rejectedCandidateSurveyInput({
+      reviewOutcomes: [{
+        id: "review.registration-status.rejected",
+        candidateSetId: "candidate-set.registration-status",
+        candidateId: "candidate.registration-status.rejected",
+        status: "rejected",
+        actor: "records-operator",
+        reviewedAt: "2026-05-31T15:05:00.000Z",
+        rationale: "Rejected because the archived value is stale.",
+      }],
+    });
+
+    const projections = buildSurveyLearningProjections(input);
+
+    assert.deepEqual(projections.map((projection) => projection.id), [
+      "candidate-set.registration-status.candidate.registration-status.rejected.learning.rejected-candidate",
+    ]);
+    assert.equal(projections[0]?.reviewOutcomeId, "review.registration-status.rejected");
+    assert.equal(
+      projections[0]?.metadata?.rejectedCandidate &&
+        (projections[0].metadata.rejectedCandidate as Record<string, unknown>).reviewRationale,
+      "Rejected because the archived value is stale.",
+    );
+  });
+
+  it("emits a rejected-candidate signal from a candidate-specific rejected review outcome", () => {
+    const input = rejectedCandidateSurveyInput({
+      candidateSets: [{
+        id: "candidate-set.registration-status",
+        target: "registrationStatus",
+        status: "resolved",
+        selectedCandidateId: "candidate.registration-status",
+        candidates: [
+          {
+            id: "candidate.registration-status",
+            extractionId: "extraction.registration-status",
+            value: "ACTIVE",
+            confidence: 0.9,
+          },
+          {
+            id: "candidate.registration-status.rejected",
+            extractionId: "extraction.registration-status.rejected",
+            value: "INACTIVE",
+            confidence: 0.7,
+          },
+        ],
+      }],
+      reviewOutcomes: [{
+        id: "review.registration-status.rejected",
+        candidateSetId: "candidate-set.registration-status",
+        candidateId: "candidate.registration-status.rejected",
+        status: "rejected",
+        actor: "records-operator",
+        reviewedAt: "2026-05-31T15:05:00.000Z",
+        rationale: "Rejected because the archived value is stale.",
+      }],
+    });
+
+    const projections = buildSurveyLearningProjections(input);
+
+    assert.equal(projections.length, 1);
+    assert.equal(projections[0]?.kind, "learning.rejected-candidate");
+    assert.equal(projections[0]?.createdAt, "2026-05-31T15:05:00.000Z");
+    assert.equal((projections[0]?.metadata?.rejectedCandidate as Record<string, unknown>).rejectionReason, "Rejected because the archived value is stale.");
+  });
+
+  it("includes candidate set identity in rejected-candidate projection ids", () => {
+    const input = rejectedCandidateSurveyInput({
+      candidateSets: [
+        {
+          id: "candidate-set.registration-status",
+          target: "registrationStatus",
+          status: "resolved",
+          candidates: [
+            {
+              id: "candidate.rejected",
+              extractionId: "extraction.registration-status.rejected",
+              value: "INACTIVE",
+              confidence: 0.7,
+              rejectionReason: "Archived value is stale.",
+            },
+          ],
+        },
+        {
+          id: "candidate-set.registration-source",
+          target: "registrationSource",
+          status: "resolved",
+          candidates: [
+            {
+              id: "candidate.rejected",
+              extractionId: "extraction.registration-status.rejected",
+              value: "manual-archive",
+              confidence: 0.6,
+              rejectionReason: "Archive source is not current.",
+            },
+          ],
+        },
+      ],
+      claims: [],
+    });
+
+    const projections = buildSurveyLearningProjections(input);
+
+    assert.deepEqual(projections.map((projection) => projection.id), [
+      "candidate-set.registration-status.candidate.rejected.learning.rejected-candidate",
+      "candidate-set.registration-source.candidate.rejected.learning.rejected-candidate",
+    ]);
+  });
+
+  it("uses the first matching rejected review outcome when several describe the same rejected candidate", () => {
+    const input = rejectedCandidateSurveyInput({
+      reviewOutcomes: [
+        {
+          id: "review.registration-status.rejected.first",
+          candidateSetId: "candidate-set.registration-status",
+          candidateId: "candidate.registration-status.rejected",
+          status: "rejected",
+          actor: "records-operator",
+          reviewedAt: "2026-05-31T15:05:00.000Z",
+          rationale: "Rejected because the archived value is stale.",
+        },
+        {
+          id: "review.registration-status.rejected.second",
+          candidateSetId: "candidate-set.registration-status",
+          candidateId: "candidate.registration-status.rejected",
+          status: "rejected",
+          actor: "records-operator",
+          reviewedAt: "2026-05-31T15:06:00.000Z",
+          rationale: "Second review kept the same rejection.",
+        },
+      ],
+    });
+
+    const projections = buildSurveyLearningProjections(input);
+
+    assert.equal(projections.length, 1);
+    assert.equal(projections[0]?.reviewOutcomeId, "review.registration-status.rejected.first");
+    assert.equal(
+      projections[0]?.metadata?.rejectedCandidate &&
+        (projections[0].metadata.rejectedCandidate as Record<string, unknown>).reviewRationale,
+      "Rejected because the archived value is stale.",
+    );
+  });
+
   it("emits a comfort-zone signal from structured review outcome data", () => {
     const input = baseSurveyInput({
       reviewOutcomes: [{
@@ -260,4 +484,79 @@ function baseSurveyInput(overrides: Partial<SurveyInput> = {}): SurveyInput {
     }],
     ...overrides,
   };
+}
+
+function rejectedCandidateSurveyInput(overrides: Partial<SurveyInput> = {}): SurveyInput {
+  return baseSurveyInput({
+    extractions: [
+      {
+        id: "extraction.registration-status",
+        sourceId: "source.registry",
+        target: "registrationStatus",
+        value: "ACTIVE",
+        confidence: 0.9,
+        locator: "json:$.registrationStatus",
+        extractor: "records-importer",
+        extractedAt: "2026-05-31T15:00:00.000Z",
+      },
+      {
+        id: "extraction.registration-status.rejected",
+        sourceId: "source.registry",
+        target: "registrationStatus",
+        value: "INACTIVE",
+        confidence: 0.7,
+        locator: "json:$.archivedRegistrationStatus",
+        extractor: "records-importer",
+        extractedAt: "2026-05-31T15:02:00.000Z",
+      },
+    ],
+    candidateSets: [{
+      id: "candidate-set.registration-status",
+      target: "registrationStatus",
+      status: "resolved",
+      selectedCandidateId: "candidate.registration-status",
+      candidates: [
+        {
+          id: "candidate.registration-status",
+          extractionId: "extraction.registration-status",
+          value: "ACTIVE",
+          confidence: 0.9,
+        },
+        {
+          id: "candidate.registration-status.rejected",
+          extractionId: "extraction.registration-status.rejected",
+          value: "INACTIVE",
+          confidence: 0.7,
+          rejectionReason: "Superseded by the registry ACTIVE value.",
+        },
+      ],
+    }],
+    claims: [
+      {
+        id: "claim.registration-status",
+        candidateSetId: "candidate-set.registration-status",
+        candidateId: "candidate.registration-status",
+        subjectType: "public-record.entity",
+        subjectId: "entity-1",
+        surface: "public-record.profile",
+        claimType: "public-data.field",
+        fieldOrBehavior: "registrationStatus",
+        impactLevel: "medium",
+        collectedBy: "records-importer",
+      },
+      {
+        id: "claim.registration-status.rejected",
+        candidateSetId: "candidate-set.registration-status",
+        candidateId: "candidate.registration-status.rejected",
+        subjectType: "public-record.entity",
+        subjectId: "entity-1",
+        surface: "public-record.profile",
+        claimType: "public-data.field",
+        fieldOrBehavior: "registrationStatus",
+        impactLevel: "medium",
+        collectedBy: "records-importer",
+      },
+    ],
+    ...overrides,
+  });
 }
