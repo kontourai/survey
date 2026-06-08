@@ -45,6 +45,13 @@ The downstream-boundary dogfood proof in
 shows how a sanitized copied producer proposal can be adapted into the same
 `ReviewItem` shape without adding product-specific workbench branches.
 
+The queue fixture also includes a generic regulated rule-conflict `ReviewItem`
+modeled after a downstream rules-management proof. It uses the same current /
+proposed candidate roles, source locator, extraction confidence, producer
+policy, and projection hints as the public-directory example. Survey code does
+not know the downstream product name; the workbench only consumes the portable
+resource shape.
+
 ## Decision Mapping
 
 The prototype keeps reviewer note and selected decision state only in browser

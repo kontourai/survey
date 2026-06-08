@@ -133,6 +133,143 @@ export const publicDirectoryReviewItemFixture = {
   },
 } satisfies ReviewItem;
 
+export const regulatedRuleConflictReviewItemFixture = {
+  apiVersion: reviewResourceApiVersion,
+  kind: "ReviewItem",
+  metadata: {
+    name: "regulated-rule-conflict-standard-threshold",
+    labels: {
+      domain: "regulated-rule-source",
+    },
+    producer: {
+      displayName: "Regulated Rule Review",
+      jurisdiction: "example-jurisdiction",
+      reportingPeriod: "2026",
+    },
+  },
+  spec: {
+    target: "standardThreshold",
+    selectedCandidateId: "regulated-rule-conflict-standard-threshold:candidate:current",
+    candidateSetStatus: "conflict",
+    rationale: "A newly extracted source candidate conflicts with the currently managed rule value.",
+    projection: {
+      candidateSetId: "regulated-rule-conflict-standard-threshold:candidate-set",
+    },
+    producerPolicy: {
+      decisionMode: "keep-current",
+      sourceAuthorityProjection: "only-for-selected-source-backed-value",
+      feedbackTags: ["rule-conflict", "source-extraction-review"],
+    },
+    candidates: [
+      {
+        id: "regulated-rule-conflict-standard-threshold:candidate:current",
+        role: "current",
+        value: 15000,
+        confidence: 1,
+        source: {
+          sourceId: "regulated-rule-conflict-standard-threshold:source:current",
+          sourceRef: "survey-example://rules/example-jurisdiction/2026/standardThreshold",
+          kind: "manual-entry",
+          observedAt: "2026-06-03T00:00:00.000Z",
+          locatorScheme: "structured-field",
+        },
+        locator: {
+          scheme: "structured-field",
+          locator: "managed-rules:path=standardThreshold",
+          excerpt: "Current managed rule value.",
+        },
+        extraction: {
+          extractionId: "regulated-rule-conflict-standard-threshold:extraction:current",
+          target: "standardThreshold",
+          confidence: 1,
+          extractor: "example-rule-manager",
+          extractedAt: "2026-06-03T00:00:00.000Z",
+        },
+        claimTarget: {
+          claimId: "regulated-rule.example-jurisdiction.2026.standard-threshold.current",
+          subjectType: "regulated-rule-source",
+          subjectId: "example-jurisdiction:2026:standardThreshold",
+          surface: "regulated.rules",
+          claimType: "regulated.rule-source-value",
+          fieldOrBehavior: "standardThreshold",
+          impactLevel: "high",
+          evidenceType: "human_attestation",
+          evidenceMethod: "attestation",
+          collectedBy: "example-rule-manager",
+        },
+        projection: {
+          rawSourceId: "regulated-rule-conflict-standard-threshold:source:current",
+          extractionId: "regulated-rule-conflict-standard-threshold:extraction:current",
+          candidateSetId: "regulated-rule-conflict-standard-threshold:candidate-set",
+          candidateId: "regulated-rule-conflict-standard-threshold:projection:current",
+          claimId: "regulated-rule.example-jurisdiction.2026.standard-threshold.current",
+        },
+        producer: {
+          status: "current-managed-value",
+        },
+      },
+      {
+        id: "regulated-rule-conflict-standard-threshold:candidate:proposed",
+        role: "proposed",
+        value: 16000,
+        confidence: 0.95,
+        sourceRank: 1,
+        source: {
+          sourceId: "regulated-rule-conflict-standard-threshold:source:proposed",
+          sourceRef: "https://example.test/regulatory-bulletins/2026-thresholds.pdf",
+          kind: "uploaded-document",
+          observedAt: "2026-06-03T00:30:00.000Z",
+          locatorScheme: "pdf",
+        },
+        locator: {
+          scheme: "pdf",
+          locator: "pdf:page=12;section=Standard%20Threshold;path=standardThreshold",
+          excerpt: "Example Individual Standard Threshold $16,000",
+        },
+        extraction: {
+          extractionId: "regulated-rule-conflict-standard-threshold:extraction:proposed",
+          target: "standardThreshold",
+          confidence: 0.95,
+          extractor: "example-rule-source-parser",
+          extractedAt: "2026-06-03T00:30:00.000Z",
+        },
+        claimTarget: {
+          claimId: "regulated-rule.example-jurisdiction.2026.standard-threshold.proposed",
+          subjectType: "regulated-rule-source",
+          subjectId: "example-jurisdiction:2026:standardThreshold",
+          surface: "regulated.rules",
+          claimType: "regulated.rule-source-value",
+          fieldOrBehavior: "standardThreshold",
+          impactLevel: "high",
+          evidenceType: "policy_rule",
+          evidenceMethod: "extraction",
+          collectedBy: "example-rule-source-parser",
+        },
+        projection: {
+          rawSourceId: "regulated-rule-conflict-standard-threshold:source:proposed",
+          extractionId: "regulated-rule-conflict-standard-threshold:extraction:proposed",
+          candidateSetId: "regulated-rule-conflict-standard-threshold:candidate-set",
+          candidateId: "regulated-rule-conflict-standard-threshold:projection:proposed",
+          claimId: "regulated-rule.example-jurisdiction.2026.standard-threshold.proposed",
+        },
+        producer: {
+          sourceSection: "Standard Threshold",
+          sourcePage: 12,
+          sourceAuthority: {
+            authorityClass: "official_publication",
+            declaredBy: "Example regulatory source registry",
+            scope: "standardThreshold rule value for example-jurisdiction 2026",
+          },
+        },
+      },
+    ],
+  },
+  status: {
+    observedCandidateCount: 2,
+    selectedCandidateId: "regulated-rule-conflict-standard-threshold:candidate:current",
+  },
+} satisfies ReviewItem;
+
 function queueFixture(
   name: string,
   target: string,
@@ -235,4 +372,5 @@ export const reviewWorkbenchQueueFixtures = [
     "escalated",
     ["licensing", "manual-review-required"],
   ),
+  regulatedRuleConflictReviewItemFixture,
 ] satisfies ReviewItem[];

@@ -15,7 +15,10 @@ import {
   reviewSessionSummary,
   type ReviewWorkbenchDecision,
 } from "../examples/review-workbench/review-workbench.js";
-import { reviewWorkbenchQueueFixtures } from "../examples/review-workbench/review-workbench-data.js";
+import {
+  regulatedRuleConflictReviewItemFixture,
+  reviewWorkbenchQueueFixtures,
+} from "../examples/review-workbench/review-workbench-data.js";
 
 describe("review workbench prototype", () => {
   const cases: Array<{
@@ -113,6 +116,7 @@ describe("review workbench prototype", () => {
     assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueFixtures[2], session), "resolved");
     assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueFixtures[3], session), "rejected");
     assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueFixtures[4], session), "escalated");
+    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueFixtures[5], session), "pending");
 
     const html = renderReviewWorkbenchHtml(session);
     assert.match(html, /data-testid="queue-row" data-queue-status="in-review"/);
@@ -163,7 +167,7 @@ describe("review workbench prototype", () => {
       keptCurrent: 1,
       rejected: 1,
       escalated: 1,
-      unresolved: 0,
+      unresolved: 1,
     });
 
     const html = renderReviewWorkbenchHtml(initialReviewQueueSessionState());
@@ -405,6 +409,33 @@ describe("review workbench prototype", () => {
     assert.match(html, /is-neutral/);
     assert.match(html, /Survey records source and review posture/);
     assert.match(html, /does not validate real-world truth/);
+  });
+
+  it("renders a regulated rule conflict ReviewItem without product-specific workbench branches", () => {
+    const state = {
+      ...initialReviewWorkbenchState(regulatedRuleConflictReviewItemFixture),
+      decision: "keep-current" as const,
+      note: "Kept current value after reviewing the official source candidate.",
+    };
+
+    const decision = buildReviewDecision(state);
+    const preview = buildSurfaceProjectionPreview(state.item, decision);
+    const html = renderReviewWorkbenchHtml(state);
+
+    assert.ok(decision);
+    assert.equal(decision.spec.reviewItemName, "regulated-rule-conflict-standard-threshold");
+    assert.equal(decision.spec.candidateId, "regulated-rule-conflict-standard-threshold:candidate:current");
+    assert.equal(decision.spec.status, "verified");
+    assert.ok(preview);
+    assert.equal(preview.canonicalClaim.value, "15000");
+    assert.equal(preview.candidateHistory[0]?.candidateId, "regulated-rule-conflict-standard-threshold:candidate:proposed");
+    assert.equal(preview.candidateHistory[0]?.value, "16000");
+    assert.equal(preview.sourceEvidence.sourceRef, "survey-example://rules/example-jurisdiction/2026/standardThreshold");
+    assert.match(html, /Regulated Rule Review/);
+    assert.match(html, /standardThreshold/);
+    assert.match(html, /Example Individual Standard Threshold \$16,000/);
+    assert.match(html, /data-testid="candidate-current" data-outcome="selected"/);
+    assert.match(html, /data-testid="candidate-proposed" data-outcome="unselected"/);
   });
 
   it("updates the mounted payload and replaces Surface preview when the reviewer enters a note", () => {
