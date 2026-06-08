@@ -871,11 +871,18 @@ const learning = buildSurveyLearningProjections(surveyInput);
 const trustInput = buildSurveyTrustInput(surveyInput);
 ```
 
-Learning projections are product-neutral `learning.*` records. Survey currently
-emits `learning.comfort-zone` from structured `ReviewOutcome.withinComfortZone
-=== false` data and `learning.escalation` from unresolved `EscalationRecord`s,
-including unattached records that producer tooling can route but Surface cannot
-attach to a claim event.
+Learning projections are product-neutral `learning.*` records. Survey emits
+`learning.rejected-candidate` from structured candidate rejection data such as
+non-empty `Candidate.rejectionReason` values or a candidate-specific
+`ReviewOutcome.status === "rejected"` outcome with rationale. When both exist,
+Survey emits one rejected-candidate projection enriched with candidate and
+review outcome context.
+Ordinary rejected candidates do not emit `learning.comfort-zone`.
+
+Survey also emits `learning.comfort-zone` from structured
+`ReviewOutcome.withinComfortZone === false` data and `learning.escalation` from
+unresolved `EscalationRecord`s, including unattached records that producer
+tooling can route but Surface cannot attach to a claim event.
 
 These projections are producer/review workflow and evaluation signals. They are
 not claims about truth or veracity, not Surface claim status, not evidence, and

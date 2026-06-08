@@ -1,8 +1,8 @@
-import type { ClaimTarget, EscalationRecord, ReviewOutcome, SurveyInput } from "./types.js";
+import type { Candidate, CandidateSet, ClaimTarget, EscalationRecord, Extraction, ReviewOutcome, SurveyInput } from "./types.js";
 
-export type LearningProjectionKind = "learning.comfort-zone" | "learning.escalation";
+export type LearningProjectionKind = "learning.comfort-zone" | "learning.escalation" | "learning.rejected-candidate";
 
-export type LearningProjectionSignal = "comfort-zone.outside" | "escalation.unresolved";
+export type LearningProjectionSignal = "comfort-zone.outside" | "escalation.unresolved" | "rejected-candidate.reason";
 
 export type LearningProjectionSeverity = "info" | "attention";
 
@@ -24,7 +24,49 @@ export interface LearningProjection {
 export function buildSurveyLearningProjections(input: SurveyInput): LearningProjection[] {
   const claimsByCandidateSet = groupBy(input.claims, (claim) => claim.candidateSetId);
   const candidateSetTargets = new Map(input.candidateSets.map((candidateSet) => [candidateSet.id, candidateSet.target]));
+  const extractionsById = new Map(input.extractions.map((extraction) => [extraction.id, extraction]));
+  const rejectedReviewsByCandidate = groupBy(
+    input.reviewOutcomes.filter((reviewOutcome) => reviewOutcome.status === "rejected" && reviewOutcome.candidateId),
+    (reviewOutcome) => `${reviewOutcome.candidateSetId}:${reviewOutcome.candidateId}`,
+  );
   const projections: LearningProjection[] = [];
+
+  for (const candidateSet of input.candidateSets) {
+    for (const candidate of candidateSet.candidates) {
+      const rejectedReviews = rejectedReviewsByCandidate.get(`${candidateSet.id}:${candidate.id}`) ?? [];
+      const candidateReason = normalizeText(candidate.rejectionReason);
+      const reviewOutcome = rejectedReviews[0];
+      const reviewRationale = normalizeText(reviewOutcome?.rationale);
+      const rejectionReason = candidateReason ?? reviewRationale;
+      if (!rejectionReason) continue;
+
+      const claim = claimsByCandidateSet.get(candidateSet.id)?.find((candidateSetClaim) => candidateSetClaim.candidateId === candidate.id);
+      const extraction = extractionsById.get(candidate.extractionId);
+
+      projections.push({
+        id: `${candidateSet.id}.${candidate.id}.learning.rejected-candidate`,
+        kind: "learning.rejected-candidate",
+        source: input.source,
+        createdAt: reviewOutcome?.reviewedAt ?? extraction?.extractedAt ?? input.generatedAt,
+        target: candidateSet.target,
+        claimId: claim?.id,
+        reviewOutcomeId: reviewOutcome?.id,
+        signal: "rejected-candidate.reason",
+        severity: "info",
+        summary: `Rejected candidate reason: ${rejectionReason}`,
+        metadata: {
+          rejectedCandidate: rejectedCandidateMetadata({
+            candidateSet,
+            candidate,
+            extraction,
+            reviewOutcome,
+            claim,
+            rejectionReason,
+          }),
+        },
+      });
+    }
+  }
 
   for (const reviewOutcome of input.reviewOutcomes) {
     if (reviewOutcome.withinComfortZone !== false) continue;
@@ -76,6 +118,28 @@ export function buildSurveyLearningProjections(input: SurveyInput): LearningProj
   return projections;
 }
 
+function rejectedCandidateMetadata(input: {
+  candidateSet: CandidateSet;
+  candidate: Candidate;
+  extraction?: Extraction;
+  reviewOutcome?: ReviewOutcome;
+  claim?: ClaimTarget;
+  rejectionReason: string;
+}): Record<string, unknown> {
+  return {
+    candidateId: input.candidate.id,
+    candidateSetId: input.candidateSet.id,
+    target: input.candidateSet.target,
+    rejectionReason: input.rejectionReason,
+    ...(input.reviewOutcome ? { reviewOutcomeId: input.reviewOutcome.id, reviewStatus: input.reviewOutcome.status } : {}),
+    ...(input.claim ? { claimId: input.claim.id } : {}),
+    ...(input.extraction ? { extractionId: input.extraction.id } : {}),
+    ...(input.candidateSet.selectedCandidateId ? { selectedCandidateId: input.candidateSet.selectedCandidateId } : {}),
+    ...(input.candidate.rejectionReason ? { candidateRejectionReason: input.candidate.rejectionReason } : {}),
+    ...(input.reviewOutcome?.rationale ? { reviewRationale: input.reviewOutcome.rationale } : {}),
+  };
+}
+
 function findClaimForReview(claims: ClaimTarget[], reviewOutcome: ReviewOutcome): ClaimTarget | undefined {
   if (reviewOutcome.candidateId) {
     return claims.find((claim) => claim.candidateId === reviewOutcome.candidateId);
@@ -104,4 +168,9 @@ function groupBy<T>(items: T[], getKey: (item: T) => string): Map<string, T[]> {
     map.set(key, [...(map.get(key) ?? []), item]);
   }
   return map;
+}
+
+function normalizeText(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
 }
