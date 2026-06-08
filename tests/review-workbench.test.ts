@@ -5,11 +5,13 @@ import { reviewResourceApiVersion } from "../src/index.js";
 import {
   buildReviewDecision,
   buildReviewDecisionsFromSession,
+  buildReviewWorkbenchResultsFromSession,
   buildReviewSessionEvents,
   buildReviewWorkbenchSessionExport,
   buildSurfaceProjectionPreview,
   createInMemoryReviewSessionEventStore,
   createLocalStorageReviewSessionEventStore,
+  createPersistentReviewSessionEventStore,
   currentReviewWorkbenchState,
   deriveQueueRowStatus,
   initialReviewWorkbenchState,
@@ -111,6 +113,36 @@ describe("review workbench prototype", () => {
     assert.match(html, /Accept proposed/);
     assert.match(html, /Keep current/);
     assert.match(html, /Reject proposed/);
+  });
+
+  it("renders structured candidate values without downstream pre-stringification", () => {
+    const structuredItem: ReviewItem = {
+      ...publicDirectoryReviewItemFixture,
+      spec: {
+        ...publicDirectoryReviewItemFixture.spec,
+        producerPolicy: {
+          feedbackTags: ["structured-value", { producer: "downstream-reviewer" }],
+        },
+        candidates: publicDirectoryReviewItemFixture.spec.candidates.map((candidate) => (
+          candidate.role === "proposed"
+            ? {
+                ...candidate,
+                value: [{ label: "Week 1", minAge: 7, maxAge: 12 }],
+              }
+            : {
+                ...candidate,
+                value: { status: "available", source: "current-record" },
+              }
+        )),
+      },
+    };
+
+    const html = renderReviewWorkbenchHtml(initialReviewWorkbenchState(structuredItem));
+
+    assert.match(html, /Week 1/);
+    assert.match(html, /current-record/);
+    assert.match(html, /structured-value/);
+    assert.match(html, /downstream-reviewer/);
   });
 
   it("AC37-1 derives queue row statuses from ReviewItem status and local decisions", () => {
@@ -278,6 +310,7 @@ describe("review workbench prototype", () => {
     const replayed = replayReviewSessionEvents(initialReviewQueueSessionState(), events);
     const exported = buildReviewWorkbenchSessionExport(replayed, events);
     const decisions = buildReviewDecisionsFromSession(replayed);
+    const results = buildReviewWorkbenchResultsFromSession(replayed);
 
     assert.equal(exported.session.kind, "ReviewSession");
     assert.equal(exported.session.status?.eventCount, events.length);
@@ -285,7 +318,11 @@ describe("review workbench prototype", () => {
     assert.deepEqual(replayed.decisionsByItemName, session.decisionsByItemName);
     assert.deepEqual(replayed.notesByItemName, session.notesByItemName);
     assert.deepEqual(exported.decisions.map((decision) => decision.metadata.name), decisions.map((decision) => decision.metadata.name));
+    assert.deepEqual(exported.results.map((result) => result.reviewDecision.metadata.name), decisions.map((decision) => decision.metadata.name));
     assert.deepEqual(decisions.map((decision) => decision.spec.status), ["verified", "verified", "rejected"]);
+    assert.deepEqual(results.map((result) => result.decision), ["accept-proposed", "keep-current", "reject-proposed"]);
+    assert.deepEqual(results.map((result) => result.status), ["verified", "verified", "rejected"]);
+    assert.ok(results.every((result) => result.selectedCandidateId === result.selectedCandidate.id));
 
     const itemForDecision = (decision: ReviewDecision): ReviewItem => {
       const item = replayed.items.find((entry) => entry.metadata.name === decision.spec.reviewItemName);
@@ -307,6 +344,51 @@ describe("review workbench prototype", () => {
     assert.equal(acceptedPreview?.reviewEvent?.rationale, "Accepted longer posted hours.");
     assert.equal(keptPreview?.reviewEvent?.rationale, "Kept current phone after source check.");
     assert.equal(rejectedPreview?.reviewEvent?.rationale, "Rejected proposed address as low confidence.");
+  });
+
+  it("creates a queued persistent event store with expected event count and status callbacks", async () => {
+    const session = initialReviewQueueSessionState();
+    const firstEvents = buildReviewSessionEvents({
+      ...session,
+      notesByItemName: {
+        "public-directory-hours": "Accepted posted hours.",
+      },
+    });
+    const secondEvents = buildReviewSessionEvents({
+      ...session,
+      notesByItemName: {
+        "public-directory-hours": "Accepted posted hours.",
+      },
+      decisionsByItemName: {
+        "public-directory-hours": "accept-proposed",
+      },
+    });
+    const requests: Array<{
+      expectedEventCount: number;
+      events: readonly unknown[];
+    }> = [];
+    const statuses: string[] = [];
+    const store = createPersistentReviewSessionEventStore({
+      initialEvents: [],
+      onStatusChange: (state) => statuses.push(state.status),
+      persist: async (request) => {
+        requests.push({
+          expectedEventCount: request.expectedEventCount,
+          events: request.events,
+        });
+        return { eventCount: request.events.length };
+      },
+    });
+
+    store.save(session, firstEvents);
+    store.save(session, secondEvents);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.deepEqual(requests.map((request) => request.expectedEventCount), [0, firstEvents.length]);
+    assert.deepEqual(requests.map((request) => request.events.length), [firstEvents.length, secondEvents.length]);
+    assert.deepEqual(statuses, ["saving", "saved", "saving", "saved"]);
+    assert.equal(store.events().length, secondEvents.length);
   });
 
   it("marks selected and unselected outcomes after a decision", () => {

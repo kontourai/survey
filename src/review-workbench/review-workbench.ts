@@ -110,11 +110,36 @@ export interface ReviewWorkbenchSessionExport {
   readonly session: ReviewSession;
   readonly events: readonly ReviewSessionEvent[];
   readonly decisions: readonly ReviewDecision[];
+  readonly results: readonly ReviewWorkbenchResult[];
 }
 
 export interface ReviewSessionEventStore {
   load(session: ReviewQueueSessionState): readonly ReviewSessionEvent[] | undefined;
   save(session: ReviewQueueSessionState, events: readonly ReviewSessionEvent[]): void;
+}
+
+export type ReviewSessionPersistenceStatus = "idle" | "saving" | "saved" | "error";
+
+export interface ReviewSessionPersistenceState {
+  readonly status: ReviewSessionPersistenceStatus;
+  readonly events: readonly ReviewSessionEvent[];
+  readonly error?: unknown;
+}
+
+export interface ReviewSessionPersistenceRequest {
+  readonly session: ReviewQueueSessionState;
+  readonly events: readonly ReviewSessionEvent[];
+  readonly expectedEventCount: number;
+}
+
+export interface ReviewSessionPersistenceResult {
+  readonly eventCount?: number;
+}
+
+export interface PersistentReviewSessionEventStoreOptions {
+  readonly initialEvents?: readonly ReviewSessionEvent[];
+  readonly persist: (request: ReviewSessionPersistenceRequest) => Promise<ReviewSessionPersistenceResult | void>;
+  readonly onStatusChange?: (state: ReviewSessionPersistenceState) => void;
 }
 
 export interface MountReviewWorkbenchOptions {
@@ -123,6 +148,20 @@ export interface MountReviewWorkbenchOptions {
 
 export interface BrowserReviewWorkbenchConfig {
   readonly startState?: ReviewQueueSessionState | ReviewWorkbenchState;
+}
+
+export interface ReviewWorkbenchResult {
+  readonly reviewItemName: string;
+  readonly decision: ReviewWorkbenchDecision;
+  readonly selectedCandidate: ReviewCandidate;
+  readonly selectedCandidateId: string;
+  readonly selectedCandidateRole?: ReviewCandidate["role"];
+  readonly selectedValue: unknown;
+  readonly selectedDisplayValue: string;
+  readonly unselectedCandidates: readonly ReviewCandidate[];
+  readonly reviewDecision: ReviewDecision;
+  readonly status: ReviewDecision["spec"]["status"];
+  readonly rationale?: string;
 }
 
 export function buildReviewDecisionsFromSession(session: ReviewQueueSessionState): ReviewDecision[] {
@@ -141,6 +180,40 @@ export function buildReviewDecisionsFromSession(session: ReviewQueueSessionState
   });
 }
 
+export function buildReviewWorkbenchResultsFromSession(session: ReviewQueueSessionState): ReviewWorkbenchResult[] {
+  return session.items.flatMap((item) => {
+    const decision = session.decisionsByItemName[item.metadata.name];
+    if (!decision) {
+      return [];
+    }
+
+    const state = currentReviewWorkbenchState({
+      ...session,
+      activeItemName: item.metadata.name,
+    });
+    const reviewDecision = buildReviewDecision(state);
+    if (!reviewDecision) {
+      return [];
+    }
+
+    const selectedCandidate = candidateForDecision(item, decision);
+
+    return [{
+      reviewItemName: item.metadata.name,
+      decision,
+      selectedCandidate,
+      selectedCandidateId: selectedCandidate.id,
+      selectedCandidateRole: selectedCandidate.role,
+      selectedValue: selectedCandidate.value,
+      selectedDisplayValue: formatValue(selectedCandidate.value),
+      unselectedCandidates: item.spec.candidates.filter((candidate) => candidate.id !== selectedCandidate.id),
+      reviewDecision,
+      status: reviewDecision.spec.status,
+      rationale: reviewDecision.spec.rationale,
+    }];
+  });
+}
+
 export function buildReviewWorkbenchSessionExport(
   session: ReviewQueueSessionState,
   events: readonly ReviewSessionEvent[] = buildReviewSessionEvents(session),
@@ -149,6 +222,7 @@ export function buildReviewWorkbenchSessionExport(
     session: buildReviewSessionResource(session, events),
     events,
     decisions: buildReviewDecisionsFromSession(session),
+    results: buildReviewWorkbenchResultsFromSession(session),
   };
 }
 
@@ -186,6 +260,51 @@ export function createLocalStorageReviewSessionEventStore(
     },
     save: (session, events) => {
       storage.setItem(reviewSessionStorageKey(session, keyPrefix), JSON.stringify(events));
+    },
+  };
+}
+
+export function createPersistentReviewSessionEventStore(
+  options: PersistentReviewSessionEventStoreOptions,
+): ReviewSessionEventStore & { events(): readonly ReviewSessionEvent[] } {
+  let savedEvents = [...(options.initialEvents ?? [])];
+  let lastPersistedSerialized = JSON.stringify(savedEvents);
+  let lastPersistedEventCount = savedEvents.length;
+  let pendingSave = Promise.resolve();
+
+  const emit = (state: ReviewSessionPersistenceState): void => {
+    options.onStatusChange?.(state);
+  };
+
+  return {
+    events: () => [...savedEvents],
+    load: () => savedEvents.length > 0 ? [...savedEvents] : undefined,
+    save: (session, events) => {
+      const normalizedEvents = [...events];
+      const serialized = JSON.stringify(normalizedEvents);
+      if (serialized === lastPersistedSerialized) {
+        return;
+      }
+
+      pendingSave = pendingSave
+        .then(async () => {
+          if (serialized === lastPersistedSerialized) {
+            return;
+          }
+          emit({ status: "saving", events: normalizedEvents });
+          const result = await options.persist({
+            session,
+            events: normalizedEvents,
+            expectedEventCount: lastPersistedEventCount,
+          });
+          savedEvents = normalizedEvents;
+          lastPersistedSerialized = serialized;
+          lastPersistedEventCount = result?.eventCount ?? normalizedEvents.length;
+          emit({ status: "saved", events: normalizedEvents });
+        })
+        .catch((error) => {
+          emit({ status: "error", events: normalizedEvents, error });
+        });
     },
   };
 }
@@ -924,7 +1043,7 @@ function refreshSessionAudit(
 
 function producerFeedbackTags(item: ReviewItem): string[] {
   const tags = item.spec.producerPolicy?.feedbackTags;
-  return Array.isArray(tags) ? tags.map(String) : [];
+  return Array.isArray(tags) ? tags.map(formatValue) : [];
 }
 
 function renderCandidateCard(candidate: ReviewCandidate, state: ReviewWorkbenchState): string {
@@ -970,7 +1089,7 @@ function candidateByRole(item: ReviewItem, role: "current" | "proposed"): Review
   return candidate;
 }
 
-function metaItem(label: string, value: string): string {
+function metaItem(label: string, value: unknown): string {
   return `
     <div class="meta-item">
       <dt class="field-label">${escapeHtml(label)}</dt>
@@ -979,7 +1098,7 @@ function metaItem(label: string, value: string): string {
   `;
 }
 
-function fieldItem(label: string, value: string, extraClass = ""): string {
+function fieldItem(label: string, value: unknown, extraClass = ""): string {
   return `
     <div class="field ${extraClass}">
       <dt class="field-label">${escapeHtml(label)}</dt>
@@ -992,12 +1111,13 @@ function formatConfidence(value: number): string {
   return `${Math.round(value * 100)}% (${value.toFixed(2)})`;
 }
 
-function titleCase(value: string): string {
-  return value.slice(0, 1).toUpperCase() + value.slice(1);
+function titleCase(value: unknown): string {
+  const displayValue = formatValue(value);
+  return displayValue.slice(0, 1).toUpperCase() + displayValue.slice(1);
 }
 
-function escapeHtml(value: string): string {
-  return value
+function escapeHtml(value: unknown): string {
+  return formatValue(value)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
