@@ -4,7 +4,12 @@ import { publicDirectoryReviewItemFixture } from "../fixtures/public-directory-r
 import { reviewResourceApiVersion } from "../src/index.js";
 import {
   buildReviewDecision,
+  buildReviewDecisionsFromSession,
+  buildReviewSessionEvents,
+  buildReviewWorkbenchSessionExport,
   buildSurfaceProjectionPreview,
+  createInMemoryReviewSessionEventStore,
+  createLocalStorageReviewSessionEventStore,
   currentReviewWorkbenchState,
   deriveQueueRowStatus,
   initialReviewWorkbenchState,
@@ -12,6 +17,7 @@ import {
   mountReviewWorkbench,
   nextUnresolvedItemName,
   renderReviewWorkbenchHtml,
+  replayReviewSessionEvents,
   reviewSessionSummary,
   type ReviewWorkbenchDecision,
 } from "../examples/review-workbench/review-workbench.js";
@@ -19,6 +25,7 @@ import {
   regulatedRuleConflictReviewItemFixture,
   reviewWorkbenchQueueFixtures,
 } from "../examples/review-workbench/review-workbench-data.js";
+import type { ReviewDecision, ReviewItem } from "../src/review-resource.js";
 
 describe("review workbench prototype", () => {
   const cases: Array<{
@@ -204,6 +211,57 @@ describe("review workbench prototype", () => {
 
     assert.match(decidedHtml, /hours-change/);
     assert.doesNotMatch(decidedHtml, /<span class="tag">resolved<\/span>/);
+  });
+
+  it("exports and replays review session events into final review decisions", () => {
+    const session = {
+      ...initialReviewQueueSessionState(),
+      activeItemName: "public-directory-address",
+      notesByItemName: {
+        "public-directory-hours": "Accepted longer posted hours.",
+        "public-directory-phone": "Kept current phone after source check.",
+        "public-directory-address": "Rejected proposed address as low confidence.",
+      },
+      decisionsByItemName: {
+        "public-directory-hours": "accept-proposed" as const,
+        "public-directory-phone": "keep-current" as const,
+        "public-directory-address": "reject-proposed" as const,
+      },
+    };
+
+    const events = buildReviewSessionEvents(session);
+    const replayed = replayReviewSessionEvents(initialReviewQueueSessionState(), events);
+    const exported = buildReviewWorkbenchSessionExport(replayed, events);
+    const decisions = buildReviewDecisionsFromSession(replayed);
+
+    assert.equal(exported.session.kind, "ReviewSession");
+    assert.equal(exported.session.status?.eventCount, events.length);
+    assert.deepEqual(exported.events.map((event) => event.kind), events.map(() => "ReviewSessionEvent"));
+    assert.deepEqual(replayed.decisionsByItemName, session.decisionsByItemName);
+    assert.deepEqual(replayed.notesByItemName, session.notesByItemName);
+    assert.deepEqual(exported.decisions.map((decision) => decision.metadata.name), decisions.map((decision) => decision.metadata.name));
+    assert.deepEqual(decisions.map((decision) => decision.spec.status), ["verified", "verified", "rejected"]);
+
+    const itemForDecision = (decision: ReviewDecision): ReviewItem => {
+      const item = replayed.items.find((entry) => entry.metadata.name === decision.spec.reviewItemName);
+      assert.ok(item);
+      return item;
+    };
+
+    const previews = new Map(decisions.map((decision) => [
+      decision.spec.reviewItemName,
+      buildSurfaceProjectionPreview(itemForDecision(decision), decision),
+    ]));
+    const acceptedPreview = previews.get("public-directory-hours");
+    const keptPreview = previews.get("public-directory-phone");
+    const rejectedPreview = previews.get("public-directory-address");
+
+    assert.equal(acceptedPreview?.canonicalClaim.status, "verified");
+    assert.equal(keptPreview?.canonicalClaim.status, "verified");
+    assert.equal(rejectedPreview?.canonicalClaim.status, "rejected");
+    assert.equal(acceptedPreview?.reviewEvent?.rationale, "Accepted longer posted hours.");
+    assert.equal(keptPreview?.reviewEvent?.rationale, "Kept current phone after source check.");
+    assert.equal(rejectedPreview?.reviewEvent?.rationale, "Rejected proposed address as low confidence.");
   });
 
   it("marks selected and unselected outcomes after a decision", () => {
@@ -505,6 +563,64 @@ describe("review workbench prototype", () => {
     assert.match(root.html, /decision-button is-active" type="button" data-decision="accept-proposed"/);
     assert.match(root.html, /data-queue-status="resolved"/);
     assert.match(root.html, /Kept current/);
+  });
+
+  it("persists mounted review decisions and notes through a ReviewSessionEvent store", () => {
+    const store = createInMemoryReviewSessionEventStore();
+    const firstRoot = new ReviewWorkbenchTestRoot();
+    const documentRestore = installTestDocument();
+
+    try {
+      mountReviewWorkbench(firstRoot as unknown as HTMLElement, initialReviewQueueSessionState(), { eventStore: store });
+      firstRoot.clickDecision("accept-proposed");
+      firstRoot.textarea.value = "Accepted persisted hours.";
+      firstRoot.textarea.dispatch("input");
+      firstRoot.clickNextUnresolved();
+    } finally {
+      documentRestore();
+    }
+
+    assert.deepEqual(store.events().map((event) => event.spec.eventType), [
+      "decision-changed",
+      "note-changed",
+      "item-selected",
+    ]);
+
+    const secondRoot = new ReviewWorkbenchTestRoot();
+    mountReviewWorkbench(secondRoot as unknown as HTMLElement, initialReviewQueueSessionState(), { eventStore: store });
+
+    assert.match(secondRoot.html, /public-directory-phone/);
+    secondRoot.clickQueueRow("public-directory-hours");
+    assert.equal(secondRoot.textarea.value, "Accepted persisted hours.");
+    assert.match(secondRoot.html, /decision-button is-active" type="button" data-decision="accept-proposed"/);
+  });
+
+  it("keeps local ReviewSessionEvent storage scoped to the review item set", () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string): string | null => values.get(key) ?? null,
+      setItem: (key: string, value: string): void => {
+        values.set(key, value);
+      },
+    };
+    const store = createLocalStorageReviewSessionEventStore(storage);
+    const queueSession = initialReviewQueueSessionState();
+    const singleItemSession = initialReviewQueueSessionState([publicDirectoryReviewItemFixture]);
+    const events = buildReviewSessionEvents(queueSession);
+
+    store.save(queueSession, events);
+
+    assert.deepEqual(store.load(queueSession), events);
+    assert.equal(store.load(singleItemSession), undefined);
+  });
+
+  it("ignores malformed local ReviewSessionEvent storage payloads", () => {
+    const store = createLocalStorageReviewSessionEventStore({
+      getItem: () => "{",
+      setItem: () => undefined,
+    });
+
+    assert.equal(store.load(initialReviewQueueSessionState()), undefined);
   });
 
   for (const entry of cases) {

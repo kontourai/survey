@@ -1,12 +1,18 @@
 import {
   candidateForDecision,
+  buildReviewSessionEvent,
+  buildReviewSessionEvents,
+  buildReviewSessionResource,
   currentReviewItem,
   currentReviewWorkbenchState,
+  defaultReviewSessionName,
   deriveQueueRowStatus,
   initialReviewQueueSessionState,
   initialReviewWorkbenchState,
   nextUnresolvedItemName,
+  replayReviewSessionEvents,
   reviewSessionSummary,
+  reviewWorkbenchSessionStorageKey,
   selectedCandidateRole,
   workbenchDecisionDefinitions,
   type ReviewQueueSessionState,
@@ -23,17 +29,25 @@ import {
   type ReviewCandidate,
   type ReviewDecision,
   type ReviewItem,
+  type ReviewSession,
+  type ReviewSessionEvent,
 } from "../../src/review-resource.js";
 
 export {
+  buildReviewSessionEvents,
+  buildReviewSessionEvent,
+  buildReviewSessionResource,
   candidateForDecision,
   currentReviewItem,
   currentReviewWorkbenchState,
+  defaultReviewSessionName,
   deriveQueueRowStatus,
   initialReviewQueueSessionState,
   initialReviewWorkbenchState,
   nextUnresolvedItemName,
+  replayReviewSessionEvents,
   reviewSessionSummary,
+  reviewWorkbenchSessionStorageKey,
   selectedCandidateRole,
   workbenchDecisionDefinitions,
   type ReviewQueueRowStatus,
@@ -88,6 +102,86 @@ export function buildReviewDecision(state: ReviewWorkbenchState): ReviewDecision
     },
     status: {
       appliedToClaimIds: candidate.projection?.claimId ? [candidate.projection.claimId] : undefined,
+    },
+  };
+}
+
+export interface ReviewWorkbenchSessionExport {
+  readonly session: ReviewSession;
+  readonly events: readonly ReviewSessionEvent[];
+  readonly decisions: readonly ReviewDecision[];
+}
+
+export interface ReviewSessionEventStore {
+  load(session: ReviewQueueSessionState): readonly ReviewSessionEvent[] | undefined;
+  save(session: ReviewQueueSessionState, events: readonly ReviewSessionEvent[]): void;
+}
+
+export interface MountReviewWorkbenchOptions {
+  readonly eventStore?: ReviewSessionEventStore;
+}
+
+export function buildReviewDecisionsFromSession(session: ReviewQueueSessionState): ReviewDecision[] {
+  return session.items.flatMap((item) => {
+    const decision = session.decisionsByItemName[item.metadata.name];
+    if (!decision) {
+      return [];
+    }
+
+    const reviewDecision = buildReviewDecision(currentReviewWorkbenchState({
+      ...session,
+      activeItemName: item.metadata.name,
+    }));
+
+    return reviewDecision ? [reviewDecision] : [];
+  });
+}
+
+export function buildReviewWorkbenchSessionExport(
+  session: ReviewQueueSessionState,
+  events: readonly ReviewSessionEvent[] = buildReviewSessionEvents(session),
+): ReviewWorkbenchSessionExport {
+  return {
+    session: buildReviewSessionResource(session, events),
+    events,
+    decisions: buildReviewDecisionsFromSession(session),
+  };
+}
+
+export function createInMemoryReviewSessionEventStore(
+  initialEvents: readonly ReviewSessionEvent[] = [],
+): ReviewSessionEventStore & { events(): readonly ReviewSessionEvent[] } {
+  let savedEvents = [...initialEvents];
+
+  return {
+    events: () => [...savedEvents],
+    load: () => savedEvents.length > 0 ? [...savedEvents] : undefined,
+    save: (_session, events) => {
+      savedEvents = [...events];
+    },
+  };
+}
+
+export function createLocalStorageReviewSessionEventStore(
+  storage: Pick<Storage, "getItem" | "setItem">,
+  keyPrefix = reviewWorkbenchSessionStorageKey,
+): ReviewSessionEventStore {
+  return {
+    load: (session) => {
+      const value = storage.getItem(reviewSessionStorageKey(session, keyPrefix));
+      if (!value) {
+        return undefined;
+      }
+
+      try {
+        const parsed = JSON.parse(value) as unknown;
+        return Array.isArray(parsed) ? parsed as ReviewSessionEvent[] : undefined;
+      } catch {
+        return undefined;
+      }
+    },
+    save: (session, events) => {
+      storage.setItem(reviewSessionStorageKey(session, keyPrefix), JSON.stringify(events));
     },
   };
 }
@@ -474,8 +568,9 @@ function renderPreviewSection(
 export function mountReviewWorkbench(
   root: HTMLElement,
   startState: ReviewQueueSessionState | ReviewWorkbenchState = initialReviewQueueSessionState(),
+  options: MountReviewWorkbenchOptions = {},
 ): void {
-  const controller = createReviewWorkbenchController(root, startState);
+  const controller = createReviewWorkbenchController(root, startState, options);
 
   controller.renderCurrentState();
 }
@@ -487,8 +582,40 @@ interface ReviewWorkbenchController {
 function createReviewWorkbenchController(
   root: HTMLElement,
   startState: ReviewQueueSessionState | ReviewWorkbenchState,
+  options: MountReviewWorkbenchOptions,
 ): ReviewWorkbenchController {
-  let session = queueSessionFromStartState(startState);
+  const baseSession = queueSessionFromStartState(startState);
+  const eventStore = options.eventStore ?? browserReviewSessionEventStore();
+  let events = eventStore?.load(baseSession) ?? [];
+  let session = events.length > 0 ? replayReviewSessionEvents(baseSession, events) : baseSession;
+
+  const persistEvents = (): void => {
+    eventStore?.save(session, events);
+  };
+
+  const appendEvent = (eventType: ReviewSessionEvent["spec"]["eventType"]): void => {
+    const state = currentReviewWorkbenchState(session);
+    const decision = state.decision;
+    const candidate = decision ? candidateForDecision(state.item, decision) : undefined;
+    const definition = decision ? workbenchDecisionDefinitions[decision] : undefined;
+
+    events = [
+      ...events,
+      buildReviewSessionEvent(session, {
+        sessionName: defaultReviewSessionName,
+        sequence: events.length + 1,
+        eventType,
+        occurredAt: session.reviewedAt,
+        reviewItemName: state.item.metadata.name,
+        activeItemName: eventType === "item-selected" ? session.activeItemName : undefined,
+        reviewDecisionName: decision ? `${state.item.metadata.name}-${decision}` : undefined,
+        candidateId: candidate?.id,
+        status: definition?.status,
+        rationale: state.note,
+        data: decision ? { workbenchDecision: decision } : undefined,
+      }),
+    ];
+  };
 
   const applySessionUpdate = (update: (current: ReviewQueueSessionState) => ReviewQueueSessionState): void => {
     session = update(session);
@@ -502,15 +629,29 @@ function createReviewWorkbenchController(
         [currentReviewItem(current).metadata.name]: decision,
       },
     }));
+    appendEvent("decision-changed");
+    persistEvents();
   };
 
   const controller = {
     currentState: (): ReviewWorkbenchState => currentReviewWorkbenchState(session),
-    goToNextUnresolved: (): void => applyNextUnresolvedSessionUpdate(applySessionUpdate, session),
+    goToNextUnresolved: (): void => {
+      applyNextUnresolvedSessionUpdate(applySessionUpdate, session);
+      appendEvent("item-selected");
+      persistEvents();
+    },
     renderCurrentState: (): void => renderCurrentState(root, session, controller),
     selectDecision,
-    selectQueueItem: (itemName: string): void => applySessionUpdate((current) => ({ ...current, activeItemName: itemName })),
-    updateReviewerNote: (note: string): void => applyReviewerNoteSessionUpdate(applySessionUpdate, session, note),
+    selectQueueItem: (itemName: string): void => {
+      applySessionUpdate((current) => ({ ...current, activeItemName: itemName }));
+      appendEvent("item-selected");
+      persistEvents();
+    },
+    updateReviewerNote: (note: string): void => {
+      applyReviewerNoteSessionUpdate(applySessionUpdate, session, note);
+      appendEvent("note-changed");
+      persistEvents();
+    },
   };
 
   return controller;
@@ -547,6 +688,19 @@ function applyNextUnresolvedSessionUpdate(
   if (next) {
     applySessionUpdate((current) => ({ ...current, activeItemName: next }));
   }
+}
+
+function browserReviewSessionEventStore(): ReviewSessionEventStore | undefined {
+  if (typeof window === "undefined" || !window.localStorage) {
+    return undefined;
+  }
+
+  return createLocalStorageReviewSessionEventStore(window.localStorage);
+}
+
+function reviewSessionStorageKey(session: ReviewQueueSessionState, keyPrefix: string): string {
+  const itemNames = buildReviewSessionResource(session).spec.reviewItemNames.join(",");
+  return `${keyPrefix}:${itemNames}`;
 }
 
 function renderCurrentState(

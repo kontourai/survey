@@ -33,6 +33,13 @@ export type {
   ReviewResource,
   ReviewResourceApiVersion,
   ReviewResourceKind,
+  ReviewSession,
+  ReviewSessionEvent,
+  ReviewSessionEventSpec,
+  ReviewSessionEventStatus,
+  ReviewSessionEventType,
+  ReviewSessionSpec,
+  ReviewSessionStatus,
   SourceReference,
   SurveyRecordProjectionHint,
 } from "./review-resource.js";

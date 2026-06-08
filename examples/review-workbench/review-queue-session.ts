@@ -1,8 +1,19 @@
 import { publicDirectoryReviewItemFixture, reviewWorkbenchQueueFixtures } from "./review-workbench-data.js";
-import { type ReviewCandidate, type ReviewDecision, type ReviewItem } from "../../src/review-resource.js";
+import {
+  reviewResourceApiVersion,
+  type ReviewCandidate,
+  type ReviewDecision,
+  type ReviewItem,
+  type ReviewSession,
+  type ReviewSessionEvent,
+  type ReviewSessionEventSpec,
+} from "../../src/review-resource.js";
 
 export type ReviewWorkbenchDecision = "accept-proposed" | "keep-current" | "reject-proposed";
 export type ReviewQueueRowStatus = "pending" | "in-review" | "resolved" | "rejected" | "escalated";
+
+export const reviewWorkbenchSessionStorageKey = "kontourai.survey.review-workbench.session-events.v1";
+export const defaultReviewSessionName = "review-workbench-session";
 
 export interface ReviewWorkbenchState {
   readonly item: ReviewItem;
@@ -178,4 +189,183 @@ export function selectedCandidateRole(state: ReviewWorkbenchState): ReviewCandid
   }
 
   return workbenchDecisionDefinitions[state.decision].candidateRole;
+}
+
+export function buildReviewSessionResource(
+  session: ReviewQueueSessionState,
+  events: readonly ReviewSessionEvent[] = [],
+  sessionName = defaultReviewSessionName,
+): ReviewSession {
+  const summary = reviewSessionSummary(session);
+  const completedAt = summary.unresolved === 0 ? session.reviewedAt : undefined;
+
+  return {
+    apiVersion: reviewResourceApiVersion,
+    kind: "ReviewSession",
+    metadata: {
+      name: sessionName,
+    },
+    spec: {
+      reviewItemNames: session.items.map((item) => item.metadata.name),
+      actor: {
+        id: session.actorId,
+      },
+      startedAt: session.reviewedAt,
+      completedAt,
+    },
+    status: {
+      activeItemName: session.activeItemName,
+      eventCount: events.length,
+      decisionCount: Object.keys(session.decisionsByItemName).length,
+    },
+  };
+}
+
+export function buildReviewSessionEvents(
+  session: ReviewQueueSessionState,
+  sessionName = defaultReviewSessionName,
+): ReviewSessionEvent[] {
+  const events: ReviewSessionEvent[] = [
+    buildReviewSessionEvent(session, {
+      sessionName,
+      sequence: 1,
+      eventType: "session-started",
+      occurredAt: session.reviewedAt,
+    }),
+    buildReviewSessionEvent(session, {
+      sessionName,
+      sequence: 2,
+      eventType: "item-selected",
+      occurredAt: session.reviewedAt,
+      activeItemName: session.activeItemName,
+      reviewItemName: session.activeItemName,
+    }),
+  ];
+
+  for (const item of session.items) {
+    const note = session.notesByItemName[item.metadata.name];
+    if (note) {
+      events.push(buildReviewSessionEvent(session, {
+        sessionName,
+        sequence: events.length + 1,
+        eventType: "note-changed",
+        occurredAt: session.reviewedAt,
+        reviewItemName: item.metadata.name,
+        rationale: note,
+      }));
+    }
+
+    const decision = session.decisionsByItemName[item.metadata.name];
+    if (!decision) {
+      continue;
+    }
+
+    const candidate = candidateForDecision(item, decision);
+    const definition = workbenchDecisionDefinitions[decision];
+    const reviewDecisionName = `${item.metadata.name}-${decision}`;
+    const data = { workbenchDecision: decision };
+
+    events.push(buildReviewSessionEvent(session, {
+      sessionName,
+      sequence: events.length + 1,
+      eventType: "decision-changed",
+      occurredAt: session.reviewedAt,
+      reviewItemName: item.metadata.name,
+      reviewDecisionName,
+      candidateId: candidate.id,
+      status: definition.status,
+      data,
+    }));
+    events.push(buildReviewSessionEvent(session, {
+      sessionName,
+      sequence: events.length + 1,
+      eventType: "decision-submitted",
+      occurredAt: session.reviewedAt,
+      reviewItemName: item.metadata.name,
+      reviewDecisionName,
+      candidateId: candidate.id,
+      status: definition.status,
+      rationale: note,
+      data,
+    }));
+  }
+
+  if (reviewSessionSummary(session).unresolved === 0) {
+    events.push(buildReviewSessionEvent(session, {
+      sessionName,
+      sequence: events.length + 1,
+      eventType: "session-completed",
+      occurredAt: session.reviewedAt,
+    }));
+  }
+
+  return events;
+}
+
+export function replayReviewSessionEvents(
+  startState: ReviewQueueSessionState,
+  events: readonly ReviewSessionEvent[],
+): ReviewQueueSessionState {
+  const sortedEvents = [...events].sort((left, right) => left.spec.sequence - right.spec.sequence);
+
+  return sortedEvents.reduce<ReviewQueueSessionState>((session, event) => {
+    if (event.spec.eventType === "item-selected") {
+      const activeItemName = event.spec.activeItemName ?? event.spec.reviewItemName;
+      return activeItemName && session.items.some((item) => item.metadata.name === activeItemName)
+        ? { ...session, activeItemName }
+        : session;
+    }
+
+    if (event.spec.eventType === "note-changed" && event.spec.reviewItemName) {
+      return {
+        ...session,
+        notesByItemName: {
+          ...session.notesByItemName,
+          [event.spec.reviewItemName]: event.spec.rationale ?? "",
+        },
+      };
+    }
+
+    if ((event.spec.eventType === "decision-changed" || event.spec.eventType === "decision-submitted")
+      && event.spec.reviewItemName) {
+      const decision = workbenchDecisionFromEvent(event);
+      return decision
+        ? {
+            ...session,
+            decisionsByItemName: {
+              ...session.decisionsByItemName,
+              [event.spec.reviewItemName]: decision,
+            },
+          }
+        : session;
+    }
+
+    return session;
+  }, startState);
+}
+
+export function buildReviewSessionEvent(
+  session: ReviewQueueSessionState,
+  spec: Omit<ReviewSessionEventSpec, "actor">,
+): ReviewSessionEvent {
+  return {
+    apiVersion: reviewResourceApiVersion,
+    kind: "ReviewSessionEvent",
+    metadata: {
+      name: `${spec.sessionName}-${String(spec.sequence).padStart(4, "0")}-${spec.eventType}`,
+    },
+    spec: {
+      ...spec,
+      actor: {
+        id: session.actorId,
+      },
+    },
+  };
+}
+
+function workbenchDecisionFromEvent(event: ReviewSessionEvent): ReviewWorkbenchDecision | undefined {
+  const decision = event.spec.data?.workbenchDecision;
+  return typeof decision === "string" && decision in workbenchDecisionDefinitions
+    ? decision as ReviewWorkbenchDecision
+    : undefined;
 }
