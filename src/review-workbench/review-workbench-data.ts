@@ -270,6 +270,162 @@ export const regulatedRuleConflictReviewItemFixture = {
   },
 } satisfies ReviewItem;
 
+export const facilityCredentialReviewItemFixture = {
+  apiVersion: reviewResourceApiVersion,
+  kind: "ReviewItem",
+  metadata: {
+    name: "facility-credential-review-operating-license",
+    labels: {
+      domain: "facility-credential",
+      workflow: "credential-review",
+    },
+    producer: {
+      displayName: "Facility Credential Review",
+      slug: "facility-credential-review",
+    },
+  },
+  spec: {
+    target: "operatingLicenseCredential",
+    selectedCandidateId: "facility-credential-review-operating-license:candidate:current",
+    candidateSetStatus: "needs-review",
+    rationale: "A source-of-authority registry update may supersede the currently managed facility credential snapshot.",
+    projection: {
+      candidateSetId: "facility-credential-review-operating-license:candidate-set",
+    },
+    producerPolicy: {
+      decisionMode: "current-proposed",
+      sourceAuthorityProjection: "only-for-selected-source-backed-value",
+      feedbackTags: ["credential-review", "authority-backed-registry", "nested-value"],
+    },
+    candidates: [
+      {
+        id: "facility-credential-review-operating-license:candidate:current",
+        role: "current",
+        value: {
+          licenseNumber: "FAC-2025-1042",
+          status: "active",
+          issuedAt: "2025-01-15",
+          expiresAt: "2026-01-15",
+          permittedServices: ["day-program", "after-school-care"],
+          inspections: [
+            { date: "2025-11-20", outcome: "passed", findingCount: 0 },
+          ],
+        },
+        confidence: 0.98,
+        source: {
+          sourceId: "facility-credential-review-operating-license:source:managed-record",
+          sourceRef: "survey-example://facility-credentials/facility-42/current",
+          kind: "manual-entry",
+          observedAt: "2026-01-02T16:00:00.000Z",
+          locatorScheme: "structured-field",
+        },
+        locator: {
+          scheme: "structured-field",
+          locator: "facilityCredentials[path=operatingLicense]",
+          excerpt: "Managed facility credential FAC-2025-1042 is active through 2026-01-15.",
+        },
+        extraction: {
+          extractionId: "facility-credential-review-operating-license:extraction:current",
+          target: "operatingLicenseCredential",
+          confidence: 0.98,
+          extractor: "credential-record-manager",
+          extractedAt: "2026-01-02T16:00:00.000Z",
+        },
+        claimTarget: {
+          claimId: "facility-credential.facility-42.operating-license.current",
+          subjectType: "facility",
+          subjectId: "facility-42",
+          surface: "facility.credential-profile",
+          claimType: "facility.credential",
+          fieldOrBehavior: "operatingLicenseCredential",
+          impactLevel: "high",
+          evidenceType: "human_attestation",
+          evidenceMethod: "attestation",
+          collectedBy: "credential-record-manager",
+        },
+        projection: {
+          rawSourceId: "facility-credential-review-operating-license:source:managed-record",
+          extractionId: "facility-credential-review-operating-license:extraction:current",
+          candidateSetId: "facility-credential-review-operating-license:candidate-set",
+          candidateId: "facility-credential-review-operating-license:projection:current",
+          claimId: "facility-credential.facility-42.operating-license.current",
+        },
+        producer: {
+          credentialSystem: "managed-record",
+        },
+      },
+      {
+        id: "facility-credential-review-operating-license:candidate:proposed",
+        role: "proposed",
+        value: {
+          licenseNumber: "FAC-2026-1042",
+          status: "active",
+          issuedAt: "2026-01-16",
+          expiresAt: "2027-01-15",
+          permittedServices: ["day-program", "after-school-care", "summer-session"],
+          inspections: [
+            { date: "2026-01-10", outcome: "passed", findingCount: 1 },
+            { date: "2026-01-12", outcome: "corrected", findingCount: 0 },
+          ],
+        },
+        confidence: 0.93,
+        sourceRank: 1,
+        source: {
+          sourceId: "facility-credential-review-operating-license:source:registry",
+          sourceRef: "https://example.test/facility-registry/facility-42/license",
+          kind: "api-record",
+          observedAt: "2026-01-17T14:45:00.000Z",
+          fetchedAt: "2026-01-17T14:45:00.000Z",
+          locatorScheme: "structured-field",
+        },
+        locator: {
+          scheme: "structured-field",
+          locator: "/facilityCredentials/operatingLicense",
+          excerpt: "License FAC-2026-1042 active through 2027-01-15; permitted services include summer-session.",
+        },
+        extraction: {
+          extractionId: "facility-credential-review-operating-license:extraction:registry",
+          target: "operatingLicenseCredential",
+          confidence: 0.93,
+          extractor: "credential-registry-sync",
+          extractedAt: "2026-01-17T14:45:00.000Z",
+        },
+        claimTarget: {
+          claimId: "facility-credential.facility-42.operating-license.registry",
+          subjectType: "facility",
+          subjectId: "facility-42",
+          surface: "facility.credential-profile",
+          claimType: "facility.credential-candidate",
+          fieldOrBehavior: "operatingLicenseCredential",
+          impactLevel: "high",
+          evidenceType: "source_excerpt",
+          evidenceMethod: "extraction",
+          collectedBy: "credential-registry-sync",
+        },
+        projection: {
+          rawSourceId: "facility-credential-review-operating-license:source:registry",
+          extractionId: "facility-credential-review-operating-license:extraction:registry",
+          candidateSetId: "facility-credential-review-operating-license:candidate-set",
+          candidateId: "facility-credential-review-operating-license:projection:registry",
+          claimId: "facility-credential.facility-42.operating-license.registry",
+        },
+        producer: {
+          credentialSystem: "source-of-authority-registry",
+          sourceAuthority: {
+            authorityClass: "facility-credential-registry",
+            declaredBy: "Example Facility Registry",
+            scope: "Operating license credential for facility-42",
+          },
+        },
+      },
+    ],
+  },
+  status: {
+    observedCandidateCount: 2,
+    selectedCandidateId: "facility-credential-review-operating-license:candidate:current",
+  },
+} satisfies ReviewItem;
+
 function queueFixture(
   name: string,
   target: string,

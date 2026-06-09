@@ -12,6 +12,7 @@ const requiredFiles = [
   "examples/review-workbench/vendor/console-kit/tokens/fonts.css",
   "examples/review-workbench/review-workbench.ts",
   "src/review-workbench/review-workbench-data.ts",
+  "src/review-workbench/review-presentation.ts",
   "src/review-workbench/review-queue-session.ts",
   "src/review-workbench/review-surface-preview.ts",
   "src/review-workbench/review-workbench.ts",
@@ -19,10 +20,12 @@ const requiredFiles = [
   "scripts/sync-review-workbench-assets.cjs",
   "dist/examples/review-workbench/review-workbench.js",
   "dist/src/review-workbench/review-workbench-data.js",
+  "dist/src/review-workbench/review-presentation.js",
   "dist/src/review-workbench/review-queue-session.js",
   "dist/src/review-workbench/review-surface-preview.js",
   "dist/src/review-workbench/review-workbench.js",
   "dist/src/review-workbench/review-workbench.d.ts",
+  "dist/src/review-workbench/review-presentation.d.ts",
   "dist/src/review-workbench/review-queue-session.d.ts",
   "dist/src/review-workbench/review-surface-preview.d.ts",
   "dist/src/review-workbench/review-workbench.css",
@@ -39,6 +42,7 @@ for (const file of requiredFiles) {
 const html = fs.readFileSync(path.join(root, "examples/review-workbench/index.html"), "utf8");
 const css = fs.readFileSync(path.join(root, "examples/review-workbench/review-workbench.css"), "utf8");
 const dataJs = fs.readFileSync(path.join(root, "dist/src/review-workbench/review-workbench-data.js"), "utf8");
+const presentationJs = fs.readFileSync(path.join(root, "dist/src/review-workbench/review-presentation.js"), "utf8");
 const queueSessionJs = fs.readFileSync(path.join(root, "dist/src/review-workbench/review-queue-session.js"), "utf8");
 const surfacePreviewJs = fs.readFileSync(path.join(root, "dist/src/review-workbench/review-surface-preview.js"), "utf8");
 const js = fs.readFileSync(path.join(root, "dist/src/review-workbench/review-workbench.js"), "utf8");
@@ -76,7 +80,12 @@ async function main() {
   assertExcludes(embedCss, "\nbody {");
   assertExcludes(embedCss, "\n:root {");
   assertIncludes(dataJs, "publicDirectoryReviewItemFixture");
+  assertIncludes(dataJs, "facilityCredentialReviewItemFixture");
+  assertIncludes(dataJs, "facility-credential-review-operating-license");
   assertIncludes(dataJs, "reviewWorkbenchQueueFixtures");
+  assertIncludes(presentationJs, "buildReviewItemPresentation");
+  assertIncludes(presentationJs, "buildReviewResultPresentation");
+  assertIncludes(presentationJs, "humanizeIdentifier");
   assertIncludes(queueSessionJs, "initialReviewQueueSessionState");
   assertIncludes(queueSessionJs, "deriveQueueRowStatus");
   assertIncludes(queueSessionJs, "reviewSessionSummary");
@@ -108,6 +117,10 @@ async function main() {
   assertExcludes(dataJs, "@kontourai/surface");
   assertExcludes(dataJs, "src/to-surface");
   assertExcludes(dataJs, "src/review-proof");
+  assertExcludes(presentationJs, "node:");
+  assertExcludes(presentationJs, "@kontourai/surface");
+  assertExcludes(presentationJs, "src/to-surface");
+  assertExcludes(presentationJs, "src/review-proof");
   assertExcludes(queueSessionJs, "node:");
   assertExcludes(queueSessionJs, "@kontourai/surface");
   assertExcludes(queueSessionJs, "src/to-surface");

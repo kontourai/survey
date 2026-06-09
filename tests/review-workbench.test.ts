@@ -26,9 +26,11 @@ import {
   replayReviewSessionEventsForSnapshot,
   reviewSessionSummary,
   validateReviewSessionEventsForSnapshot,
+  type ReviewPresentationAdapter,
   type ReviewWorkbenchDecision,
 } from "../src/review-workbench/review-workbench.js";
 import {
+  facilityCredentialReviewItemFixture,
   regulatedRuleConflictReviewItemFixture,
   reviewWorkbenchQueueFixtures,
 } from "../src/review-workbench/review-workbench-data.js";
@@ -212,6 +214,65 @@ describe("review workbench prototype", () => {
     assert.match(html, /display:available/);
     assert.match(html, /Needs operator review/);
     assert.doesNotMatch(html, /<strong>availabilityStatus<\/strong>/);
+  });
+
+  it("presents a non-product facility credential ReviewItem with nested structured values", () => {
+    const presentation = buildReviewItemPresentation(facilityCredentialReviewItemFixture, facilityCredentialPresentationAdapter());
+    const proposed = presentation.candidates.find((candidate) => candidate.candidate.role === "proposed");
+
+    assert.equal(presentation.targetLabel, "Operating license credential");
+    assert.equal(presentation.statusLabel, "Credential review needed");
+    assert.equal(presentation.traceRefs.find((ref) => ref.kind === "candidate-set")?.value, "facility-credential-review-operating-license:candidate-set");
+    assert.ok(proposed);
+    assert.equal(proposed.valueText, "FAC-2026-1042 active through 2027-01-15; 3 permitted services; 2 inspections");
+    assert.equal(proposed.sourceLink?.href, "https://example.test/facility-registry/facility-42/license");
+    assert.equal(
+      proposed.traceRefs.find((ref) => ref.kind === "claim")?.value,
+      "facility-credential.facility-42.operating-license.registry",
+    );
+  });
+
+  it("renders facility credential presentation through the embedded workbench adapter", () => {
+    const html = renderReviewWorkbenchHtml(
+      initialReviewWorkbenchState(facilityCredentialReviewItemFixture),
+      undefined,
+      { presentationAdapter: facilityCredentialPresentationAdapter() },
+    );
+
+    assert.match(html, /Operating license credential/);
+    assert.match(html, /FAC-2026-1042 active through 2027-01-15; 3 permitted services; 2 inspections/);
+    assert.match(html, /Credential review needed/);
+    assert.match(html, /facility-credential-review-operating-license:candidate:proposed/);
+    assert.match(html, /facility-credential-review-operating-license:source:registry/);
+    assert.doesNotMatch(html, /public-directory/);
+  });
+
+  it("builds saved facility credential result presentation from replayed Survey decisions", () => {
+    const session = {
+      ...initialReviewQueueSessionState([facilityCredentialReviewItemFixture]),
+      decisionsByItemName: {
+        [facilityCredentialReviewItemFixture.metadata.name]: "accept-proposed" as const,
+      },
+    };
+    const events = buildReviewSessionEvents(session);
+    const replayed = buildReviewWorkbenchSessionExportForSnapshot({
+      ...session,
+      decisionsByItemName: {},
+    }, events);
+    const result = replayed.results[0];
+
+    assert.ok(result);
+
+    const presentation = buildReviewResultPresentation(
+      result,
+      facilityCredentialReviewItemFixture,
+      facilityCredentialPresentationAdapter(),
+    );
+
+    assert.equal(presentation.targetLabel, "Operating license credential");
+    assert.equal(presentation.selectedValueText, "FAC-2026-1042 active through 2027-01-15; 3 permitted services; 2 inspections");
+    assert.equal(presentation.applyMeaning, "Saved decision applies proposed value");
+    assert.equal(presentation.traceRefs[1]?.value, "facility-credential-review-operating-license:candidate:proposed");
   });
 
   it("AC37-1 derives queue row statuses from ReviewItem status and local decisions", () => {
@@ -1142,6 +1203,30 @@ function replaceReviewEventSpec(
       ...spec,
     },
   };
+}
+
+function facilityCredentialPresentationAdapter(): ReviewPresentationAdapter {
+  return {
+    labelForTarget: (target) => target === "operatingLicenseCredential" ? "Operating license credential" : undefined,
+    statusLabel: (status) => status === "needs-review" ? "Credential review needed" : undefined,
+    summarizeValue: (value) => {
+      if (!isRecord(value)) {
+        return undefined;
+      }
+
+      const permittedServices = Array.isArray(value.permittedServices) ? value.permittedServices : [];
+      const inspections = Array.isArray(value.inspections) ? value.inspections : [];
+      return `${String(value.licenseNumber)} ${String(value.status)} through ${String(value.expiresAt)}; `
+        + `${permittedServices.length} permitted services; ${inspections.length} inspections`;
+    },
+    linkForTraceRef: (ref) => ref.kind === "candidate"
+      ? { href: `/credential-review/trace/${encodeURIComponent(ref.value)}` }
+      : undefined,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function unescapeHtml(value: string): string {
