@@ -80,13 +80,13 @@ p {
   z-index: 1;
   container-type: inline-size;
   min-height: 100vh;
-  padding: 30px 26px 60px;
+  padding: 22px 22px 50px;
 }
 
 .workbench-shell {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 22px;
+  gap: 16px;
   max-width: 1360px;
   margin: 0 auto;
 }
@@ -121,10 +121,10 @@ p {
 
 .topbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 520px);
-  gap: 26px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
   align-items: center;
-  padding: 22px 26px;
+  padding: 15px 17px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
   background:
@@ -144,12 +144,12 @@ p {
 }
 
 h1 {
-  margin-top: 8px;
+  margin-top: 6px;
   font-family: "Fraunces", Georgia, "Times New Roman", serif;
   font-optical-sizing: auto;
   font-weight: 600;
-  font-size: clamp(26px, 3.4vw, 38px);
-  line-height: 1.04;
+  font-size: clamp(21px, 2vw, 27px);
+  line-height: 1.08;
   letter-spacing: -0.01em;
   overflow-wrap: anywhere;
   color: var(--paper);
@@ -157,10 +157,10 @@ h1 {
 
 .review-question {
   max-width: 720px;
-  margin-top: 10px;
+  margin-top: 7px;
   color: var(--paper-dim);
-  font-size: 15px;
-  line-height: 1.45;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .review-question strong {
@@ -170,7 +170,7 @@ h1 {
 }
 
 .meta-grid {
-  display: grid;
+  display: none;
   grid-template-columns: repeat(4, minmax(110px, 1fr));
   gap: 10px;
   width: 100%;
@@ -208,13 +208,13 @@ h1 {
 .queue-layout {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
-  gap: 22px;
+  gap: 16px;
   align-items: start;
 }
 
 .queue-panel {
   display: grid;
-  gap: 18px;
+  gap: 14px;
   position: sticky;
   top: 18px;
 }
@@ -229,7 +229,7 @@ h1 {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: linear-gradient(180deg, var(--ink-800), var(--ink-850));
-  padding: 18px;
+  padding: 14px;
   box-shadow: 0 22px 50px -38px rgba(0, 0, 0, 0.9);
   animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: 0.05s;
@@ -248,7 +248,7 @@ h1 {
 .session-audit h2 {
   font-family: "Fraunces", Georgia, serif;
   font-weight: 600;
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1.1;
   letter-spacing: -0.01em;
 }
@@ -261,12 +261,12 @@ h1 {
   gap: 10px;
   align-items: center;
   width: 100%;
-  min-height: 60px;
+  min-height: 54px;
   border: 1px solid var(--line);
   border-left: 3px solid var(--paper-faint);
   border-radius: var(--radius-sm);
-  margin-top: 9px;
-  padding: 11px 12px;
+  margin-top: 8px;
+  padding: 9px 10px;
   background: rgba(8, 12, 18, 0.5);
   color: var(--paper);
   cursor: pointer;
@@ -368,13 +368,13 @@ h1 {
 .summary-grid .meta-item {
   display: grid;
   gap: 2px;
-  padding: 12px;
+  padding: 10px;
   background: rgba(8, 12, 18, 0.6);
 }
 
 .summary-grid .meta-value {
   font-family: "Fraunces", Georgia, serif;
-  font-size: 28px;
+  font-size: 20px;
   font-weight: 700;
   line-height: 1;
   color: var(--paper);
@@ -391,7 +391,7 @@ h1 {
 .session-audit-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
+  gap: 8px;
   align-items: start;
 }
 
@@ -406,8 +406,8 @@ h1 {
 
 .audit-grid .meta-value {
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 12px;
-  line-height: 1.35;
+  font-size: 11px;
+  line-height: 1.3;
 }
 
 .session-event-list {
@@ -420,20 +420,20 @@ h1 {
 
 .session-event-list li {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
-  gap: 9px;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 8px;
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  padding: 9px 10px;
+  padding: 8px;
   background: rgba(6, 9, 13, 0.45);
 }
 
 .event-sequence {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border: 1px solid var(--line-strong);
   border-radius: 999px;
   color: var(--accent);
@@ -452,13 +452,13 @@ h1 {
 .session-event-list strong {
   color: var(--paper);
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .session-event-list small {
   margin-top: 3px;
   color: var(--paper-faint);
-  font-size: 11.5px;
+  font-size: 10.5px;
   line-height: 1.35;
 }
 
@@ -489,13 +489,13 @@ h1 {
     "focus"
     "decision"
     "candidates";
-  gap: 22px;
+  gap: 14px;
   align-items: start;
 }
 
 .review-main {
   display: grid;
-  gap: 18px;
+  gap: 14px;
   min-width: 0;
 }
 
@@ -504,11 +504,11 @@ h1 {
 .review-focus {
   grid-area: focus;
   display: grid;
-  gap: 16px;
+  gap: 12px;
   min-width: 0;
   border: 1px solid rgba(92, 224, 198, 0.28);
   border-radius: var(--radius);
-  padding: 18px;
+  padding: 14px;
   background:
     linear-gradient(135deg, rgba(92, 224, 198, 0.12), transparent 34%),
     linear-gradient(180deg, var(--ink-800), var(--ink-850));
@@ -518,7 +518,7 @@ h1 {
 .focus-head,
 .focus-values {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .focus-head {
@@ -534,23 +534,23 @@ h1 {
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  padding: 13px 14px;
+  padding: 10px 12px;
   background: rgba(6, 9, 13, 0.56);
 }
 
 .focus-value strong {
   display: block;
-  margin-top: 8px;
+  margin-top: 6px;
   color: var(--paper);
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: clamp(22px, 3vw, 34px);
-  line-height: 1.05;
+  font-size: clamp(18px, 1.8vw, 25px);
+  line-height: 1.14;
   overflow-wrap: anywhere;
 }
 
 .focus-value span:last-child {
   display: block;
-  margin-top: 8px;
+  margin-top: 6px;
   color: var(--paper-faint);
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 11px;
@@ -568,13 +568,13 @@ h1 {
 .focus-evidence {
   display: grid;
   grid-template-columns: minmax(110px, 0.65fr) minmax(0, 1.2fr) minmax(0, 1.4fr);
-  gap: 12px;
+  gap: 10px;
   margin: 0;
 }
 
 .focus-evidence .field {
   border-top: 1px solid var(--line);
-  padding-top: 12px;
+  padding-top: 10px;
 }
 
 /* ---- Candidate comparison: the hero of the console -------------------- */
@@ -583,7 +583,7 @@ h1 {
   grid-area: candidates;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
+  gap: 12px;
   position: relative;
 }
 
@@ -591,12 +591,12 @@ h1 {
 .candidate-grid::before {
   content: "vs";
   position: absolute;
-  top: 26px;
+  top: 18px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 3;
-  width: 38px;
-  height: 38px;
+  width: 30px;
+  height: 30px;
   display: grid;
   place-items: center;
   border-radius: 999px;
@@ -605,7 +605,7 @@ h1 {
   color: var(--paper-faint);
   font-family: "Fraunces", Georgia, serif;
   font-style: italic;
-  font-size: 15px;
+  font-size: 13px;
   box-shadow: 0 10px 26px -12px rgba(0, 0, 0, 0.9);
 }
 
@@ -622,9 +622,9 @@ h1 {
 .candidate-card {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 16px;
-  min-height: 460px;
-  padding: 20px;
+  gap: 11px;
+  min-height: auto;
+  padding: 14px;
   position: relative;
   overflow: hidden;
   animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -656,7 +656,7 @@ h1 {
 
 .card-head {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   justify-content: space-between;
   align-items: flex-start;
   position: relative;
@@ -673,10 +673,10 @@ h1 {
 }
 
 .role {
-  margin-top: 4px;
+  margin-top: 3px;
   font-family: "Fraunces", Georgia, serif;
   font-weight: 600;
-  font-size: 22px;
+  font-size: 18px;
   letter-spacing: -0.01em;
   color: var(--paper);
 }
@@ -696,16 +696,16 @@ h1 {
   position: relative;
   z-index: 1;
   border-block: 1px solid var(--line);
-  padding: 18px 0;
+  padding: 10px 0;
 }
 
 .candidate-value .field-value {
-  margin-top: 10px;
+  margin-top: 7px;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: clamp(26px, 3vw, 40px);
+  font-size: clamp(16px, 1.35vw, 20px);
   font-weight: 600;
-  line-height: 1.05;
-  letter-spacing: -0.02em;
+  line-height: 1.22;
+  letter-spacing: 0;
   color: var(--paper);
 }
 
@@ -719,34 +719,34 @@ h1 {
 
 .field-stack {
   display: grid;
-  gap: 14px;
+  gap: 9px;
   position: relative;
   z-index: 1;
   align-content: start;
 }
 
 .field-value {
-  margin-top: 5px;
-  font-size: 14px;
+  margin-top: 4px;
+  font-size: 12.5px;
 }
 
 /* Source refs / locators / ids read as data. */
 .candidate-card .field-stack .field-value {
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 12.5px;
+  font-size: 11.5px;
   color: var(--paper-dim);
 }
 
 /* Highlight extraction confidence (5th field in the stack) as a chip. */
 .candidate-card .field-stack > .field:nth-child(5) .field-value {
   display: inline-block;
-  margin-top: 6px;
-  padding: 5px 11px;
+  margin-top: 5px;
+  padding: 4px 9px;
   border: 1px solid rgba(92, 224, 198, 0.35);
   border-radius: 999px;
   background: rgba(92, 224, 198, 0.1);
   color: var(--accent);
-  font-size: 13px;
+  font-size: 11.5px;
   font-weight: 600;
 }
 
@@ -766,7 +766,7 @@ h1 {
   grid-area: decision;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 18px;
+  gap: 12px;
   animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: 0.15s;
 }
@@ -774,22 +774,22 @@ h1 {
 .decision-row,
 .payload-panel,
 .surface-preview {
-  padding: 20px;
+  padding: 14px;
 }
 
 textarea {
   display: block;
   width: 100%;
-  min-height: 104px;
-  margin-top: 10px;
+  min-height: 74px;
+  margin-top: 8px;
   resize: vertical;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
-  padding: 12px;
+  padding: 10px;
   color: var(--paper);
   background: rgba(6, 9, 13, 0.7);
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -807,19 +807,19 @@ textarea:focus {
 .decision-buttons {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 16px;
+  gap: 8px;
+  margin-top: 0;
 }
 
 .decision-button {
-  min-height: 50px;
+  min-height: 42px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   background: rgba(8, 12, 18, 0.6);
   color: var(--paper);
   cursor: pointer;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 12px;
   letter-spacing: 0.01em;
   transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease, box-shadow 0.14s ease;
 }
@@ -846,23 +846,23 @@ textarea:focus {
 .effect {
   display: grid;
   gap: 7px;
-  margin-top: 16px;
+  margin-top: 12px;
   border-top: 1px solid var(--line);
-  padding-top: 14px;
+  padding-top: 11px;
 }
 
 .effect .field-value {
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 12.5px;
+  line-height: 1.45;
   color: var(--paper-dim);
 }
 
 .feedback-tags {
   display: grid;
-  gap: 9px;
-  margin-top: 16px;
+  gap: 8px;
+  margin-top: 12px;
   border-top: 1px solid var(--line);
-  padding-top: 14px;
+  padding-top: 11px;
 }
 
 .tag-row {
@@ -891,7 +891,7 @@ textarea:focus {
 
 .surface-preview {
   display: grid;
-  gap: 14px;
+  gap: 11px;
 }
 
 .surface-head {
@@ -904,7 +904,7 @@ textarea:focus {
 .surface-head h2 {
   font-family: "Fraunces", Georgia, serif;
   font-weight: 600;
-  font-size: 19px;
+  font-size: 16px;
   letter-spacing: -0.01em;
 }
 
@@ -919,22 +919,22 @@ textarea:focus {
 .preview-section-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .preview-section {
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  padding: 13px 14px;
+  padding: 10px 11px;
   background: rgba(6, 9, 13, 0.55);
 }
 
 .preview-section h3 {
-  margin-bottom: 10px;
+  margin-bottom: 7px;
   color: var(--accent);
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -966,22 +966,31 @@ textarea:focus {
   background: linear-gradient(180deg, var(--ink-850), var(--ink-900));
 }
 
-.payload-panel h2.field-label::before {
+.payload-panel summary.field-label {
+  cursor: pointer;
+  list-style: none;
+}
+
+.payload-panel summary.field-label::-webkit-details-marker {
+  display: none;
+}
+
+.payload-panel summary.field-label::before {
   content: "› ";
   color: var(--verify);
 }
 
 pre {
-  max-height: 460px;
+  max-height: 280px;
   margin: 12px 0 0;
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--ink-1000);
-  padding: 14px;
+  padding: 11px;
   color: #b6f3df;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 11.5px;
+  font-size: 11px;
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;

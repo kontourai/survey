@@ -207,8 +207,8 @@ test("keeps the review controls usable on mobile width", async ({ page }) => {
     expect(auditBox.x + auditBox.width).toBeLessThanOrEqual(viewport.width + 1);
   }
 
-  await page.locator(".active-review-decisions [data-decision='keep-current']").click();
-  await expect(page.locator(".active-review-decisions [data-decision='keep-current']")).toHaveClass(/is-active/);
+  await page.locator(".decision-column [data-decision='keep-current']").click();
+  await expect(page.locator(".decision-column [data-decision='keep-current']")).toHaveClass(/is-active/);
   await expect(page.getByTestId("session-event-list")).toContainText("decision-changed");
   expect(consoleErrors).toEqual([]);
 });

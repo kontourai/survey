@@ -168,7 +168,8 @@ describe("review workbench prototype", () => {
     assert.match(html, /data-testid="active-review-strip"/);
     assert.match(html, /Review 1 of 6/);
     assert.match(html, /data-testid="active-next-unresolved"/);
-    assert.match(html, /Quick review decision/);
+    assert.doesNotMatch(html, /active-review-decisions/);
+    assert.doesNotMatch(html, /Quick review decision/);
     assert.match(html, /data-testid="queue-row" data-queue-status="in-review"/);
     assert.match(html, /data-testid="queue-row" data-queue-status="pending"/);
     assert.match(html, /data-testid="queue-row" data-queue-status="resolved"/);
@@ -1052,14 +1053,14 @@ function payloadValue(html: string): string {
 }
 
 function surfacePreviewValue(html: string): string {
-  return html.match(/(<section class="surface-preview"[^>]*data-testid="surface-preview"[\s\S]*?)\s*<section class="payload-panel">/)?.[1]
+  return html.match(/(<section class="surface-preview"[^>]*data-testid="surface-preview"[\s\S]*?)\s*<details class="payload-panel">/)?.[1]
     ?? html.match(/<section class="surface-preview"[^>]*data-testid="surface-preview"[\s\S]*?<\/section>/)?.[0]
     ?? "";
 }
 
 function replaceSurfacePreview(html: string, replacement: string): string {
   return html.replace(
-    /<section class="surface-preview"[^>]*data-testid="surface-preview"[\s\S]*?(?=\s*<section class="payload-panel">)/,
+    /<section class="surface-preview"[^>]*data-testid="surface-preview"[\s\S]*?(?=\s*<details class="payload-panel">)/,
     `${replacement}\n      `,
   );
 }

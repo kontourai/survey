@@ -59,7 +59,9 @@ async function main() {
   assertIncludes(html, "../../dist/examples/review-workbench/review-workbench.js");
   assertIncludes(css, "@media (max-width: 980px)");
   assertIncludes(css, ".workbench-shell");
-  assertIncludes(css, "grid-template-columns: minmax(0, 1fr) minmax(0, 520px)");
+  assertIncludes(css, "grid-template-columns: minmax(0, 1fr)");
+  assertIncludes(css, ".meta-grid {\n  display: none;");
+  assertIncludes(css, ".payload-panel summary.field-label");
   assertIncludes(css, "overflow-wrap: anywhere");
   assertIncludes(css, "--ink-1000: var(--k-bg)");
   assertIncludes(css, "--accent: var(--k-brand)");

@@ -408,8 +408,8 @@ export function renderReviewWorkbenchHtml(
       ${renderWorkbenchHeader(state)}
       <div class="content-grid">
         ${renderReviewFocus(state)}
-        ${renderCandidateComparison(state)}
         ${renderDecisionColumn(state)}
+        ${renderCandidateComparison(state)}
       </div>
     </section>
   `;
@@ -431,8 +431,8 @@ function renderReviewQueueSessionHtml(session: ReviewQueueSessionState, events?:
         </aside>
         <div class="content-grid">
           ${renderReviewFocus(state)}
-          ${renderCandidateComparison(state)}
           ${renderDecisionColumn(state)}
+          ${renderCandidateComparison(state)}
         </div>
       </div>
     </section>
@@ -564,9 +564,6 @@ function renderActiveReviewStrip(session: ReviewQueueSessionState, state: Review
         <span class="state-label">${escapeHtml(status)}</span>
         <button class="next-button" type="button" data-testid="active-next-unresolved">Next unresolved</button>
       </div>
-      <div class="active-review-decisions" aria-label="Quick review decision">
-        ${renderDecisionButtons(state)}
-      </div>
     </section>
   `;
 }
@@ -668,10 +665,6 @@ function renderDecisionControls(state: ReviewWorkbenchState): string {
 
   return `
     <section class="decision-row">
-      <label class="field">
-        <span class="field-label">Reviewer note</span>
-        <textarea id="reviewer-note" data-testid="reviewer-note">${escapeHtml(state.note)}</textarea>
-      </label>
       <div class="decision-buttons">
         ${renderDecisionButtons(state)}
       </div>
@@ -679,6 +672,10 @@ function renderDecisionControls(state: ReviewWorkbenchState): string {
         <span class="field-label">Decision effect</span>
         <span class="field-value">${escapeHtml(activeDefinition?.effect ?? "No decision selected.")}</span>
       </div>
+      <label class="field">
+        <span class="field-label">Reviewer note</span>
+        <textarea id="reviewer-note" data-testid="reviewer-note">${escapeHtml(state.note)}</textarea>
+      </label>
       ${renderFeedbackTags(state)}
     </section>
   `;
@@ -709,10 +706,10 @@ function renderDecisionPayload(state: ReviewWorkbenchState): string {
   const decision = buildReviewDecision(state);
 
   return `
-    <section class="payload-panel">
-      <h2 class="field-label">ReviewDecision payload</h2>
+    <details class="payload-panel">
+      <summary class="field-label">ReviewDecision payload</summary>
       <pre data-testid="decision-payload">${escapeHtml(JSON.stringify(decision ?? null, null, 2))}</pre>
-    </section>
+    </details>
   `;
 }
 
