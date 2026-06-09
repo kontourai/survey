@@ -213,6 +213,42 @@ test("keeps the review controls usable on mobile width", async ({ page }) => {
   expect(consoleErrors).toEqual([]);
 });
 
+test("keeps embedded review evidence readable in a narrow host panel", async ({ page }) => {
+  test.skip(test.info().project.name !== "chromium-desktop", "embedded-width regression uses desktop viewport with a narrow host");
+  const consoleErrors = await loadWorkbench(page);
+
+  await page.addStyleTag({
+    content: `
+      [data-testid="review-workbench"] {
+        width: 760px;
+        max-width: 760px;
+        margin-inline: auto;
+      }
+    `,
+  });
+
+  await expect(page.getByTestId("review-focus")).toBeVisible();
+  await expect(page.getByTestId("surface-preview")).toBeVisible();
+
+  const layout = await page.evaluate(() => {
+    const workbench = document.querySelector<HTMLElement>("[data-testid='review-workbench']");
+    const candidateCards = [...document.querySelectorAll<HTMLElement>(".candidate-card")];
+    const decisionButtons = [...document.querySelectorAll<HTMLElement>(".decision-column .decision-button")];
+    return {
+      viewportOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      workbenchOverflow: workbench ? workbench.scrollWidth - workbench.clientWidth : 0,
+      candidateWidths: candidateCards.map((card) => card.getBoundingClientRect().width),
+      decisionButtonWidths: decisionButtons.map((button) => button.getBoundingClientRect().width),
+    };
+  });
+
+  expect(layout.viewportOverflow).toBeLessThanOrEqual(1);
+  expect(layout.workbenchOverflow).toBeLessThanOrEqual(1);
+  expect(Math.min(...layout.candidateWidths)).toBeGreaterThanOrEqual(620);
+  expect(Math.min(...layout.decisionButtonWidths)).toBeGreaterThanOrEqual(180);
+  expect(consoleErrors).toEqual([]);
+});
+
 async function loadWorkbench(page: Page): Promise<string[]> {
   const consoleErrors: string[] = [];
   page.on("console", (message) => {

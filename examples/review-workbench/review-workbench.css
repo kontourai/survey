@@ -78,6 +78,7 @@ p {
 .workbench {
   position: relative;
   z-index: 1;
+  container-type: inline-size;
   min-height: 100vh;
   padding: 30px 26px 60px;
 }
@@ -86,7 +87,7 @@ p {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 22px;
-  max-width: 1280px;
+  max-width: 1360px;
   margin: 0 auto;
 }
 
@@ -206,7 +207,7 @@ h1 {
 
 .queue-layout {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: 280px minmax(0, 1fr);
   gap: 22px;
   align-items: start;
 }
@@ -483,10 +484,11 @@ h1 {
 
 .content-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 440px);
+  grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
-    "focus decision"
-    "candidates decision";
+    "focus"
+    "decision"
+    "candidates";
   gap: 22px;
   align-items: start;
 }
@@ -621,7 +623,7 @@ h1 {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   gap: 16px;
-  min-height: 560px;
+  min-height: 460px;
   padding: 20px;
   position: relative;
   overflow: hidden;
@@ -763,6 +765,7 @@ h1 {
 .decision-column {
   grid-area: decision;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
   animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: 0.15s;
@@ -915,7 +918,7 @@ textarea:focus {
 
 .preview-section-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -1115,6 +1118,69 @@ pre {
 
   .candidate-card {
     min-height: auto;
+  }
+}
+
+@container (max-width: 1100px) {
+  .topbar,
+  .queue-layout,
+  .focus-evidence {
+    grid-template-columns: 1fr;
+  }
+
+  .queue-layout {
+    grid-template-areas:
+      "content"
+      "queue";
+  }
+
+  .queue-panel {
+    grid-area: queue;
+    position: static;
+  }
+
+  .content-grid {
+    grid-area: content;
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "focus"
+      "decision"
+      "candidates";
+  }
+
+  .content-grid,
+  .review-main,
+  .candidate-grid,
+  .decision-column {
+    min-width: 0;
+  }
+}
+
+@container (max-width: 860px) {
+  .candidate-grid,
+  .focus-values,
+  .preview-section-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .candidate-grid::before {
+    display: none;
+  }
+
+  .candidate-card {
+    min-height: auto;
+  }
+}
+
+@container (max-width: 620px) {
+  .topbar .meta-grid {
+    display: none;
+  }
+
+  .decision-buttons,
+  .summary-grid,
+  .audit-grid {
+    grid-template-columns: 1fr;
   }
 }
 
