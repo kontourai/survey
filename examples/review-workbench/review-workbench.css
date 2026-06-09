@@ -621,7 +621,7 @@ h1 {
 
 .candidate-card {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   gap: 11px;
   min-height: auto;
   padding: 14px;
@@ -667,7 +667,7 @@ h1 {
   color: var(--paper-faint);
   font-size: 10px;
   letter-spacing: 0.1em;
-  text-transform: none;
+  text-transform: uppercase;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -958,6 +958,44 @@ textarea:focus {
 
 .preview-section.is-neutral h3 {
   color: var(--paper-faint);
+}
+
+.reference-details {
+  margin-top: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.reference-details summary {
+  cursor: pointer;
+  color: var(--paper-faint);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.reference-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.reference-details summary::before {
+  content: "› ";
+  color: var(--paper-faint);
+}
+
+.reference-details[open] summary {
+  color: var(--accent);
+}
+
+.reference-details[open] summary::before {
+  content: "⌄ ";
+  color: var(--accent);
+}
+
+.reference-details .field-stack {
+  margin-top: 8px;
 }
 
 /* ---- Decision payload: terminal readout, intentionally demoted -------- */

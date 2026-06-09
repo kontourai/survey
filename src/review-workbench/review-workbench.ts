@@ -758,11 +758,12 @@ function renderSurfacePreviewSections(preview: SurfaceProjectionPreview): string
 }
 
 function renderCanonicalClaim(preview: SurfaceProjectionPreview): string {
-  return renderPreviewSection("Selected canonical claim", "surface-canonical-claim", [
-    ["Candidate", preview.canonicalClaim.candidateId],
-    ["Claim", preview.canonicalClaim.claimId],
+  return renderPreviewSection("Selected claim", "surface-canonical-claim", [
     ["Value", preview.canonicalClaim.value],
     ["Review status", preview.canonicalClaim.status],
+  ], undefined, [
+    ["Candidate ID", preview.canonicalClaim.candidateId],
+    ["Claim ID", preview.canonicalClaim.claimId],
   ]);
 }
 
@@ -778,10 +779,11 @@ function renderReviewEvent(preview: SurfaceProjectionPreview): string {
 
 function renderIntegrityPosture(preview: SurfaceProjectionPreview): string {
   return renderPreviewSection("Integrity posture", "surface-integrity-posture", [
-    ["Candidate set", preview.integrityPosture.candidateSetId],
-    ["Raw source", preview.integrityPosture.rawSourceId],
-    ["Extraction", preview.integrityPosture.extractionId],
     ["Checksum", preview.integrityPosture.checksum],
+  ], undefined, [
+    ["Candidate set ID", preview.integrityPosture.candidateSetId],
+    ["Raw source ID", preview.integrityPosture.rawSourceId],
+    ["Extraction ID", preview.integrityPosture.extractionId],
   ]);
 }
 
@@ -797,21 +799,25 @@ function renderCandidateHistory(preview: SurfaceProjectionPreview): string {
     ? [["History", "No unselected candidates."]]
     : preview.candidateHistory.flatMap((candidate) => [
       ["History", candidate.historyLabel],
-      ["Candidate", candidate.candidateId],
       ["Value", candidate.value],
     ] as Array<readonly [string, string]>);
+  const references: Array<readonly [string, string]> = preview.candidateHistory.flatMap((candidate) => [
+    ["Candidate ID", candidate.candidateId],
+  ] as Array<readonly [string, string]>);
 
-  return renderPreviewSection("Unselected candidate history", "surface-candidate-history", rows);
+  return renderPreviewSection("Unselected candidate history", "surface-candidate-history", rows, undefined, references);
 }
 
 function renderSourceEvidence(preview: SurfaceProjectionPreview): string {
   const rows: Array<readonly [string, string]> = [
     ["Source URL", preview.sourceEvidence.sourceRef],
-    ["Source ref", preview.sourceEvidence.sourceId],
     ["Excerpt", preview.sourceEvidence.excerpt],
-    ["Extraction", preview.sourceEvidence.extractionId],
     ["Extractor", preview.sourceEvidence.extractor],
     ["Observed", preview.sourceEvidence.observedAt],
+  ];
+  const references: Array<readonly [string, string]> = [
+    ["Source ID", preview.sourceEvidence.sourceId],
+    ["Extraction ID", preview.sourceEvidence.extractionId],
   ];
 
   if (preview.sourceEvidence.sourceAuthority) {
@@ -830,6 +836,7 @@ function renderPreviewSection(
   testId: string,
   rows: ReadonlyArray<readonly [string, string]>,
   extraClass = "",
+  references: ReadonlyArray<readonly [string, string]> = [],
 ): string {
   return `
     <section class="preview-section${extraClass}" data-testid="${testId}">
@@ -837,7 +844,19 @@ function renderPreviewSection(
       <dl class="field-stack compact">
         ${rows.map(([label, value]) => fieldItem(label, value)).join("")}
       </dl>
+      ${references.length > 0 ? renderReferenceDetails(references) : ""}
     </section>
+  `;
+}
+
+function renderReferenceDetails(references: ReadonlyArray<readonly [string, string]>): string {
+  return `
+    <details class="reference-details">
+      <summary>IDs and trace links</summary>
+      <dl class="field-stack compact">
+        ${references.map(([label, value]) => fieldItem(label, value)).join("")}
+      </dl>
+    </details>
   `;
 }
 
@@ -1141,7 +1160,7 @@ function renderCandidateCard(candidate: ReviewCandidate, state: ReviewWorkbenchS
     <article class="candidate-card${cssState}" data-testid="candidate-${escapeHtml(candidate.role ?? candidate.id)}" data-outcome="${candidateState}">
       <div class="card-head">
         <div>
-          <p class="eyebrow">${escapeHtml(candidate.id)}</p>
+          <p class="eyebrow">${escapeHtml(candidate.role === "proposed" ? "incoming value" : candidate.role === "current" ? "existing value" : "candidate")}</p>
           <h2 class="role">${escapeHtml(titleCase(candidate.role ?? "candidate"))}</h2>
         </div>
         <span class="state-label">${escapeHtml(candidateState)}</span>
@@ -1152,13 +1171,19 @@ function renderCandidateCard(candidate: ReviewCandidate, state: ReviewWorkbenchS
       </div>
       <dl class="field-stack">
         ${fieldItem("Source URL", candidate.source.sourceRef)}
-        ${fieldItem("Source ref", candidate.source.sourceId ?? candidate.source.sourceRef)}
         ${fieldItem("Locator", candidate.locator?.locator ?? candidate.locator?.scheme ?? "none")}
         ${fieldItem("Excerpt", candidate.locator?.excerpt ?? "none", "excerpt")}
         ${fieldItem("Extraction confidence", confidence === undefined ? "unknown" : formatConfidence(confidence))}
         ${fieldItem("Extractor", candidate.extraction.extractor ?? "unknown")}
-        ${fieldItem("Claim", candidate.claimTarget.claimId ?? candidate.claimTarget.fieldOrBehavior)}
       </dl>
+      <details class="reference-details">
+        <summary>IDs and trace links</summary>
+        <dl class="field-stack compact">
+          ${fieldItem("Candidate ID", candidate.id)}
+          ${fieldItem("Source ID", candidate.source.sourceId ?? candidate.source.sourceRef)}
+          ${fieldItem("Claim ID", candidate.claimTarget.claimId ?? candidate.claimTarget.fieldOrBehavior)}
+        </dl>
+      </details>
     </article>
   `;
 }

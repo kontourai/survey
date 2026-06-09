@@ -62,6 +62,7 @@ async function main() {
   assertIncludes(css, "grid-template-columns: minmax(0, 1fr)");
   assertIncludes(css, ".meta-grid {\n  display: none;");
   assertIncludes(css, ".payload-panel summary.field-label");
+  assertIncludes(css, ".reference-details summary");
   assertIncludes(css, "overflow-wrap: anywhere");
   assertIncludes(css, "--ink-1000: var(--k-bg)");
   assertIncludes(css, "--accent: var(--k-brand)");
@@ -93,6 +94,8 @@ async function main() {
   assertIncludes(js, "Session summary");
   assertIncludes(js, "Producer feedback tags");
   assertIncludes(js, "Surface preview");
+  assertIncludes(js, "IDs and trace links");
+  assertIncludes(js, "incoming value");
   assertIncludes(js, "authorityTrace");
   assertIncludes(dataJs, "sourceAuthority");
   assertIncludes(dataJs, "feedbackTags");

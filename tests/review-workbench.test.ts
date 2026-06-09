@@ -546,7 +546,7 @@ describe("review workbench prototype", () => {
 
     const html = renderReviewWorkbenchHtml(state);
     assert.match(html, /data-testid="surface-canonical-claim"/);
-    assert.match(html, /Selected canonical claim/);
+    assert.match(html, /Selected claim/);
     assert.match(html, /public-field\.entity-123\.availability-status\.proposal-456/);
     assert.match(html, /data-testid="surface-candidate-history"/);
     assert.match(html, /Unselected candidate history/);
