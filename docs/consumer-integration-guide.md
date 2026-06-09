@@ -19,6 +19,101 @@ The canonical integration path is:
 Survey should not own the producer queue, auth, tenancy, parser policy, source
 ranking policy, final apply semantics, or product field catalog.
 
+## Consumer Adapter Contract
+
+The reusable boundary is intentionally small:
+
+| Step | Producer owns | Survey owns |
+| --- | --- | --- |
+| Queue | Which product records need review, who can see them, and tenancy/auth rules. | `ReviewQueueSessionState` as the portable queue/session shape. |
+| Item | Stable ids, field catalog, candidate ranking, source authority posture, and product policy notes. | `ReviewItem`, `ReviewCandidate`, source, extraction, locator, claim target, and projection hints. |
+| Presentation | Human labels, value summaries, and links back to product records, sources, claims, or traces. | `ReviewPresentationAdapter` hooks plus deterministic item/result presentation builders. |
+| Events | Durable event storage, optimistic concurrency, and reviewer identity from trusted product context. | `ReviewSessionEvent` resources and replay/validation helpers. |
+| Apply | Current-state validation, product policy, mutating writes, audit tables, and downstream jobs. | `ReviewWorkbenchResult` and `ReviewDecision` derived from a reviewed snapshot plus persisted events. |
+| Surface handoff | Which reviewed observations become claims and when to publish them. | Normal Survey observation/claim records and `buildSurveyTrustInput` projection into Surface. |
+
+`ReviewPresentationAdapter` is display-only. It lets a product explain ids and
+values without changing canonical `ReviewItem` data or apply authority.
+
+```ts
+import {
+  buildReviewItemPresentation,
+  buildReviewResultPresentation,
+  type ReviewPresentationAdapter,
+} from "@kontourai/survey/review-workbench";
+
+const presentationAdapter = {
+  labelForTarget: (target) => target === "operatingLicenseCredential"
+    ? "Operating license credential"
+    : undefined,
+  labelForCandidateRole: (role) => role === "current"
+    ? "Current managed credential"
+    : role === "proposed"
+      ? "Registry candidate"
+      : undefined,
+  summarizeValue: (value) => summarizeCredentialValue(value),
+  linkForReviewItem: (item) => ({
+    label: typeof item.metadata.producer?.displayName === "string"
+      ? item.metadata.producer.displayName
+      : "Review item",
+    href: `/review/items/${encodeURIComponent(item.metadata.name)}`,
+  }),
+  linkForSource: (sourceRef) => ({ href: sourceRef }),
+  linkForTraceRef: (ref) => ref.kind === "claim"
+    ? { label: "Claim target", href: `/claims/${encodeURIComponent(ref.value)}` }
+    : undefined,
+} satisfies ReviewPresentationAdapter;
+
+const itemPresentation = buildReviewItemPresentation(reviewItem, presentationAdapter);
+const resultPresentation = buildReviewResultPresentation(result, reviewItem, presentationAdapter);
+```
+
+A server apply path should treat persisted events as the auditable input and
+derive results again from the reviewed snapshot. Browser exports and
+presentation payloads are useful for inspection, not write authority.
+
+```ts
+import {
+  buildReviewWorkbenchSessionExportForSnapshot,
+  validateReviewSessionEventsForSnapshot,
+} from "@kontourai/survey/review-workbench";
+
+const currentRecord = await loadCurrentProductRecord(recordId);
+const reviewedSnapshot = await loadReviewedSnapshot(reviewId);
+const events = await loadPersistedReviewEvents(reviewId);
+
+const issues = validateReviewSessionEventsForSnapshot(reviewedSnapshot, events);
+if (issues.length > 0) {
+  throw new Error("Review events do not match the reviewed snapshot.");
+}
+
+const exported = buildReviewWorkbenchSessionExportForSnapshot(reviewedSnapshot, events);
+
+for (const result of exported.results) {
+  assertProductTargetStillMatches(currentRecord, result);
+  await applyProductPolicy({
+    decision: result.decision,
+    selectedCandidateId: result.selectedCandidateId,
+    selectedValue: result.selectedValue,
+    actorId: auth.user.id,
+    appliedAt: new Date().toISOString(),
+  });
+}
+```
+
+Surface projection is still the normal Survey path. A review result tells the
+producer which candidate was selected; producer code then emits the reviewed
+source/extraction/candidate/review/claim records it wants to publish and calls
+`buildSurveyTrustInput`. The workbench also exposes a projection preview for UI
+explanation, but that preview is not a separate write path.
+
+The generic, test-covered example lives at
+[`examples/review-workbench/facility-credential-consumer.ts`](../examples/review-workbench/facility-credential-consumer.ts).
+It shows a `ReviewItem`, `ReviewPresentationAdapter`, persisted
+`ReviewSessionEvent` resources, event replay, derived `ReviewWorkbenchResult`,
+and a Surface projection preview without product-specific policy embedded in
+Survey.
+
 ## Public-Directory Example
 
 A public-directory producer often has an existing value and a proposed value

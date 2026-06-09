@@ -70,10 +70,20 @@ Survey also exposes a framework-neutral review workbench for downstream
 products that already produce `ReviewItem` queues.
 
 ```ts
-import { mountReviewWorkbench } from "@kontourai/survey/review-workbench";
+import {
+  mountReviewWorkbench,
+  type ReviewPresentationAdapter,
+} from "@kontourai/survey/review-workbench";
 import "@kontourai/survey/review-workbench.css";
 
-mountReviewWorkbench(element, reviewQueueSession);
+const presentationAdapter = {
+  labelForTarget: (target) => target === "registrationStatus"
+    ? "Registration status"
+    : undefined,
+  linkForReviewItem: (item) => ({ href: `/review/${item.metadata.name}` }),
+} satisfies ReviewPresentationAdapter;
+
+mountReviewWorkbench(element, reviewQueueSession, { presentationAdapter });
 ```
 
 The default stylesheet is scoped to `.survey-workbench-embed` and bundles the
@@ -93,6 +103,8 @@ review events, exported results, and optional Surface projection, see
 That guide also covers the server-side apply boundary: producers should derive
 write results from reviewed snapshots plus persisted events, not from
 browser-computed decisions or exported result payloads.
+For a generic, test-covered example of the consumer adapter contract, see
+[`examples/review-workbench/facility-credential-consumer.ts`](examples/review-workbench/facility-credential-consumer.ts).
 For the current decision on why Survey is not adding a generic review adapter
 builder yet, see
 [`docs/consumer-adapter-abstraction-assessment.md`](docs/consumer-adapter-abstraction-assessment.md).
