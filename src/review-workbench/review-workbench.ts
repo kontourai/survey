@@ -137,7 +137,11 @@ export interface ReviewWorkbenchSessionExport {
 export type ReviewSessionReplayIssueCode =
   | "unknown-active-item"
   | "unknown-review-item"
-  | "unknown-candidate";
+  | "unknown-candidate"
+  | "missing-review-item"
+  | "invalid-workbench-decision"
+  | "decision-candidate-mismatch"
+  | "decision-status-mismatch";
 
 export interface ReviewSessionReplayIssue {
   readonly code: ReviewSessionReplayIssueCode;
@@ -147,6 +151,46 @@ export interface ReviewSessionReplayIssue {
   readonly candidateId?: string;
   readonly message: string;
 }
+
+export type ReviewSessionApplyResolutionRequirement = "all" | "any" | "none";
+
+export type ReviewSessionApplyIssue =
+  | ReviewSessionReplayIssue
+  | {
+      readonly code: "unresolved-review-item";
+      readonly reviewItemName: string;
+      readonly message: string;
+    }
+  | {
+      readonly code: "no-resolved-review-items";
+      readonly message: string;
+    };
+
+export interface DeriveReviewSessionApplyResultForSnapshotOptions {
+  readonly snapshot: ReviewQueueSessionState;
+  readonly events: readonly ReviewSessionEvent[];
+  readonly requiredResolvedItems?: ReviewSessionApplyResolutionRequirement;
+}
+
+export type DeriveReviewSessionApplyResultForSnapshotResult =
+  | {
+      readonly ok: true;
+      readonly issues: readonly [];
+      readonly unresolvedItemNames: readonly string[];
+      readonly replayedSession: ReviewQueueSessionState;
+      readonly sessionExport: ReviewWorkbenchSessionExport;
+      readonly decisions: readonly ReviewDecision[];
+      readonly results: readonly ReviewWorkbenchResult[];
+    }
+  | {
+      readonly ok: false;
+      readonly issues: readonly ReviewSessionApplyIssue[];
+      readonly unresolvedItemNames: readonly string[];
+      readonly replayedSession?: ReviewQueueSessionState;
+      readonly sessionExport?: ReviewWorkbenchSessionExport;
+      readonly decisions: readonly ReviewDecision[];
+      readonly results: readonly ReviewWorkbenchResult[];
+    };
 
 export interface ReviewSessionEventStore {
   load(session: ReviewQueueSessionState): readonly ReviewSessionEvent[] | undefined;
@@ -309,6 +353,56 @@ export function validateReviewSessionEventsForSnapshot(
       });
     }
 
+    if ((event.spec.eventType === "decision-changed" || event.spec.eventType === "decision-submitted")
+      && !reviewItemName) {
+      issues.push({
+        ...eventRef,
+        code: "missing-review-item",
+        message: `ReviewSessionEvent ${event.metadata.name} is a decision event but does not reference a ReviewItem.`,
+      });
+    }
+
+    if (event.spec.eventType === "decision-changed" || event.spec.eventType === "decision-submitted") {
+      const decision = replayableWorkbenchDecision(event.spec.data?.workbenchDecision);
+      if (!decision) {
+        issues.push({
+          ...eventRef,
+          code: "invalid-workbench-decision",
+          reviewItemName,
+          candidateId: event.spec.candidateId,
+          message: `ReviewSessionEvent ${event.metadata.name} is a decision event but does not include a replayable workbench decision.`,
+        });
+      } else if (itemName && itemsByName.has(itemName)) {
+        const item = itemsByName.get(itemName);
+        const expectedCandidate = item ? candidateForDecision(item, decision) : undefined;
+        const expectedStatus = workbenchDecisionDefinitions[decision].status;
+
+        const referencedCandidateExists = event.spec.candidateId
+          ? item?.spec.candidates.some((candidate) => candidate.id === event.spec.candidateId)
+          : false;
+
+        if (expectedCandidate && (!event.spec.candidateId || referencedCandidateExists) && event.spec.candidateId !== expectedCandidate.id) {
+          issues.push({
+            ...eventRef,
+            code: "decision-candidate-mismatch",
+            reviewItemName: itemName,
+            candidateId: event.spec.candidateId,
+            message: `ReviewSessionEvent ${event.metadata.name} decision ${decision} expects candidate ${expectedCandidate.id}, but references ${event.spec.candidateId ?? "no candidate"}.`,
+          });
+        }
+
+        if (event.spec.status !== expectedStatus) {
+          issues.push({
+            ...eventRef,
+            code: "decision-status-mismatch",
+            reviewItemName: itemName,
+            candidateId: event.spec.candidateId,
+            message: `ReviewSessionEvent ${event.metadata.name} decision ${decision} expects status ${expectedStatus}, but references ${event.spec.status ?? "no status"}.`,
+          });
+        }
+      }
+    }
+
     if (event.spec.candidateId && itemName && itemsByName.has(itemName)) {
       const item = itemsByName.get(itemName);
       const hasCandidate = item?.spec.candidates.some((candidate) => candidate.id === event.spec.candidateId);
@@ -325,6 +419,12 @@ export function validateReviewSessionEventsForSnapshot(
 
     return issues;
   });
+}
+
+function replayableWorkbenchDecision(value: unknown): ReviewWorkbenchDecision | undefined {
+  return typeof value === "string" && value in workbenchDecisionDefinitions
+    ? value as ReviewWorkbenchDecision
+    : undefined;
 }
 
 export function replayReviewSessionEventsForSnapshot(
@@ -345,6 +445,67 @@ export function buildReviewWorkbenchSessionExportForSnapshot(
 ): ReviewWorkbenchSessionExport {
   const replayedSession = replayReviewSessionEventsForSnapshot(snapshot, events);
   return buildReviewWorkbenchSessionExport(replayedSession, events);
+}
+
+export function deriveReviewSessionApplyResultForSnapshot(
+  options: DeriveReviewSessionApplyResultForSnapshotOptions,
+): DeriveReviewSessionApplyResultForSnapshotResult {
+  const requiredResolvedItems = options.requiredResolvedItems ?? "none";
+  const replayIssues = validateReviewSessionEventsForSnapshot(options.snapshot, options.events);
+  if (replayIssues.length > 0) {
+    return {
+      ok: false,
+      issues: replayIssues,
+      unresolvedItemNames: options.snapshot.items.map((item) => item.metadata.name),
+      decisions: [],
+      results: [],
+    };
+  }
+
+  const replayedSession = replayReviewSessionEvents(options.snapshot, options.events);
+  const sessionExport = buildReviewWorkbenchSessionExport(replayedSession, options.events);
+  const resolvedItemNames = new Set(sessionExport.results.map((result) => result.reviewItemName));
+  const unresolvedItemNames = options.snapshot.items
+    .map((item) => item.metadata.name)
+    .filter((itemName) => !resolvedItemNames.has(itemName));
+  const issues: ReviewSessionApplyIssue[] = [];
+
+  if (requiredResolvedItems === "all") {
+    issues.push(...unresolvedItemNames.map((reviewItemName) => ({
+      code: "unresolved-review-item" as const,
+      reviewItemName,
+      message: `Review item ${reviewItemName} has no resolved review decision.`,
+    })));
+  }
+
+  if (requiredResolvedItems === "any" && sessionExport.results.length === 0) {
+    issues.push({
+      code: "no-resolved-review-items",
+      message: "Review session has no resolved review decisions.",
+    });
+  }
+
+  if (issues.length > 0) {
+    return {
+      ok: false,
+      issues,
+      unresolvedItemNames,
+      replayedSession,
+      sessionExport,
+      decisions: sessionExport.decisions,
+      results: sessionExport.results,
+    };
+  }
+
+  return {
+    ok: true,
+    issues: [],
+    unresolvedItemNames,
+    replayedSession,
+    sessionExport,
+    decisions: sessionExport.decisions,
+    results: sessionExport.results,
+  };
 }
 
 export function createInMemoryReviewSessionEventStore(

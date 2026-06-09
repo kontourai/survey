@@ -7,7 +7,6 @@ import {
 import {
   buildReviewItemPresentation,
   buildReviewResultPresentation,
-  buildReviewWorkbenchSessionExportForSnapshot,
   validateReviewSessionEventsForSnapshot,
 } from "../src/review-workbench/review-workbench.js";
 
@@ -29,14 +28,14 @@ describe("generic facility credential consumer example", () => {
   it("persists replayable review events and derives the selected result from the persisted snapshot events", async () => {
     const example = await buildFacilityCredentialConsumerExample();
     const issues = validateReviewSessionEventsForSnapshot(example.reviewedSnapshot, example.persistedEvents);
-    const replayed = buildReviewWorkbenchSessionExportForSnapshot(example.reviewedSnapshot, example.persistedEvents);
-    const [result] = replayed.results;
+    const [result] = example.applyResult.results;
 
     assert.deepEqual(issues, []);
+    assert.equal(example.applyResult.ok, true);
     assert.equal(example.eventsToPersist.length, 6);
     assert.deepEqual(example.persistedEvents, example.eventsToPersist);
     assert.equal(example.persistedEventCount, example.persistedEvents.length);
-    assert.equal(replayed.events.length, example.persistedEvents.length);
+    assert.equal(example.applyResult.sessionExport.events.length, example.persistedEvents.length);
     assert.equal(result?.decision, "accept-proposed");
     assert.equal(result?.selectedCandidateRole, "proposed");
     assert.equal(result?.reviewDecision.spec.actor?.id, "review-operator@example.test");
@@ -45,7 +44,7 @@ describe("generic facility credential consumer example", () => {
 
   it("presents result meaning and a Surface projection preview for the selected candidate", async () => {
     const example = await buildFacilityCredentialConsumerExample();
-    const [result] = example.sessionExport.results;
+    const [result] = example.applyResult.results;
     assert.ok(result);
 
     const resultPresentation = buildReviewResultPresentation(

@@ -75,9 +75,8 @@ presentation payloads are useful for inspection, not write authority.
 ```ts
 import {
   buildReviewSessionEvents,
-  buildReviewWorkbenchSessionExportForSnapshot,
+  deriveReviewSessionApplyResultForSnapshot,
   persistReviewSessionEvents,
-  validateReviewSessionEventsForSnapshot,
 } from "@kontourai/survey/review-workbench";
 
 const currentRecord = await loadCurrentProductRecord(recordId);
@@ -91,14 +90,16 @@ const persisted = await persistReviewSessionEvents({
     saveReviewEvents({ reviewId, events, expectedEventCount }),
 });
 
-const issues = validateReviewSessionEventsForSnapshot(reviewedSnapshot, persisted.events);
-if (issues.length > 0) {
+const applyResult = deriveReviewSessionApplyResultForSnapshot({
+  snapshot: reviewedSnapshot,
+  events: persisted.events,
+  requiredResolvedItems: "all",
+});
+if (!applyResult.ok) {
   throw new Error("Review events do not match the reviewed snapshot.");
 }
 
-const exported = buildReviewWorkbenchSessionExportForSnapshot(reviewedSnapshot, persisted.events);
-
-for (const result of exported.results) {
+for (const result of applyResult.results) {
   assertProductTargetStillMatches(currentRecord, result);
   await applyProductPolicy({
     decision: result.decision,
@@ -468,25 +469,24 @@ snapshot, derive `ReviewWorkbenchResult` values through Survey, validate those
 values against the current product state, and only then apply product-specific
 policy.
 
-For server-side replay, prefer the snapshot-safe helpers:
+For server-side replay, prefer the snapshot-safe apply preparation helper:
 
 ```ts
 import {
-  buildReviewWorkbenchSessionExportForSnapshot,
-  validateReviewSessionEventsForSnapshot,
+  deriveReviewSessionApplyResultForSnapshot,
 } from "@kontourai/survey/review-workbench";
 
-const issues = validateReviewSessionEventsForSnapshot(reviewedSnapshot, persistedEvents);
-if (issues.length > 0) {
-  throw new Error("Review events no longer match the reviewed snapshot.");
+const applyResult = deriveReviewSessionApplyResultForSnapshot({
+  snapshot: reviewedSnapshot,
+  events: persistedEvents,
+  requiredResolvedItems: "all",
+});
+
+if (!applyResult.ok) {
+  throw new Error(applyResult.issues.map((issue) => issue.message).join(" "));
 }
 
-const exported = buildReviewWorkbenchSessionExportForSnapshot(
-  reviewedSnapshot,
-  persistedEvents,
-);
-
-for (const result of exported.results) {
+for (const result of applyResult.results) {
   assertProductRecordStillMatchesReviewTarget(result);
   applyProductPolicy({
     reviewItemName: result.reviewItemName,
@@ -496,6 +496,11 @@ for (const result of exported.results) {
   });
 }
 ```
+
+Use `requiredResolvedItems: "all"` for full approval flows and `"any"` for
+partial apply flows where at least one reviewed item must be ready. Survey
+returns replay and completion issues as data so product API routes can choose
+their own HTTP status, audit logging, and reviewer-facing copy.
 
 Do not accept browser-submitted `ReviewDecision` resources,
 `ReviewWorkbenchSessionExport.results`, or standalone decision fields as write

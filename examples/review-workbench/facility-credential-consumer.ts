@@ -3,8 +3,8 @@ import {
   buildReviewItemPresentation,
   buildReviewResultPresentation,
   buildReviewSessionEvents,
-  buildReviewWorkbenchSessionExportForSnapshot,
   buildSurfaceProjectionPreview,
+  deriveReviewSessionApplyResultForSnapshot,
   initialReviewQueueSessionState,
   persistReviewSessionEvents,
   type ReviewPresentationAdapter,
@@ -89,8 +89,15 @@ export async function buildFacilityCredentialConsumerExample(): Promise<Facility
     },
   });
 
-  const sessionExport = buildReviewWorkbenchSessionExportForSnapshot(reviewedSnapshot, persisted.events);
-  const [result] = sessionExport.results;
+  const applyResult = deriveReviewSessionApplyResultForSnapshot({
+    snapshot: reviewedSnapshot,
+    events: persisted.events,
+    requiredResolvedItems: "all",
+  });
+  if (!applyResult.ok) {
+    throw new Error(`Expected persisted credential events to replay before apply: ${applyResult.issues.map((issue) => issue.message).join(" ")}`);
+  }
+  const [result] = applyResult.results;
   if (!result) {
     throw new Error("Expected the reviewed credential snapshot to produce one review result.");
   }
@@ -119,7 +126,7 @@ export async function buildFacilityCredentialConsumerExample(): Promise<Facility
     eventsToPersist,
     persistedEvents: persisted.events,
     persistedEventCount: persisted.eventCount,
-    sessionExport,
+    applyResult,
     itemPresentation,
     resultPresentation,
     surfaceProjectionPreview,
@@ -134,7 +141,7 @@ export interface FacilityCredentialConsumerExample {
   readonly eventsToPersist: readonly ReviewSessionEvent[];
   readonly persistedEvents: readonly ReviewSessionEvent[];
   readonly persistedEventCount: number;
-  readonly sessionExport: ReturnType<typeof buildReviewWorkbenchSessionExportForSnapshot>;
+  readonly applyResult: Extract<ReturnType<typeof deriveReviewSessionApplyResultForSnapshot>, { readonly ok: true }>;
   readonly itemPresentation: ReturnType<typeof buildReviewItemPresentation>;
   readonly resultPresentation: ReturnType<typeof buildReviewResultPresentation>;
   readonly surfaceProjectionPreview: NonNullable<ReturnType<typeof buildSurfaceProjectionPreview>>;
