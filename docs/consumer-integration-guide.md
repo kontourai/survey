@@ -73,6 +73,57 @@ derive results again from the pre-decision review queue snapshot. Browser
 exports and presentation payloads are useful for inspection, not write
 authority.
 
+## Server-Owned Review Sessions
+
+For browser-backed review flows, the server should own the review snapshot. A
+consumer typically stores a local session row or file containing:
+
+- a product session id;
+- the Survey `sessionName`;
+- the pre-decision `ReviewQueueSessionState` snapshot;
+- `hashReviewSessionSnapshot(snapshot)`;
+- optional event-count or optimistic-concurrency metadata.
+
+The browser may submit `ReviewSessionEvent` resources and a server session id,
+but it should not submit the authoritative snapshot or derived apply result.
+Before saving or applying events, validate that the request still matches the
+server snapshot:
+
+```ts
+import {
+  deriveReviewSessionApplyResultForSnapshot,
+} from "@kontourai/survey/review-workbench";
+import {
+  assertServerReviewSessionEvents,
+  assertServerReviewSessionFreshness,
+  createServerReviewSessionRecord,
+} from "@kontourai/survey/review-workbench/server-review-session";
+
+const record = createServerReviewSessionRecord({
+  sessionName: "review-workbench-session",
+  snapshot: reviewSessionSnapshot,
+  eventCount: persistedEventCount,
+  updatedAt: storedSessionUpdatedAt,
+});
+
+assertServerReviewSessionFreshness(record, rebuildCurrentSnapshot(), persistedEventCount);
+assertServerReviewSessionEvents(record, submittedEvents);
+
+const applyResult = deriveReviewSessionApplyResultForSnapshot({
+  snapshot: record.snapshot,
+  events: submittedEvents,
+  requiredResolvedItems: "all",
+});
+```
+
+`assertServerReviewSessionFreshness` compares stable snapshot hashes and, when
+both sides provide an event count, the expected event count. A producer that
+synthesizes events server-side from a trusted action can omit event-count
+checking and still use the snapshot hash to detect stale ReviewItems.
+`assertServerReviewSessionEvents` reuses Survey replay validation and also
+rejects events for the wrong `sessionName`, unknown ReviewItems, active items,
+or candidates outside the server-owned snapshot.
+
 ```ts
 import {
   buildReviewSessionEvents,

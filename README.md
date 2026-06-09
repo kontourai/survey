@@ -108,6 +108,12 @@ then pass the persisted event set to `deriveReviewSessionApplyResultForSnapshot`
 before applying product policy. Survey derives selected review results and
 structured replay/completion issues; the producer still owns current-record
 validation and writes.
+For browser-backed queues, server code can import
+`@kontourai/survey/review-workbench/server-review-session` and use
+`createServerReviewSessionRecord`, `hashReviewSessionSnapshot`,
+`assertServerReviewSessionFreshness`, and `assertServerReviewSessionEvents` to
+keep the review snapshot server-owned while accepting browser-submitted
+`ReviewSessionEvent` resources.
 For generic, test-covered consumer examples, see
 [`examples/review-workbench/facility-credential-consumer.ts`](examples/review-workbench/facility-credential-consumer.ts)
 for presentation and event persistence, and

@@ -1,6 +1,6 @@
 {
   "name": "@kontourai/survey",
-  "version": "0.4.19",
+  "version": "0.4.20",
   "description": "Producer-side source, extraction, candidate, and review contracts for projecting verified claims into Surface.",
   "license": "Apache-2.0",
   "type": "module",
@@ -21,6 +21,10 @@
     "./review-workbench": {
       "types": "./dist/src/review-workbench/review-workbench.d.ts",
       "default": "./dist/src/review-workbench/review-workbench.js"
+    },
+    "./review-workbench/server-review-session": {
+      "types": "./dist/src/review-workbench/server-review-session.d.ts",
+      "default": "./dist/src/review-workbench/server-review-session.js"
     },
     "./review-workbench.css": "./dist/src/review-workbench/review-workbench.css",
     "./review-workbench/standalone.css": "./dist/src/review-workbench/review-workbench.standalone.css",

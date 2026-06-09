@@ -516,12 +516,15 @@ describe("review workbench prototype", () => {
     const decisionEvent = events.find((event) => event.spec.eventType === "decision-changed");
     assert.ok(decisionEvent);
     const eventForUnknownItem = replaceReviewEventSpec(decisionEvent, {
+      sequence: 1,
       reviewItemName: "missing-review-item",
     });
     const eventForUnknownCandidate = replaceReviewEventSpec(decisionEvent, {
+      sequence: 2,
       candidateId: "missing-candidate",
     });
     const eventWithInvalidDecision = replaceReviewEventSpec(decisionEvent, {
+      sequence: 3,
       data: {
         workbenchDecision: "not-a-workbench-decision",
       },
@@ -531,9 +534,11 @@ describe("review workbench prototype", () => {
       ?.spec.candidates.find((candidate) => candidate.role === "current");
     assert.ok(currentCandidate);
     const eventWithCandidateMismatch = replaceReviewEventSpec(decisionEvent, {
+      sequence: 4,
       candidateId: currentCandidate.id,
     });
     const eventWithStatusMismatch = replaceReviewEventSpec(decisionEvent, {
+      sequence: 5,
       status: "rejected",
     });
 
@@ -643,6 +648,7 @@ describe("review workbench prototype", () => {
     const decisionEvent = completeEvents.find((event) => event.spec.eventType === "decision-changed");
     assert.ok(decisionEvent);
     const eventForUnknownItem = replaceReviewEventSpec(decisionEvent, {
+      sequence: 1,
       reviewItemName: "missing-review-item",
     });
 
