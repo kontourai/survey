@@ -25,6 +25,11 @@ import {
   type SurfaceProjectionPreview,
 } from "./review-surface-preview.js";
 import {
+  buildReviewCandidatePresentation,
+  buildReviewItemPresentation,
+  type ReviewPresentationAdapter,
+} from "./review-presentation.js";
+import {
   reviewResourceApiVersion,
   type ReviewCandidate,
   type ReviewDecision,
@@ -56,6 +61,22 @@ export {
   type ReviewWorkbenchDecision,
   type ReviewWorkbenchState,
 } from "./review-queue-session.js";
+export {
+  buildReviewCandidatePresentation,
+  buildReviewItemPresentation,
+  buildReviewResultPresentation,
+  humanizeIdentifier,
+  type ReviewCandidatePresentation,
+  type ReviewCandidatePresentationContext,
+  type ReviewItemPresentation,
+  type ReviewItemPresentationContext,
+  type ReviewPresentationAdapter,
+  type ReviewPresentationLink,
+  type ReviewResultPresentation,
+  type ReviewTracePresentationContext,
+  type ReviewTraceRef,
+  type ReviewValuePresentationContext,
+} from "./review-presentation.js";
 export {
   buildSurfaceProjectionPreview,
   type PreviewAuthorityTrace,
@@ -158,6 +179,7 @@ export interface PersistentReviewSessionEventStoreOptions {
 
 export interface MountReviewWorkbenchOptions {
   readonly eventStore?: ReviewSessionEventStore;
+  readonly presentationAdapter?: ReviewPresentationAdapter;
 }
 
 export interface BrowserReviewWorkbenchConfig {
@@ -398,41 +420,46 @@ export function createPersistentReviewSessionEventStore(
 export function renderReviewWorkbenchHtml(
   state: ReviewWorkbenchState | ReviewQueueSessionState,
   events?: readonly ReviewSessionEvent[],
+  options: { readonly presentationAdapter?: ReviewPresentationAdapter } = {},
 ): string {
   if ("items" in state) {
-    return renderReviewQueueSessionHtml(state, events);
+    return renderReviewQueueSessionHtml(state, events, options.presentationAdapter);
   }
 
   return `
     <section class="workbench-shell" aria-label="Survey review workbench">
-      ${renderWorkbenchHeader(state)}
+      ${renderWorkbenchHeader(state, options.presentationAdapter)}
       <div class="content-grid">
-        ${renderReviewFocus(state)}
-        ${renderDecisionColumn(state)}
-        ${renderCandidateComparison(state)}
+        ${renderReviewFocus(state, options.presentationAdapter)}
+        ${renderDecisionColumn(state, options.presentationAdapter)}
+        ${renderCandidateComparison(state, options.presentationAdapter)}
       </div>
     </section>
   `;
 }
 
-function renderReviewQueueSessionHtml(session: ReviewQueueSessionState, events?: readonly ReviewSessionEvent[]): string {
+function renderReviewQueueSessionHtml(
+  session: ReviewQueueSessionState,
+  events: readonly ReviewSessionEvent[] | undefined,
+  presentationAdapter: ReviewPresentationAdapter | undefined,
+): string {
   const state = currentReviewWorkbenchState(session);
   const sessionExport = buildReviewWorkbenchSessionExport(session, events);
 
   return `
     <section class="workbench-shell" aria-label="Survey review workbench">
-      ${renderWorkbenchHeader(state)}
-      ${renderActiveReviewStrip(session, state)}
+      ${renderWorkbenchHeader(state, presentationAdapter)}
+      ${renderActiveReviewStrip(session, state, presentationAdapter)}
       <div class="queue-layout">
         <aside class="queue-panel" aria-label="Review queue">
-          ${renderQueueRows(session)}
+          ${renderQueueRows(session, presentationAdapter)}
           ${renderSessionSummary(session)}
           ${renderSessionAudit(session, sessionExport)}
         </aside>
         <div class="content-grid">
-          ${renderReviewFocus(state)}
-          ${renderDecisionColumn(state)}
-          ${renderCandidateComparison(state)}
+          ${renderReviewFocus(state, presentationAdapter)}
+          ${renderDecisionColumn(state, presentationAdapter)}
+          ${renderCandidateComparison(state, presentationAdapter)}
         </div>
       </div>
     </section>
@@ -504,27 +531,32 @@ function renderSessionEventRow(event: ReviewSessionEvent): string {
   `;
 }
 
-function renderQueueRows(session: ReviewQueueSessionState): string {
+function renderQueueRows(session: ReviewQueueSessionState, presentationAdapter?: ReviewPresentationAdapter): string {
   return `
     <section class="queue-list" data-testid="review-queue">
       <div class="queue-head">
         <h2>Review queue</h2>
         <button class="next-button" type="button" data-testid="next-unresolved">Next unresolved</button>
       </div>
-      ${session.items.map((item) => renderQueueRow(item, session)).join("")}
+      ${session.items.map((item) => renderQueueRow(item, session, presentationAdapter)).join("")}
     </section>
   `;
 }
 
-function renderQueueRow(item: ReviewItem, session: ReviewQueueSessionState): string {
+function renderQueueRow(
+  item: ReviewItem,
+  session: ReviewQueueSessionState,
+  presentationAdapter?: ReviewPresentationAdapter,
+): string {
   const status = deriveQueueRowStatus(item, session);
   const isActive = item.metadata.name === session.activeItemName;
+  const presentation = buildReviewItemPresentation(item, presentationAdapter);
 
   return `
     <button class="queue-row${isActive ? " is-active" : ""}" type="button" data-item-name="${escapeHtml(item.metadata.name)}" data-testid="queue-row" data-queue-status="${status}">
       <span class="queue-row-main">
-        <span class="queue-row-title">${escapeHtml(item.metadata.name)}</span>
-        <span class="queue-row-target">${escapeHtml(item.spec.target)}</span>
+        <span class="queue-row-title">${escapeHtml(presentation.targetLabel)}</span>
+        <span class="queue-row-target">${escapeHtml(item.metadata.name)}</span>
       </span>
       <span class="state-label">${escapeHtml(status)}</span>
     </button>
@@ -548,17 +580,22 @@ function renderSessionSummary(session: ReviewQueueSessionState): string {
   `;
 }
 
-function renderActiveReviewStrip(session: ReviewQueueSessionState, state: ReviewWorkbenchState): string {
+function renderActiveReviewStrip(
+  session: ReviewQueueSessionState,
+  state: ReviewWorkbenchState,
+  presentationAdapter?: ReviewPresentationAdapter,
+): string {
   const activeIndex = session.items.findIndex((item) => item.metadata.name === session.activeItemName);
   const position = activeIndex >= 0 ? activeIndex + 1 : 1;
   const status = deriveQueueRowStatus(state.item, session);
+  const presentation = buildReviewItemPresentation(state.item, presentationAdapter);
 
   return `
     <section class="active-review-strip" data-testid="active-review-strip" aria-label="Active review item">
       <div class="active-review-copy">
         <span class="field-label">Review ${position} of ${session.items.length}</span>
-        <strong>${escapeHtml(state.item.metadata.name)}</strong>
-        <span>${escapeHtml(state.item.spec.target)}</span>
+        <strong>${escapeHtml(presentation.targetLabel)}</strong>
+        <span>${escapeHtml(state.item.metadata.name)}</span>
       </div>
       <div class="active-review-actions">
         <span class="state-label">${escapeHtml(status)}</span>
@@ -568,20 +605,23 @@ function renderActiveReviewStrip(session: ReviewQueueSessionState, state: Review
   `;
 }
 
-function renderWorkbenchHeader(state: ReviewWorkbenchState): string {
+function renderWorkbenchHeader(state: ReviewWorkbenchState, presentationAdapter?: ReviewPresentationAdapter): string {
   const current = candidateByRole(state.item, "current");
   const proposed = candidateByRole(state.item, "proposed");
+  const presentation = buildReviewItemPresentation(state.item, presentationAdapter);
+  const currentPresentation = buildReviewCandidatePresentation(state.item, current, presentationAdapter, presentation.targetLabel);
+  const proposedPresentation = buildReviewCandidatePresentation(state.item, proposed, presentationAdapter, presentation.targetLabel);
 
   return `
     <header class="topbar">
       <div>
         <p class="eyebrow">${escapeHtml(String(state.item.metadata.producer?.displayName ?? "Survey"))}</p>
         <h1>Review candidate update</h1>
-        <p class="review-question">For <strong>${escapeHtml(state.item.spec.target)}</strong>, decide whether <strong>${escapeHtml(formatValue(proposed.value))}</strong> should replace <strong>${escapeHtml(formatValue(current.value))}</strong>.</p>
+        <p class="review-question">For <strong>${escapeHtml(presentation.targetLabel)}</strong>, decide whether <strong>${escapeHtml(proposedPresentation.valueText)}</strong> should replace <strong>${escapeHtml(currentPresentation.valueText)}</strong>.</p>
       </div>
       <dl class="meta-grid">
         ${metaItem("Item", state.item.metadata.name)}
-        ${metaItem("Status", state.item.spec.candidateSetStatus ?? "unresolved")}
+        ${metaItem("Status", presentation.statusLabel)}
         ${metaItem("Selected", state.item.spec.selectedCandidateId ?? "none")}
         ${metaItem("Candidate count", String(state.item.status?.observedCandidateCount ?? state.item.spec.candidates.length))}
       </dl>
@@ -598,24 +638,25 @@ function renderReviewMain(state: ReviewWorkbenchState): string {
   `;
 }
 
-function renderReviewFocus(state: ReviewWorkbenchState): string {
+function renderReviewFocus(state: ReviewWorkbenchState, presentationAdapter?: ReviewPresentationAdapter): string {
   const current = candidateByRole(state.item, "current");
   const proposed = candidateByRole(state.item, "proposed");
   const proposedConfidence = proposed.extraction.confidence ?? proposed.confidence;
   const currentConfidence = current.extraction.confidence ?? current.confidence;
+  const presentation = buildReviewItemPresentation(state.item, presentationAdapter);
 
   return `
     <section class="review-focus" data-testid="review-focus" aria-label="Active review focus">
       <div class="focus-head">
         <span class="field-label">Active review</span>
-        <span class="state-label">${escapeHtml(state.item.spec.candidateSetStatus ?? "unresolved")}</span>
+        <span class="state-label">${escapeHtml(presentation.statusLabel)}</span>
       </div>
       <div class="focus-values">
-        ${focusValue("Current", current, currentConfidence, "current")}
-        ${focusValue("Proposed", proposed, proposedConfidence, "proposed")}
+        ${focusValue(state.item, current, currentConfidence, "current", presentationAdapter, presentation.targetLabel)}
+        ${focusValue(state.item, proposed, proposedConfidence, "proposed", presentationAdapter, presentation.targetLabel)}
       </div>
       <dl class="focus-evidence">
-        ${fieldItem("Target", state.item.spec.target)}
+        ${fieldItem("Target", presentation.targetLabel)}
         ${fieldItem("Proposed source", proposed.source.sourceRef)}
         ${fieldItem("Proposed excerpt", proposed.locator?.excerpt ?? "none", "excerpt")}
       </dl>
@@ -624,37 +665,40 @@ function renderReviewFocus(state: ReviewWorkbenchState): string {
 }
 
 function focusValue(
-  label: string,
+  item: ReviewItem,
   candidate: ReviewCandidate,
   confidence: number | undefined,
   tone: "current" | "proposed",
+  presentationAdapter: ReviewPresentationAdapter | undefined,
+  targetLabel: string,
 ): string {
+  const presentation = buildReviewCandidatePresentation(item, candidate, presentationAdapter, targetLabel);
   return `
     <div class="focus-value is-${tone}">
-      <span class="field-label">${escapeHtml(label)}</span>
-      <strong>${escapeHtml(formatValue(candidate.value))}</strong>
+      <span class="field-label">${escapeHtml(presentation.roleLabel)}</span>
+      <strong>${escapeHtml(presentation.valueText)}</strong>
       <span>${escapeHtml(confidence === undefined ? "confidence unknown" : formatConfidence(confidence))}</span>
     </div>
   `;
 }
 
-function renderCandidateComparison(state: ReviewWorkbenchState): string {
+function renderCandidateComparison(state: ReviewWorkbenchState, presentationAdapter?: ReviewPresentationAdapter): string {
   const current = candidateByRole(state.item, "current");
   const proposed = candidateByRole(state.item, "proposed");
 
   return `
     <section class="candidate-grid" aria-label="Candidate comparison">
-      ${renderCandidateCard(current, state)}
-      ${renderCandidateCard(proposed, state)}
+      ${renderCandidateCard(current, state, presentationAdapter)}
+      ${renderCandidateCard(proposed, state, presentationAdapter)}
     </section>
   `;
 }
 
-function renderDecisionColumn(state: ReviewWorkbenchState): string {
+function renderDecisionColumn(state: ReviewWorkbenchState, presentationAdapter?: ReviewPresentationAdapter): string {
   return `
     <aside class="decision-column" aria-label="Review decision">
       ${renderDecisionControls(state)}
-      ${renderSurfacePreview(state)}
+      ${renderSurfacePreview(state, presentationAdapter)}
       ${renderDecisionPayload(state)}
     </aside>
   `;
@@ -713,8 +757,8 @@ function renderDecisionPayload(state: ReviewWorkbenchState): string {
   `;
 }
 
-function renderSurfacePreview(state: ReviewWorkbenchState): string {
-  const preview = buildSurfaceProjectionPreview(state.item, buildReviewDecision(state));
+function renderSurfacePreview(state: ReviewWorkbenchState, presentationAdapter?: ReviewPresentationAdapter): string {
+  const preview = buildSurfaceProjectionPreview(state.item, buildReviewDecision(state), presentationAdapter);
 
   return preview ? renderPopulatedSurfacePreview(preview) : renderPendingSurfacePreview();
 }
@@ -937,7 +981,7 @@ function createReviewWorkbenchController(
       appendEvent("item-selected");
       persistEvents();
     },
-    renderCurrentState: (): void => renderCurrentState(root, session, controller),
+    renderCurrentState: (): void => renderCurrentState(root, session, controller, options.presentationAdapter),
     selectDecision,
     selectQueueItem: (itemName: string): void => {
       applySessionUpdate((current) => ({ ...current, activeItemName: itemName }));
@@ -1006,8 +1050,9 @@ function renderCurrentState(
   root: HTMLElement,
   session: ReviewQueueSessionState,
   controller: ReviewWorkbenchControllerBindings,
+  presentationAdapter?: ReviewPresentationAdapter,
 ): void {
-  root.innerHTML = renderReviewWorkbenchHtml(session, controller.currentSessionExport().events);
+  root.innerHTML = renderReviewWorkbenchHtml(session, controller.currentSessionExport().events, { presentationAdapter });
   bindReviewerNote(
     root,
     controller.updateReviewerNote,
@@ -1015,6 +1060,7 @@ function renderCurrentState(
     controller.currentSession,
     controller.currentSessionExport,
     controller.renderCurrentState,
+    presentationAdapter,
   );
   bindDecisionButtons(root, (decision) => {
     controller.selectDecision(decision);
@@ -1054,10 +1100,11 @@ function bindReviewerNote(
   currentSession: () => ReviewQueueSessionState,
   currentSessionExport: () => ReviewWorkbenchSessionExport,
   renderCurrentState: () => void,
+  presentationAdapter?: ReviewPresentationAdapter,
 ): void {
   root.querySelector<HTMLTextAreaElement>("[data-testid='reviewer-note']")?.addEventListener("input", (event) => {
     updateReviewerNote((event.target as HTMLTextAreaElement).value);
-    refreshDecisionOutputs(root, currentState(), renderCurrentState);
+    refreshDecisionOutputs(root, currentState(), renderCurrentState, presentationAdapter);
     refreshSessionAudit(root, currentSession(), currentSessionExport(), renderCurrentState);
   });
 }
@@ -1101,7 +1148,12 @@ function scrollActiveReviewIntoView(root: HTMLElement): void {
   });
 }
 
-function refreshDecisionOutputs(root: HTMLElement, state: ReviewWorkbenchState, renderCurrentState: () => void): void {
+function refreshDecisionOutputs(
+  root: HTMLElement,
+  state: ReviewWorkbenchState,
+  renderCurrentState: () => void,
+  presentationAdapter?: ReviewPresentationAdapter,
+): void {
   const payload = root.querySelector<HTMLElement>("[data-testid='decision-payload']");
   if (payload) {
     payload.textContent = JSON.stringify(buildReviewDecision(state) ?? null, null, 2);
@@ -1118,7 +1170,7 @@ function refreshDecisionOutputs(root: HTMLElement, state: ReviewWorkbenchState, 
   }
 
   const wrapper = document.createElement("div");
-  wrapper.innerHTML = renderSurfacePreview(state);
+  wrapper.innerHTML = renderSurfacePreview(state, presentationAdapter);
   preview.replaceWith(wrapper.firstElementChild as HTMLElement);
 }
 
@@ -1148,29 +1200,35 @@ function producerFeedbackTags(item: ReviewItem): string[] {
   return Array.isArray(tags) ? tags.map(formatValue) : [];
 }
 
-function renderCandidateCard(candidate: ReviewCandidate, state: ReviewWorkbenchState): string {
+function renderCandidateCard(
+  candidate: ReviewCandidate,
+  state: ReviewWorkbenchState,
+  presentationAdapter?: ReviewPresentationAdapter,
+): string {
   const selectedRole = selectedCandidateRole(state);
   const candidateState = state.decision
     ? candidate.role === selectedRole ? "selected" : "unselected"
     : "pending";
   const cssState = candidateState === "selected" ? " is-selected" : candidateState === "unselected" ? " is-unselected" : "";
   const confidence = candidate.extraction.confidence ?? candidate.confidence;
+  const itemPresentation = buildReviewItemPresentation(state.item, presentationAdapter);
+  const presentation = buildReviewCandidatePresentation(state.item, candidate, presentationAdapter, itemPresentation.targetLabel);
 
   return `
     <article class="candidate-card${cssState}" data-testid="candidate-${escapeHtml(candidate.role ?? candidate.id)}" data-outcome="${candidateState}">
       <div class="card-head">
         <div>
           <p class="eyebrow">${escapeHtml(candidate.role === "proposed" ? "incoming value" : candidate.role === "current" ? "existing value" : "candidate")}</p>
-          <h2 class="role">${escapeHtml(titleCase(candidate.role ?? "candidate"))}</h2>
+          <h2 class="role">${escapeHtml(presentation.roleLabel)}</h2>
         </div>
         <span class="state-label">${escapeHtml(candidateState)}</span>
       </div>
       <div class="candidate-value">
-        <span class="field-label">Value</span>
-        <p class="field-value">${escapeHtml(formatValue(candidate.value))}</p>
+        <span class="field-label">${escapeHtml(presentation.valueLabel)}</span>
+        <p class="field-value">${escapeHtml(presentation.valueText)}</p>
       </div>
       <dl class="field-stack">
-        ${fieldItem("Source URL", candidate.source.sourceRef)}
+        ${fieldItem("Source URL", presentation.sourceText)}
         ${fieldItem("Locator", candidate.locator?.locator ?? candidate.locator?.scheme ?? "none")}
         ${fieldItem("Excerpt", candidate.locator?.excerpt ?? "none", "excerpt")}
         ${fieldItem("Extraction confidence", confidence === undefined ? "unknown" : formatConfidence(confidence))}
@@ -1179,9 +1237,7 @@ function renderCandidateCard(candidate: ReviewCandidate, state: ReviewWorkbenchS
       <details class="reference-details">
         <summary>IDs and trace links</summary>
         <dl class="field-stack compact">
-          ${fieldItem("Candidate ID", candidate.id)}
-          ${fieldItem("Source ID", candidate.source.sourceId ?? candidate.source.sourceRef)}
-          ${fieldItem("Claim ID", candidate.claimTarget.claimId ?? candidate.claimTarget.fieldOrBehavior)}
+          ${presentation.traceRefs.map((ref) => fieldItem(ref.label, ref.value)).join("")}
         </dl>
       </details>
     </article>
@@ -1217,11 +1273,6 @@ function fieldItem(label: string, value: unknown, extraClass = ""): string {
 
 function formatConfidence(value: number): string {
   return `${Math.round(value * 100)}% (${value.toFixed(2)})`;
-}
-
-function titleCase(value: unknown): string {
-  const displayValue = formatValue(value);
-  return displayValue.slice(0, 1).toUpperCase() + displayValue.slice(1);
 }
 
 function escapeHtml(value: unknown): string {

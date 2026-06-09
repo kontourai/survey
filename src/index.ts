@@ -96,6 +96,24 @@ export type {
   SourceOfAuthorityObservationInput,
 } from "./source-of-authority-observation.js";
 export {
+  buildReviewCandidatePresentation,
+  buildReviewItemPresentation,
+  buildReviewResultPresentation,
+  humanizeIdentifier,
+} from "./review-workbench/review-presentation.js";
+export type {
+  ReviewCandidatePresentation,
+  ReviewCandidatePresentationContext,
+  ReviewItemPresentation,
+  ReviewItemPresentationContext,
+  ReviewPresentationAdapter,
+  ReviewPresentationLink,
+  ReviewResultPresentation,
+  ReviewTracePresentationContext,
+  ReviewTraceRef,
+  ReviewValuePresentationContext,
+} from "./review-workbench/review-presentation.js";
+export {
   apiRecordSource,
   manualEntrySource,
   policyStandardSource,

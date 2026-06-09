@@ -5,6 +5,8 @@ import { reviewResourceApiVersion } from "../src/index.js";
 import {
   buildReviewDecision,
   buildReviewDecisionsFromSession,
+  buildReviewItemPresentation,
+  buildReviewResultPresentation,
   buildReviewWorkbenchResultsFromSession,
   buildReviewSessionEvents,
   buildReviewWorkbenchSessionExport,
@@ -146,6 +148,70 @@ describe("review workbench prototype", () => {
     assert.match(html, /current-record/);
     assert.match(html, /structured-value/);
     assert.match(html, /downstream-reviewer/);
+  });
+
+  it("builds generic presentation metadata with downstream display overrides", () => {
+    const item = publicDirectoryReviewItemFixture;
+    const presentation = buildReviewItemPresentation(item, {
+      labelForTarget: (target) => target === "availabilityStatus" ? "Availability status" : undefined,
+      summarizeValue: (value, context) => `${context.candidate.role ?? "candidate"}:${String(value).toLowerCase()}`,
+      linkForReviewItem: (reviewItem) => ({ href: `/review/${reviewItem.metadata.name}`, label: "Review item" }),
+      linkForTraceRef: (ref) => ref.kind === "candidate"
+        ? { href: `/trace/${encodeURIComponent(ref.value)}`, label: ref.label }
+        : undefined,
+    });
+
+    assert.equal(presentation.targetLabel, "Availability status");
+    assert.equal(presentation.statusLabel, "Resolved");
+    assert.equal(presentation.reviewItemLink?.href, "/review/public-directory-availability");
+    assert.equal(presentation.candidates[0]?.roleLabel, "Current value");
+    assert.equal(presentation.candidates[0]?.valueText, "current:available");
+    assert.equal(presentation.candidates[1]?.roleLabel, "Proposed value");
+    assert.equal(presentation.candidates[1]?.valueText, "proposed:waitlist");
+    assert.equal(presentation.candidates[1]?.sourceLink?.href, "https://example.test/listings/example-program");
+    assert.equal(
+      presentation.candidates[1]?.traceRefs.find((ref) => ref.kind === "candidate")?.link?.href,
+      "/trace/public-directory%3Acandidate%3Aproposed",
+    );
+  });
+
+  it("builds saved result presentation without product-specific branches", () => {
+    const session = {
+      ...initialReviewQueueSessionState([publicDirectoryReviewItemFixture]),
+      decisionsByItemName: {
+        [publicDirectoryReviewItemFixture.metadata.name]: "accept-proposed" as const,
+      },
+    };
+    const result = buildReviewWorkbenchResultsFromSession(session)[0];
+
+    assert.ok(result);
+
+    const presentation = buildReviewResultPresentation(result, publicDirectoryReviewItemFixture, {
+      labelForTarget: () => "Availability status",
+    });
+
+    assert.equal(presentation.targetLabel, "Availability status");
+    assert.equal(presentation.decisionLabel, "Accept Proposed");
+    assert.equal(presentation.selectedValueText, "WAITLIST");
+    assert.equal(presentation.applyMeaning, "Saved decision applies proposed value");
+    assert.equal(presentation.traceRefs[0]?.label, "Survey ReviewItem");
+    assert.equal(presentation.traceRefs[1]?.value, "public-directory:candidate:proposed");
+  });
+
+  it("renders embedded workbench labels and value summaries from the presentation adapter", () => {
+    const html = renderReviewWorkbenchHtml(initialReviewWorkbenchState(), undefined, {
+      presentationAdapter: {
+        labelForTarget: () => "Reviewable field",
+        summarizeValue: (value) => `display:${String(value).toLowerCase()}`,
+        statusLabel: () => "Needs operator review",
+      },
+    });
+
+    assert.match(html, /Reviewable field/);
+    assert.match(html, /display:waitlist/);
+    assert.match(html, /display:available/);
+    assert.match(html, /Needs operator review/);
+    assert.doesNotMatch(html, /<strong>availabilityStatus<\/strong>/);
   });
 
   it("AC37-1 derives queue row statuses from ReviewItem status and local decisions", () => {

@@ -1,4 +1,5 @@
 import { type ReviewCandidate, type ReviewDecision, type ReviewItem } from "../review-resource.js";
+import { type ReviewPresentationAdapter } from "./review-presentation.js";
 
 export interface SurfaceProjectionPreview {
   readonly canonicalClaim: PreviewClaim;
@@ -63,6 +64,7 @@ export interface PreviewAuthorityTrace {
 export function buildSurfaceProjectionPreview(
   item: ReviewItem,
   decision: ReviewDecision | undefined,
+  presentationAdapter: ReviewPresentationAdapter = {},
 ): SurfaceProjectionPreview | undefined {
   const selectedCandidate = selectedPreviewCandidate(item, decision);
   if (!selectedCandidate || !decision) {
@@ -72,8 +74,8 @@ export function buildSurfaceProjectionPreview(
   const projection = decision.spec.projection ?? selectedCandidate.projection;
 
   return {
-    canonicalClaim: buildPreviewClaim(selectedCandidate, decision, projection),
-    candidateHistory: buildCandidateHistory(item, selectedCandidate),
+    canonicalClaim: buildPreviewClaim(item, selectedCandidate, decision, projection, presentationAdapter),
+    candidateHistory: buildCandidateHistory(item, selectedCandidate, presentationAdapter),
     sourceEvidence: buildSourceEvidence(selectedCandidate),
     reviewEvent: buildReviewEvent(decision, projection),
     integrityPosture: buildIntegrityPosture(item, selectedCandidate, projection),
@@ -120,24 +122,32 @@ function selectedPreviewCandidate(
 }
 
 function buildPreviewClaim(
+  item: ReviewItem,
   candidate: ReviewCandidate,
   decision: ReviewDecision,
   projection: ReviewDecision["spec"]["projection"] | ReviewCandidate["projection"],
+  presentationAdapter: ReviewPresentationAdapter,
 ): PreviewClaim {
   return {
     candidateId: candidate.id,
     claimId: projection?.claimId ?? candidate.claimTarget.claimId ?? candidate.claimTarget.fieldOrBehavior,
-    value: formatValue(candidate.value),
+    value: presentationAdapter.summarizeValue?.(candidate.value, { item, candidate, value: candidate.value })
+      ?? formatValue(candidate.value),
     status: decision.spec.status,
   };
 }
 
-function buildCandidateHistory(item: ReviewItem, selectedCandidate: ReviewCandidate): PreviewCandidateHistory[] {
+function buildCandidateHistory(
+  item: ReviewItem,
+  selectedCandidate: ReviewCandidate,
+  presentationAdapter: ReviewPresentationAdapter,
+): PreviewCandidateHistory[] {
   return item.spec.candidates
     .filter((candidate) => candidate.id !== selectedCandidate.id)
     .map((candidate) => ({
       candidateId: candidate.id,
-      value: formatValue(candidate.value),
+      value: presentationAdapter.summarizeValue?.(candidate.value, { item, candidate, value: candidate.value })
+        ?? formatValue(candidate.value),
       historyLabel: "Unselected candidate history",
     }));
 }
