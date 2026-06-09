@@ -33,7 +33,9 @@ async function buildEmbeddedWorkbenchCss() {
   const tokensCss = await fs.readFile(path.join(tokenRoot, "tokens.css"), "utf8");
   const themesCss = await fs.readFile(path.join(tokenRoot, "themes.css"), "utf8");
   const workbenchCss = await fs.readFile(path.join(sourceRoot, "review-workbench.css"), "utf8");
-  const scopedWorkbenchCss = containEmbeddedWorkbenchOverlay(scopeCssForEmbeddedWorkbench(workbenchCss));
+  const scopedWorkbenchCss = containEmbeddedWorkbenchOverlay(
+    scopeCssForEmbeddedWorkbench(stripCssImports(workbenchCss)),
+  );
 
   return [
     "/* Bundled, scoped Survey Review Workbench styles for downstream embeds. */",
@@ -47,6 +49,13 @@ async function buildEmbeddedWorkbenchCss() {
       "}",
     ].join("\n"),
   ].join("\n");
+}
+
+function stripCssImports(css) {
+  return css
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("@import "))
+    .join("\n");
 }
 
 function containEmbeddedWorkbenchOverlay(css) {

@@ -70,6 +70,7 @@ async function main() {
   assertIncludes(embedCss, ".survey-workbench-embed .workbench-shell");
   assertIncludes(embedCss, ".survey-workbench-embed::before");
   assertIncludes(embedCss, "position: absolute;");
+  assertEquals((embedCss.match(/^@import /gm) ?? []).length, 1);
   assertExcludes(embedCss, "position: fixed;");
   assertExcludes(embedCss, "\nbody {");
   assertExcludes(embedCss, "\n:root {");
@@ -141,5 +142,11 @@ function assertIncludes(content, expected) {
 function assertExcludes(content, unexpected) {
   if (content.includes(unexpected)) {
     throw new Error(`Expected review workbench artifact not to include: ${unexpected}`);
+  }
+}
+
+function assertEquals(actual, expected) {
+  if (actual !== expected) {
+    throw new Error(`Expected review workbench artifact value ${expected}, received ${actual}`);
   }
 }
