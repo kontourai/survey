@@ -101,15 +101,18 @@ For the full consumer path from `ReviewItem` construction through persisted
 review events, exported results, and optional Surface projection, see
 [`docs/consumer-integration-guide.md`](docs/consumer-integration-guide.md).
 That guide also covers the server-side apply boundary: producers should derive
-write results from reviewed snapshots plus persisted events, not from
+write results from pre-decision review snapshots plus persisted events, not from
 browser-computed decisions or exported result payloads.
 Use `persistReviewSessionEvents` when server code needs to save review events,
 then pass the persisted event set to `deriveReviewSessionApplyResultForSnapshot`
 before applying product policy. Survey derives selected review results and
 structured replay/completion issues; the producer still owns current-record
 validation and writes.
-For a generic, test-covered example of the consumer adapter contract, see
-[`examples/review-workbench/facility-credential-consumer.ts`](examples/review-workbench/facility-credential-consumer.ts).
+For generic, test-covered consumer examples, see
+[`examples/review-workbench/facility-credential-consumer.ts`](examples/review-workbench/facility-credential-consumer.ts)
+for presentation and event persistence, and
+[`examples/review-workbench/server-apply-consumer.ts`](examples/review-workbench/server-apply-consumer.ts)
+for a compact server-side apply boundary.
 For the current decision on why Survey is not adding a generic review adapter
 builder yet, see
 [`docs/consumer-adapter-abstraction-assessment.md`](docs/consumer-adapter-abstraction-assessment.md).

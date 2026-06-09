@@ -61,10 +61,13 @@ export const facilityCredentialPresentationAdapter: ReviewPresentationAdapter = 
 };
 
 export async function buildFacilityCredentialConsumerExample(): Promise<FacilityCredentialConsumerExample> {
-  const reviewedSnapshot = {
+  const reviewSessionSnapshot = {
     ...initialReviewQueueSessionState([facilityCredentialReviewItemFixture]),
     actorId: "review-operator@example.test",
     reviewedAt: "2026-01-17T16:15:00.000Z",
+  };
+  const reviewedSnapshot = {
+    ...reviewSessionSnapshot,
     decisionsByItemName: {
       [facilityCredentialReviewItemFixture.metadata.name]: "accept-proposed" as const,
     },
@@ -90,7 +93,7 @@ export async function buildFacilityCredentialConsumerExample(): Promise<Facility
   });
 
   const applyResult = deriveReviewSessionApplyResultForSnapshot({
-    snapshot: reviewedSnapshot,
+    snapshot: reviewSessionSnapshot,
     events: persisted.events,
     requiredResolvedItems: "all",
   });
@@ -122,6 +125,7 @@ export async function buildFacilityCredentialConsumerExample(): Promise<Facility
 
   return {
     reviewItem: facilityCredentialReviewItemFixture,
+    reviewSessionSnapshot,
     reviewedSnapshot,
     eventsToPersist,
     persistedEvents: persisted.events,
@@ -137,6 +141,7 @@ export const facilityCredentialConsumerExample = await buildFacilityCredentialCo
 
 export interface FacilityCredentialConsumerExample {
   readonly reviewItem: typeof facilityCredentialReviewItemFixture;
+  readonly reviewSessionSnapshot: ReturnType<typeof initialReviewQueueSessionState>;
   readonly reviewedSnapshot: ReturnType<typeof initialReviewQueueSessionState>;
   readonly eventsToPersist: readonly ReviewSessionEvent[];
   readonly persistedEvents: readonly ReviewSessionEvent[];

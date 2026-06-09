@@ -27,7 +27,7 @@ describe("generic facility credential consumer example", () => {
 
   it("persists replayable review events and derives the selected result from the persisted snapshot events", async () => {
     const example = await buildFacilityCredentialConsumerExample();
-    const issues = validateReviewSessionEventsForSnapshot(example.reviewedSnapshot, example.persistedEvents);
+    const issues = validateReviewSessionEventsForSnapshot(example.reviewSessionSnapshot, example.persistedEvents);
     const [result] = example.applyResult.results;
 
     assert.deepEqual(issues, []);

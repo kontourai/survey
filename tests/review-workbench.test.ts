@@ -570,7 +570,7 @@ describe("review workbench prototype", () => {
     );
   });
 
-  it("prepares server-side review apply results from a reviewed snapshot and persisted events", () => {
+  it("prepares server-side review apply results from a pre-decision snapshot and persisted events", () => {
     const session = {
       ...initialReviewQueueSessionState(),
       decisionsByItemName: {

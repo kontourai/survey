@@ -29,7 +29,7 @@ The reusable boundary is intentionally small:
 | Item | Stable ids, field catalog, candidate ranking, source authority posture, and product policy notes. | `ReviewItem`, `ReviewCandidate`, source, extraction, locator, claim target, and projection hints. |
 | Presentation | Human labels, value summaries, and links back to product records, sources, claims, or traces. | `ReviewPresentationAdapter` hooks plus deterministic item/result presentation builders. |
 | Events | Durable event storage, optimistic concurrency, and reviewer identity from trusted product context. | `ReviewSessionEvent` resources and replay/validation helpers. |
-| Apply | Current-state validation, product policy, mutating writes, audit tables, and downstream jobs. | `ReviewWorkbenchResult` and `ReviewDecision` derived from a reviewed snapshot plus persisted events. |
+| Apply | Current-state validation, product policy, mutating writes, audit tables, and downstream jobs. | `ReviewWorkbenchResult` and `ReviewDecision` derived from a pre-decision review snapshot plus persisted events. |
 | Surface handoff | Which reviewed observations become claims and when to publish them. | Normal Survey observation/claim records and `buildSurveyTrustInput` projection into Surface. |
 
 `ReviewPresentationAdapter` is display-only. It lets a product explain ids and
@@ -69,8 +69,9 @@ const resultPresentation = buildReviewResultPresentation(result, reviewItem, pre
 ```
 
 A server apply path should treat persisted events as the auditable input and
-derive results again from the reviewed snapshot. Browser exports and
-presentation payloads are useful for inspection, not write authority.
+derive results again from the pre-decision review queue snapshot. Browser
+exports and presentation payloads are useful for inspection, not write
+authority.
 
 ```ts
 import {
@@ -80,10 +81,11 @@ import {
 } from "@kontourai/survey/review-workbench";
 
 const currentRecord = await loadCurrentProductRecord(recordId);
-const reviewedSnapshot = await loadReviewedSnapshot(reviewId);
-const eventsToPersist = buildReviewSessionEvents(reviewedSnapshot);
+const reviewSessionSnapshot = await loadReviewSessionSnapshot(reviewId);
+const reviewedSession = buildReviewedSession(reviewSessionSnapshot, reviewerInput);
+const eventsToPersist = buildReviewSessionEvents(reviewedSession);
 const persisted = await persistReviewSessionEvents({
-  session: reviewedSnapshot,
+  session: reviewedSession,
   events: eventsToPersist,
   expectedEventCount: await countPersistedReviewEvents(reviewId),
   persist: ({ events, expectedEventCount }) =>
@@ -91,12 +93,12 @@ const persisted = await persistReviewSessionEvents({
 });
 
 const applyResult = deriveReviewSessionApplyResultForSnapshot({
-  snapshot: reviewedSnapshot,
+  snapshot: reviewSessionSnapshot,
   events: persisted.events,
   requiredResolvedItems: "all",
 });
 if (!applyResult.ok) {
-  throw new Error("Review events do not match the reviewed snapshot.");
+  throw new Error("Review events do not match the review session snapshot.");
 }
 
 for (const result of applyResult.results) {
@@ -122,12 +124,19 @@ producer's persistence layer canonicalizes or reads back stored resources, its
 `persist` callback should return `{ events, eventCount }`; otherwise the
 callback must atomically commit exactly the supplied array before returning.
 
-The generic, test-covered example lives at
+The generic, test-covered workbench example lives at
 [`examples/review-workbench/facility-credential-consumer.ts`](../examples/review-workbench/facility-credential-consumer.ts).
 It shows a `ReviewItem`, `ReviewPresentationAdapter`, persisted
 `ReviewSessionEvent` resources, event replay, derived `ReviewWorkbenchResult`,
 and a Surface projection preview without product-specific policy embedded in
 Survey.
+
+For the smallest server apply boundary, see
+[`examples/review-workbench/server-apply-consumer.ts`](../examples/review-workbench/server-apply-consumer.ts).
+That example intentionally keeps the product mutation local: Survey derives the
+review result from the pre-decision snapshot and persisted events, while the
+consumer validates current state, rejects already-applied results, stamps the
+authenticated actor, and prepares its own write.
 
 ## Public-Directory Example
 
@@ -464,10 +473,10 @@ pattern below instead of trusting browser-computed results.
 Survey can derive the selected candidate, review decision resource, and
 replayable audit trail. The producer still owns write authority. A server-side
 apply path should load the product's current record, rebuild or load the
-`ReviewItem` snapshot that was reviewed, replay persisted events against that
-snapshot, derive `ReviewWorkbenchResult` values through Survey, validate those
-values against the current product state, and only then apply product-specific
-policy.
+pre-decision `ReviewItem`/`ReviewSession` snapshot that was presented for
+review, replay persisted events against that snapshot, derive
+`ReviewWorkbenchResult` values through Survey, validate those values against
+the current product state, and only then apply product-specific policy.
 
 For server-side replay, prefer the snapshot-safe apply preparation helper:
 
@@ -477,7 +486,7 @@ import {
 } from "@kontourai/survey/review-workbench";
 
 const applyResult = deriveReviewSessionApplyResultForSnapshot({
-  snapshot: reviewedSnapshot,
+  snapshot: reviewSessionSnapshot,
   events: persistedEvents,
   requiredResolvedItems: "all",
 });
@@ -573,7 +582,7 @@ Use this checklist before adding Survey to a producer:
 - Missing source context produces a warning or gap; do not invent evidence.
 - Product apply code consumes selected candidates or `ReviewWorkbenchResult`
   instead of re-deriving review choices from UI state.
-- Product write routes derive results server-side from reviewed snapshots plus
+- Product write routes derive results server-side from pre-decision review snapshots plus
   events; they do not trust browser-computed `ReviewDecision` or
   `sessionExport.results` payloads.
 - Product write routes stamp mutating actor and time from authenticated server
