@@ -22,6 +22,7 @@ import {
   mountReviewWorkbench,
   nextUnresolvedItemName,
   persistReviewSessionEvents,
+  deriveReviewSessionApplyResultForSnapshot,
   renderReviewWorkbenchHtml,
   replayReviewSessionEvents,
   replayReviewSessionEventsForSnapshot,
@@ -504,8 +505,9 @@ describe("review workbench prototype", () => {
   });
 
   it("reports stale replay events that do not match the supplied snapshot", () => {
+    const snapshot = initialReviewQueueSessionState();
     const session = {
-      ...initialReviewQueueSessionState(),
+      ...snapshot,
       decisionsByItemName: {
         "public-directory-hours": "accept-proposed" as const,
       },
@@ -519,21 +521,187 @@ describe("review workbench prototype", () => {
     const eventForUnknownCandidate = replaceReviewEventSpec(decisionEvent, {
       candidateId: "missing-candidate",
     });
+    const eventWithInvalidDecision = replaceReviewEventSpec(decisionEvent, {
+      data: {
+        workbenchDecision: "not-a-workbench-decision",
+      },
+    });
+    const currentCandidate = snapshot.items
+      .find((item) => item.metadata.name === "public-directory-hours")
+      ?.spec.candidates.find((candidate) => candidate.role === "current");
+    assert.ok(currentCandidate);
+    const eventWithCandidateMismatch = replaceReviewEventSpec(decisionEvent, {
+      candidateId: currentCandidate.id,
+    });
+    const eventWithStatusMismatch = replaceReviewEventSpec(decisionEvent, {
+      status: "rejected",
+    });
 
-    const issues = validateReviewSessionEventsForSnapshot(initialReviewQueueSessionState(), [
+    const issues = validateReviewSessionEventsForSnapshot(snapshot, [
       eventForUnknownItem,
       eventForUnknownCandidate,
+      eventWithInvalidDecision,
+      eventWithCandidateMismatch,
+      eventWithStatusMismatch,
     ]);
 
-    assert.deepEqual(issues.map((issue) => issue.code), ["unknown-review-item", "unknown-candidate"]);
+    assert.deepEqual(issues.map((issue) => issue.code), [
+      "unknown-review-item",
+      "unknown-candidate",
+      "invalid-workbench-decision",
+      "decision-candidate-mismatch",
+      "decision-status-mismatch",
+    ]);
     assert.throws(
-      () => replayReviewSessionEventsForSnapshot(initialReviewQueueSessionState(), [eventForUnknownItem]),
+      () => replayReviewSessionEventsForSnapshot(snapshot, [eventForUnknownItem]),
       /missing-review-item/,
     );
     assert.throws(
-      () => buildReviewWorkbenchSessionExportForSnapshot(initialReviewQueueSessionState(), [eventForUnknownCandidate]),
+      () => buildReviewWorkbenchSessionExportForSnapshot(snapshot, [eventForUnknownCandidate]),
       /missing-candidate/,
     );
+    assert.throws(
+      () => buildReviewWorkbenchSessionExportForSnapshot(snapshot, [eventWithInvalidDecision]),
+      /replayable workbench decision/,
+    );
+    assert.throws(
+      () => buildReviewWorkbenchSessionExportForSnapshot(snapshot, [eventWithCandidateMismatch]),
+      /expects candidate/,
+    );
+  });
+
+  it("prepares server-side review apply results from a reviewed snapshot and persisted events", () => {
+    const session = {
+      ...initialReviewQueueSessionState(),
+      decisionsByItemName: {
+        "public-directory-hours": "accept-proposed" as const,
+        "public-directory-phone": "keep-current" as const,
+      },
+      notesByItemName: {
+        "public-directory-hours": "Accepted longer posted hours.",
+      },
+    };
+    const events = buildReviewSessionEvents(session);
+
+    const prepared = deriveReviewSessionApplyResultForSnapshot({
+      snapshot: initialReviewQueueSessionState(),
+      events,
+      requiredResolvedItems: "any",
+    });
+
+    assert.equal(prepared.ok, true);
+    assert.deepEqual(prepared.issues, []);
+    assert.equal(prepared.unresolvedItemNames.includes("public-directory-hours"), false);
+    assert.equal(prepared.unresolvedItemNames.includes("public-directory-phone"), false);
+    assert.deepEqual(prepared.results.map((result) => result.reviewItemName), [
+      "public-directory-hours",
+      "public-directory-phone",
+    ]);
+    assert.deepEqual(prepared.results.map((result) => result.selectedCandidateRole), ["proposed", "current"]);
+    assert.equal(prepared.decisions.length, 2);
+    assert.equal(prepared.sessionExport.events.length, events.length);
+    assert.deepEqual(prepared.replayedSession.decisionsByItemName, session.decisionsByItemName);
+  });
+
+  it("reports unresolved review items before a product applies review results", () => {
+    const session = initialReviewQueueSessionState();
+    const events = buildReviewSessionEvents({
+      ...session,
+      decisionsByItemName: {
+        "public-directory-hours": "accept-proposed",
+      },
+    });
+
+    const fullApply = deriveReviewSessionApplyResultForSnapshot({
+      snapshot: session,
+      events,
+      requiredResolvedItems: "all",
+    });
+    const partialApply = deriveReviewSessionApplyResultForSnapshot({
+      snapshot: session,
+      events,
+      requiredResolvedItems: "any",
+    });
+
+    assert.equal(fullApply.ok, false);
+    assert.ok(fullApply.issues.every((issue) => issue.code === "unresolved-review-item"));
+    assert.ok(fullApply.unresolvedItemNames.includes("public-directory-phone"));
+    assert.equal(fullApply.unresolvedItemNames.includes("public-directory-hours"), false);
+    assert.equal(fullApply.results.length, 1);
+    assert.equal(partialApply.ok, true);
+    assert.equal(partialApply.results.length, 1);
+  });
+
+  it("reports empty and stale persisted event sets without throwing", () => {
+    const session = initialReviewQueueSessionState();
+    const completeEvents = buildReviewSessionEvents({
+      ...session,
+      decisionsByItemName: {
+        "public-directory-hours": "accept-proposed",
+      },
+    });
+    const decisionEvent = completeEvents.find((event) => event.spec.eventType === "decision-changed");
+    assert.ok(decisionEvent);
+    const eventForUnknownItem = replaceReviewEventSpec(decisionEvent, {
+      reviewItemName: "missing-review-item",
+    });
+
+    const emptyApply = deriveReviewSessionApplyResultForSnapshot({
+      snapshot: session,
+      events: [],
+      requiredResolvedItems: "any",
+    });
+    const staleApply = deriveReviewSessionApplyResultForSnapshot({
+      snapshot: session,
+      events: [eventForUnknownItem],
+      requiredResolvedItems: "all",
+    });
+    const partiallyValidEvents = buildReviewSessionEvents({
+      ...session,
+      decisionsByItemName: {
+        "public-directory-hours": "accept-proposed",
+        "public-directory-phone": "keep-current",
+      },
+    });
+    const malformedPhoneEvents = partiallyValidEvents.map((event) =>
+      event.spec.eventType === "decision-changed" && event.spec.reviewItemName === "public-directory-phone"
+        ? replaceReviewEventSpec(event, { data: { workbenchDecision: "not-a-workbench-decision" } })
+        : event,
+    );
+    const currentHoursCandidate = session.items
+      .find((item) => item.metadata.name === "public-directory-hours")
+      ?.spec.candidates.find((candidate) => candidate.role === "current");
+    assert.ok(currentHoursCandidate);
+    const candidateMismatchEvents = partiallyValidEvents.map((event) =>
+      event.spec.eventType === "decision-changed" && event.spec.reviewItemName === "public-directory-hours"
+        ? replaceReviewEventSpec(event, { candidateId: currentHoursCandidate.id })
+        : event,
+    );
+    const malformedPartialApply = deriveReviewSessionApplyResultForSnapshot({
+      snapshot: session,
+      events: malformedPhoneEvents,
+      requiredResolvedItems: "any",
+    });
+    const mismatchPartialApply = deriveReviewSessionApplyResultForSnapshot({
+      snapshot: session,
+      events: candidateMismatchEvents,
+      requiredResolvedItems: "any",
+    });
+
+    assert.equal(emptyApply.ok, false);
+    assert.deepEqual(emptyApply.issues.map((issue) => issue.code), ["no-resolved-review-items"]);
+    assert.deepEqual(emptyApply.unresolvedItemNames, session.items.map((item) => item.metadata.name));
+    assert.equal(emptyApply.results.length, 0);
+    assert.equal(staleApply.ok, false);
+    assert.deepEqual(staleApply.issues.map((issue) => issue.code), ["unknown-review-item"]);
+    assert.deepEqual(staleApply.unresolvedItemNames, session.items.map((item) => item.metadata.name));
+    assert.equal(staleApply.results.length, 0);
+    assert.equal(malformedPartialApply.ok, false);
+    assert.deepEqual(malformedPartialApply.issues.map((issue) => issue.code), ["invalid-workbench-decision"]);
+    assert.equal(malformedPartialApply.results.length, 0);
+    assert.equal(mismatchPartialApply.ok, false);
+    assert.deepEqual(mismatchPartialApply.issues.map((issue) => issue.code), ["decision-candidate-mismatch"]);
+    assert.equal(mismatchPartialApply.results.length, 0);
   });
 
   it("creates a queued persistent event store with expected event count and status callbacks", async () => {
