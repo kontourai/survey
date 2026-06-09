@@ -46,11 +46,11 @@ function lineNumberFor(content, index) {
 const findings = [];
 
 for (const filePath of trackedFiles()) {
-  if (filePath.startsWith(".agents/")) {
+  if (filePath.startsWith(".flow-agents/")) {
     findings.push({
       filePath,
       line: 1,
-      label: "agent workflow artifact must not be tracked in this repo",
+      label: "Flow Agents runtime artifact must not be tracked in this repo",
     });
     continue;
   }
