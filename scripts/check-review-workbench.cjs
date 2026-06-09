@@ -70,7 +70,7 @@ async function main() {
   assertIncludes(embedCss, ".survey-workbench-embed .workbench-shell");
   assertIncludes(embedCss, ".survey-workbench-embed::before");
   assertIncludes(embedCss, "position: absolute;");
-  assertEquals((embedCss.match(/^@import /gm) ?? []).length, 1);
+  assertEquals((embedCss.match(/^@import /gm) ?? []).length, 0);
   assertExcludes(embedCss, "position: fixed;");
   assertExcludes(embedCss, "\nbody {");
   assertExcludes(embedCss, "\n:root {");

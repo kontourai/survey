@@ -29,7 +29,6 @@ async function main() {
 
 async function buildEmbeddedWorkbenchCss() {
   const tokenRoot = path.join(sourceRoot, "vendor", "console-kit", "tokens");
-  const fontsCss = await fs.readFile(path.join(tokenRoot, "fonts.css"), "utf8");
   const tokensCss = await fs.readFile(path.join(tokenRoot, "tokens.css"), "utf8");
   const themesCss = await fs.readFile(path.join(tokenRoot, "themes.css"), "utf8");
   const workbenchCss = await fs.readFile(path.join(sourceRoot, "review-workbench.css"), "utf8");
@@ -38,8 +37,7 @@ async function buildEmbeddedWorkbenchCss() {
   );
 
   return [
-    "/* Bundled, scoped Survey Review Workbench styles for downstream embeds. */",
-    fontsCss,
+    "/* Bundled, scoped Survey Review Workbench styles for downstream embeds. Font loading is left to the host app. */",
     scopeCssForEmbeddedWorkbench(tokensCss),
     scopeCssForEmbeddedWorkbench(themesCss),
     scopedWorkbenchCss,
