@@ -21,6 +21,7 @@ import {
   initialReviewQueueSessionState,
   mountReviewWorkbench,
   nextUnresolvedItemName,
+  persistReviewSessionEvents,
   renderReviewWorkbenchHtml,
   replayReviewSessionEvents,
   replayReviewSessionEventsForSnapshot,
@@ -578,6 +579,94 @@ describe("review workbench prototype", () => {
     assert.deepEqual(requests.map((request) => request.events.length), [firstEvents.length, secondEvents.length]);
     assert.deepEqual(statuses, ["saving", "saved", "saving", "saved"]);
     assert.equal(store.events().length, secondEvents.length);
+  });
+
+  it("persists review session events through an awaitable helper before replay", async () => {
+    const session = initialReviewQueueSessionState();
+    const events = buildReviewSessionEvents({
+      ...session,
+      notesByItemName: {
+        "public-directory-hours": "Accepted posted hours.",
+      },
+      decisionsByItemName: {
+        "public-directory-hours": "accept-proposed",
+      },
+    });
+    const requests: Array<{
+      expectedEventCount: number;
+      events: readonly ReviewSessionEvent[];
+    }> = [];
+
+    const persisted = await persistReviewSessionEvents({
+      session,
+      events,
+      expectedEventCount: 3,
+      persist: async (request) => {
+        requests.push({
+          expectedEventCount: request.expectedEventCount,
+          events: request.events,
+        });
+        return { eventCount: request.events.length };
+      },
+    });
+    const exported = buildReviewWorkbenchSessionExportForSnapshot(session, persisted.events);
+
+    assert.equal(persisted.eventCount, events.length);
+    assert.deepEqual(persisted.events, events);
+    assert.deepEqual(requests.map((request) => request.expectedEventCount), [3]);
+    assert.equal(exported.results[0]?.decision, "accept-proposed");
+  });
+
+  it("uses committed review events returned by the persistence callback", async () => {
+    const session = initialReviewQueueSessionState();
+    const events = buildReviewSessionEvents({
+      ...session,
+      notesByItemName: {
+        "public-directory-hours": "Accepted posted hours.",
+      },
+    });
+    const committedEvents = events.map((event) => ({
+      ...event,
+      metadata: {
+        ...event.metadata,
+        annotations: {
+          ...event.metadata.annotations,
+          "survey.kontourai.io/persisted-by": "example-store",
+        },
+      },
+    }));
+
+    const persisted = await persistReviewSessionEvents({
+      session,
+      events,
+      persist: async () => ({
+        events: committedEvents,
+        eventCount: committedEvents.length,
+      }),
+    });
+
+    assert.deepEqual(persisted.events, committedEvents);
+    assert.notDeepEqual(persisted.events, events);
+    assert.equal(persisted.eventCount, committedEvents.length);
+  });
+
+  it("defaults persisted review event count to the persisted event array length", async () => {
+    const session = initialReviewQueueSessionState();
+    const events = buildReviewSessionEvents({
+      ...session,
+      notesByItemName: {
+        "public-directory-hours": "Accepted posted hours.",
+      },
+    });
+
+    const persisted = await persistReviewSessionEvents({
+      session,
+      events,
+      persist: async () => undefined,
+    });
+
+    assert.equal(persisted.eventCount, events.length);
+    assert.deepEqual(persisted.events, events);
   });
 
   it("marks selected and unselected outcomes after a decision", () => {

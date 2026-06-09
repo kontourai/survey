@@ -168,7 +168,20 @@ export interface ReviewSessionPersistenceRequest {
 }
 
 export interface ReviewSessionPersistenceResult {
+  readonly events?: readonly ReviewSessionEvent[];
   readonly eventCount?: number;
+}
+
+export interface PersistReviewSessionEventsOptions {
+  readonly session: ReviewQueueSessionState;
+  readonly events: readonly ReviewSessionEvent[];
+  readonly expectedEventCount?: number;
+  readonly persist: (request: ReviewSessionPersistenceRequest) => Promise<ReviewSessionPersistenceResult | void>;
+}
+
+export interface PersistReviewSessionEventsResult {
+  readonly events: readonly ReviewSessionEvent[];
+  readonly eventCount: number;
 }
 
 export interface PersistentReviewSessionEventStoreOptions {
@@ -372,10 +385,27 @@ export function createLocalStorageReviewSessionEventStore(
   };
 }
 
+export async function persistReviewSessionEvents(
+  options: PersistReviewSessionEventsOptions,
+): Promise<PersistReviewSessionEventsResult> {
+  const events = [...options.events];
+  const result = await options.persist({
+    session: options.session,
+    events,
+    expectedEventCount: options.expectedEventCount ?? 0,
+  });
+  const persistedEvents = result?.events ? [...result.events] : events;
+
+  return {
+    events: persistedEvents,
+    eventCount: result?.eventCount ?? persistedEvents.length,
+  };
+}
+
 export function createPersistentReviewSessionEventStore(
   options: PersistentReviewSessionEventStoreOptions,
 ): ReviewSessionEventStore & { events(): readonly ReviewSessionEvent[] } {
-  let savedEvents = [...(options.initialEvents ?? [])];
+  let savedEvents: readonly ReviewSessionEvent[] = [...(options.initialEvents ?? [])];
   let lastPersistedSerialized = JSON.stringify(savedEvents);
   let lastPersistedEventCount = savedEvents.length;
   let pendingSave = Promise.resolve();
@@ -400,15 +430,16 @@ export function createPersistentReviewSessionEventStore(
             return;
           }
           emit({ status: "saving", events: normalizedEvents });
-          const result = await options.persist({
+          const result = await persistReviewSessionEvents({
             session,
             events: normalizedEvents,
             expectedEventCount: lastPersistedEventCount,
+            persist: options.persist,
           });
-          savedEvents = normalizedEvents;
-          lastPersistedSerialized = serialized;
-          lastPersistedEventCount = result?.eventCount ?? normalizedEvents.length;
-          emit({ status: "saved", events: normalizedEvents });
+          savedEvents = result.events;
+          lastPersistedSerialized = JSON.stringify(result.events);
+          lastPersistedEventCount = result.eventCount;
+          emit({ status: "saved", events: result.events });
         })
         .catch((error) => {
           emit({ status: "error", events: normalizedEvents, error });

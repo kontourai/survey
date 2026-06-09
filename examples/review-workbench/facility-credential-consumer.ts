@@ -5,8 +5,8 @@ import {
   buildReviewSessionEvents,
   buildReviewWorkbenchSessionExportForSnapshot,
   buildSurfaceProjectionPreview,
-  createPersistentReviewSessionEventStore,
   initialReviewQueueSessionState,
+  persistReviewSessionEvents,
   type ReviewPresentationAdapter,
 } from "../../src/review-workbench/review-workbench.js";
 import type { ReviewSessionEvent } from "../../src/review-resource.js";
@@ -75,32 +75,21 @@ export async function buildFacilityCredentialConsumerExample(): Promise<Facility
 
   const eventsToPersist = buildReviewSessionEvents(reviewedSnapshot);
   const persistedEvents: ReviewSessionEvent[] = [];
-  const persisted = new Promise<readonly ReviewSessionEvent[]>((resolve, reject) => {
-    const eventStore = createPersistentReviewSessionEventStore({
-      onStatusChange: ({ status, events, error }) => {
-        if (status === "saved") {
-          resolve(events);
-        }
-        if (status === "error") {
-          reject(error instanceof Error ? error : new Error("Review event persistence failed."));
-        }
-      },
-      persist: async ({ events, expectedEventCount }) => {
-        if (expectedEventCount !== persistedEvents.length) {
-          throw new Error(`Expected ${expectedEventCount} persisted events, found ${persistedEvents.length}.`);
-        }
+  const persisted = await persistReviewSessionEvents({
+    session: reviewedSnapshot,
+    events: eventsToPersist,
+    expectedEventCount: persistedEvents.length,
+    persist: async ({ events, expectedEventCount }) => {
+      if (expectedEventCount !== persistedEvents.length) {
+        throw new Error(`Expected ${expectedEventCount} persisted events, found ${persistedEvents.length}.`);
+      }
 
-        persistedEvents.splice(0, persistedEvents.length, ...events);
-        return { eventCount: persistedEvents.length };
-      },
-    });
-
-    eventStore.save(reviewedSnapshot, eventsToPersist);
+      persistedEvents.splice(0, persistedEvents.length, ...events);
+      return { eventCount: persistedEvents.length };
+    },
   });
 
-  const replayEvents = await persisted;
-
-  const sessionExport = buildReviewWorkbenchSessionExportForSnapshot(reviewedSnapshot, replayEvents);
+  const sessionExport = buildReviewWorkbenchSessionExportForSnapshot(reviewedSnapshot, persisted.events);
   const [result] = sessionExport.results;
   if (!result) {
     throw new Error("Expected the reviewed credential snapshot to produce one review result.");
@@ -128,7 +117,8 @@ export async function buildFacilityCredentialConsumerExample(): Promise<Facility
     reviewItem: facilityCredentialReviewItemFixture,
     reviewedSnapshot,
     eventsToPersist,
-    persistedEvents: replayEvents,
+    persistedEvents: persisted.events,
+    persistedEventCount: persisted.eventCount,
     sessionExport,
     itemPresentation,
     resultPresentation,
@@ -143,6 +133,7 @@ export interface FacilityCredentialConsumerExample {
   readonly reviewedSnapshot: ReturnType<typeof initialReviewQueueSessionState>;
   readonly eventsToPersist: readonly ReviewSessionEvent[];
   readonly persistedEvents: readonly ReviewSessionEvent[];
+  readonly persistedEventCount: number;
   readonly sessionExport: ReturnType<typeof buildReviewWorkbenchSessionExportForSnapshot>;
   readonly itemPresentation: ReturnType<typeof buildReviewItemPresentation>;
   readonly resultPresentation: ReturnType<typeof buildReviewResultPresentation>;

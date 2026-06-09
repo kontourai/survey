@@ -103,6 +103,8 @@ review events, exported results, and optional Surface projection, see
 That guide also covers the server-side apply boundary: producers should derive
 write results from reviewed snapshots plus persisted events, not from
 browser-computed decisions or exported result payloads.
+Use `persistReviewSessionEvents` when server code needs to save review events
+and then replay exactly the persisted event set before applying product policy.
 For a generic, test-covered example of the consumer adapter contract, see
 [`examples/review-workbench/facility-credential-consumer.ts`](examples/review-workbench/facility-credential-consumer.ts).
 For the current decision on why Survey is not adding a generic review adapter

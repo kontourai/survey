@@ -74,20 +74,29 @@ presentation payloads are useful for inspection, not write authority.
 
 ```ts
 import {
+  buildReviewSessionEvents,
   buildReviewWorkbenchSessionExportForSnapshot,
+  persistReviewSessionEvents,
   validateReviewSessionEventsForSnapshot,
 } from "@kontourai/survey/review-workbench";
 
 const currentRecord = await loadCurrentProductRecord(recordId);
 const reviewedSnapshot = await loadReviewedSnapshot(reviewId);
-const events = await loadPersistedReviewEvents(reviewId);
+const eventsToPersist = buildReviewSessionEvents(reviewedSnapshot);
+const persisted = await persistReviewSessionEvents({
+  session: reviewedSnapshot,
+  events: eventsToPersist,
+  expectedEventCount: await countPersistedReviewEvents(reviewId),
+  persist: ({ events, expectedEventCount }) =>
+    saveReviewEvents({ reviewId, events, expectedEventCount }),
+});
 
-const issues = validateReviewSessionEventsForSnapshot(reviewedSnapshot, events);
+const issues = validateReviewSessionEventsForSnapshot(reviewedSnapshot, persisted.events);
 if (issues.length > 0) {
   throw new Error("Review events do not match the reviewed snapshot.");
 }
 
-const exported = buildReviewWorkbenchSessionExportForSnapshot(reviewedSnapshot, events);
+const exported = buildReviewWorkbenchSessionExportForSnapshot(reviewedSnapshot, persisted.events);
 
 for (const result of exported.results) {
   assertProductTargetStillMatches(currentRecord, result);
@@ -106,6 +115,11 @@ producer which candidate was selected; producer code then emits the reviewed
 source/extraction/candidate/review/claim records it wants to publish and calls
 `buildSurveyTrustInput`. The workbench also exposes a projection preview for UI
 explanation, but that preview is not a separate write path.
+
+`persistReviewSessionEvents` returns the event array accepted for replay. If a
+producer's persistence layer canonicalizes or reads back stored resources, its
+`persist` callback should return `{ events, eventCount }`; otherwise the
+callback must atomically commit exactly the supplied array before returning.
 
 The generic, test-covered example lives at
 [`examples/review-workbench/facility-credential-consumer.ts`](../examples/review-workbench/facility-credential-consumer.ts).

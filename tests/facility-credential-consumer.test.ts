@@ -35,6 +35,7 @@ describe("generic facility credential consumer example", () => {
     assert.deepEqual(issues, []);
     assert.equal(example.eventsToPersist.length, 6);
     assert.deepEqual(example.persistedEvents, example.eventsToPersist);
+    assert.equal(example.persistedEventCount, example.persistedEvents.length);
     assert.equal(replayed.events.length, example.persistedEvents.length);
     assert.equal(result?.decision, "accept-proposed");
     assert.equal(result?.selectedCandidateRole, "proposed");

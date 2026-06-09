@@ -1,6 +1,6 @@
 {
   "name": "@kontourai/survey",
-  "version": "0.4.16",
+  "version": "0.4.17",
   "description": "Producer-side source, extraction, candidate, and review contracts for projecting verified claims into Surface.",
   "license": "Apache-2.0",
   "type": "module",
