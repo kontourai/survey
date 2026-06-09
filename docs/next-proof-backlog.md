@@ -140,13 +140,58 @@ Exit criteria:
 - downstream producers no longer need product-local projection glue for this
   generic learning case
 
+## Committed Follow-Up: Review Apply Contract Hardening
+
+Question: what else should Survey provide so downstream products can safely
+apply reviewed results without rebuilding workbench mechanics or trusting
+browser payloads?
+
+The first public-directory and regulated-rule review proofs showed the same
+boundary: Survey can derive selected candidates, review decisions, session
+resources, and replayable events, but the product server owns authorization,
+current-state validation, write policy, persistence, and audit stamps. The
+important repeated friction was not a generic apply builder. It was the need to
+replay events against a reviewed session snapshot before deriving write inputs.
+
+Survey now exposes the narrow snapshot-safe replay/export helpers. Future work
+should stay inside that policy-free lane.
+
+Shape additive improvements only when they:
+
+- validate or replay Survey review resources without deciding product policy
+- make stale item or candidate references visible before product mutation
+- preserve the distinction between trusted server replay and display-only
+  browser exports
+- help products map `ReviewWorkbenchResult` into Survey claim records or Surface
+  transparency without applying values for them
+- keep mutating actor, time, tenancy, authorization, and persistence in the
+  producer
+
+Do not build:
+
+- a helper that applies selected values to product records
+- a helper that chooses accept, reject, keep-current, or partial-apply policy
+- a helper that treats browser-submitted `ReviewDecision` or
+  `sessionExport.results` as authoritative for web writes
+- a helper that stamps authenticated write actor or write time
+
+Exit criteria:
+
+- at least one more producer uses the snapshot-safe replay/export helpers
+  without product-specific glue inside Survey
+- the next integration can delete local session replay validation, not local
+  product apply policy
+- product documentation or UI can point from an applied value back to the Survey
+  session, event trail, and derived result that justified the write
+
 ## Current Priority
 
 1. Rejected candidate learning projection.
-2. Current/proposed review friction.
-3. Per-row repeated source authority.
-4. Portable Authority Trace.
-5. Source descriptor reuse.
+2. Review apply contract hardening.
+3. Current/proposed review friction.
+4. Per-row repeated source authority.
+5. Portable Authority Trace.
+6. Source descriptor reuse.
 
 This order reflects current evidence. Reorder it when downstream integrations
 produce stronger pain signals.

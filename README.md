@@ -90,6 +90,9 @@ the standalone demo page. Use that only when Survey owns the whole page.
 For the full consumer path from `ReviewItem` construction through persisted
 review events, exported results, and optional Surface projection, see
 [`docs/consumer-integration-guide.md`](docs/consumer-integration-guide.md).
+That guide also covers the server-side apply boundary: producers should derive
+write results from reviewed snapshots plus persisted events, not from
+browser-computed decisions or exported result payloads.
 For the current decision on why Survey is not adding a generic review adapter
 builder yet, see
 [`docs/consumer-adapter-abstraction-assessment.md`](docs/consumer-adapter-abstraction-assessment.md).

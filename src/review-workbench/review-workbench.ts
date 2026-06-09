@@ -113,6 +113,20 @@ export interface ReviewWorkbenchSessionExport {
   readonly results: readonly ReviewWorkbenchResult[];
 }
 
+export type ReviewSessionReplayIssueCode =
+  | "unknown-active-item"
+  | "unknown-review-item"
+  | "unknown-candidate";
+
+export interface ReviewSessionReplayIssue {
+  readonly code: ReviewSessionReplayIssueCode;
+  readonly eventName: string;
+  readonly sequence: number;
+  readonly reviewItemName?: string;
+  readonly candidateId?: string;
+  readonly message: string;
+}
+
 export interface ReviewSessionEventStore {
   load(session: ReviewQueueSessionState): readonly ReviewSessionEvent[] | undefined;
   save(session: ReviewQueueSessionState, events: readonly ReviewSessionEvent[]): void;
@@ -224,6 +238,78 @@ export function buildReviewWorkbenchSessionExport(
     decisions: buildReviewDecisionsFromSession(session),
     results: buildReviewWorkbenchResultsFromSession(session),
   };
+}
+
+export function validateReviewSessionEventsForSnapshot(
+  snapshot: ReviewQueueSessionState,
+  events: readonly ReviewSessionEvent[],
+): ReviewSessionReplayIssue[] {
+  const itemsByName = new Map(snapshot.items.map((item) => [item.metadata.name, item]));
+
+  return events.flatMap((event) => {
+    const issues: ReviewSessionReplayIssue[] = [];
+    const activeItemName = event.spec.activeItemName;
+    const reviewItemName = event.spec.reviewItemName;
+    const itemName = reviewItemName ?? activeItemName;
+    const eventRef = {
+      eventName: event.metadata.name,
+      sequence: event.spec.sequence,
+    };
+
+    if (activeItemName && !itemsByName.has(activeItemName)) {
+      issues.push({
+        ...eventRef,
+        code: "unknown-active-item",
+        reviewItemName: activeItemName,
+        message: `ReviewSessionEvent ${event.metadata.name} references active item ${activeItemName}, but the supplied session snapshot does not contain that ReviewItem.`,
+      });
+    }
+
+    if (reviewItemName && !itemsByName.has(reviewItemName)) {
+      issues.push({
+        ...eventRef,
+        code: "unknown-review-item",
+        reviewItemName,
+        message: `ReviewSessionEvent ${event.metadata.name} references review item ${reviewItemName}, but the supplied session snapshot does not contain that ReviewItem.`,
+      });
+    }
+
+    if (event.spec.candidateId && itemName && itemsByName.has(itemName)) {
+      const item = itemsByName.get(itemName);
+      const hasCandidate = item?.spec.candidates.some((candidate) => candidate.id === event.spec.candidateId);
+      if (!hasCandidate) {
+        issues.push({
+          ...eventRef,
+          code: "unknown-candidate",
+          reviewItemName: itemName,
+          candidateId: event.spec.candidateId,
+          message: `ReviewSessionEvent ${event.metadata.name} references candidate ${event.spec.candidateId}, but ReviewItem ${itemName} in the supplied session snapshot does not contain that candidate.`,
+        });
+      }
+    }
+
+    return issues;
+  });
+}
+
+export function replayReviewSessionEventsForSnapshot(
+  snapshot: ReviewQueueSessionState,
+  events: readonly ReviewSessionEvent[],
+): ReviewQueueSessionState {
+  const issues = validateReviewSessionEventsForSnapshot(snapshot, events);
+  if (issues.length > 0) {
+    throw new Error(`Review session events do not match the supplied session snapshot: ${issues.map((issue) => issue.message).join(" ")}`);
+  }
+
+  return replayReviewSessionEvents(snapshot, events);
+}
+
+export function buildReviewWorkbenchSessionExportForSnapshot(
+  snapshot: ReviewQueueSessionState,
+  events: readonly ReviewSessionEvent[],
+): ReviewWorkbenchSessionExport {
+  const replayedSession = replayReviewSessionEventsForSnapshot(snapshot, events);
+  return buildReviewWorkbenchSessionExport(replayedSession, events);
 }
 
 export function createInMemoryReviewSessionEventStore(

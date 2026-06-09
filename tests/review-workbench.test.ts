@@ -8,6 +8,7 @@ import {
   buildReviewWorkbenchResultsFromSession,
   buildReviewSessionEvents,
   buildReviewWorkbenchSessionExport,
+  buildReviewWorkbenchSessionExportForSnapshot,
   buildSurfaceProjectionPreview,
   createInMemoryReviewSessionEventStore,
   createLocalStorageReviewSessionEventStore,
@@ -20,14 +21,16 @@ import {
   nextUnresolvedItemName,
   renderReviewWorkbenchHtml,
   replayReviewSessionEvents,
+  replayReviewSessionEventsForSnapshot,
   reviewSessionSummary,
+  validateReviewSessionEventsForSnapshot,
   type ReviewWorkbenchDecision,
 } from "../src/review-workbench/review-workbench.js";
 import {
   regulatedRuleConflictReviewItemFixture,
   reviewWorkbenchQueueFixtures,
 } from "../src/review-workbench/review-workbench-data.js";
-import type { ReviewDecision, ReviewItem } from "../src/review-resource.js";
+import type { ReviewDecision, ReviewItem, ReviewSessionEvent } from "../src/review-resource.js";
 
 describe("review workbench prototype", () => {
   const cases: Array<{
@@ -344,6 +347,64 @@ describe("review workbench prototype", () => {
     assert.equal(acceptedPreview?.reviewEvent?.rationale, "Accepted longer posted hours.");
     assert.equal(keptPreview?.reviewEvent?.rationale, "Kept current phone after source check.");
     assert.equal(rejectedPreview?.reviewEvent?.rationale, "Rejected proposed address as low confidence.");
+  });
+
+  it("exports review session results by strictly replaying events against the supplied snapshot", () => {
+    const session = {
+      ...initialReviewQueueSessionState(),
+      decisionsByItemName: {
+        "public-directory-hours": "accept-proposed" as const,
+        "public-directory-phone": "keep-current" as const,
+      },
+      notesByItemName: {
+        "public-directory-hours": "Accepted longer posted hours.",
+      },
+    };
+    const events = buildReviewSessionEvents(session);
+
+    const replayed = replayReviewSessionEventsForSnapshot(initialReviewQueueSessionState(), events);
+    const exported = buildReviewWorkbenchSessionExportForSnapshot(initialReviewQueueSessionState(), events);
+
+    assert.deepEqual(replayed.decisionsByItemName, session.decisionsByItemName);
+    assert.deepEqual(exported.events.map((event) => event.metadata.name), events.map((event) => event.metadata.name));
+    assert.deepEqual(exported.results.map((result) => result.reviewItemName), [
+      "public-directory-hours",
+      "public-directory-phone",
+    ]);
+    assert.deepEqual(exported.results.map((result) => result.selectedCandidateRole), ["proposed", "current"]);
+  });
+
+  it("reports stale replay events that do not match the supplied snapshot", () => {
+    const session = {
+      ...initialReviewQueueSessionState(),
+      decisionsByItemName: {
+        "public-directory-hours": "accept-proposed" as const,
+      },
+    };
+    const events = buildReviewSessionEvents(session);
+    const decisionEvent = events.find((event) => event.spec.eventType === "decision-changed");
+    assert.ok(decisionEvent);
+    const eventForUnknownItem = replaceReviewEventSpec(decisionEvent, {
+      reviewItemName: "missing-review-item",
+    });
+    const eventForUnknownCandidate = replaceReviewEventSpec(decisionEvent, {
+      candidateId: "missing-candidate",
+    });
+
+    const issues = validateReviewSessionEventsForSnapshot(initialReviewQueueSessionState(), [
+      eventForUnknownItem,
+      eventForUnknownCandidate,
+    ]);
+
+    assert.deepEqual(issues.map((issue) => issue.code), ["unknown-review-item", "unknown-candidate"]);
+    assert.throws(
+      () => replayReviewSessionEventsForSnapshot(initialReviewQueueSessionState(), [eventForUnknownItem]),
+      /missing-review-item/,
+    );
+    assert.throws(
+      () => buildReviewWorkbenchSessionExportForSnapshot(initialReviewQueueSessionState(), [eventForUnknownCandidate]),
+      /missing-candidate/,
+    );
   });
 
   it("creates a queued persistent event store with expected event count and status callbacks", async () => {
@@ -1001,6 +1062,19 @@ function replaceSurfacePreview(html: string, replacement: string): string {
     /<section class="surface-preview"[^>]*data-testid="surface-preview"[\s\S]*?(?=\s*<section class="payload-panel">)/,
     `${replacement}\n      `,
   );
+}
+
+function replaceReviewEventSpec(
+  event: ReviewSessionEvent,
+  spec: Partial<ReviewSessionEvent["spec"]>,
+): ReviewSessionEvent {
+  return {
+    ...event,
+    spec: {
+      ...event.spec,
+      ...spec,
+    },
+  };
 }
 
 function unescapeHtml(value: string): string {

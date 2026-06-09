@@ -317,8 +317,9 @@ owns the database, conflict response, and retry UX.
 ## Export Results
 
 Use `buildReviewWorkbenchResultsFromSession` when the producer wants a compact
-view of completed review choices. Use `buildReviewWorkbenchSessionExport` when
-the producer also wants the replayable session and event resources.
+view of completed review choices for display, audit export, or trusted
+in-process code. Use `buildReviewWorkbenchSessionExport` when the producer also
+wants the replayable session and event resources.
 
 ```ts
 import {
@@ -332,7 +333,7 @@ const results = buildReviewWorkbenchResultsFromSession(replayedSession);
 const exported = buildReviewWorkbenchSessionExport(replayedSession, persistedEvents);
 
 for (const result of results) {
-  applyProductDecision({
+  renderReviewSummary({
     reviewItemName: result.reviewItemName,
     decision: result.decision,
     selectedCandidateId: result.selectedCandidateId,
@@ -345,7 +346,61 @@ for (const result of results) {
 
 The producer still decides whether a selected candidate updates a record,
 creates a rejected-candidate learning signal, triggers a recomputation, or only
-records an audit event.
+records an audit event. For web mutation routes, use the server-side apply
+pattern below instead of trusting browser-computed results.
+
+## Apply Review Results
+
+Survey can derive the selected candidate, review decision resource, and
+replayable audit trail. The producer still owns write authority. A server-side
+apply path should load the product's current record, rebuild or load the
+`ReviewItem` snapshot that was reviewed, replay persisted events against that
+snapshot, derive `ReviewWorkbenchResult` values through Survey, validate those
+values against the current product state, and only then apply product-specific
+policy.
+
+For server-side replay, prefer the snapshot-safe helpers:
+
+```ts
+import {
+  buildReviewWorkbenchSessionExportForSnapshot,
+  validateReviewSessionEventsForSnapshot,
+} from "@kontourai/survey/review-workbench";
+
+const issues = validateReviewSessionEventsForSnapshot(reviewedSnapshot, persistedEvents);
+if (issues.length > 0) {
+  throw new Error("Review events no longer match the reviewed snapshot.");
+}
+
+const exported = buildReviewWorkbenchSessionExportForSnapshot(
+  reviewedSnapshot,
+  persistedEvents,
+);
+
+for (const result of exported.results) {
+  assertProductRecordStillMatchesReviewTarget(result);
+  applyProductPolicy({
+    reviewItemName: result.reviewItemName,
+    selectedCandidateId: result.selectedCandidateId,
+    selectedValue: result.selectedValue,
+    status: result.status,
+  });
+}
+```
+
+Do not accept browser-submitted `ReviewDecision` resources,
+`ReviewWorkbenchSessionExport.results`, or standalone decision fields as write
+authority for web mutations. Those payloads are useful for display,
+debugging, local trusted scripts, or audit export, but a product server should
+derive write results from trusted session state and persisted events. Events
+alone are also insufficient when the server cannot reconstruct the reviewed
+candidate values; store the reviewed session snapshot or rebuild it from
+server-owned data.
+
+Review actor and write time should come from authenticated server context for
+mutations. The actor and timestamp in Survey resources describe the review
+session, but the product owns authorization, tenancy, reviewer assignment,
+write stamps, and conflict handling.
 
 ## Project To Surface
 
@@ -404,4 +459,9 @@ Use this checklist before adding Survey to a producer:
 - Missing source context produces a warning or gap; do not invent evidence.
 - Product apply code consumes selected candidates or `ReviewWorkbenchResult`
   instead of re-deriving review choices from UI state.
+- Product write routes derive results server-side from reviewed snapshots plus
+  events; they do not trust browser-computed `ReviewDecision` or
+  `sessionExport.results` payloads.
+- Product write routes stamp mutating actor and time from authenticated server
+  context.
 - Surface projection uses `buildSurveyTrustInput`, not private review UI state.

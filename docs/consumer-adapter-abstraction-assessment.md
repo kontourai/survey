@@ -108,6 +108,8 @@ Survey can still improve developer experience without adding a broad builder.
 Good candidates:
 
 - more guide-level examples showing how to build `ReviewItem` resources
+- snapshot-safe review session replay helpers that reject events pointing at
+  items or candidates outside the supplied reviewed snapshot
 - small validation helpers for review resources if multiple producers start
   emitting malformed resources
 - source descriptor reuse if producers repeatedly rebuild the same raw source
@@ -136,6 +138,14 @@ Before adding another public builder, collect one more producer call site where:
 If that proof appears, shape the smallest helper around the repeated mechanical
 piece. If the repeated piece still includes product ids, source policy, evidence
 type, or apply behavior, keep it local to the producer.
+
+The first post-proof helper is intentionally narrower than a builder:
+`validateReviewSessionEventsForSnapshot`,
+`replayReviewSessionEventsForSnapshot`, and
+`buildReviewWorkbenchSessionExportForSnapshot` only check that replayed review
+events still point at items and candidates in the supplied reviewed snapshot.
+They do not choose ids, decide product apply behavior, authorize the write, or
+compare reviewed values with the producer's current record.
 
 ## Decision
 
