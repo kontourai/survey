@@ -89,10 +89,17 @@ product policy into Survey. That would weaken the product boundary.
 Keep these APIs as the recommended integration surface:
 
 - `ReviewItem` and `ReviewDecision` resource contracts
+- `ReviewSession` and `ReviewSessionEvent` resource contracts
 - `mountReviewWorkbench`
 - `createPersistentReviewSessionEventStore`
 - `buildReviewWorkbenchResultsFromSession`
 - `buildReviewWorkbenchSessionExport`
+- `replayReviewSessionEventsForSnapshot`
+- `deriveReviewSessionApplyResultForSnapshot`
+- `validateReviewSessionEventsForSnapshot`
+- `createServerReviewSessionRecord`, `hashReviewSessionSnapshot`,
+  `assertServerReviewSessionFreshness`, `assertServerReviewSessionEvents`,
+  `deriveServerReviewSessionApplyResult`
 - `reviewedCurrentProposedResolution`
 - `candidateReviewRecord`
 - `sourceOfAuthorityObservationBuilder`

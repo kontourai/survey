@@ -24,7 +24,7 @@ is proposed, assumed, verified, disputed, or stale.
 
 1. Capture the raw source.
    Use a source helper such as `uploadedDocumentSource`, `apiRecordSource`,
-   `webPageSource`, or `manualEntrySource`. `sourceRef` may be a URL, local
+   `webPageSource`, `manualEntrySource`, or `policyStandardSource`. `sourceRef` may be a URL, local
    file path, API record reference, content-addressed reference, or other
    producer-stable source reference.
 
