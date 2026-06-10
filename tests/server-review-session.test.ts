@@ -9,6 +9,7 @@ import {
   assertServerReviewSessionFreshness,
   compareServerReviewSessionFreshness,
   createServerReviewSessionRecord,
+  deriveServerReviewSessionApplyResult,
   hashReviewSessionSnapshot,
   ServerReviewSessionEventValidationError,
   StaleServerReviewSessionError,
@@ -199,6 +200,69 @@ describe("server-owned review sessions", () => {
     assert.deepEqual(
       validateServerReviewSessionEvents(record, [invalid]).map((issue) => issue.code),
       ["invalid-sequence"],
+    );
+  });
+
+  it("derives server apply results after freshness and event validation", () => {
+    const snapshot = initialReviewQueueSessionState();
+    const reviewedSession = {
+      ...snapshot,
+      decisionsByItemName: {
+        [publicDirectoryReviewItemFixture.metadata.name]: "accept-proposed" as const,
+      },
+    };
+    const record = createServerReviewSessionRecord({
+      sessionName: "server-review-1",
+      snapshot,
+      updatedAt: "2026-06-06T00:00:00.000Z",
+    });
+
+    const result = deriveServerReviewSessionApplyResult({
+      record,
+      currentSnapshot: snapshot,
+      events: buildReviewSessionEvents(reviewedSession, "server-review-1"),
+      requiredResolvedItems: "any",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.results.length, 1);
+    assert.equal(result.results[0]?.reviewItemName, publicDirectoryReviewItemFixture.metadata.name);
+  });
+
+  it("rejects server apply when the stored snapshot hash or event stream is invalid", () => {
+    const snapshot = initialReviewQueueSessionState();
+    const record = {
+      ...createServerReviewSessionRecord({
+        sessionName: "server-review-1",
+        snapshot,
+        updatedAt: "2026-06-06T00:00:00.000Z",
+      }),
+      snapshotHash: "not-the-stored-snapshot-hash",
+    };
+    const [event] = buildReviewSessionEvents(snapshot, "wrong-session");
+    assert.ok(event);
+
+    assert.throws(
+      () => deriveServerReviewSessionApplyResult({
+        record,
+        events: [event],
+        requiredResolvedItems: "any",
+      }),
+      StaleServerReviewSessionError,
+    );
+
+    const validRecord = createServerReviewSessionRecord({
+      sessionName: "server-review-1",
+      snapshot,
+      updatedAt: "2026-06-06T00:00:00.000Z",
+    });
+    assert.throws(
+      () => deriveServerReviewSessionApplyResult({
+        record: validRecord,
+        events: [event],
+        requiredResolvedItems: "any",
+      }),
+      ServerReviewSessionEventValidationError,
     );
   });
 });

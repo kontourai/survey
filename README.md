@@ -113,7 +113,8 @@ For browser-backed queues, server code can import
 `createServerReviewSessionRecord`, `hashReviewSessionSnapshot`,
 `assertServerReviewSessionFreshness`, and `assertServerReviewSessionEvents` to
 keep the review snapshot server-owned while accepting browser-submitted
-`ReviewSessionEvent` resources.
+`ReviewSessionEvent` resources. `deriveServerReviewSessionApplyResult` composes
+those checks with Survey's apply-result derivation for server-side write paths.
 For generic, test-covered consumer examples, see
 [`examples/review-workbench/facility-credential-consumer.ts`](examples/review-workbench/facility-credential-consumer.ts)
 for presentation and event persistence, and

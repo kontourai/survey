@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
 import {
+  deriveReviewSessionApplyResultForSnapshot,
+  type DeriveReviewSessionApplyResultForSnapshotResult,
+  type ReviewSessionApplyResolutionRequirement,
+} from "./review-workbench.js";
+import {
   validateReviewSessionEventsForSnapshot,
   type ReviewSessionReplayIssue,
 } from "./review-session-replay.js";
@@ -74,6 +79,14 @@ export interface CreateServerReviewSessionRecordOptions {
   readonly snapshot: ReviewQueueSessionState;
   readonly eventCount?: number;
   readonly updatedAt?: string | Date;
+}
+
+export interface DeriveServerReviewSessionApplyResultOptions {
+  readonly record: ServerReviewSessionRecord;
+  readonly events: readonly ReviewSessionEvent[];
+  readonly currentSnapshot?: ReviewQueueSessionState;
+  readonly currentEventCount?: number;
+  readonly requiredResolvedItems?: ReviewSessionApplyResolutionRequirement;
 }
 
 export function createServerReviewSessionRecord(
@@ -152,6 +165,22 @@ export function assertServerReviewSessionEvents(
   if (issues.length > 0) {
     throw new ServerReviewSessionEventValidationError(issues);
   }
+}
+
+export function deriveServerReviewSessionApplyResult(
+  options: DeriveServerReviewSessionApplyResultOptions,
+): DeriveReviewSessionApplyResultForSnapshotResult {
+  assertServerReviewSessionFreshness(options.record, options.record.snapshot);
+  if (options.currentSnapshot) {
+    assertServerReviewSessionFreshness(options.record, options.currentSnapshot, options.currentEventCount);
+  }
+  assertServerReviewSessionEvents(options.record, options.events);
+
+  return deriveReviewSessionApplyResultForSnapshot({
+    snapshot: options.record.snapshot,
+    events: options.events,
+    requiredResolvedItems: options.requiredResolvedItems,
+  });
 }
 
 function staleIssuesForComparison(

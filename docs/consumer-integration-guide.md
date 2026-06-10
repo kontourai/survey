@@ -97,6 +97,7 @@ import {
   assertServerReviewSessionEvents,
   assertServerReviewSessionFreshness,
   createServerReviewSessionRecord,
+  deriveServerReviewSessionApplyResult,
 } from "@kontourai/survey/review-workbench/server-review-session";
 
 const record = createServerReviewSessionRecord({
@@ -109,8 +110,9 @@ const record = createServerReviewSessionRecord({
 assertServerReviewSessionFreshness(record, rebuildCurrentSnapshot(), persistedEventCount);
 assertServerReviewSessionEvents(record, submittedEvents);
 
-const applyResult = deriveReviewSessionApplyResultForSnapshot({
-  snapshot: record.snapshot,
+const applyResult = deriveServerReviewSessionApplyResult({
+  record,
+  currentSnapshot: rebuildCurrentSnapshot(),
   events: submittedEvents,
   requiredResolvedItems: "all",
 });
@@ -123,6 +125,8 @@ checking and still use the snapshot hash to detect stale ReviewItems.
 `assertServerReviewSessionEvents` reuses Survey replay validation and also
 rejects events for the wrong `sessionName`, unknown ReviewItems, active items,
 or candidates outside the server-owned snapshot.
+`deriveServerReviewSessionApplyResult` composes those server-side checks before
+deriving the same typed apply result as `deriveReviewSessionApplyResultForSnapshot`.
 
 ```ts
 import {
