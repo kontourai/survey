@@ -9,7 +9,7 @@
     "type": "git",
     "url": "git+https://github.com/kontourai/survey.git"
   },
-  "homepage": "https://kontourai.io/survey",
+  "homepage": "https://kontourai.github.io/survey/",
   "bugs": {
     "url": "https://github.com/kontourai/survey/issues"
   },
@@ -53,7 +53,7 @@
     "check:review-workbench:static": "npm run build && node scripts/check-review-workbench.cjs",
     "setup:repo-hooks": "node scripts/setup-repo-hooks.cjs",
     "validate:repo-hooks": "node scripts/validate-repo-hooks.cjs",
-    "docs:build": "node scripts/docs-site/build.ts",
+    "docs:build": "npm run build --silent && node scripts/docs-site/build.ts",
     "docs:check": "npm run docs:build && node scripts/docs-site/check-links.ts"
   },
   "dependencies": {
