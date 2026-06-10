@@ -113,7 +113,6 @@ current, and reject proposed decisions.
 
 See [`consumer-integration-guide.md`](consumer-integration-guide.md) for the
 recommended consumer path from `ReviewItem` construction through persisted
-review events, exported results, and optional Surface projection. See
-[`consumer-adapter-abstraction-assessment.md`](consumer-adapter-abstraction-assessment.md)
-for the current decision to defer a generic review adapter builder until another
-producer proof shows repeated, policy-free Survey-shape friction.
+review events, exported results, and optional Surface projection. A generic
+review adapter builder is deliberately deferred until another producer proof
+shows repeated, policy-free Survey-shape friction.

@@ -1,0 +1,646 @@
+# Record Contracts
+
+Survey's job is a consistent `source -> extraction -> candidate -> review -> claim` chain. This reference covers every record shape in that chain — what each one means, what it requires, and how it projects into Surface. The [consumer integration guide](consumer-integration-guide.md) covers the end-to-end consumer path; this page is the contract-by-contract reference.
+
+## Raw sources
+
+Use raw-source helpers when a producer wants Survey to shape source identity
+before building observations. The helpers do not fetch, crawl, parse, or judge
+the source; they only produce stable `RawSource` records with explicit source
+references, observed times, locator schemes, checksums, and producer metadata.
+
+```ts
+import {
+  apiRecordSource,
+  fieldObservation,
+  SurveyInputBuilder,
+} from "@kontourai/survey";
+
+const rawSource = apiRecordSource({
+  sourceRef: "example-records://entity/entity-123",
+  observedAt: new Date().toISOString(),
+  checksum: "abc123",
+  metadata: {
+    provider: "example-records",
+  },
+});
+
+const surveyInput = new SurveyInputBuilder({ source: "example-producer:run-1" })
+  .addObservation(fieldObservation({
+    id: "entity-123.status.current",
+    field: "registrationStatus",
+    value: "ACTIVE",
+    rawSource,
+    extraction: {
+      confidence: 0.97,
+      locator: "json:$.registrationStatus",
+      extractor: "example-extractor",
+      extractedAt: new Date().toISOString(),
+    },
+    claim: {
+      subjectType: "public-record.entity",
+      subjectId: "entity-123",
+      surface: "example.profile",
+      claimType: "public-data.field",
+      status: "proposed",
+      impactLevel: "medium",
+      collectedBy: "example-extractor",
+    },
+  }))
+  .build();
+```
+
+Survey exports `uploadedDocumentSource`, `apiRecordSource`, `webPageSource`,
+`manualEntrySource`, and `policyStandardSource`. Producer-provided `id` values
+are preserved; otherwise Survey derives a stable id from source kind and
+`sourceRef`. Bare checksum values are normalized to `sha256:<value>`, while
+already-prefixed checksum values are preserved. Producer metadata is copied
+through to Surface evidence.
+
+Use `policyStandardSource` when the observed material is the applied standard
+itself. It records `inlineText`, `standardVersion`, and optional `paragraphRef`
+on the `RawSource` and projects to Surface `policy_rule` evidence by default.
+Survey only preserves the producer-applied standard text/version; it does not
+decide whether that standard is correct for the producer's domain.
+
+
+## Interpretation records
+
+Use `addInterpretation` when a producer records how an actor read a
+`policy-standard` paragraph for one claim. Interpretations are flat provenance
+records with an `appliesTo` edge to a claim and an `anchorsTo` edge to a
+policy-standard raw source; they are not nested claim derivations or rejection
+reasons.
+
+```ts
+import {
+  apiRecordSource,
+  buildSurveyTrustInput,
+  fieldObservation,
+  policyStandardSource,
+  SurveyInputBuilder,
+} from "@kontourai/survey";
+
+const observedAt = new Date().toISOString();
+const standard = policyStandardSource({
+  id: "source.example.policy-standard.rule-1",
+  sourceRef: "policy-standard://example/rules/2026#rule-1",
+  observedAt,
+  inlineText: "A producer reading must cite the applied rule paragraph.",
+  standardVersion: "2026.1",
+  paragraphRef: "rule-1",
+});
+
+const surveyInput = new SurveyInputBuilder({ source: "example-producer:run-1" })
+  .addRawSource(standard)
+  .addObservation(fieldObservation({
+    id: "observation.example.policy-application",
+    field: "policyApplication.status",
+    value: "DOCUMENTED",
+    rawSource: apiRecordSource({
+      id: "source.example.application-record",
+      sourceRef: "example-records://application/application-1",
+      observedAt,
+      checksum: "application-1",
+    }),
+    extraction: {
+      target: "policyApplication.status",
+      locator: "json:$.policyApplication.status",
+      extractor: "example-extractor",
+      extractedAt: observedAt,
+    },
+    claim: {
+      id: "claim.example.policy-application",
+      subjectType: "example.application",
+      subjectId: "application-1",
+      surface: "example.review",
+      claimType: "policy-application.status",
+      impactLevel: "medium",
+      collectedBy: "example-extractor",
+    },
+  }))
+  .addInterpretation({
+    id: "interpretation.example.rule-1",
+    appliesToClaimId: "claim.example.policy-application",
+    anchorsToSourceId: standard.id,
+    ruleLocator: "text:paragraph=rule-1",
+    reading: "The producer read rule 1 as applying to the claim.",
+    actor: "producer-operator",
+    recordedAt: observedAt,
+  })
+  .build();
+
+const trustInput = buildSurveyTrustInput(surveyInput);
+```
+
+Projection emits a normal Surface verification event with
+`method: "survey-interpretation"`, the existing `claimId`, and anchor
+`evidenceIds`. Because current Surface verification events reject unsupported
+keys, typed edge details are preserved on the projected claim at
+`metadata.survey.interpretations[]`. The anchor evidence uses
+`evidenceType: "policy_rule"`, `method: "anchoring"`, the interpretation
+`ruleLocator` as `sourceLocator`, and the policy-standard text/version metadata.
+
+
+## Review resources
+
+Survey also exports producer-neutral `ReviewItem`, `ReviewCandidate`, and
+`ReviewDecision` TypeScript resource shapes for review UI and adapter fixtures.
+They use `apiVersion`, `kind`, `metadata`, `spec`, and `status` fields while
+mapping back to the existing Survey record layer. See
+[`docs/review-resource-contract.md`](review-resource-contract.md) for
+field ownership, mapping hints, and the `ReviewSession` non-goal.
+
+
+## Field observations
+
+Use `fieldObservation` when a producer wants to describe one scalar field value
+without hand-assembling the repeated source, extraction, candidate, review, and
+claim defaults. The helper returns a normal `SurveyObservationInput`, so it
+works with `SurveyInputBuilder.addObservation` and the same Surface projection
+path.
+
+```ts
+import {
+  buildSurveyTrustInput,
+  fieldObservation,
+  SurveyInputBuilder,
+} from "@kontourai/survey";
+
+const surveyInput = new SurveyInputBuilder({
+  source: "example-producer:run-1",
+})
+  .addObservation(fieldObservation({
+    id: "entity-123.status.current",
+    field: "registrationStatus",
+    value: "ACTIVE",
+    rawSource: {
+      kind: "api-record",
+      sourceRef: "example-records://entity/entity-123",
+      observedAt: new Date().toISOString(),
+      locatorScheme: "structured-field",
+    },
+    extraction: {
+      confidence: 0.97,
+      locator: "json:$.registrationStatus",
+      extractor: "example-extractor",
+      extractedAt: new Date().toISOString(),
+    },
+    reviewOutcome: {
+      status: "verified",
+      actor: "records-operator",
+      reviewedAt: new Date().toISOString(),
+    },
+    claim: {
+      subjectType: "public-record.entity",
+      subjectId: "entity-123",
+      surface: "example.profile",
+      claimType: "public-data.field",
+      status: "verified",
+      impactLevel: "medium",
+      collectedBy: "example-extractor",
+    },
+    metadata: {
+      producerField: "registration_status",
+    },
+  }))
+  .build();
+
+const trustInput = buildSurveyTrustInput(surveyInput);
+```
+
+`fieldObservation` sets `extraction.target` and `claim.fieldOrBehavior` from
+`field` when omitted, uses the scalar as both the extraction and claim value,
+and adds neutral helper metadata at
+`metadata.survey.field = { representation: "scalar" }`. Producer metadata is
+preserved. Producers still own scalar semantics, validation, candidate ranking,
+review policy, and whether a value should be verified, proposed, rejected, or
+assumed.
+
+
+## Source-of-authority observations
+
+Use `sourceOfAuthorityObservationBuilder` when a producer treats the raw source
+as authoritative for the extracted target: an official publication,
+registration platform page, policy document, contract record, or
+system-of-record response. The builder does not decide whether the source is
+truly authoritative. It guides producers through the source, extraction,
+source-authority posture, review outcome, and claim fields that make the
+declared source posture auditable.
+
+Verified or assumed source-of-authority observations require:
+
+- source reference
+- source locator
+- source-authority class
+- source-authority scope
+- review actor
+- reviewed time
+
+Source-authority metadata projects through Surface Evidence metadata under
+`sourceAuthority`. It does not project to Surface `authorityTrace`, which is
+reserved for actor, credential, role, organization, policy, or system authority.
+
+```ts
+import {
+  buildSurveyTrustInput,
+  sourceOfAuthorityObservationBuilder,
+  SurveyInputBuilder,
+  uploadedDocumentSource,
+} from "@kontourai/survey";
+
+const observedAt = new Date().toISOString();
+const rawSource = uploadedDocumentSource({
+  sourceRef: "https://rules.example.test/thresholds.pdf",
+  observedAt,
+  checksum: "abc123",
+  locatorScheme: "pdf",
+});
+
+const surveyInput = new SurveyInputBuilder({
+  source: "rule-producer:run-1",
+})
+  .addObservation(sourceOfAuthorityObservationBuilder({
+    id: "rule.threshold.primary.2026",
+    field: "regulatedRule.threshold.primary.2026",
+    value: 1200,
+  })
+    .withSourceAuthority({
+      authorityClass: "official_publication",
+      scope: {
+        jurisdiction: "example",
+        productArea: "regulated-rule",
+        effectiveYear: 2026,
+      },
+      sourceVersion: "2026",
+      declaredBy: "rule-producer",
+    })
+    .fromSource(rawSource)
+    .withExtraction({
+      confidence: 0.94,
+      locator: "pdf:page=12;table=thresholds;row=primary",
+      extractor: "rule-producer",
+      extractedAt: observedAt,
+    })
+    .withReviewOutcome({
+      status: "verified",
+      actor: "rule-reviewer",
+      reviewedAt: new Date().toISOString(),
+    })
+    .forClaim({
+      subjectType: "regulated-rule",
+      subjectId: "example:threshold:primary:2026",
+      surface: "regulated.rules",
+      claimType: "regulated.rule-value",
+      status: "verified",
+      impactLevel: "high",
+      evidenceType: "policy_rule",
+      evidenceMethod: "extraction",
+      collectedBy: "rule-producer",
+    })
+    .build())
+  .build();
+
+const trustInput = buildSurveyTrustInput(surveyInput);
+```
+
+`sourceOfAuthorityObservation` remains available as the lower-level object
+factory when a producer already has the full observation input assembled.
+
+Contextual claims such as "this submission is compliant" or "this record is
+eligible for a specific requester" are not source-of-authority observations.
+They are Surface claims with Claim Dependencies on source-of-authority claims
+and other producer facts. The producer owns that domain logic.
+
+For the reusable producer workflow, including manual confirmation state,
+source references, Survey review outcomes, and Surface report boundaries, see
+[Source-Authority Review Pattern](source-authority-review-pattern.md).
+
+
+## Reviewed candidate resolutions
+
+Use `reviewedCandidateResolution` when a producer has multiple candidate
+observations for the same target and a review outcome selects one candidate.
+The helper wraps `candidateReviewRecord`, attaches the review outcome to the
+selected candidate, defaults the candidate set to `resolved`, defaults the
+selected claim status from the review outcome, and defaults unselected
+candidates to `superseded`. Producers can override selected or unselected claim
+statuses when their domain workflow needs a different posture.
+
+This is useful for corrected documents, source-of-truth choices, and review
+queues where losing candidates should remain visible for transparency rather
+than disappearing from the trust trail.
+
+Candidates may include an optional `rejectionReason` when a producer wants to
+record why a non-selected alternative was superseded or rejected. Survey
+preserves that producer-provided rationale on the candidate and projects it to
+Surface claim `metadata.survey.candidate.rejectionReason` for that candidate
+while preserving producer-provided `metadata.survey` keys. Survey does not rank
+candidates, choose winners, or define rejection policy.
+
+
+## Reviewed current/proposed resolutions
+
+Use `reviewedCurrentProposedResolution` when a producer has exactly two
+candidate roles for the same target: the current value the producer would keep
+absent a change, and a proposed value introduced by new source material,
+extraction, or review work. The helper consumes full observations, selects
+either the current or proposed candidate through `selectedCandidateRole`, and
+wraps the result with `reviewedCandidateResolution`.
+
+The helper may promote the selected candidate to a caller-supplied
+`selectedClaimId`. The unselected observation keeps its caller-authored claim
+id, so producers can keep losing candidates as candidate-specific history.
+Survey does not decide producer policy: callers still own review status,
+selected and unselected claim statuses, source details, claim vocabulary, and
+domain metadata.
+
+
+## Repeated observations
+
+Use `repeatedObservation` when a producer wants to describe a repeated field or
+entity list as one aggregate observation. The helper returns a normal
+`SurveyObservationInput`, so it works with `SurveyInputBuilder.addObservation`
+and the same Surface projection path.
+
+```ts
+import {
+  buildSurveyTrustInput,
+  repeatedObservation,
+  SurveyInputBuilder,
+} from "@kontourai/survey";
+
+const aliases = [
+  { name: "North Annex", sourceLabel: "record row 1" },
+  { name: "East Annex", sourceLabel: "record row 2" },
+];
+
+const surveyInput = new SurveyInputBuilder({
+  source: "example-producer:run-1",
+})
+  .addObservation(repeatedObservation({
+    id: "entity-123.aliases.current",
+    field: "knownAliases",
+    value: aliases,
+    rawSource: {
+      kind: "api-record",
+      sourceRef: "example-records://entity/entity-123",
+      observedAt: new Date().toISOString(),
+      locatorScheme: "structured-field",
+    },
+    extraction: {
+      confidence: 0.88,
+      locator: "json:$.aliases",
+      extractor: "example-extractor",
+      extractedAt: new Date().toISOString(),
+    },
+    reviewOutcome: {
+      status: "verified",
+      actor: "records-operator",
+      reviewedAt: new Date().toISOString(),
+    },
+    claim: {
+      subjectType: "public-record.entity",
+      subjectId: "entity-123",
+      surface: "example.profile",
+      claimType: "public-data.repeated-field",
+      status: "verified",
+      impactLevel: "medium",
+      collectedBy: "example-extractor",
+    },
+    metadata: {
+      producerField: "aliases",
+    },
+  }))
+  .build();
+
+const trustInput = buildSurveyTrustInput(surveyInput);
+```
+
+`repeatedObservation` sets `extraction.target` and
+`claim.fieldOrBehavior` from `field` when omitted, uses the array as both the
+extraction and claim value, and adds neutral helper metadata at
+`metadata.survey.repeated = { representation: "aggregate-array", itemCount }`.
+Producer metadata is preserved. Producers still own item semantics,
+validation, candidate ranking, review policy, and whether a value should be
+verified, proposed, rejected, or assumed.
+
+
+## Candidate review records
+
+Use `candidateReviewRecord` when a producer has multiple candidate observations
+for the same target and wants Survey to assemble the shared candidate set,
+candidate links, and optional review outcome.
+
+```ts
+import {
+  candidateReviewRecord,
+  fieldObservation,
+  SurveyInputBuilder,
+} from "@kontourai/survey";
+
+const observations = [
+  fieldObservation({
+    id: "entity-123.status.registry",
+    field: "registrationStatus",
+    value: "ACTIVE",
+    rawSource: {
+      kind: "api-record",
+      sourceRef: "example-records://entity/entity-123",
+      observedAt: new Date().toISOString(),
+      locatorScheme: "structured-field",
+    },
+    extraction: {
+      confidence: 0.97,
+      locator: "json:$.registrationStatus",
+      extractor: "example-extractor",
+      extractedAt: new Date().toISOString(),
+    },
+    candidate: { id: "candidate.registry", confidence: 0.97 },
+    claim: {
+      id: "claim.entity-123.status.registry",
+      subjectType: "public-record.entity",
+      subjectId: "entity-123",
+      surface: "example.profile",
+      claimType: "public-data.field",
+      status: "verified",
+      impactLevel: "medium",
+      collectedBy: "example-extractor",
+    },
+  }),
+  fieldObservation({
+    id: "entity-123.status.archive",
+    field: "registrationStatus",
+    value: "INACTIVE",
+    rawSource: {
+      kind: "web-page",
+      sourceRef: "https://records.example.test/entity-123",
+      observedAt: new Date().toISOString(),
+      locatorScheme: "html",
+    },
+    extraction: {
+      confidence: 0.71,
+      locator: "css:#registration-status",
+      extractor: "example-crawler",
+      extractedAt: new Date().toISOString(),
+    },
+    candidate: { id: "candidate.archive", confidence: 0.71 },
+    claim: {
+      id: "claim.entity-123.status.archive",
+      subjectType: "public-record.entity",
+      subjectId: "entity-123",
+      surface: "example.profile",
+      claimType: "public-data.field",
+      status: "superseded",
+      impactLevel: "medium",
+      collectedBy: "example-crawler",
+    },
+  }),
+];
+
+const surveyInput = new SurveyInputBuilder({ source: "example-producer:run-1" })
+  .addClaimRecords(candidateReviewRecord({
+    id: "candidate-set.entity-123.registration-status",
+    target: "registrationStatus",
+    selectedCandidateId: "candidate.registry",
+    status: "resolved",
+    rationale: "Registry source wins over archive source.",
+    reviewOutcome: {
+      status: "verified",
+      actor: "records-operator",
+      reviewedAt: new Date().toISOString(),
+    },
+    observations,
+  }))
+  .build();
+```
+
+`candidateReviewRecord` does not choose the winning candidate or status. The
+producer still supplies candidate ids, selected candidate id, claim ids, review
+status, rationale, and all domain policy. Survey only assembles the generic
+record graph and tolerates repeated references to identical raw sources or the
+shared candidate set while rejecting conflicting duplicate ids. Duplicate
+conflict checks assume Survey records are JSON-shaped data, which is the same
+shape expected by Surface validation and reports.
+
+If an observation candidate includes `rejectionReason`, `candidateReviewRecord`
+preserves it in the shared candidate set. Use this only for producer-authored
+rationale about a candidate that the producer already treats as non-selected,
+superseded, or rejected; it does not affect selected candidate behavior or
+status projection.
+
+A candidate set with status `"conflict"` represents a Survey-side Candidate
+Conflict before review has resolved which candidate should win. When no review
+outcome overrides it, `buildSurveyTrustInput` projects the claim to Surface
+status `"disputed"` and records a `"candidate-conflict"` verification event.
+
+
+## Review proofs
+
+Use review proof helpers when a producer wants a Surface-compatible integrity
+anchor for one reviewed Survey source -> extraction -> candidate -> review ->
+claim path.
+
+```ts
+import {
+  buildCanonicalReviewProofPayload,
+  buildReviewProofAnchor,
+  canonicalReviewProofJson,
+  hashCanonicalReviewProofPayload,
+} from "@kontourai/survey";
+
+const proofInput = {
+  rawSource,
+  extraction,
+  candidate,
+  candidateSet,
+  reviewOutcome,
+  claim,
+};
+
+const payload = buildCanonicalReviewProofPayload(proofInput);
+const canonicalJson = canonicalReviewProofJson(payload);
+const hash = hashCanonicalReviewProofPayload(payload);
+const anchor = buildReviewProofAnchor(proofInput);
+```
+
+`buildReviewProofAnchor` returns a hash-only Surface `IntegrityAnchor` for the
+canonical payload. The lower-level payload, JSON, and hash helpers are exported
+so producers can store or recompute the exact canonical proof material used for
+the anchor. Producer metadata is not part of the canonical payload; any
+non-portable context belongs outside the hash, such as anchor metadata.
+
+The canonical payload is the portable review proof contract. It contains:
+
+| Field | Purpose |
+| --- | --- |
+| `schemaVersion` / `proof.schema` / `proof.schemaVersion` | Stable Survey review proof schema identity. |
+| `proof.packageName` / `proof.packageVersion` | Review proof contract identity. `proof.packageVersion` is the proof contract version, not the npm package release version. Package releases do not change canonical proof hashes unless this explicit proof contract version or another canonical field changes. |
+| `proof.issuer` | Survey producer identity, derived from the claim collector. |
+| `proof.producer` | Extraction producer identity, derived from the extractor id. |
+| `proof.issuedAt` | Proof envelope time, derived from review time, then claim update time, then extraction time. |
+| `proof.subject` | Claim identity: claim id, candidate set id, reviewed candidate id, subject, surface, claim type, and field/behavior. If the claim also names a candidate id, it must match the reviewed candidate id. |
+| `proof.sourcePayload` / `rawSource.checksum` | Source payload identity, ref, and producer-supplied checksum when present. |
+| `extraction` | Extracted target, value, locator, excerpt, extractor, confidence, and extraction time. |
+| `candidate` / `candidateSet` | Candidate identity/value plus the ordered candidate set, selected candidate, status, and rationale. |
+| `reviewOutcome` | Review decision/status, actor, review time, rationale, and evidence ids. |
+| `claim` | Projected claim identity, status/value, impact, evidence method, derivation links, collector, actor, and event method. |
+
+To recompute the anchor value, rebuild the same canonical payload from the
+reviewed Survey records, call `canonicalReviewProofJson(payload)`, and compute
+SHA-256 over that JSON. The result should equal
+`claim.currentIntegrityAnchor.value`. The Surface anchor remains generic:
+`kind: "hash"`, `algorithm: "sha256"`, `verificationStatus: "unverified"`, no
+Survey-specific anchor metadata, and a source/time pointer for display. Claims
+without a selected review outcome are not anchored by `{ reviewProofs: true }`.
+
+When the Surface projection proof option is enabled, `buildSurveyTrustInput`
+will attach the same kind of anchor to the projected reviewed claim:
+
+```ts
+const trustInput = buildSurveyTrustInput(surveyInput, { reviewProofs: true });
+```
+
+The proof provides hash-only tamper evidence for the Survey review/provenance
+trail in the canonical payload. It does not authenticate an actor, sign the
+payload, or prove the real-world truth of the claim. Non-goals include JWT/JWS
+signing, key management, a transparency log, and any veracity guarantee.
+
+JWT-adjacent words in the payload are process-envelope vocabulary, not a v0 JWT
+implementation. `issuer` identifies the Survey producer for recomputation,
+`subject` identifies the claim being reviewed, and `issuedAt` records the review
+proof time. Audience restrictions, expiry, cryptographic signing, key discovery,
+and legal non-repudiation are deferred concepts for a future signed envelope.
+
+
+## Computed values
+
+Computed values are normal `ClaimTarget` entries in `claims`. Producers should
+link them to their inputs with Surface Claim Dependency fields:
+`derivedFrom` for simple claim-id links, or `derivationEdges` when the link
+needs method, role, support-strength, rationale, or metadata.
+
+Survey passes those fields through to Surface while keeping the same
+source -> extraction -> candidate -> review -> claim projection path. Surface
+owns dependency semantics such as recompute pressure and status ceilings.
+
+
+## Comfort zone flags
+
+Use `withinComfortZone: false` on a `ReviewOutcome` when the reviewer is
+recording a decision outside their domain expertise or is flagging that the
+conclusion requires a different authority to confirm. The flag and optional
+`comfortZoneNote` are carried forward as structured Survey metadata on the
+projected Surface claim at `metadata.survey.comfortZone`. Verification event
+`notes` carry the normal review or candidate-set rationale only.
+
+```ts
+reviewOutcome: {
+  status: "assumed",
+  actor: "records-operator",
+  reviewedAt: new Date().toISOString(),
+  rationale: "Assumed from registry source pending specialist review.",
+  withinComfortZone: false,
+  comfortZoneNote: "Renewal clause interpretation requires specialist counsel.",
+},
+```
