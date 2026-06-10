@@ -126,6 +126,3 @@ claim, evidence, status, gap, and metadata records. Manual file references are
 valid source references; they remain source context and do not become Surface
 Authority Trace records.
 
-For the first downstream proof assessment across public-directory and
-regulated-rule producers, see
-[Downstream Builder Proof Assessment](downstream-builder-proof-assessment.md).

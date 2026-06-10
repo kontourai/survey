@@ -42,10 +42,9 @@ separately with Playwright.
 `npm run verify` includes the content boundary check, typecheck, tests, and this
 static review workbench guard.
 
-The downstream-boundary dogfood proof in
-[`downstream-adapter-dogfood-proof.md`](./downstream-adapter-dogfood-proof.md)
-shows how a sanitized copied producer proposal can be adapted into the same
-`ReviewItem` shape without adding product-specific workbench branches.
+A sanitized copied producer proposal can be adapted into the same `ReviewItem`
+shape without adding product-specific workbench branches; the consumer examples
+under `examples/review-workbench/` show the pattern.
 
 The queue fixture also includes a generic regulated rule-conflict `ReviewItem`
 modeled after a downstream rules-management proof. It uses the same current /
