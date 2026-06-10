@@ -369,75 +369,10 @@ export function assertReviewResultMatches(
 export function mapReviewWorkbenchResultsToApplyActions<TAction>(
   options: MapReviewWorkbenchResultsToApplyActionsOptions<TAction>,
 ): ReviewApplyActionMapping<TAction>[] {
-  const issues: ReviewApplyActionIssue[] = [];
+  const issues = options.requireUniqueTargets ? duplicateTargetIssues(options.items) : [];
   const itemByName = new Map(options.items.map((item) => [item.metadata.name, item]));
-
-  if (options.requireUniqueTargets) {
-    const seenTargets = new Set<string>();
-    for (const item of options.items) {
-      if (seenTargets.has(item.spec.target)) {
-        issues.push({
-          code: "duplicate-review-target",
-          target: item.spec.target,
-          message: `Review target ${item.spec.target} appears on more than one ReviewItem.`,
-        });
-      }
-      seenTargets.add(item.spec.target);
-    }
-  }
-
-  const mappings = options.results.flatMap((result) => {
-    const item = itemByName.get(result.reviewItemName);
-    if (!item) {
-      issues.push({
-        code: "unknown-review-item",
-        reviewItemName: result.reviewItemName,
-        message: `Review result ${result.reviewItemName} does not reference a known ReviewItem.`,
-      });
-      return [];
-    }
-
-    const selectedCandidate = item.spec.candidates.find((candidate) => candidate.id === result.selectedCandidateId);
-    if (
-      !selectedCandidate
-      || selectedCandidate.role !== result.selectedCandidateRole
-      || !structuralEqual(selectedCandidate.value, result.selectedValue)
-    ) {
-      issues.push({
-        code: "selected-candidate-mismatch",
-        reviewItemName: result.reviewItemName,
-        message: `Review result ${result.reviewItemName} selected candidate does not match the supplied ReviewItem.`,
-      });
-      return [];
-    }
-
-    const context: ReviewApplyActionContext = {
-      result,
-      item,
-      target: item.spec.target,
-      selectedCandidate,
-      unselectedCandidates: item.spec.candidates.filter((candidate) => candidate.id !== selectedCandidate.id),
-    };
-    if (options.skip?.(context)) {
-      return [];
-    }
-
-    const action = options.map(context);
-    if (action === undefined) {
-      issues.push({
-        code: "unmapped-review-result",
-        reviewItemName: result.reviewItemName,
-        message: `Review result ${result.reviewItemName} did not produce an apply action.`,
-      });
-      return [];
-    }
-
-    return (Array.isArray(action) ? action : [action]).map((entry) => ({
-      result,
-      item,
-      action: entry,
-    }));
-  });
+  const mappings = options.results.flatMap((result) =>
+    mapReviewApplyResultToActions({ result, itemByName, options, issues }));
 
   if (issues.length > 0) {
     throw new ReviewApplyActionMappingError(issues);
@@ -447,6 +382,96 @@ export function mapReviewWorkbenchResultsToApplyActions<TAction>(
 }
 
 export const mapReviewApplyActions = mapReviewWorkbenchResultsToApplyActions;
+
+function duplicateTargetIssues(items: readonly ReviewItem[]): ReviewApplyActionIssue[] {
+  const issues: ReviewApplyActionIssue[] = [];
+  const seenTargets = new Set<string>();
+  for (const item of items) {
+    if (seenTargets.has(item.spec.target)) {
+      issues.push({
+        code: "duplicate-review-target",
+        target: item.spec.target,
+        message: `Review target ${item.spec.target} appears on more than one ReviewItem.`,
+      });
+    }
+    seenTargets.add(item.spec.target);
+  }
+  return issues;
+}
+
+function mapReviewApplyResultToActions<TAction>(input: {
+  readonly result: ReviewWorkbenchResult;
+  readonly itemByName: ReadonlyMap<string, ReviewItem>;
+  readonly options: MapReviewWorkbenchResultsToApplyActionsOptions<TAction>;
+  readonly issues: ReviewApplyActionIssue[];
+}): ReviewApplyActionMapping<TAction>[] {
+  const context = buildReviewApplyActionContext(input.result, input.itemByName, input.issues);
+  if (!context || input.options.skip?.(context)) {
+    return [];
+  }
+
+  const action = input.options.map(context);
+  if (action === undefined) {
+    input.issues.push({
+      code: "unmapped-review-result",
+      reviewItemName: input.result.reviewItemName,
+      message: `Review result ${input.result.reviewItemName} did not produce an apply action.`,
+    });
+    return [];
+  }
+
+  return (Array.isArray(action) ? action : [action]).map((entry) => ({
+    result: context.result,
+    item: context.item,
+    action: entry,
+  }));
+}
+
+function buildReviewApplyActionContext(
+  result: ReviewWorkbenchResult,
+  itemByName: ReadonlyMap<string, ReviewItem>,
+  issues: ReviewApplyActionIssue[],
+): ReviewApplyActionContext | undefined {
+  const item = itemByName.get(result.reviewItemName);
+  if (!item) {
+    issues.push({
+      code: "unknown-review-item",
+      reviewItemName: result.reviewItemName,
+      message: `Review result ${result.reviewItemName} does not reference a known ReviewItem.`,
+    });
+    return undefined;
+  }
+
+  const selectedCandidate = matchingSelectedCandidate(item, result);
+  if (!selectedCandidate) {
+    issues.push({
+      code: "selected-candidate-mismatch",
+      reviewItemName: result.reviewItemName,
+      message: `Review result ${result.reviewItemName} selected candidate does not match the supplied ReviewItem.`,
+    });
+    return undefined;
+  }
+
+  return {
+    result,
+    item,
+    target: item.spec.target,
+    selectedCandidate,
+    unselectedCandidates: item.spec.candidates.filter((candidate) => candidate.id !== selectedCandidate.id),
+  };
+}
+
+function matchingSelectedCandidate(
+  item: ReviewItem,
+  result: ReviewWorkbenchResult,
+): ReviewCandidate | undefined {
+  const candidate = item.spec.candidates.find((entry) => entry.id === result.selectedCandidateId);
+  return candidate
+    && candidate.role === result.selectedCandidateRole
+    && structuralEqual(candidate.value, result.selectedValue)
+    ? candidate
+    : undefined;
+}
 
 function structuralEqual(left: unknown, right: unknown): boolean {
   return JSON.stringify(canonicalJson(left)) === JSON.stringify(canonicalJson(right));

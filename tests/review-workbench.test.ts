@@ -671,6 +671,20 @@ describe("review workbench prototype", () => {
     });
 
     assert.deepEqual(skipped.map((entry) => entry.action.target), ["hours", "phoneNumber"]);
+
+    const expanded = mapReviewWorkbenchResultsToApplyActions({
+      results: [hoursResult],
+      items: snapshot.items,
+      map: ({ target, selectedCandidate }) => [
+        { kind: "apply-field" as const, target },
+        { kind: "record-selected-candidate" as const, candidateId: selectedCandidate.id },
+      ],
+    });
+
+    assert.deepEqual(expanded.map((entry) => entry.action), [
+      { kind: "apply-field", target: "hours" },
+      { kind: "record-selected-candidate", candidateId: "public-directory-hours:candidate:proposed" },
+    ]);
   });
 
   it("fails closed when review apply action mapping sees stale or incomplete inputs", () => {
