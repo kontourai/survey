@@ -10,8 +10,8 @@ Each resource uses a Kubernetes-inspired shape:
 ```ts
 {
   apiVersion: "survey.kontourai.io/v1alpha1",
-  kind: "ReviewItem" | "ReviewDecision",
-  metadata: { name, labels, annotations, producer },
+  kind: "ReviewItem" | "ReviewDecision" | "ReviewSession" | "ReviewSessionEvent",
+  metadata: { name, uid?, labels?, annotations?, producer? },
   spec: { ...producer-declared intent },
   status: { ...Survey-readable observation hints }
 }
@@ -34,10 +34,17 @@ portable contract only needs the serializable candidate payload.
 status, actor, reviewed time, rationale, evidence ids, comfort-zone notes, and
 projection hints.
 
-`ReviewSession` is intentionally not part of this contract. A session quickly
-turns into queue position, assignment, retry, lock, or workflow state. Producers
-can group `ReviewItem` resources in their own systems without Survey owning
-operational semantics.
+`ReviewSession` is a portable envelope for one review session. It carries the
+session snapshot hash, item count, event count, and status so downstream systems
+can validate replay without importing workbench mechanics. A session does not own
+queue position, assignment, retry, lock, or workflow state — those remain in the
+producer's own system.
+
+`ReviewSessionEvent` is a single event in a review session, such as a decision,
+undo, or session-complete marker. Events are replayed against the session
+snapshot to derive the final apply result. See
+[`consumer-integration-guide.md`](consumer-integration-guide.md) for the full
+replay and apply boundary.
 
 ## Ownership
 
@@ -70,6 +77,11 @@ Field ownership:
 | `ReviewDecision.spec.status`, `actor`, `reviewedAt`, `rationale`, `evidenceIds`, `withinComfortZone` | `ReviewOutcome` |
 | `ReviewCandidate.claimTarget` | `ClaimTarget` |
 | `projection` | Optional id bridge for tests and adapters |
+| `ReviewSession.spec.snapshot`, `itemCount`, `eventCount` | Replay envelope for session validation |
+| `ReviewSessionEvent.spec.type`, `reviewItemName`, `candidateId`, `status`, `actor` | Replayable event log for derive/apply |
+
+Session resource mapping and the snapshot-safe replay/export helpers are covered
+in detail in [`consumer-integration-guide.md`](consumer-integration-guide.md).
 
 Adapters should emit normal `SurveyInput` records and then call
 `buildSurveyTrustInput`. Review resources are a durable neutral contract for

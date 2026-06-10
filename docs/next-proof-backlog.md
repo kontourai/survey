@@ -153,8 +153,17 @@ current-state validation, write policy, persistence, and audit stamps. The
 important repeated friction was not a generic apply builder. It was the need to
 replay events against a reviewed session snapshot before deriving write inputs.
 
-Survey now exposes the narrow snapshot-safe replay/export helpers. Future work
-should stay inside that policy-free lane.
+Survey now exposes the narrow snapshot-safe replay/export helpers:
+`replayReviewSessionEventsForSnapshot`, `deriveReviewSessionApplyResultForSnapshot`,
+`validateReviewSessionEventsForSnapshot`, and the server-review-session module
+(`createServerReviewSessionRecord`, `hashReviewSessionSnapshot`,
+`assertServerReviewSessionFreshness`, `assertServerReviewSessionEvents`,
+`deriveServerReviewSessionApplyResult`).
+
+These helpers are implemented, tested, and exercised by the consumer examples at
+`examples/review-workbench/facility-credential-consumer.ts` and
+`examples/review-workbench/server-apply-consumer.ts`. Future work should stay
+inside that policy-free lane.
 
 Shape additive improvements only when they:
 

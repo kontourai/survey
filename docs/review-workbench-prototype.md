@@ -69,7 +69,9 @@ All generated payloads use the resource contract from
 `src/review-resource.ts`: `apiVersion`, `kind: "ReviewDecision"`,
 `metadata.name`, `spec.reviewItemName`, `spec.candidateId`, `spec.status`,
 `spec.actor`, `spec.reviewedAt`, `spec.rationale`, `spec.projection`, and
-`status.appliedToClaimIds`.
+`status.appliedToClaimIds`. The workbench also generates `ReviewSession` and
+`ReviewSessionEvent` payloads for session audit and replay; those are covered
+in [`consumer-integration-guide.md`](consumer-integration-guide.md).
 
 ## Surface Preview
 
