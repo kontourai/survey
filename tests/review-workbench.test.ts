@@ -19,13 +19,17 @@ import {
   deriveQueueRowStatus,
   initialReviewWorkbenchState,
   initialReviewQueueSessionState,
+  assertReviewResultMatches,
+  mapReviewWorkbenchResultsToApplyActions,
   mountReviewWorkbench,
   nextUnresolvedItemName,
   persistReviewSessionEvents,
   deriveReviewSessionApplyResultForSnapshot,
   renderReviewWorkbenchHtml,
+  requireReviewResultForItem,
   replayReviewSessionEvents,
   replayReviewSessionEventsForSnapshot,
+  ReviewApplyActionMappingError,
   reviewSessionSummary,
   validateReviewSessionEventsForSnapshot,
   type ReviewPresentationAdapter,
@@ -606,6 +610,140 @@ describe("review workbench prototype", () => {
     assert.equal(prepared.decisions.length, 2);
     assert.equal(prepared.sessionExport.events.length, events.length);
     assert.deepEqual(prepared.replayedSession.decisionsByItemName, session.decisionsByItemName);
+  });
+
+  it("maps resolved review results into product-owned apply actions", () => {
+    const snapshot = initialReviewQueueSessionState();
+    const reviewedSession = {
+      ...snapshot,
+      decisionsByItemName: {
+        "public-directory-hours": "accept-proposed" as const,
+        "public-directory-phone": "keep-current" as const,
+        "public-directory-address": "reject-proposed" as const,
+      },
+    };
+    const apply = deriveReviewSessionApplyResultForSnapshot({
+      snapshot,
+      events: buildReviewSessionEvents(reviewedSession),
+      requiredResolvedItems: "any",
+    });
+    assert.equal(apply.ok, true);
+
+    const hoursItem = snapshot.items.find((item) => item.metadata.name === "public-directory-hours");
+    assert.ok(hoursItem);
+    const hoursResult = requireReviewResultForItem(hoursItem, apply.results);
+    assertReviewResultMatches(hoursResult, {
+      decision: "accept-proposed",
+      status: "verified",
+      selectedCandidateRole: "proposed",
+    });
+    assert.throws(
+      () => assertReviewResultMatches(hoursResult, { selectedCandidateRole: "current" }),
+      /expected current/,
+    );
+
+    const actions = mapReviewWorkbenchResultsToApplyActions({
+      results: apply.results,
+      items: snapshot.items,
+      requireUniqueTargets: true,
+      map: ({ result, item }) => {
+        if (result.decision === "accept-proposed" && result.selectedCandidateRole === "proposed") {
+          return { kind: "apply-field" as const, target: item.spec.target };
+        }
+        if (result.decision === "keep-current" || result.decision === "reject-proposed") {
+          return { kind: "leave-current" as const, target: item.spec.target };
+        }
+        return undefined;
+      },
+    });
+
+    assert.deepEqual(actions.map((entry) => entry.action), [
+      { kind: "apply-field", target: "hours" },
+      { kind: "leave-current", target: "phoneNumber" },
+      { kind: "leave-current", target: "streetAddress" },
+    ]);
+
+    const skipped = mapReviewWorkbenchResultsToApplyActions({
+      results: apply.results,
+      items: snapshot.items,
+      skip: ({ result }) => result.decision === "reject-proposed",
+      map: ({ target }) => ({ kind: "apply-or-keep" as const, target }),
+    });
+
+    assert.deepEqual(skipped.map((entry) => entry.action.target), ["hours", "phoneNumber"]);
+  });
+
+  it("fails closed when review apply action mapping sees stale or incomplete inputs", () => {
+    const snapshot = initialReviewQueueSessionState();
+    const reviewedSession = {
+      ...snapshot,
+      decisionsByItemName: {
+        "public-directory-hours": "accept-proposed" as const,
+      },
+    };
+    const apply = deriveReviewSessionApplyResultForSnapshot({
+      snapshot,
+      events: buildReviewSessionEvents(reviewedSession),
+      requiredResolvedItems: "any",
+    });
+    assert.equal(apply.ok, true);
+    const [result] = apply.results;
+    assert.ok(result);
+
+    assert.throws(
+      () => mapReviewWorkbenchResultsToApplyActions({
+        results: [{ ...result, reviewItemName: "missing-review-item" }],
+        items: snapshot.items,
+        map: ({ target }) => ({ target }),
+      }),
+      (error) =>
+        error instanceof ReviewApplyActionMappingError
+        && error.issues[0]?.code === "unknown-review-item",
+    );
+
+    assert.throws(
+      () => mapReviewWorkbenchResultsToApplyActions({
+        results: apply.results,
+        items: snapshot.items,
+        map: () => undefined,
+      }),
+      (error) =>
+        error instanceof ReviewApplyActionMappingError
+        && error.issues[0]?.code === "unmapped-review-result",
+    );
+
+    assert.throws(
+      () => mapReviewWorkbenchResultsToApplyActions({
+        results: [{ ...result, selectedCandidateId: "stale-candidate" }],
+        items: snapshot.items,
+        map: ({ target }) => ({ target }),
+      }),
+      (error) =>
+        error instanceof ReviewApplyActionMappingError
+        && error.issues[0]?.code === "selected-candidate-mismatch",
+    );
+
+    const duplicateTargetItems = [
+      snapshot.items[0]!,
+      {
+        ...snapshot.items[1]!,
+        spec: {
+          ...snapshot.items[1]!.spec,
+          target: snapshot.items[0]!.spec.target,
+        },
+      },
+    ];
+    assert.throws(
+      () => mapReviewWorkbenchResultsToApplyActions({
+        results: apply.results,
+        items: duplicateTargetItems,
+        requireUniqueTargets: true,
+        map: ({ target }) => ({ target }),
+      }),
+      (error) =>
+        error instanceof ReviewApplyActionMappingError
+        && error.issues.some((issue) => issue.code === "duplicate-review-target"),
+    );
   });
 
   it("reports unresolved review items before a product applies review results", () => {

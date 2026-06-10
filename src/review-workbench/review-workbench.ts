@@ -248,6 +248,69 @@ export interface ReviewWorkbenchResult {
   readonly rationale?: string;
 }
 
+export interface ReviewApplyResultExpectation {
+  readonly decision?: ReviewWorkbenchDecision;
+  readonly status?: ReviewDecision["spec"]["status"];
+  readonly selectedCandidateRole?: ReviewCandidate["role"];
+  readonly selectedCandidateId?: string;
+  readonly selectedValue?: unknown;
+  readonly equals?: (left: unknown, right: unknown) => boolean;
+}
+
+export interface ReviewApplyActionMapping<TAction> {
+  readonly result: ReviewWorkbenchResult;
+  readonly item: ReviewItem;
+  readonly action: TAction;
+}
+
+export type ReviewApplyActionIssue =
+  | {
+      readonly code: "unknown-review-item";
+      readonly reviewItemName: string;
+      readonly message: string;
+    }
+  | {
+      readonly code: "duplicate-review-target";
+      readonly target: string;
+      readonly message: string;
+    }
+  | {
+      readonly code: "selected-candidate-mismatch";
+      readonly reviewItemName: string;
+      readonly message: string;
+    }
+  | {
+      readonly code: "unmapped-review-result";
+      readonly reviewItemName: string;
+      readonly message: string;
+    };
+
+export class ReviewApplyActionMappingError extends Error {
+  readonly name = "ReviewApplyActionMappingError";
+  readonly issues: readonly ReviewApplyActionIssue[];
+
+  constructor(issues: readonly ReviewApplyActionIssue[]) {
+    super(`Review apply action mapping failed: ${issues.map((issue) => issue.message).join(" ")}`);
+    this.issues = issues;
+  }
+}
+
+export interface ReviewApplyActionContext {
+  readonly result: ReviewWorkbenchResult;
+  readonly item: ReviewItem;
+  readonly target: ReviewItem["spec"]["target"];
+  readonly selectedCandidate: ReviewCandidate;
+  readonly unselectedCandidates: readonly ReviewCandidate[];
+}
+
+export interface MapReviewWorkbenchResultsToApplyActionsOptions<TAction> {
+  readonly results: readonly ReviewWorkbenchResult[];
+  readonly items: readonly ReviewItem[];
+  readonly requireUniqueTargets?: boolean;
+  readonly skip?: (context: ReviewApplyActionContext) => boolean;
+  readonly map: (context: ReviewApplyActionContext) => TAction | readonly TAction[] | undefined;
+}
+
 export function buildReviewDecisionsFromSession(session: ReviewQueueSessionState): ReviewDecision[] {
   return session.items.flatMap((item) => {
     const decision = session.decisionsByItemName[item.metadata.name];
@@ -262,6 +325,146 @@ export function buildReviewDecisionsFromSession(session: ReviewQueueSessionState
 
     return reviewDecision ? [reviewDecision] : [];
   });
+}
+
+export function requireReviewResultForItem(
+  item: ReviewItem,
+  results: readonly ReviewWorkbenchResult[],
+): ReviewWorkbenchResult {
+  const matching = results.filter((result) => result.reviewItemName === item.metadata.name);
+  if (matching.length !== 1) {
+    throw new Error(`Expected exactly one resolved Survey result for ${item.metadata.name}.`);
+  }
+  return matching[0] as ReviewWorkbenchResult;
+}
+
+export function assertReviewResultMatches(
+  result: ReviewWorkbenchResult,
+  expectation: ReviewApplyResultExpectation,
+): void {
+  if (expectation.decision && result.decision !== expectation.decision) {
+    throw new Error(`Review result ${result.reviewItemName} has decision ${result.decision}; expected ${expectation.decision}.`);
+  }
+  if (expectation.status && result.status !== expectation.status) {
+    throw new Error(`Review result ${result.reviewItemName} has status ${result.status}; expected ${expectation.status}.`);
+  }
+  if (expectation.selectedCandidateRole && result.selectedCandidateRole !== expectation.selectedCandidateRole) {
+    throw new Error(
+      `Review result ${result.reviewItemName} selected ${result.selectedCandidateRole ?? "unknown"} candidate; expected ${expectation.selectedCandidateRole}.`,
+    );
+  }
+  if (expectation.selectedCandidateId && result.selectedCandidateId !== expectation.selectedCandidateId) {
+    throw new Error(
+      `Review result ${result.reviewItemName} selected candidate ${result.selectedCandidateId}; expected ${expectation.selectedCandidateId}.`,
+    );
+  }
+  if ("selectedValue" in expectation) {
+    const equals = expectation.equals ?? Object.is;
+    if (!equals(result.selectedValue, expectation.selectedValue)) {
+      throw new Error(`Review result ${result.reviewItemName} selected value does not match the expected value.`);
+    }
+  }
+}
+
+export function mapReviewWorkbenchResultsToApplyActions<TAction>(
+  options: MapReviewWorkbenchResultsToApplyActionsOptions<TAction>,
+): ReviewApplyActionMapping<TAction>[] {
+  const issues: ReviewApplyActionIssue[] = [];
+  const itemByName = new Map(options.items.map((item) => [item.metadata.name, item]));
+
+  if (options.requireUniqueTargets) {
+    const seenTargets = new Set<string>();
+    for (const item of options.items) {
+      if (seenTargets.has(item.spec.target)) {
+        issues.push({
+          code: "duplicate-review-target",
+          target: item.spec.target,
+          message: `Review target ${item.spec.target} appears on more than one ReviewItem.`,
+        });
+      }
+      seenTargets.add(item.spec.target);
+    }
+  }
+
+  const mappings = options.results.flatMap((result) => {
+    const item = itemByName.get(result.reviewItemName);
+    if (!item) {
+      issues.push({
+        code: "unknown-review-item",
+        reviewItemName: result.reviewItemName,
+        message: `Review result ${result.reviewItemName} does not reference a known ReviewItem.`,
+      });
+      return [];
+    }
+
+    const selectedCandidate = item.spec.candidates.find((candidate) => candidate.id === result.selectedCandidateId);
+    if (
+      !selectedCandidate
+      || selectedCandidate.role !== result.selectedCandidateRole
+      || !structuralEqual(selectedCandidate.value, result.selectedValue)
+    ) {
+      issues.push({
+        code: "selected-candidate-mismatch",
+        reviewItemName: result.reviewItemName,
+        message: `Review result ${result.reviewItemName} selected candidate does not match the supplied ReviewItem.`,
+      });
+      return [];
+    }
+
+    const context: ReviewApplyActionContext = {
+      result,
+      item,
+      target: item.spec.target,
+      selectedCandidate,
+      unselectedCandidates: item.spec.candidates.filter((candidate) => candidate.id !== selectedCandidate.id),
+    };
+    if (options.skip?.(context)) {
+      return [];
+    }
+
+    const action = options.map(context);
+    if (action === undefined) {
+      issues.push({
+        code: "unmapped-review-result",
+        reviewItemName: result.reviewItemName,
+        message: `Review result ${result.reviewItemName} did not produce an apply action.`,
+      });
+      return [];
+    }
+
+    return (Array.isArray(action) ? action : [action]).map((entry) => ({
+      result,
+      item,
+      action: entry,
+    }));
+  });
+
+  if (issues.length > 0) {
+    throw new ReviewApplyActionMappingError(issues);
+  }
+
+  return mappings;
+}
+
+export const mapReviewApplyActions = mapReviewWorkbenchResultsToApplyActions;
+
+function structuralEqual(left: unknown, right: unknown): boolean {
+  return JSON.stringify(canonicalJson(left)) === JSON.stringify(canonicalJson(right));
+}
+
+function canonicalJson(value: unknown): unknown {
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(canonicalJson);
+  }
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([, entry]) => entry !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => [key, canonicalJson(entry)]),
+  );
 }
 
 export function buildReviewWorkbenchResultsFromSession(session: ReviewQueueSessionState): ReviewWorkbenchResult[] {
