@@ -57,6 +57,8 @@ export type {
   CurrentProposedCandidateRole,
   ReviewedCurrentProposedResolutionInput,
 } from "./reviewed-current-proposed-resolution.js";
+export { flowTrustArtifactFromReviewOutcome } from "./to-flow-artifact.js";
+export type { FlowTrustArtifact, FlowTrustArtifactOptions } from "./to-flow-artifact.js";
 export { buildSurveyTrustInput } from "./to-surface.js";
 export type { BuildSurveyTrustInputOptions } from "./to-surface.js";
 export { buildSurveyLearningProjections } from "./learning-projections.js";
