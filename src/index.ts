@@ -162,3 +162,15 @@ export type {
   UtteranceStatementRecords,
   UtteranceTrustReport,
 } from "./agent-utterance.js";
+export {
+  mappingReviewToSurface,
+  referenceSchemaExtractor,
+  surveySchemaMapping,
+} from "./schema-mapping.js";
+export type {
+  MappingProposalRecord,
+  ReviewedMapping,
+  SchemaMappingExtractor,
+  SchemaMappingOptions,
+  SystemFieldRef,
+} from "./schema-mapping.js";

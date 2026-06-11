@@ -785,3 +785,141 @@ Key contracts:
   passing.
 - `surveyAgentUtterance` is `async` to support async extractors, but it works
   equally well with synchronous extractors.
+
+---
+
+## Schema Mapping
+
+The schema-mapping producer profile is the **evidenced-ontology layer**: every cross-system field mapping shows its work via the standard Survey chain rather than unaudited config.  Each mapping proposal carries schema-doc excerpts, a confidence score, a rationale, and the name of the extractor that produced it.  Nothing is accepted until it flows through review.
+
+### Core types
+
+```ts
+import type {
+  MappingProposalRecord,
+  ReviewedMapping,
+  SchemaMappingExtractor,
+  SchemaMappingOptions,
+  SystemFieldRef,
+} from "@kontourai/survey";
+```
+
+**`SystemFieldRef`** — a stable reference to one field within one system's schema:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `system` | `string` | System identifier (e.g. `"crm"`, `"erp"`) |
+| `entity` | `string` | Entity/table/resource name within that system |
+| `field` | `string` | Field/column/attribute name |
+| `locator?` | `string` | Structural locator within a schema document |
+
+**`MappingProposalRecord`** — the "show your work" record for one proposed field link:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Stable identifier |
+| `sourceField` | `SystemFieldRef` | The source field |
+| `targetField` | `SystemFieldRef` | The target field |
+| `relation` | `"equivalent" \| "subsumes" \| "converts"` | Semantic relation |
+| `conversion?` | `{ factor?, offset?, note? }` | Numeric conversion (only for `"converts"`) |
+| `evidence` | `Array<{ system, excerpt }>` | Schema-document excerpts from each system |
+| `confidence` | `number` | Extractor confidence 0–1 |
+| `rationale` | `string` | Human-readable rationale |
+| `proposedBy` | `string` | Extractor name |
+| `proposedAt` | `string` | ISO 8601 timestamp |
+
+### SchemaMappingExtractor interface
+
+```ts
+export interface SchemaMappingExtractor {
+  name: string;
+  extract(context: {
+    systems: Array<{ system: string; schemaText: string }>;
+  }): MappingProposalRecord[] | Promise<MappingProposalRecord[]>;
+}
+```
+
+The extractor is pluggable.  Implementations may be deterministic (like `referenceSchemaExtractor`), embedding-based, or LLM-backed — but they are always **proposers**: their output carries full provenance and goes through review before it counts.
+
+A `referenceSchemaExtractor` is exported for tests; it is a **reference implementation only** (field-name exact-match, not suitable for production).
+
+### surveySchemaMapping
+
+```ts
+import { surveySchemaMapping, referenceSchemaExtractor } from "@kontourai/survey";
+
+const { surveyInput, proposals, candidateSets } = await surveySchemaMapping(
+  {
+    systems: [
+      { system: "crm", schemaText: "Contact.email:string\nContact.phone:string" },
+      { system: "erp", schemaText: "Customer.email:string\nCustomer.phone:string" },
+    ],
+  },
+  referenceSchemaExtractor,
+  { autoAcceptMinConfidence: 0.85 },  // optional comfort-zone threshold
+);
+```
+
+The function runs the extractor and projects proposals into the standard Survey chain:
+
+- One `RawSource` per system schema (`kind: "system-schema"`, `locatorScheme: "structured-field"`).
+- One `Extraction` and one `Candidate` per proposal.
+- One `CandidateSet` per field pair:
+  - `status: "conflict"` when proposals for the same pair disagree on `relation`.
+  - `status: "needs-review"` otherwise.
+- One `ReviewOutcome` (`status: "assumed"`, `actor: "auto-accept-policy"`) per non-conflicting candidate set whose top confidence is at or above `autoAcceptMinConfidence`.  Conflicting sets are never auto-accepted.
+
+### mappingReviewToSurface
+
+```ts
+import { mappingReviewToSurface } from "@kontourai/survey";
+import type { ReviewedMapping } from "@kontourai/survey";
+
+const bundle = mappingReviewToSurface(reviewedMappings, {
+  source: "schema-mapping.reviewed",
+  generatedAt: new Date().toISOString(),
+});
+```
+
+For each accepted mapping (`status: "verified"` or `"assumed"`) the bundle contains **both**:
+
+1. **A `Claim`**: `subjectType: "system-field"`, `fieldOrBehavior: "maps-to"`.  Disputing this claim caps the downstream answer through the weakest-link rule.
+2. **An `IdentityLink`**: links the source and target system-field subjects by `subjectType: "system-field"` and `subjectId: "<system>::<entity>::<field>"`.  Sets `relation` and `conversion` from the proposal, and `mappingClaimId` pointing at the claim above.
+
+Rejected mappings are omitted from the bundle.  Use `buildSurveyTrustBundle` on the original `SurveyInput` if you need an audit trail that includes rejections.
+
+### Cross-system resolution and weakest-link capping
+
+Once a reviewed mapping bundle is merged with domain data claims, `resolveInquiry` from `@kontourai/surface` can resolve a system-B field inquiry using system-A's claim:
+
+```ts
+import { resolveInquiry } from "@kontourai/surface";
+
+// bundle contains: mapping claim + identity link + crm data claim
+const record = resolveInquiry(bundle, {
+  id: "inquiry-1",
+  question: "What is the email for erp Customer?",
+  target: {
+    subjectType: "system-field",
+    subjectId: "erp::Customer::email",
+    fieldOrBehavior: "value",
+  },
+  askedBy: "consumer",
+  askedAt: new Date().toISOString(),
+});
+
+// record.outcome === "matched"
+// record.answer.value === "alice@example.com"  (from crm claim, traversed via link)
+// record.answer.status — capped by the mapping claim's derived status
+```
+
+**Weakest-link rule**: if the mapping claim is disputed (or has any lower-trust event as its latest event), the resolved answer status is capped to `"disputed"` regardless of the source data claim's status.
+
+### Key contracts
+
+- `RawSource.kind` is `"system-schema"` for all schema sources.  `locatorScheme` is `"structured-field"`.
+- `IdentityLink.subjects` use `subjectType: "system-field"` and `subjectId` in the form `"<system>::<entity>::<field>"`.
+- `IdentityLink.mappingClaimId` must point at a claim present in the same bundle; `resolveInquiry` uses it to compute the weakest-link ceiling.
+- The `SchemaMappingExtractor` interface is synchronous or async; `surveySchemaMapping` always awaits it.
+- Auto-accept mirrors `applyAutoAcceptPolicy` in `inquiry-mapping`: non-conflicting proposals above the threshold are accepted as `"assumed"`, never as `"verified"`.  Conflicts require explicit human review.
+- `referenceSchemaExtractor` is deterministic and test-only.  Its matching strategy (exact field-name, optional type-token match) is intentionally simple and transparent.
