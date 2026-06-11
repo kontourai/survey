@@ -1,5 +1,7 @@
 # Releasing Survey
 
+Releases are automated with release-please: merges to main accumulate into a release PR, and merging it tags the version and dispatches the npm publish workflow. Use conventional commit prefixes (feat:, fix:, docs:, chore:) so version inference works. The manual flow below remains valid for exceptional releases.
+
 This document is the operator checklist for cutting a release of `@kontourai/survey`.
 
 ## Preconditions
