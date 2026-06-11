@@ -109,7 +109,8 @@ describe("review workbench prototype", () => {
     const html = renderReviewWorkbenchHtml(initialReviewWorkbenchState());
 
     assert.match(html, /Review candidate update/);
-    assert.match(html, /decide whether/);
+    assert.match(html, /Availability Status/);
+    assert.match(html, /data-testid="review-target-label"/);
     assert.match(html, /data-testid="review-focus"/);
     assert.match(html, /Active review/);
     assert.match(html, /Current/);
@@ -1087,9 +1088,10 @@ describe("review workbench prototype", () => {
     ]);
 
     const html = renderReviewWorkbenchHtml(state);
-    assert.match(html, /data-testid="surface-canonical-claim"/);
-    assert.match(html, /Selected claim/);
-    assert.match(html, /public-field\.entity-123\.availability-status\.proposal-456/);
+    // The Selected claim section was removed (duplicated by candidate cards).
+    // Claim IDs still appear in the candidate history reference details.
+    assert.doesNotMatch(html, /data-testid="surface-canonical-claim"/);
+    assert.doesNotMatch(html, /Selected claim/);
     assert.match(html, /data-testid="surface-candidate-history"/);
     assert.match(html, /Unselected candidate history/);
     assert.match(html, /public-directory:candidate:current/);

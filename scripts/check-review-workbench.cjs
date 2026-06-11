@@ -30,6 +30,10 @@ const requiredFiles = [
   "dist/src/review-workbench/review-surface-preview.d.ts",
   "dist/src/review-workbench/review-workbench.css",
   "dist/src/review-workbench/review-workbench.standalone.css",
+  "src/review-workbench/review-workbench-css.generated.ts",
+  "src/review-workbench/review-workbench-element.ts",
+  "dist/src/review-workbench/review-workbench-css.generated.js",
+  "dist/src/review-workbench/review-workbench-element.js",
 ];
 
 for (const file of requiredFiles) {

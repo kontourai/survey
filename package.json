@@ -26,6 +26,10 @@
       "types": "./dist/src/review-workbench/review-workbench.d.ts",
       "default": "./dist/src/review-workbench/review-workbench.js"
     },
+    "./review-workbench/element": {
+      "types": "./dist/src/review-workbench/review-workbench-element.d.ts",
+      "default": "./dist/src/review-workbench/review-workbench-element.js"
+    },
     "./review-workbench/server-review-session": {
       "types": "./dist/src/review-workbench/server-review-session.d.ts",
       "default": "./dist/src/review-workbench/server-review-session.js"
@@ -38,10 +42,12 @@
     "./example-data/regulated-document-review-resource": "./dist/example-data/regulated-document-review-resource.js"
   },
   "files": [
+    "bin/",
     "dist/examples/",
     "dist/example-data/",
     "dist/src/",
-    "README.md"
+    "README.md",
+    "example-data/mcp-review-session.json"
   ],
   "scripts": {
     "build": "rm -rf dist && tsc && node scripts/copy-review-workbench-package-assets.cjs",
@@ -53,12 +59,13 @@
     "check:content-boundary": "node scripts/check-content-boundary.cjs",
     "sync:review-workbench-assets": "node scripts/sync-review-workbench-assets.cjs",
     "check:review-workbench-assets": "node scripts/sync-review-workbench-assets.cjs --check",
-    "check:review-workbench": "npm run check:review-workbench:static",
+    "check:review-workbench": "npm run check:review-workbench:static && npm run check:generated-css",
     "check:review-workbench:static": "npm run build && node scripts/check-review-workbench.cjs",
     "setup:repo-hooks": "node scripts/setup-repo-hooks.cjs",
     "validate:repo-hooks": "node scripts/validate-repo-hooks.cjs",
     "docs:build": "npm run build --silent && node scripts/docs-site/build.ts",
-    "docs:check": "npm run docs:build && node scripts/docs-site/check-links.ts"
+    "docs:check": "npm run docs:build && node scripts/docs-site/check-links.ts",
+    "check:generated-css": "node scripts/copy-review-workbench-package-assets.cjs --check"
   },
   "dependencies": {
     "@kontourai/surface": "^0.9.0"
@@ -81,5 +88,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "bin": {
+    "survey-review-mcp": "./bin/survey-review-mcp.mjs"
   }
 }
