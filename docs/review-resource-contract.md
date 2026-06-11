@@ -116,3 +116,46 @@ recommended consumer path from `ReviewItem` construction through persisted
 review events, exported results, and optional Surface projection. A generic
 review adapter builder is deliberately deferred until another producer proof
 shows repeated, policy-free Survey-shape friction.
+
+## Collection provenance
+
+A `ReviewDecision` can carry an `authorizing` block inside its spec (mapped
+from `ReviewOutcome.authorizing`). This block records how the reviewer was asked
+and what action they took — the testimony provenance that makes a decision
+self-contained for downstream admissibility checks.
+
+Three kinds are admissible: `explicit-statement` (reviewer typed a free-form
+statement), `exchange` (a prompt was shown and the reviewer responded — both
+halves required), and `authorized-action` (reviewer clicked a named action
+against a versioned prompt; requires `promptRef`, `renderedPrompt`, `action`,
+and `authorityRef`).
+
+**Vertical UIs inherit correct collection by using the workbench.** `buildReviewDecision`
+now populates `authorizing` automatically on every workbench decision. The block
+kind is `authorized-action` with:
+
+- `promptRef`: `"review-workbench/decision-card@v1"` — a stable versioned identifier
+  for the decision card control.
+- `renderedPrompt`: the review question rendered for that item, including the target
+  label and both candidate values, so the block is self-contained.
+- `action`: `"affirmed-control"` for a pure button click, `"typed"` when the
+  reviewer also supplied a rationale note.
+- `authorityRef`: `"actor:<actorId>"` — the actor identity already on the outcome.
+
+The provenance logic lives in the workbench boundary, not in the vertical UI, so
+consumer products do not need to re-implement it. The `authorizing` field is
+optional; existing records without it remain valid.
+
+If `buildAuthorizedActionAuthorizing` returns an invalid block (e.g., an empty
+`actorId` during testing), the workbench records the outcome without `authorizing`
+and emits a `console.warn`. This is a transparency gap, not a hard block, per
+ADR 0004.
+
+For consumers building outcomes outside the workbench, `buildAuthorizedActionAuthorizing`
+is exported from `@kontourai/survey`. It constructs and validates the block,
+throwing on invalid inputs so callers catch configuration errors at build time.
+
+Validation is available via `validateAuthorizing(block)` from
+`@kontourai/survey`. It returns structured issues for transparency-gap reporting;
+it does not hard-block decisions. Gaps are flagged for human review, never
+silently resolved by model judgment.

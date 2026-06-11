@@ -10,6 +10,11 @@ export type {
   LocatorScheme,
   RawSource,
   RawSourceKind,
+  ReviewAuthorizing,
+  ReviewAuthorizingAuthorizedAction,
+  ReviewAuthorizingExchange,
+  ReviewAuthorizingExplicitStatement,
+  ReviewAuthorizingKind,
   ReviewOutcome,
   ReviewStatus,
   SurveyInput,
@@ -174,3 +179,9 @@ export type {
   SchemaMappingOptions,
   SystemFieldRef,
 } from "./schema-mapping.js";
+export { buildAuthorizedActionAuthorizing, isValidAuthorizing, validateAuthorizing } from "./review-authorizing.js";
+export type {
+  BuildAuthorizedActionAuthorizingInput,
+  ReviewAuthorizingIssue,
+  ReviewAuthorizingIssueCode,
+} from "./review-authorizing.js";

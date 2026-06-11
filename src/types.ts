@@ -55,6 +55,34 @@ export interface CandidateSet {
 
 export type ReviewStatus = Extract<TrustStatus, "verified" | "assumed" | "rejected" | "proposed">;
 
+export type ReviewAuthorizingKind = "explicit-statement" | "exchange" | "authorized-action";
+
+export interface ReviewAuthorizingExplicitStatement {
+  kind: "explicit-statement";
+  statement: string;
+  source?: string;
+}
+
+export interface ReviewAuthorizingExchange {
+  kind: "exchange";
+  prompt: string;
+  response: string;
+  source?: string;
+}
+
+export interface ReviewAuthorizingAuthorizedAction {
+  kind: "authorized-action";
+  promptRef: string;
+  renderedPrompt: string;
+  action: "affirmed-control" | "typed";
+  authorityRef: string;
+}
+
+export type ReviewAuthorizing =
+  | ReviewAuthorizingExplicitStatement
+  | ReviewAuthorizingExchange
+  | ReviewAuthorizingAuthorizedAction;
+
 export interface ReviewOutcome {
   id: string;
   candidateSetId: string;
@@ -66,6 +94,9 @@ export interface ReviewOutcome {
   evidenceIds?: string[];
   withinComfortZone?: boolean;
   comfortZoneNote?: string;
+  /** Optional testimony provenance. When present, records how this decision
+   *  was authorized — interpreted by downstream verifiers for admissibility. */
+  authorizing?: ReviewAuthorizing;
   metadata?: Record<string, unknown>;
 }
 
