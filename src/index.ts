@@ -152,11 +152,13 @@ export type {
 export {
   referenceUtteranceExtractor,
   surveyAgentUtterance,
+  utteranceToSurveyInput,
 } from "./agent-utterance.js";
 export type {
   ExtractedStatement,
   StatementBadge,
   UtteranceClaimExtractor,
   UtteranceStatement,
+  UtteranceStatementRecords,
   UtteranceTrustReport,
 } from "./agent-utterance.js";

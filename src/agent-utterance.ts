@@ -20,7 +20,7 @@
 import type { DerivationRule, InquiryRecord, TrustBundle } from "@kontourai/surface";
 import { resolveInquiry } from "@kontourai/surface";
 import type { CanonicalClaimTarget } from "@kontourai/surface";
-import type { Candidate, CandidateSet, Extraction, RawSource } from "./types.js";
+import type { Candidate, CandidateSet, ClaimTarget, Extraction, RawSource, SurveyInput } from "./types.js";
 import type { InquiryMapping } from "./inquiry-mapping.js";
 import { lookupMapping, resolveQuestion } from "./inquiry-mapping.js";
 
@@ -110,6 +110,172 @@ export interface UtteranceStatementRecords {
   extraction: Extraction;
   candidate: Candidate;
   candidateSet: CandidateSet;
+}
+
+// ---------------------------------------------------------------------------
+// SurveyInput projection
+// ---------------------------------------------------------------------------
+
+/**
+ * Project an agent utterance and its extracted statements into the standard
+ * SurveyInput shape so they can flow into buildSurveyTrustBundle.
+ *
+ * Each extracted statement lands as:
+ *   RawSource (agent-utterance) → Extraction (with text-span locator) →
+ *   Candidate → CandidateSet (needs-review, no review outcome) → ClaimTarget
+ *
+ * Status discipline (ADR 0003 §4, to-surface.ts producer rules):
+ * - All claims project as "proposed" — unreviewed extractions are proposals,
+ *   never authoritative. assertProducerDiscipline forbids verified/assumed
+ *   without a review outcome.
+ * - agent-utterance is not a manual-entry source, so extraction.locator is
+ *   required. Span-located statements use text-span:start-end; span-less
+ *   statements use text-span derived from the excerpt offset in the utterance
+ *   (best-effort, 0-based).
+ *
+ * The returned SurveyInput can be passed directly to buildSurveyTrustBundle
+ * to produce a TrustBundle with full provenance in the Trust Bundle metadata.
+ *
+ * @param utterance - The raw agent utterance text.
+ * @param extracted - ExtractedStatements produced by a UtteranceClaimExtractor.
+ * @param context - agentId, extractor name, optional now timestamp.
+ */
+export function utteranceToSurveyInput(
+  utterance: string,
+  extracted: ExtractedStatement[],
+  context: {
+    agentId: string;
+    extractorName: string;
+    now?: Date;
+    source?: string;
+  },
+): SurveyInput {
+  const { agentId, extractorName, now } = context;
+  const observedAt = (now ?? new Date()).toISOString();
+  const source = context.source ?? `agent-utterance:${agentId}`;
+
+  // One shared RawSource for the entire utterance
+  const sourceId = `agent-utterance:${agentId}:${observedAt}`;
+  const rawSource: RawSource = {
+    id: sourceId,
+    kind: "agent-utterance",
+    sourceRef: `agent-utterance://${agentId}/${observedAt}`,
+    observedAt,
+    locatorScheme: "text-span",
+    inlineText: utterance,
+    metadata: { agentId },
+  };
+
+  const extractions: Extraction[] = [];
+  const candidateSets: CandidateSet[] = [];
+  const claims: ClaimTarget[] = [];
+
+  for (let idx = 0; idx < extracted.length; idx++) {
+    const statement = extracted[idx]!;
+    const statementId = `${sourceId}.statement.${idx}`;
+    const extractionId = `${statementId}.extraction`;
+    const candidateId = `${statementId}.candidate`;
+    const candidateSetId = `${statementId}.candidate-set`;
+    const claimId = `${statementId}.claim`;
+
+    // Compute locator — required for non-manual-entry sources
+    // (assertProducerDiscipline throws without it)
+    const locator = spanToLocator(statement.span) ?? excerptLocator(utterance, statement.excerpt);
+
+    const extraction: Extraction = {
+      id: extractionId,
+      sourceId,
+      target: canonicalTargetKey(statement.target),
+      value: statement.value ?? null,
+      confidence: statement.confidence,
+      locator,
+      excerpt: statement.excerpt,
+      extractor: extractorName,
+      extractedAt: observedAt,
+      metadata: {
+        agentUtterance: {
+          span: statement.span,
+          excerpt: statement.excerpt,
+          extractorName,
+          confidence: statement.confidence,
+        },
+      },
+    };
+
+    const candidate: Candidate = {
+      id: candidateId,
+      extractionId,
+      value: statement.value ?? null,
+      confidence: statement.confidence,
+      metadata: {
+        agentUtterance: {
+          span: statement.span,
+          excerpt: statement.excerpt,
+          extractorName,
+          confidence: statement.confidence,
+        },
+      },
+    };
+
+    // needs-review status → statusFor returns "proposed" (no review outcome)
+    const candidateSet: CandidateSet = {
+      id: candidateSetId,
+      target: canonicalTargetKey(statement.target),
+      candidates: [candidate],
+      selectedCandidateId: candidateId,
+      status: "needs-review",
+      metadata: {
+        agentUtterance: {
+          subjectType: statement.target.subjectType,
+          subjectId: statement.target.subjectId,
+          fieldOrBehavior: statement.target.fieldOrBehavior,
+        },
+      },
+    };
+
+    // Unreviewed: status is omitted so statusFor() computes "proposed"
+    // assertProducerDiscipline: no verified/assumed without review → compliant
+    const claimTarget: ClaimTarget = {
+      id: claimId,
+      candidateSetId,
+      candidateId,
+      subjectType: statement.target.subjectType,
+      subjectId: statement.target.subjectId,
+      surface: "agent-utterance.profile",
+      claimType: "agent-extraction",
+      fieldOrBehavior: statement.target.fieldOrBehavior,
+      value: statement.value,
+      // status intentionally omitted → computed as "proposed" by statusFor
+      impactLevel: "low",
+      collectedBy: extractorName,
+      metadata: {
+        survey: {
+          agentUtterance: {
+            agentId,
+            extractorName,
+            excerpt: statement.excerpt,
+            span: statement.span,
+            confidence: statement.confidence,
+            locator,
+          },
+        },
+      },
+    };
+
+    extractions.push(extraction);
+    candidateSets.push(candidateSet);
+    claims.push(claimTarget);
+  }
+
+  return {
+    source,
+    generatedAt: observedAt,
+    rawSources: [rawSource],
+    extractions,
+    candidateSets,
+    reviewOutcomes: [],
+    claims,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -221,7 +387,7 @@ export async function surveyAgentUtterance(
       badge,
     });
 
-    // Suppress unused-variable warning for extraction/candidateSet
+    // Suppress unused-variable warning for extraction
     void extraction;
   }
 
@@ -269,6 +435,29 @@ function badgeFromRecord(record: InquiryRecord): StatementBadge {
   if (status === "disputed") return "disputed";
   if (status === "rejected" || status === "superseded") return "rejected";
   return "unsupported";
+}
+
+/**
+ * Convert a text-span to a locator string.
+ */
+function spanToLocator(span?: { start: number; end: number }): string | undefined {
+  if (!span) return undefined;
+  return `text-span:${span.start}-${span.end}`;
+}
+
+/**
+ * Best-effort locator from excerpt text — find the first occurrence of the
+ * excerpt in the utterance and use that as a text-span locator.
+ * Falls back to text-span:0-0 if the excerpt is not found.
+ */
+function excerptLocator(utterance: string, excerpt: string): string {
+  const idx = utterance.indexOf(excerpt);
+  if (idx >= 0) {
+    return `text-span:${idx}-${idx + excerpt.length}`;
+  }
+  // Fallback: anchor to start (preserves discipline contract; locator is
+  // best-effort for span-less extractors)
+  return `text-span:0-${excerpt.length}`;
 }
 
 // ---------------------------------------------------------------------------
