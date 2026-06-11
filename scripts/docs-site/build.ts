@@ -259,7 +259,7 @@ function landingContent(): string {
     </div>
     <div class="feature">
       <h3>One projection to Surface</h3>
-      <p><code>buildSurveyTrustInput</code> turns Survey records into <a href="https://kontourai.io/surface" rel="noopener">Surface</a> TrustInput. Surface owns claims, evidence, status, and trust reporting from there.</p>
+      <p><code>buildSurveyTrustBundle</code> turns Survey records into a <a href="https://kontourai.io/surface" rel="noopener">Surface</a> Trust Bundle. Surface owns claims, evidence, status, and trust reporting from there.</p>
     </div>
     <div class="feature">
       <h3>A review workbench you can embed</h3>
@@ -282,7 +282,7 @@ function landingContent(): string {
 
 <section class="showcase">
   <h2>The Review Workbench</h2>
-  <p>A fixture-backed queue rendered by the embeddable workbench: current vs proposed values, source refs and excerpts, decision effect, and the Surface projection preview.</p>
+  <p>A example-backed queue rendered by the embeddable workbench: current vs proposed values, source refs and excerpts, decision effect, and the Surface projection preview.</p>
   <p><a class="button primary" href="demo/">Open the live demo</a></p>
   <img src="assets/review-workbench-desktop.png" alt="Survey Review Workbench showing a review queue, current versus proposed values, decision controls, and a Surface preview" loading="lazy">
 </section>
@@ -299,8 +299,8 @@ function landingContent(): string {
   })
   .build();
 
-const trustInput = validateTrustInput(buildSurveyTrustInput(surveyInput));
-const report = buildTrustReport(trustInput);</code></pre>
+const trustBundle = validateTrustBundle(buildSurveyTrustBundle(surveyInput));
+const report = buildTrustReport(trustBundle);</code></pre>
   <p><a class="button primary" href="record-contracts.html">Read the record contracts</a></p>
 </section>
 `;
@@ -316,12 +316,12 @@ async function build(): Promise<void> {
 
   for (const page of pages) await renderDocPage(page);
 
-  // Host the fixture-backed Review Workbench as a live demo at /demo/.
+  // Host the example-backed Review Workbench as a live demo at /demo/.
   const demoDir = path.join(outDir, "demo");
   await mkdir(demoDir, { recursive: true });
   await cp(path.join(repoRoot, "examples", "review-workbench", "vendor"), path.join(demoDir, "vendor"), { recursive: true });
   await cp(path.join(repoRoot, "examples", "review-workbench", "review-workbench.css"), path.join(demoDir, "review-workbench.css"));
-  for (const compiled of ["src", "examples", "fixtures"]) {
+  for (const compiled of ["src", "examples", "example-data"]) {
     await cp(path.join(repoRoot, "dist", compiled), path.join(demoDir, "dist", compiled), { recursive: true });
   }
   const demoHtml = await readFile(path.join(repoRoot, "examples", "review-workbench", "index.html"), "utf8");

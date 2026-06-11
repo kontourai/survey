@@ -75,7 +75,7 @@ reasons.
 ```ts
 import {
   apiRecordSource,
-  buildSurveyTrustInput,
+  buildSurveyTrustBundle,
   fieldObservation,
   policyStandardSource,
   SurveyInputBuilder,
@@ -130,7 +130,7 @@ const surveyInput = new SurveyInputBuilder({ source: "example-producer:run-1" })
   })
   .build();
 
-const trustInput = buildSurveyTrustInput(surveyInput);
+const trustBundle = buildSurveyTrustBundle(surveyInput);
 ```
 
 Projection emits a normal Surface verification event with
@@ -145,7 +145,7 @@ keys, typed edge details are preserved on the projected claim at
 ## Review resources
 
 Survey also exports producer-neutral `ReviewItem`, `ReviewCandidate`, and
-`ReviewDecision` TypeScript resource shapes for review UI and adapter fixtures.
+`ReviewDecision` TypeScript resource shapes for review UI and adapter examples.
 They use `apiVersion`, `kind`, `metadata`, `spec`, and `status` fields while
 mapping back to the existing Survey record layer. See
 [`docs/review-resource-contract.md`](review-resource-contract.md) for
@@ -162,7 +162,7 @@ path.
 
 ```ts
 import {
-  buildSurveyTrustInput,
+  buildSurveyTrustBundle,
   fieldObservation,
   SurveyInputBuilder,
 } from "@kontourai/survey";
@@ -206,7 +206,7 @@ const surveyInput = new SurveyInputBuilder({
   }))
   .build();
 
-const trustInput = buildSurveyTrustInput(surveyInput);
+const trustBundle = buildSurveyTrustBundle(surveyInput);
 ```
 
 `fieldObservation` sets `extraction.target` and `claim.fieldOrBehavior` from
@@ -243,7 +243,7 @@ reserved for actor, credential, role, organization, policy, or system authority.
 
 ```ts
 import {
-  buildSurveyTrustInput,
+  buildSurveyTrustBundle,
   sourceOfAuthorityObservationBuilder,
   SurveyInputBuilder,
   uploadedDocumentSource,
@@ -301,7 +301,7 @@ const surveyInput = new SurveyInputBuilder({
     .build())
   .build();
 
-const trustInput = buildSurveyTrustInput(surveyInput);
+const trustBundle = buildSurveyTrustBundle(surveyInput);
 ```
 
 `sourceOfAuthorityObservation` remains available as the lower-level object
@@ -365,7 +365,7 @@ and the same Surface projection path.
 
 ```ts
 import {
-  buildSurveyTrustInput,
+  buildSurveyTrustBundle,
   repeatedObservation,
   SurveyInputBuilder,
 } from "@kontourai/survey";
@@ -414,7 +414,7 @@ const surveyInput = new SurveyInputBuilder({
   }))
   .build();
 
-const trustInput = buildSurveyTrustInput(surveyInput);
+const trustBundle = buildSurveyTrustBundle(surveyInput);
 ```
 
 `repeatedObservation` sets `extraction.target` and
@@ -531,7 +531,7 @@ status projection.
 
 A candidate set with status `"conflict"` represents a Survey-side Candidate
 Conflict before review has resolved which candidate should win. When no review
-outcome overrides it, `buildSurveyTrustInput` projects the claim to Surface
+outcome overrides it, `buildSurveyTrustBundle` projects the claim to Surface
 status `"disputed"` and records a `"candidate-conflict"` verification event.
 
 
@@ -594,11 +594,11 @@ SHA-256 over that JSON. The result should equal
 Survey-specific anchor metadata, and a source/time pointer for display. Claims
 without a selected review outcome are not anchored by `{ reviewProofs: true }`.
 
-When the Surface projection proof option is enabled, `buildSurveyTrustInput`
+When the Surface projection proof option is enabled, `buildSurveyTrustBundle`
 will attach the same kind of anchor to the projected reviewed claim:
 
 ```ts
-const trustInput = buildSurveyTrustInput(surveyInput, { reviewProofs: true });
+const trustBundle = buildSurveyTrustBundle(surveyInput, { reviewProofs: true });
 ```
 
 The proof provides hash-only tamper evidence for the Survey review/provenance
@@ -644,3 +644,282 @@ reviewOutcome: {
   comfortZoneNote: "Renewal clause interpretation requires specialist counsel.",
 },
 ```
+
+
+## Inquiry mappings
+
+An **InquiryMapping** is the durable reviewed artifact that records "this
+natural-language question maps to this canonical claim or derivation rule."
+Mappings are memoized; answers are never cached.  Every answer recomputes from
+the live TrustBundle state at resolution time (ADR 0003 §6).
+
+A mapping proposal is a reviewable record with provenance.  The proposal goes
+through Survey's existing candidate → review machinery; no mapping is accepted
+silently (ADR 0003 §4).
+
+```ts
+import {
+  applyAutoAcceptPolicy,
+  applyMappingReview,
+  lookupMapping,
+  normalizeQuestion,
+  proposalsToCandidateSet,
+  referenceMappingProposer,
+  resolveQuestion,
+} from "@kontourai/survey";
+import type { TrustBundle, DerivationRule } from "@kontourai/surface";
+
+// 1. Normalise — deterministic, exact-text memoization (not semantic matching)
+const normalized = normalizeQuestion("Is entity-1 ACTIVE?");
+// → "is entity-1 active"
+
+// 2. Propose — pluggable; use your own proposer in production
+const proposals = referenceMappingProposer.propose(
+  "is entity-1 active",
+  { bundle, rules },
+);
+
+// 3. Project into Survey candidate/review machinery
+const { candidateSet, candidates } = proposalsToCandidateSet(
+  "is entity-1 active",
+  proposals,
+);
+// candidateSet.status is "needs-review" when proposals agree,
+// "conflict" when they disagree.
+
+// 4a. Human review path
+const reviewOutcome = {
+  id: "review-1",
+  candidateSetId: candidateSet.id,
+  candidateId: candidates[0]!.id,
+  status: "verified" as const,
+  actor: "reviewer@example.test",
+  reviewedAt: new Date().toISOString(),
+};
+const mapping = applyMappingReview(candidateSet, reviewOutcome);
+
+// 4b. Auto-accept policy path (proposals at or above threshold → "assumed")
+const autoMappings = applyAutoAcceptPolicy(proposals, { minConfidence: 0.85 });
+
+// 5. Resolve — looks up mapping by exact normalized text; answer always live
+const record = resolveQuestion(bundle, "is entity-1 active", {
+  mappings: [mapping],
+  rules,
+  now: new Date(),
+  askedBy: "consumer-actor",
+});
+// record.outcome: "matched" | "derived" | "unsupported"
+// Rejected mappings are remembered but never resolve; lookupRejectedMapping
+// checks whether a question was previously rejected.
+```
+
+Key contracts:
+
+- `normalizeQuestion` is exact normalized-text memoization — two questions with
+  different wording but the same meaning are NOT matched here; a MappingProposer
+  handles that.
+- Rejected mappings are remembered and prevent re-proposing without escalation.
+  Call `lookupRejectedMapping` to distinguish "never seen" from "previously
+  rejected."
+- `resolveQuestion` never caches the answer; it always calls `resolveInquiry`
+  on the live bundle.
+- `proposalsToCandidateSet` uses `RawSourceKind: "inquiry-question"` and the
+  normalized question as the CandidateSet target, so mapping candidates flow
+  through the same workbench as all other Survey candidates.
+- `buildMappingReviewItems` produces ReviewItem payloads for the existing
+  workbench; no UI changes required.
+
+
+## Agent-utterance producer profile
+
+`surveyAgentUtterance` is Survey used as a producer pointed at agent-generated
+text instead of structured sources.  Each statement the extractor finds in agent
+prose is resolved against the TrustBundle via the Inquiry pipeline, and the
+result is a per-statement badge.
+
+This is the "spell-check for evidence" integration point.  Flow-agent hook
+wiring (connecting this function to a live agent output pipeline) is out of scope
+for this module and lives in the flow-agents repo.
+
+```ts
+import {
+  surveyAgentUtterance,
+  referenceUtteranceExtractor,
+} from "@kontourai/survey";
+import type { UtteranceClaimExtractor } from "@kontourai/survey";
+
+// Use a domain-aware extractor in production; the reference extractor
+// is for tests only (it sets subjectType: "unknown").
+const report = await surveyAgentUtterance(
+  "entity-1 registration-status is ACTIVE and coverage-score is 95",
+  referenceUtteranceExtractor,
+  {
+    bundle,
+    mappings,   // optional; enables mapping-based resolution
+    rules,      // optional derivation rules
+    now: new Date(),
+    agentId: "agent-run-1234",
+  },
+);
+
+// report.source.kind === "agent-utterance"
+// report.source.locatorScheme === "text-span"
+for (const stmt of report.statements) {
+  console.log(stmt.badge, stmt.target, stmt.excerpt);
+  // badge: "verified" | "assumed" | "stale" | "disputed" | "rejected" | "unsupported"
+}
+```
+
+Key contracts:
+
+- The `RawSource` for the utterance uses `kind: "agent-utterance"` and
+  `locatorScheme: "text-span"`.  Each extracted statement carries a
+  `text-span:<start>-<end>` locator on its Extraction record.
+- The `UtteranceClaimExtractor` interface is pluggable.  Provide a
+  domain-aware extractor that emits the correct `subjectType` for canonical
+  key matching.  The reference extractor always emits `subjectType: "unknown"`
+  and is only suitable for tests.
+- Badges derive directly from the InquiryRecord outcome and answer status.
+  `"unsupported"` means either the outcome is unsupported or the answer status
+  is absent — the gap is honest and recordable rather than silently treated as
+  passing.
+- `surveyAgentUtterance` is `async` to support async extractors, but it works
+  equally well with synchronous extractors.
+
+---
+
+## Schema Mapping
+
+The schema-mapping producer profile is the **evidenced-ontology layer**: every cross-system field mapping shows its work via the standard Survey chain rather than unaudited config.  Each mapping proposal carries schema-doc excerpts, a confidence score, a rationale, and the name of the extractor that produced it.  Nothing is accepted until it flows through review.
+
+### Core types
+
+```ts
+import type {
+  MappingProposalRecord,
+  ReviewedMapping,
+  SchemaMappingExtractor,
+  SchemaMappingOptions,
+  SystemFieldRef,
+} from "@kontourai/survey";
+```
+
+**`SystemFieldRef`** — a stable reference to one field within one system's schema:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `system` | `string` | System identifier (e.g. `"crm"`, `"erp"`) |
+| `entity` | `string` | Entity/table/resource name within that system |
+| `field` | `string` | Field/column/attribute name |
+| `locator?` | `string` | Structural locator within a schema document |
+
+**`MappingProposalRecord`** — the "show your work" record for one proposed field link:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Stable identifier |
+| `sourceField` | `SystemFieldRef` | The source field |
+| `targetField` | `SystemFieldRef` | The target field |
+| `relation` | `"equivalent" \| "subsumes" \| "converts"` | Semantic relation |
+| `conversion?` | `{ factor?, offset?, note? }` | Numeric conversion (only for `"converts"`) |
+| `evidence` | `Array<{ system, excerpt }>` | Schema-document excerpts from each system |
+| `confidence` | `number` | Extractor confidence 0–1 |
+| `rationale` | `string` | Human-readable rationale |
+| `proposedBy` | `string` | Extractor name |
+| `proposedAt` | `string` | ISO 8601 timestamp |
+
+### SchemaMappingExtractor interface
+
+```ts
+export interface SchemaMappingExtractor {
+  name: string;
+  extract(context: {
+    systems: Array<{ system: string; schemaText: string }>;
+  }): MappingProposalRecord[] | Promise<MappingProposalRecord[]>;
+}
+```
+
+The extractor is pluggable.  Implementations may be deterministic (like `referenceSchemaExtractor`), embedding-based, or LLM-backed — but they are always **proposers**: their output carries full provenance and goes through review before it counts.
+
+A `referenceSchemaExtractor` is exported for tests; it is a **reference implementation only** (field-name exact-match, not suitable for production).
+
+### surveySchemaMapping
+
+```ts
+import { surveySchemaMapping, referenceSchemaExtractor } from "@kontourai/survey";
+
+const { surveyInput, proposals, candidateSets } = await surveySchemaMapping(
+  {
+    systems: [
+      { system: "crm", schemaText: "Contact.email:string\nContact.phone:string" },
+      { system: "erp", schemaText: "Customer.email:string\nCustomer.phone:string" },
+    ],
+  },
+  referenceSchemaExtractor,
+  { autoAcceptMinConfidence: 0.85 },  // optional comfort-zone threshold
+);
+```
+
+The function runs the extractor and projects proposals into the standard Survey chain:
+
+- One `RawSource` per system schema (`kind: "system-schema"`, `locatorScheme: "structured-field"`).
+- One `Extraction` and one `Candidate` per proposal.
+- One `CandidateSet` per field pair:
+  - `status: "conflict"` when proposals for the same pair disagree on `relation`.
+  - `status: "needs-review"` otherwise.
+- One `ReviewOutcome` (`status: "assumed"`, `actor: "auto-accept-policy"`) per non-conflicting candidate set whose top confidence is at or above `autoAcceptMinConfidence`.  Conflicting sets are never auto-accepted.
+
+### mappingReviewToSurface
+
+```ts
+import { mappingReviewToSurface } from "@kontourai/survey";
+import type { ReviewedMapping } from "@kontourai/survey";
+
+const bundle = mappingReviewToSurface(reviewedMappings, {
+  source: "schema-mapping.reviewed",
+  generatedAt: new Date().toISOString(),
+});
+```
+
+For each accepted mapping (`status: "verified"` or `"assumed"`) the bundle contains **both**:
+
+1. **A `Claim`**: `subjectType: "system-field"`, `fieldOrBehavior: "maps-to"`.  Disputing this claim caps the downstream answer through the weakest-link rule.
+2. **An `IdentityLink`**: links the source and target system-field subjects by `subjectType: "system-field"` and `subjectId: "<system>::<entity>::<field>"`.  Sets `relation` and `conversion` from the proposal, and `mappingClaimId` pointing at the claim above.
+
+Rejected mappings are omitted from the bundle.  Use `buildSurveyTrustBundle` on the original `SurveyInput` if you need an audit trail that includes rejections.
+
+### Cross-system resolution and weakest-link capping
+
+Once a reviewed mapping bundle is merged with domain data claims, `resolveInquiry` from `@kontourai/surface` can resolve a system-B field inquiry using system-A's claim:
+
+```ts
+import { resolveInquiry } from "@kontourai/surface";
+
+// bundle contains: mapping claim + identity link + crm data claim
+const record = resolveInquiry(bundle, {
+  id: "inquiry-1",
+  question: "What is the email for erp Customer?",
+  target: {
+    subjectType: "system-field",
+    subjectId: "erp::Customer::email",
+    fieldOrBehavior: "value",
+  },
+  askedBy: "consumer",
+  askedAt: new Date().toISOString(),
+});
+
+// record.outcome === "matched"
+// record.answer.value === "alice@example.com"  (from crm claim, traversed via link)
+// record.answer.status — capped by the mapping claim's derived status
+```
+
+**Weakest-link rule**: if the mapping claim is disputed (or has any lower-trust event as its latest event), the resolved answer status is capped to `"disputed"` regardless of the source data claim's status.
+
+### Key contracts
+
+- `RawSource.kind` is `"system-schema"` for all schema sources.  `locatorScheme` is `"structured-field"`.
+- `IdentityLink.subjects` use `subjectType: "system-field"` and `subjectId` in the form `"<system>::<entity>::<field>"`.
+- `IdentityLink.mappingClaimId` must point at a claim present in the same bundle; `resolveInquiry` uses it to compute the weakest-link ceiling.
+- The `SchemaMappingExtractor` interface is synchronous or async; `surveySchemaMapping` always awaits it.
+- Auto-accept mirrors `applyAutoAcceptPolicy` in `inquiry-mapping`: non-conflicting proposals above the threshold are accepted as `"assumed"`, never as `"verified"`.  Conflicts require explicit human review.
+- `referenceSchemaExtractor` is deterministic and test-only.  Its matching strategy (exact field-name, optional type-token match) is intentionally simple and transparent.

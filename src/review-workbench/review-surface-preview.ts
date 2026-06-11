@@ -211,7 +211,7 @@ function portableAuthorityTrace(value: unknown): PreviewAuthorityTrace {
     return {
       status: "provided",
       label: "Portable authority trace provided",
-      detail: `${value.length} authority trace entr${value.length === 1 ? "y" : "ies"} supplied by the fixture.`,
+      detail: `${value.length} authority trace entr${value.length === 1 ? "y" : "ies"} supplied by the example.`,
     };
   }
 

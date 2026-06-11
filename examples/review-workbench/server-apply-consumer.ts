@@ -1,4 +1,4 @@
-import { facilityCredentialReviewItemFixture } from "../../src/review-workbench/review-workbench-data.js";
+import { facilityCredentialReviewItemExample } from "../../src/review-workbench/review-workbench-data.js";
 import {
   deriveReviewSessionApplyResultForSnapshot,
   type ReviewQueueSessionState,
@@ -83,8 +83,8 @@ export function prepareFacilityCredentialServerApply(input: {
   };
 }
 
-export const facilityCredentialCurrentRecordFixture: FacilityCredentialRecord = {
+export const facilityCredentialCurrentRecordExample: FacilityCredentialRecord = {
   id: "facility-credential-record-1",
-  credential: facilityCredentialReviewItemFixture.spec.candidates.find((candidate) => candidate.role === "current")?.value,
+  credential: facilityCredentialReviewItemExample.spec.candidates.find((candidate) => candidate.role === "current")?.value,
   appliedReviewItemNames: [],
 };

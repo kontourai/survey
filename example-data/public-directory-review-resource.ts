@@ -1,7 +1,7 @@
 import type { ReviewDecision, ReviewItem } from "../src/index.js";
 import { reviewResourceApiVersion } from "../src/index.js";
 
-export const publicDirectoryReviewItemFixture = {
+export const publicDirectoryReviewItemExample = {
   apiVersion: reviewResourceApiVersion,
   kind: "ReviewItem",
   metadata: {
@@ -132,7 +132,7 @@ export const publicDirectoryReviewItemFixture = {
   },
 } satisfies ReviewItem;
 
-export const publicDirectoryReviewDecisionFixture = {
+export const publicDirectoryReviewDecisionExample = {
   apiVersion: reviewResourceApiVersion,
   kind: "ReviewDecision",
   metadata: {

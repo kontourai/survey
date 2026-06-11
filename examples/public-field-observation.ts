@@ -1,5 +1,5 @@
-import { buildTrustReport, validateTrustInput } from "@kontourai/surface";
-import { buildSurveyTrustInput, SurveyInputBuilder } from "../src/index.js";
+import { buildTrustReport, validateTrustBundle } from "@kontourai/surface";
+import { buildSurveyTrustBundle, SurveyInputBuilder } from "../src/index.js";
 
 const observedAt = "2026-05-31T16:00:00.000Z";
 
@@ -41,7 +41,7 @@ const surveyInput = new SurveyInputBuilder({
   })
   .build();
 
-const trustInput = validateTrustInput(buildSurveyTrustInput(surveyInput));
-const report = buildTrustReport(trustInput);
+const trustBundle = validateTrustBundle(buildSurveyTrustBundle(surveyInput));
+const report = buildTrustReport(trustBundle);
 
 console.log(JSON.stringify(report.summary, null, 2));

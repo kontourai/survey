@@ -1,17 +1,17 @@
 # Review Workbench Prototype
 
-The Survey review workbench prototype is a fixture-backed browser example for
+The Survey review workbench prototype is a example-backed browser demo for
 inspecting one current/proposed `ReviewItem` and generating a
 `ReviewDecision`-shaped payload in local memory.
 
 The reusable implementation lives under `src/review-workbench/` and is exported
 as `@kontourai/survey/review-workbench`. The standalone browser demo remains
 under `examples/review-workbench/` as a thin bootstrap plus page-owned assets.
-The workbench uses `publicDirectoryReviewItemFixture` from a browser-safe data
+The workbench uses `publicDirectoryReviewItemExample` from a browser-safe data
 module that intentionally avoids package barrel imports and Node-only
 dependencies, and `npm run check:review-workbench` fails if its `ReviewItem`
-data drifts from the canonical `fixtures/public-directory-review-resource.ts`
-fixture. The page renders the current and proposed candidates, source URL and
+data drifts from the canonical `example-data/public-directory-review-resource.ts`
+example. The page renders the current and proposed candidates, source URL and
 source ref, locator and excerpt, extraction confidence, candidate values,
 reviewer note, decision controls, decision effect, a compact Surface preview,
 and generated JSON payload.
@@ -33,9 +33,9 @@ The package check for prototype artifacts is:
 npm run check:review-workbench
 ```
 
-This is a static artifact and fixture-provenance guard. It confirms the built
-example files exist, the browser-safe fixture matches the canonical ReviewItem
-fixture, and Node-only imports are absent from the built example modules. It is
+This is a static artifact and example-provenance guard. It confirms the built
+example files exist, the browser-safe example matches the canonical ReviewItem
+example, and Node-only imports are absent from the built example modules. It is
 not browser/UI evidence for responsive behavior; browser evidence is collected
 separately with Playwright.
 
@@ -46,7 +46,7 @@ A sanitized copied producer proposal can be adapted into the same `ReviewItem`
 shape without adding product-specific workbench branches; the consumer examples
 under `examples/review-workbench/` show the pattern.
 
-The queue fixture also includes a generic regulated rule-conflict `ReviewItem`
+The example queue also includes a generic regulated rule-conflict `ReviewItem`
 modeled after a downstream rules-management proof. It uses the same current /
 proposed candidate roles, source locator, extraction confidence, producer
 policy, and projection hints as the public-directory example. Survey code does
@@ -88,7 +88,7 @@ The preview is intentionally small and labelled. It shows:
 - Unselected candidate history: the candidate values not selected by the
   decision.
 - Source evidence: source URL/ref, excerpt, extraction details, and visible
-  `sourceAuthority` metadata when the fixture provides it.
+  `sourceAuthority` metadata when the example provides it.
 - Review event: actor, review time, status, rationale, and projected review
   outcome id.
 - Integrity posture: candidate set, raw source, extraction, and checksum fields
@@ -99,7 +99,7 @@ The preview is intentionally small and labelled. It shows:
 `sourceAuthority` is evidence metadata about the source, such as authority
 class, declaring system, and scope. It is displayed in source evidence but is
 not promoted into `authorityTrace`. An empty `authorityTrace` is not an error in
-this prototype; it means the fixture does not include portable actor/system
+this prototype; it means the example does not include portable actor/system
 authority trace data.
 
 The preview records source and review posture for projection. It does not

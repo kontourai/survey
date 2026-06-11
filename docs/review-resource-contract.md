@@ -51,7 +51,7 @@ replay and apply boundary.
 Producers own acquisition, parsing, candidate ranking, review UX, vertical
 policy, field catalogs, reviewer assignment, and operational state. Survey owns
 the portable source, extraction, candidate, review, claim target, and projection
-record shapes needed to build Surface `TrustInput`.
+record shapes needed to build a Surface Trust Bundle.
 
 Field ownership:
 
@@ -84,7 +84,7 @@ Session resource mapping and the snapshot-safe replay/export helpers are covered
 in detail in [`consumer-integration-guide.md`](consumer-integration-guide.md).
 
 Adapters should emit normal `SurveyInput` records and then call
-`buildSurveyTrustInput`. Review resources are a durable neutral contract for
+`buildSurveyTrustBundle`. Review resources are a durable neutral contract for
 review payloads, not a second Surface projection path.
 
 Rejected candidates and comfort-zone review posture are separate signals.
@@ -95,19 +95,19 @@ not be modeled as `withinComfortZone: false` just to produce
 explicitly records that the conclusion is outside their authority or domain
 comfort and needs a different authority to confirm.
 
-## Fixtures
+## Examples
 
-The public-directory fixture demonstrates a current/proposed field review. The
-regulated-document fixture demonstrates multi-candidate source-version and
-computed roles without requiring current/proposed semantics. Both fixtures are
+The public-directory example demonstrates a current/proposed field review. The
+regulated-document example demonstrates multi-candidate source-version and
+computed roles without requiring current/proposed semantics. Both examples are
 plain serializable TypeScript objects and avoid private downstream product
 names.
 
 ## Prototype
 
 See [`review-workbench-prototype.md`](review-workbench-prototype.md) for the
-fixture-backed browser prototype that renders a browser-safe copy of the
-public-directory `ReviewItem`, guarded against drift from the canonical fixture,
+example-backed browser prototype that renders a browser-safe copy of the
+public-directory `ReviewItem`, guarded against drift from the canonical example,
 and emits local in-memory `ReviewDecision` payloads for accept proposed, keep
 current, and reject proposed decisions.
 

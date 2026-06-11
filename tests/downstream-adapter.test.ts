@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { downstreamPublicDirectoryProposalFixture } from "../fixtures/downstream-public-directory-proposal.js";
+import { downstreamPublicDirectoryProposalExample } from "../example-data/downstream-public-directory-proposal.js";
 import { downstreamPublicDirectoryProposalToReviewItem } from "../examples/review-workbench/downstream-public-directory-adapter.js";
 import {
   buildReviewDecision,
@@ -12,7 +12,7 @@ import { reviewResourceApiVersion, type ReviewCandidate } from "../src/review-re
 
 describe("downstream public-directory adapter example", () => {
   it("maps a sanitized downstream proposal to a valid ReviewItem", () => {
-    const item = downstreamPublicDirectoryProposalToReviewItem(downstreamPublicDirectoryProposalFixture);
+    const item = downstreamPublicDirectoryProposalToReviewItem(downstreamPublicDirectoryProposalExample);
     const current = candidateByRole(item.spec.candidates, "current");
     const proposed = candidateByRole(item.spec.candidates, "proposed");
 
@@ -44,7 +44,7 @@ describe("downstream public-directory adapter example", () => {
 
   it("omits rejected-proposal metadata for the current candidate on approved proposals", () => {
     const item = downstreamPublicDirectoryProposalToReviewItem({
-      ...downstreamPublicDirectoryProposalFixture,
+      ...downstreamPublicDirectoryProposalExample,
       id: "proposal-public-approved",
       status: "APPROVED",
       reviewerNotes: "Accepted proposed registration status.",
@@ -62,7 +62,7 @@ describe("downstream public-directory adapter example", () => {
 
   it("keeps pending proposals neutral without selected-current rejection semantics", () => {
     const item = downstreamPublicDirectoryProposalToReviewItem({
-      ...downstreamPublicDirectoryProposalFixture,
+      ...downstreamPublicDirectoryProposalExample,
       id: "proposal-public-pending",
       status: "PENDING",
       reviewedAt: null,
@@ -86,7 +86,7 @@ describe("downstream public-directory adapter example", () => {
 
   it("maps skipped proposals as neutral needs-review items without rejection policy", () => {
     const item = downstreamPublicDirectoryProposalToReviewItem({
-      ...downstreamPublicDirectoryProposalFixture,
+      ...downstreamPublicDirectoryProposalExample,
       id: "proposal-public-skipped",
       status: "SKIPPED",
       reviewedAt: "2026-06-01T17:20:00.000Z",
@@ -109,7 +109,7 @@ describe("downstream public-directory adapter example", () => {
   });
 
   it("can render through the existing workbench without product branches", () => {
-    const item = downstreamPublicDirectoryProposalToReviewItem(downstreamPublicDirectoryProposalFixture);
+    const item = downstreamPublicDirectoryProposalToReviewItem(downstreamPublicDirectoryProposalExample);
     const html = renderReviewWorkbenchHtml({
       ...initialReviewWorkbenchState(),
       item,
@@ -128,7 +128,7 @@ describe("downstream public-directory adapter example", () => {
   });
 
   it("builds workbench ReviewDecision payloads for accept proposed, keep current, and reject proposed", () => {
-    const item = downstreamPublicDirectoryProposalToReviewItem(downstreamPublicDirectoryProposalFixture);
+    const item = downstreamPublicDirectoryProposalToReviewItem(downstreamPublicDirectoryProposalExample);
     const current = candidateByRole(item.spec.candidates, "current");
     const proposed = candidateByRole(item.spec.candidates, "proposed");
 

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildTrustReport, validateTrustInput } from "@kontourai/surface";
+import { buildTrustReport, validateTrustBundle } from "@kontourai/surface";
 import {
   buildSurveyLearningProjections,
-  buildSurveyTrustInput,
+  buildSurveyTrustBundle,
   type LearningProjection,
   type LearningProjectionKind,
   type SurveyInput,
@@ -264,7 +264,7 @@ describe("Survey learning projections", () => {
       note: "Specialist authority should confirm this posture.",
     });
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(input)));
     assert.equal(report.events[0]?.notes, "Assumed from registry source.");
     assert.ok(!report.events[0]?.notes?.includes("Specialist authority should confirm"));
   });
@@ -403,7 +403,7 @@ describe("Survey learning projections", () => {
     });
   });
 
-  it("keeps learning projections separate from Surface TrustInput semantics", () => {
+  it("keeps learning projections separate from Surface TrustBundle semantics", () => {
     const input = baseSurveyInput({
       escalations: [{
         id: "escalation.attached",
@@ -416,10 +416,10 @@ describe("Survey learning projections", () => {
       }],
     });
 
-    const before = buildSurveyTrustInput(input);
+    const before = buildSurveyTrustBundle(input);
     const projections = buildSurveyLearningProjections(input);
-    const after = buildSurveyTrustInput(input);
-    const report = buildTrustReport(validateTrustInput(after));
+    const after = buildSurveyTrustBundle(input);
+    const report = buildTrustReport(validateTrustBundle(after));
     const escalationEvent = report.events.find((event) => event.method === "candidate-escalation");
 
     assert.deepEqual(after, before);

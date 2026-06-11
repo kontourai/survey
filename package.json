@@ -18,6 +18,10 @@
   },
   "exports": {
     ".": "./dist/src/index.js",
+    "./anthropic": {
+      "types": "./dist/src/anthropic.d.ts",
+      "default": "./dist/src/anthropic.js"
+    },
     "./review-workbench": {
       "types": "./dist/src/review-workbench/review-workbench.d.ts",
       "default": "./dist/src/review-workbench/review-workbench.js"
@@ -28,14 +32,14 @@
     },
     "./review-workbench.css": "./dist/src/review-workbench/review-workbench.css",
     "./review-workbench/standalone.css": "./dist/src/review-workbench/review-workbench.standalone.css",
-    "./fixtures/public-field-review": "./dist/fixtures/public-field-review.js",
-    "./fixtures/corrected-document-candidates": "./dist/fixtures/corrected-document-candidates.js",
-    "./fixtures/public-directory-review-resource": "./dist/fixtures/public-directory-review-resource.js",
-    "./fixtures/regulated-document-review-resource": "./dist/fixtures/regulated-document-review-resource.js"
+    "./example-data/public-field-review": "./dist/example-data/public-field-review.js",
+    "./example-data/corrected-document-candidates": "./dist/example-data/corrected-document-candidates.js",
+    "./example-data/public-directory-review-resource": "./dist/example-data/public-directory-review-resource.js",
+    "./example-data/regulated-document-review-resource": "./dist/example-data/regulated-document-review-resource.js"
   },
   "files": [
     "dist/examples/",
-    "dist/fixtures/",
+    "dist/example-data/",
     "dist/src/",
     "README.md"
   ],
@@ -57,9 +61,18 @@
     "docs:check": "npm run docs:build && node scripts/docs-site/check-links.ts"
   },
   "dependencies": {
-    "@kontourai/surface": "^0.5.1"
+    "@kontourai/surface": "^0.9.0"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/sdk": ">=0.20.0"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/sdk": {
+      "optional": true
+    }
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.54.0",
     "@kontourai/console-kit": "^0.1.0",
     "@playwright/test": "^1.60.0",
     "@types/node": "^25.6.0",

@@ -2,8 +2,8 @@ import type { SurveyInput } from "../src/index.js";
 
 const generatedAt = "2026-05-31T16:00:00.000Z";
 
-export const publicFieldReviewFixture: SurveyInput = {
-  source: "survey.fixture.public-field-review",
+export const publicFieldReviewExample: SurveyInput = {
+  source: "survey.example.public-field-review",
   generatedAt,
   rawSources: [
     {

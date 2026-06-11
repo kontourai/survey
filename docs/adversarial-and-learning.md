@@ -127,16 +127,16 @@ in Surface with a `candidate-escalation` event.
 ## Learning projections
 
 Use `buildSurveyLearningProjections(input)` when producer or review tooling needs
-workflow/evaluation signals without changing Surface `TrustInput`.
+workflow/evaluation signals without changing Surface `TrustBundle`.
 
 ```ts
 import {
   buildSurveyLearningProjections,
-  buildSurveyTrustInput,
+  buildSurveyTrustBundle,
 } from "@kontourai/survey";
 
 const learning = buildSurveyLearningProjections(surveyInput);
-const trustInput = buildSurveyTrustInput(surveyInput);
+const trustBundle = buildSurveyTrustBundle(surveyInput);
 ```
 
 Learning projections are product-neutral `learning.*` records. Survey emits
@@ -155,4 +155,4 @@ tooling can route but Surface cannot attach to a claim event.
 These projections are producer/review workflow and evaluation signals. They are
 not claims about truth or veracity, not Surface claim status, not evidence, and
 not verification events. Calling `buildSurveyLearningProjections` does not alter
-`buildSurveyTrustInput`, trust status derivation, or escalation event projection.
+`buildSurveyTrustBundle`, trust status derivation, or escalation event projection.

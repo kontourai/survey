@@ -1,8 +1,8 @@
 import { reviewResourceApiVersion, type ReviewItem } from "../review-resource.js";
 
-// Browser-safe mirror of fixtures/public-directory-review-resource.ts.
-// scripts/check-review-workbench.cjs fails if this data drifts from the canonical fixture.
-export const publicDirectoryReviewItemFixture = {
+// Browser-safe mirror of example-data/public-directory-review-resource.ts.
+// scripts/check-review-workbench.cjs fails if this data drifts from the canonical example.
+export const publicDirectoryReviewItemExample = {
   apiVersion: reviewResourceApiVersion,
   kind: "ReviewItem",
   metadata: {
@@ -133,7 +133,7 @@ export const publicDirectoryReviewItemFixture = {
   },
 } satisfies ReviewItem;
 
-export const regulatedRuleConflictReviewItemFixture = {
+export const regulatedRuleConflictReviewItemExample = {
   apiVersion: reviewResourceApiVersion,
   kind: "ReviewItem",
   metadata: {
@@ -270,7 +270,7 @@ export const regulatedRuleConflictReviewItemFixture = {
   },
 } satisfies ReviewItem;
 
-export const facilityCredentialReviewItemFixture = {
+export const facilityCredentialReviewItemExample = {
   apiVersion: reviewResourceApiVersion,
   kind: "ReviewItem",
   metadata: {
@@ -435,21 +435,21 @@ function queueFixture(
   feedbackTags: string[],
 ): ReviewItem {
   return {
-    ...publicDirectoryReviewItemFixture,
+    ...publicDirectoryReviewItemExample,
     metadata: {
-      ...publicDirectoryReviewItemFixture.metadata,
+      ...publicDirectoryReviewItemExample.metadata,
       name,
     },
     spec: {
-      ...publicDirectoryReviewItemFixture.spec,
+      ...publicDirectoryReviewItemExample.spec,
       target,
       selectedCandidateId: `${name}:candidate:current`,
       candidateSetStatus,
       producerPolicy: {
         feedbackTags,
       },
-      rationale: `Fixture-backed local review queue item for ${target}.`,
-      candidates: publicDirectoryReviewItemFixture.spec.candidates.map((candidate) => {
+      rationale: `Example-backed local review queue item for ${target}.`,
+      candidates: publicDirectoryReviewItemExample.spec.candidates.map((candidate) => {
         const role = candidate.role ?? "candidate";
         const value = role === "proposed" ? proposedValue : currentValue;
 
@@ -487,14 +487,14 @@ function queueFixture(
       }),
     },
     status: {
-      observedCandidateCount: publicDirectoryReviewItemFixture.status?.observedCandidateCount,
+      observedCandidateCount: publicDirectoryReviewItemExample.status?.observedCandidateCount,
       selectedCandidateId: `${name}:candidate:current`,
       reviewDecisionName: candidateSetStatus === "resolved" ? `${name}-resolved-decision` : undefined,
     },
   };
 }
 
-export const reviewWorkbenchQueueFixtures = [
+export const reviewWorkbenchQueueExamples = [
   queueFixture(
     "public-directory-hours",
     "hours",
@@ -511,7 +511,7 @@ export const reviewWorkbenchQueueFixtures = [
     "needs-review",
     ["contact-field", "source-conflict"],
   ),
-  publicDirectoryReviewItemFixture,
+  publicDirectoryReviewItemExample,
   queueFixture(
     "public-directory-address",
     "streetAddress",
@@ -528,5 +528,5 @@ export const reviewWorkbenchQueueFixtures = [
     "escalated",
     ["licensing", "manual-review-required"],
   ),
-  regulatedRuleConflictReviewItemFixture,
+  regulatedRuleConflictReviewItemExample,
 ] satisfies ReviewItem[];

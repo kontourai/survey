@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { publicDirectoryReviewItemFixture } from "../fixtures/public-directory-review-resource.js";
+import { publicDirectoryReviewItemExample } from "../example-data/public-directory-review-resource.js";
 import { reviewResourceApiVersion } from "../src/index.js";
 import {
   buildReviewDecision,
@@ -36,9 +36,9 @@ import {
   type ReviewWorkbenchDecision,
 } from "../src/review-workbench/review-workbench.js";
 import {
-  facilityCredentialReviewItemFixture,
-  regulatedRuleConflictReviewItemFixture,
-  reviewWorkbenchQueueFixtures,
+  facilityCredentialReviewItemExample,
+  regulatedRuleConflictReviewItemExample,
+  reviewWorkbenchQueueExamples,
 } from "../src/review-workbench/review-workbench-data.js";
 import type { ReviewDecision, ReviewItem, ReviewSessionEvent } from "../src/review-resource.js";
 
@@ -82,7 +82,7 @@ describe("review workbench prototype", () => {
       assert.ok(decision);
       assert.equal(decision.apiVersion, reviewResourceApiVersion);
       assert.equal(decision.kind, "ReviewDecision");
-      assert.equal(decision.spec.reviewItemName, publicDirectoryReviewItemFixture.metadata.name);
+      assert.equal(decision.spec.reviewItemName, publicDirectoryReviewItemExample.metadata.name);
       assert.equal(decision.spec.candidateId, entry.candidateId);
       assert.equal(decision.spec.status, entry.status);
       assert.equal(decision.spec.actor?.id, "review-workbench-operator");
@@ -130,13 +130,13 @@ describe("review workbench prototype", () => {
 
   it("renders structured candidate values without downstream pre-stringification", () => {
     const structuredItem: ReviewItem = {
-      ...publicDirectoryReviewItemFixture,
+      ...publicDirectoryReviewItemExample,
       spec: {
-        ...publicDirectoryReviewItemFixture.spec,
+        ...publicDirectoryReviewItemExample.spec,
         producerPolicy: {
           feedbackTags: ["structured-value", { producer: "downstream-reviewer" }],
         },
-        candidates: publicDirectoryReviewItemFixture.spec.candidates.map((candidate) => (
+        candidates: publicDirectoryReviewItemExample.spec.candidates.map((candidate) => (
           candidate.role === "proposed"
             ? {
                 ...candidate,
@@ -159,7 +159,7 @@ describe("review workbench prototype", () => {
   });
 
   it("builds generic presentation metadata with downstream display overrides", () => {
-    const item = publicDirectoryReviewItemFixture;
+    const item = publicDirectoryReviewItemExample;
     const presentation = buildReviewItemPresentation(item, {
       labelForTarget: (target) => target === "availabilityStatus" ? "Availability status" : undefined,
       summarizeValue: (value, context) => `${context.candidate.role ?? "candidate"}:${String(value).toLowerCase()}`,
@@ -185,16 +185,16 @@ describe("review workbench prototype", () => {
 
   it("builds saved result presentation without product-specific branches", () => {
     const session = {
-      ...initialReviewQueueSessionState([publicDirectoryReviewItemFixture]),
+      ...initialReviewQueueSessionState([publicDirectoryReviewItemExample]),
       decisionsByItemName: {
-        [publicDirectoryReviewItemFixture.metadata.name]: "accept-proposed" as const,
+        [publicDirectoryReviewItemExample.metadata.name]: "accept-proposed" as const,
       },
     };
     const result = buildReviewWorkbenchResultsFromSession(session)[0];
 
     assert.ok(result);
 
-    const presentation = buildReviewResultPresentation(result, publicDirectoryReviewItemFixture, {
+    const presentation = buildReviewResultPresentation(result, publicDirectoryReviewItemExample, {
       labelForTarget: () => "Availability status",
     });
 
@@ -223,7 +223,7 @@ describe("review workbench prototype", () => {
   });
 
   it("presents a non-product facility credential ReviewItem with nested structured values", () => {
-    const presentation = buildReviewItemPresentation(facilityCredentialReviewItemFixture, facilityCredentialPresentationAdapter());
+    const presentation = buildReviewItemPresentation(facilityCredentialReviewItemExample, facilityCredentialPresentationAdapter());
     const proposed = presentation.candidates.find((candidate) => candidate.candidate.role === "proposed");
 
     assert.equal(presentation.targetLabel, "Operating license credential");
@@ -240,7 +240,7 @@ describe("review workbench prototype", () => {
 
   it("renders facility credential presentation through the embedded workbench adapter", () => {
     const html = renderReviewWorkbenchHtml(
-      initialReviewWorkbenchState(facilityCredentialReviewItemFixture),
+      initialReviewWorkbenchState(facilityCredentialReviewItemExample),
       undefined,
       { presentationAdapter: facilityCredentialPresentationAdapter() },
     );
@@ -255,9 +255,9 @@ describe("review workbench prototype", () => {
 
   it("builds saved facility credential result presentation from replayed Survey decisions", () => {
     const session = {
-      ...initialReviewQueueSessionState([facilityCredentialReviewItemFixture]),
+      ...initialReviewQueueSessionState([facilityCredentialReviewItemExample]),
       decisionsByItemName: {
-        [facilityCredentialReviewItemFixture.metadata.name]: "accept-proposed" as const,
+        [facilityCredentialReviewItemExample.metadata.name]: "accept-proposed" as const,
       },
     };
     const events = buildReviewSessionEvents(session);
@@ -271,7 +271,7 @@ describe("review workbench prototype", () => {
 
     const presentation = buildReviewResultPresentation(
       result,
-      facilityCredentialReviewItemFixture,
+      facilityCredentialReviewItemExample,
       facilityCredentialPresentationAdapter(),
     );
 
@@ -290,12 +290,12 @@ describe("review workbench prototype", () => {
       },
     };
 
-    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueFixtures[0], session), "in-review");
-    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueFixtures[1], session), "pending");
-    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueFixtures[2], session), "resolved");
-    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueFixtures[3], session), "rejected");
-    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueFixtures[4], session), "escalated");
-    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueFixtures[5], session), "pending");
+    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueExamples[0], session), "in-review");
+    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueExamples[1], session), "pending");
+    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueExamples[2], session), "resolved");
+    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueExamples[3], session), "rejected");
+    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueExamples[4], session), "escalated");
+    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueExamples[5], session), "pending");
 
     const html = renderReviewWorkbenchHtml(session);
     assert.match(html, /data-testid="active-review-strip"/);
@@ -1210,7 +1210,7 @@ describe("review workbench prototype", () => {
 
   it("renders a regulated rule conflict ReviewItem without product-specific workbench branches", () => {
     const state = {
-      ...initialReviewWorkbenchState(regulatedRuleConflictReviewItemFixture),
+      ...initialReviewWorkbenchState(regulatedRuleConflictReviewItemExample),
       decision: "keep-current" as const,
       note: "Kept current value after reviewing the official source candidate.",
     };
@@ -1342,7 +1342,7 @@ describe("review workbench prototype", () => {
     };
     const store = createLocalStorageReviewSessionEventStore(storage);
     const queueSession = initialReviewQueueSessionState();
-    const singleItemSession = initialReviewQueueSessionState([publicDirectoryReviewItemFixture]);
+    const singleItemSession = initialReviewQueueSessionState([publicDirectoryReviewItemExample]);
     const events = buildReviewSessionEvents(queueSession);
 
     store.save(queueSession, events);
@@ -1364,7 +1364,7 @@ describe("review workbench prototype", () => {
     it(`handles mounted ${entry.decision} button clicks`, () => {
       const root = new ReviewWorkbenchTestRoot();
 
-      mountReviewWorkbench(root as unknown as HTMLElement, initialReviewQueueSessionState([publicDirectoryReviewItemFixture]));
+      mountReviewWorkbench(root as unknown as HTMLElement, initialReviewQueueSessionState([publicDirectoryReviewItemExample]));
       root.clickDecision(entry.decision);
 
       assert.match(root.html, new RegExp(escapeRegExp(entry.selectedText)));

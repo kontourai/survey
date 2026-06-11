@@ -1,4 +1,4 @@
-import type { Claim, Evidence, TrustInput, TrustStatus, VerificationEvent } from "@kontourai/surface";
+import type { Claim, Evidence, TrustBundle, TrustStatus, VerificationEvent } from "@kontourai/surface";
 import { buildReviewProofAnchor } from "./review-proof.js";
 import type {
   Candidate,
@@ -18,11 +18,11 @@ type PolicyStandardFields = {
   reference?: string;
 };
 
-export interface BuildSurveyTrustInputOptions {
+export interface BuildSurveyTrustBundleOptions {
   reviewProofs?: boolean;
 }
 
-export function buildSurveyTrustInput(input: SurveyInput, options: BuildSurveyTrustInputOptions = {}): TrustInput {
+export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyTrustBundleOptions = {}): TrustBundle {
   const rawSources = indexById(input.rawSources, "raw source");
   const extractions = indexById(input.extractions, "extraction");
   const candidateSets = indexById(input.candidateSets, "candidate set");

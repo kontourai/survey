@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildTrustReport, validateTrustInput } from "@kontourai/surface";
-import { correctedDocumentCandidatesFixture } from "../fixtures/corrected-document-candidates.js";
+import { buildTrustReport, validateTrustBundle } from "@kontourai/surface";
+import { correctedDocumentCandidatesExample } from "../example-data/corrected-document-candidates.js";
 import {
-  publicDirectoryReviewDecisionFixture,
-  publicDirectoryReviewItemFixture,
-} from "../fixtures/public-directory-review-resource.js";
-import { publicFieldReviewFixture } from "../fixtures/public-field-review.js";
-import { regulatedDocumentReviewItemFixture } from "../fixtures/regulated-document-review-resource.js";
+  publicDirectoryReviewDecisionExample,
+  publicDirectoryReviewItemExample,
+} from "../example-data/public-directory-review-resource.js";
+import { publicFieldReviewExample } from "../example-data/public-field-review.js";
+import { regulatedDocumentReviewItemExample } from "../example-data/regulated-document-review-resource.js";
 import {
-  buildSurveyTrustInput,
+  buildSurveyTrustBundle,
   type CandidateSet,
   type ClaimTarget,
   type Extraction,
@@ -26,8 +26,8 @@ import {
 
 describe("Review resource contract", () => {
   it("exports serializable ReviewItem and ReviewDecision resources", () => {
-    const item: ReviewItem = JSON.parse(JSON.stringify(publicDirectoryReviewItemFixture));
-    const decision: ReviewDecision = JSON.parse(JSON.stringify(publicDirectoryReviewDecisionFixture));
+    const item: ReviewItem = JSON.parse(JSON.stringify(publicDirectoryReviewItemExample));
+    const decision: ReviewDecision = JSON.parse(JSON.stringify(publicDirectoryReviewDecisionExample));
 
     assert.equal(item.apiVersion, reviewResourceApiVersion);
     assert.equal(item.kind, "ReviewItem");
@@ -44,14 +44,14 @@ describe("Review resource contract", () => {
         name: "example-review-session",
       },
       spec: {
-        reviewItemNames: [publicDirectoryReviewItemFixture.metadata.name],
+        reviewItemNames: [publicDirectoryReviewItemExample.metadata.name],
         actor: {
           id: "reviewer-1",
         },
         startedAt: "2026-06-04T00:00:00.000Z",
       },
       status: {
-        activeItemName: publicDirectoryReviewItemFixture.metadata.name,
+        activeItemName: publicDirectoryReviewItemExample.metadata.name,
         eventCount: 1,
         decisionCount: 0,
       },
@@ -83,7 +83,7 @@ describe("Review resource contract", () => {
   });
 
   it("validates a public-directory current/proposed review resource against existing records", () => {
-    const item = publicDirectoryReviewItemFixture;
+    const item = publicDirectoryReviewItemExample;
     const roles = new Set(item.spec.candidates.map((candidate) => candidate.role));
     const current = item.spec.candidates.find((candidate) => candidate.role === "current");
     const proposed = item.spec.candidates.find((candidate) => candidate.role === "proposed");
@@ -92,17 +92,17 @@ describe("Review resource contract", () => {
     assert.ok(current);
     assert.ok(proposed);
 
-    assertReviewCandidateMapsToSurveyRecord(current, publicFieldReviewFixture);
-    assertReviewCandidateMapsToSurveyRecord(proposed, publicFieldReviewFixture);
-    assertReviewDecisionMapsToSurveyRecord(publicDirectoryReviewDecisionFixture, publicFieldReviewFixture);
+    assertReviewCandidateMapsToSurveyRecord(current, publicFieldReviewExample);
+    assertReviewCandidateMapsToSurveyRecord(proposed, publicFieldReviewExample);
+    assertReviewDecisionMapsToSurveyRecord(publicDirectoryReviewDecisionExample, publicFieldReviewExample);
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(publicFieldReviewFixture)));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(publicFieldReviewExample)));
     assert.equal(report.summary.byStatus.verified, 1);
     assert.equal(report.summary.byStatus.proposed, 1);
   });
 
   it("validates a regulated-document multi-candidate resource without current/proposed roles", () => {
-    const item = regulatedDocumentReviewItemFixture;
+    const item = regulatedDocumentReviewItemExample;
     const roles: Array<string | undefined> = item.spec.candidates.map((candidate) => candidate.role);
 
     assert.equal(item.spec.candidates.length, 2);
@@ -112,10 +112,10 @@ describe("Review resource contract", () => {
     assert.ok(item.spec.candidates.every((candidate) => candidate.claimTarget.derivedFrom?.length === 2));
 
     item.spec.candidates.forEach((candidate) => {
-      assertReviewCandidateMapsToSurveyRecord(candidate, correctedDocumentCandidatesFixture);
+      assertReviewCandidateMapsToSurveyRecord(candidate, correctedDocumentCandidatesExample);
     });
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(correctedDocumentCandidatesFixture)));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(correctedDocumentCandidatesExample)));
     assert.ok(report.claims.some((claim) => claim.id === item.spec.candidates[0]?.projection?.claimId));
     assert.ok(report.claims.some((claim) => claim.id === item.spec.candidates[1]?.projection?.claimId));
   });

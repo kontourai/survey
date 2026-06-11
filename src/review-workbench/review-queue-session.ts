@@ -1,4 +1,4 @@
-import { publicDirectoryReviewItemFixture, reviewWorkbenchQueueFixtures } from "./review-workbench-data.js";
+import { publicDirectoryReviewItemExample, reviewWorkbenchQueueExamples } from "./review-workbench-data.js";
 import {
   reviewResourceApiVersion,
   type ReviewCandidate,
@@ -68,7 +68,7 @@ export const workbenchDecisionDefinitions = {
   },
 } satisfies Record<ReviewWorkbenchDecision, DecisionDefinition>;
 
-export function initialReviewWorkbenchState(item: ReviewItem = publicDirectoryReviewItemFixture): ReviewWorkbenchState {
+export function initialReviewWorkbenchState(item: ReviewItem = publicDirectoryReviewItemExample): ReviewWorkbenchState {
   return {
     item,
     note: "",
@@ -79,7 +79,7 @@ export function initialReviewWorkbenchState(item: ReviewItem = publicDirectoryRe
 }
 
 export function initialReviewQueueSessionState(
-  items: readonly ReviewItem[] = reviewWorkbenchQueueFixtures,
+  items: readonly ReviewItem[] = reviewWorkbenchQueueExamples,
 ): ReviewQueueSessionState {
   return {
     items,
