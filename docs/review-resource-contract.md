@@ -116,3 +116,28 @@ recommended consumer path from `ReviewItem` construction through persisted
 review events, exported results, and optional Surface projection. A generic
 review adapter builder is deliberately deferred until another producer proof
 shows repeated, policy-free Survey-shape friction.
+
+## Collection provenance
+
+A `ReviewDecision` can carry an `authorizing` block inside its spec (mapped
+from `ReviewOutcome.authorizing`). This block records how the reviewer was asked
+and what action they took — the testimony provenance that makes a decision
+self-contained for downstream admissibility checks.
+
+Three kinds are admissible: `explicit-statement` (reviewer typed a free-form
+statement), `exchange` (a prompt was shown and the reviewer responded — both
+halves required), and `authorized-action` (reviewer clicked a named action
+against a versioned prompt; requires `promptRef`, `renderedPrompt`, `action`,
+and `authorityRef`).
+
+**Vertical UIs inherit correct collection by using the workbench.** A UI that
+renders `ReviewItem` candidates and emits `ReviewDecision` payloads through
+Survey's workbench automatically produces correctly structured `authorized-action`
+blocks. The provenance logic lives in the workbench boundary, not in the vertical
+UI, so consumer products do not need to re-implement it. The `authorizing` field
+is optional; existing records without it remain valid.
+
+Validation is available via `validateAuthorizing(block)` from
+`@kontourai/survey`. It returns structured issues for transparency-gap reporting;
+it does not hard-block decisions. Gaps are flagged for human review, never
+silently resolved by model judgment.
