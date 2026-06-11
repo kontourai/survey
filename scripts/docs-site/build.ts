@@ -259,7 +259,7 @@ function landingContent(): string {
     </div>
     <div class="feature">
       <h3>One projection to Surface</h3>
-      <p><code>buildSurveyTrustInput</code> turns Survey records into <a href="https://kontourai.io/surface" rel="noopener">Surface</a> TrustInput. Surface owns claims, evidence, status, and trust reporting from there.</p>
+      <p><code>buildSurveyTrustBundle</code> turns Survey records into a <a href="https://kontourai.io/surface" rel="noopener">Surface</a> Trust Bundle. Surface owns claims, evidence, status, and trust reporting from there.</p>
     </div>
     <div class="feature">
       <h3>A review workbench you can embed</h3>
@@ -299,8 +299,8 @@ function landingContent(): string {
   })
   .build();
 
-const trustInput = validateTrustInput(buildSurveyTrustInput(surveyInput));
-const report = buildTrustReport(trustInput);</code></pre>
+const trustBundle = validateTrustBundle(buildSurveyTrustBundle(surveyInput));
+const report = buildTrustReport(trustBundle);</code></pre>
   <p><a class="button primary" href="record-contracts.html">Read the record contracts</a></p>
 </section>
 `;

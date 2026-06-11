@@ -77,8 +77,8 @@ const readme = readText("README.md");
 requireText("README.md", readme, "npm run setup:repo-hooks");
 requireText("README.md", readme, "npm run validate:repo-hooks");
 requireText("README.md", readme, "npm run verify");
-requireText("README.md", readme, "buildSurveyTrustInput");
-requireText("README.md", readme, "validateTrustInput");
+requireText("README.md", readme, "buildSurveyTrustBundle");
+requireText("README.md", readme, "validateTrustBundle");
 requireText("README.md", readme, "buildTrustReport");
 requireText("README.md", readme, "producer operational state outside Survey");
 

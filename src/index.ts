@@ -59,8 +59,8 @@ export type {
 } from "./reviewed-current-proposed-resolution.js";
 export { flowTrustArtifactFromReviewOutcome } from "./to-flow-artifact.js";
 export type { FlowTrustArtifact, FlowTrustArtifactOptions } from "./to-flow-artifact.js";
-export { buildSurveyTrustInput } from "./to-surface.js";
-export type { BuildSurveyTrustInputOptions } from "./to-surface.js";
+export { buildSurveyTrustBundle } from "./to-surface.js";
+export type { BuildSurveyTrustBundleOptions } from "./to-surface.js";
 export { buildSurveyLearningProjections } from "./learning-projections.js";
 export type {
   LearningProjection,
@@ -132,3 +132,31 @@ export type {
   UploadedDocumentSourceInput,
   WebPageSourceInput,
 } from "./raw-source.js";
+export {
+  applyAutoAcceptPolicy,
+  applyMappingReview,
+  buildMappingReviewItems,
+  lookupMapping,
+  lookupRejectedMapping,
+  normalizeQuestion,
+  proposalsToCandidateSet,
+  referenceMappingProposer,
+  resolveQuestion,
+} from "./inquiry-mapping.js";
+export type {
+  AutoAcceptPolicy,
+  InquiryMapping,
+  MappingProposal,
+  MappingProposer,
+} from "./inquiry-mapping.js";
+export {
+  referenceUtteranceExtractor,
+  surveyAgentUtterance,
+} from "./agent-utterance.js";
+export type {
+  ExtractedStatement,
+  StatementBadge,
+  UtteranceClaimExtractor,
+  UtteranceStatement,
+  UtteranceTrustReport,
+} from "./agent-utterance.js";

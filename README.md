@@ -16,14 +16,14 @@
 
 Every "verified" value in a data product has a story: where it was observed, what was extracted, what the alternatives were, who reviewed it, and what they decided. Most systems throw that story away the moment a human clicks approve — leaving a bare value nobody can re-inspect.
 
-Survey is the contract that keeps the story. Producers own acquisition, parsing, ranking, review UX, and vertical policy; Survey owns the portable record shapes for the **source → extraction → candidate → review → claim** chain, and projects them into [Surface](https://kontourai.io/surface) `TrustInput` — so downstream trust reports, consoles, and [Flow](https://kontourai.github.io/flow/) gates can see not just the value, but the evidence and the review posture behind it.
+Survey is the contract that keeps the story. Producers own acquisition, parsing, ranking, review UX, and vertical policy; Survey owns the portable record shapes for the **source → extraction → candidate → review → claim** chain, and projects them into [Surface](https://kontourai.io/surface) Trust Bundles — so downstream trust reports, consoles, and [Flow](https://kontourai.github.io/flow/) gates can see not just the value, but the evidence and the review posture behind it.
 
 Survey does not decide whether a real-world value is true. It preserves the producer's evidence and review discipline so something downstream can.
 
 ## What you get
 
 - **Typed record contracts** for raw sources, extractions, candidates, review outcomes, source-of-authority posture, repeated observations, resolutions, review proofs, and adversarial passes — every link in the evidence chain inspectable after the fact.
-- **One projection to Surface.** `buildSurveyTrustInput` turns Survey records into Surface `TrustInput`; Surface owns claims, evidence, status, and trust reporting from there.
+- **One projection to Surface.** `buildSurveyTrustBundle` turns Survey records into a Surface Trust Bundle; Surface owns claims, evidence, status, and trust reporting from there.
 - **An embeddable Review Workbench** — a framework-neutral UI for working a `ReviewItem` queue: current vs proposed values, source refs and excerpts, decision controls, and a live Surface preview.
 - **A server-owned apply boundary.** Review decisions are derived from pre-decision snapshots plus persisted events — never from browser-computed payloads — with freshness and replay checks built in.
 - **Adversarial-pass records** for high-stakes review loops, designed to serve as per-round evidence for [Flow's adversarial route-back pattern](https://kontourai.github.io/flow/gates-and-route-back.html#pattern-adversarial-review-with-a-defect-budget).
@@ -41,8 +41,8 @@ npm install @kontourai/survey @kontourai/surface
 ```
 
 ```ts
-import { buildTrustReport, validateTrustInput } from "@kontourai/surface";
-import { buildSurveyTrustInput, SurveyInputBuilder } from "@kontourai/survey";
+import { buildTrustReport, validateTrustBundle } from "@kontourai/surface";
+import { buildSurveyTrustBundle, SurveyInputBuilder } from "@kontourai/survey";
 
 const surveyInput = new SurveyInputBuilder({
   source: "example-producer:run-1",
@@ -81,8 +81,8 @@ const surveyInput = new SurveyInputBuilder({
   })
   .build();
 
-const trustInput = validateTrustInput(buildSurveyTrustInput(surveyInput));
-const report = buildTrustReport(trustInput);
+const trustBundle = validateTrustBundle(buildSurveyTrustBundle(surveyInput));
+const report = buildTrustReport(trustBundle);
 ```
 
 One observation, one chain: the page it came from, what the extractor read, who verified it, and the claim it supports — projected into a Surface trust report with the evidence attached.
@@ -90,8 +90,8 @@ One observation, one chain: the page it came from, what the extractor read, who 
 ## The producer validation path
 
 1. Build Survey observations with source, extraction, candidate, review, and claim records.
-2. Call `buildSurveyTrustInput` to project the Survey records into Surface `TrustInput`.
-3. Call Surface `validateTrustInput` on the projected input.
+2. Call `buildSurveyTrustBundle` to project the Survey records into a Surface Trust Bundle.
+3. Call Surface `validateTrustBundle` on the Trust Bundle.
 4. Optionally call public Surface report APIs such as `buildTrustReport` to inspect claims, evidence, status, gaps, and metadata.
 
 Keep producer operational state outside Survey. Queue status, reviewer form state, retries, source caches, and product policy decisions belong in the producer's own data model. Survey carries only the portable source, extraction, candidate, review, and claim projection records needed by Surface.

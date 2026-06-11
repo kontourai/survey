@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildTrustReport, validateTrustInput } from "@kontourai/surface";
+import { buildTrustReport, validateTrustBundle } from "@kontourai/surface";
 import { correctedDocumentCandidatesFixture } from "../fixtures/corrected-document-candidates.js";
 import { publicFieldReviewFixture } from "../fixtures/public-field-review.js";
 import {
   buildCanonicalReviewProofPayload,
-  buildSurveyTrustInput,
+  buildSurveyTrustBundle,
   candidateReviewRecord,
   apiRecordSource,
   fieldObservation,
@@ -24,8 +24,8 @@ import {
 
 describe("Survey Surface projection", () => {
   it("projects a reviewed public field into valid Surface trust input", () => {
-    const input = buildSurveyTrustInput(publicFieldReviewFixture);
-    const valid = validateTrustInput(input);
+    const input = buildSurveyTrustBundle(publicFieldReviewFixture);
+    const valid = validateTrustBundle(input);
     const report = buildTrustReport(valid);
 
     assert.equal(report.claims.length, 2);
@@ -36,8 +36,8 @@ describe("Survey Surface projection", () => {
   });
 
   it("optionally attaches recomputable review proof anchors to reviewed Surface claims", () => {
-    const input = buildSurveyTrustInput(publicFieldReviewFixture, { reviewProofs: true });
-    const valid = validateTrustInput(input);
+    const input = buildSurveyTrustBundle(publicFieldReviewFixture, { reviewProofs: true });
+    const valid = validateTrustBundle(input);
     const report = buildTrustReport(valid);
     const claim = report.claims.find((item) => item.id === "public-field.entity-123.availability-status.current");
     const proposedClaim = report.claims.find((item) => item.id === "public-field.entity-123.availability-status.proposal-456");
@@ -76,8 +76,8 @@ describe("Survey Surface projection", () => {
   });
 
   it("projects corrected document candidates and preserves Claim Dependency recompute pressure", () => {
-    const input = buildSurveyTrustInput(correctedDocumentCandidatesFixture);
-    const valid = validateTrustInput(input);
+    const input = buildSurveyTrustBundle(correctedDocumentCandidatesFixture);
+    const valid = validateTrustBundle(input);
     const report = buildTrustReport(valid);
     const currentPosition = report.claims.find((claim) => claim.id === "document.entity-1.statement-position.current");
     const originalPosition = report.claims.find((claim) => claim.id === "document.entity-1.statement-position.original");
@@ -264,7 +264,7 @@ describe("Survey Surface projection", () => {
       }))
       .build();
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(input)));
     const evidence = report.evidence.find((item) => item.claimId === "claim.example.policy-standard.paragraph-9");
     const policyStandard = evidence?.metadata?.policyStandard as {
       inlineText?: string;
@@ -346,8 +346,8 @@ describe("Survey Surface projection", () => {
 
     assert.equal(input.interpretations?.length, 1);
 
-    const trustInput = buildSurveyTrustInput(input);
-    const valid = validateTrustInput(trustInput);
+    const trustBundle = buildSurveyTrustBundle(input);
+    const valid = validateTrustBundle(trustBundle);
     const report = buildTrustReport(valid);
     const interpretationEvent = report.events.find((event) => event.method === "survey-interpretation");
     const unsupportedEventKeys = Object.keys(interpretationEvent ?? {}).filter(
@@ -443,7 +443,7 @@ describe("Survey Surface projection", () => {
       .build();
 
     assert.throws(
-      () => buildSurveyTrustInput(input),
+      () => buildSurveyTrustBundle(input),
       /Missing interpretation anchor raw source: source\.example\.unknown-policy-standard/,
     );
   });
@@ -509,7 +509,7 @@ describe("Survey Surface projection", () => {
     };
 
     assert.throws(
-      () => buildSurveyTrustInput(duplicateInput),
+      () => buildSurveyTrustBundle(duplicateInput),
       /Duplicate interpretation id: interpretation\.example\.duplicate/,
     );
   });
@@ -589,7 +589,7 @@ describe("Survey Surface projection", () => {
       .build();
 
     assert.throws(
-      () => buildSurveyTrustInput(input),
+      () => buildSurveyTrustBundle(input),
       /Interpretation interpretation\.example\.conflicting-target has conflicting appliesToClaimId claim\.example\.conflicting-target\.status and appliesToTarget policyApplication\.summary resolved to claim\.example\.conflicting-target\.summary/,
     );
   });
@@ -642,7 +642,7 @@ describe("Survey Surface projection", () => {
         recordedAt: "2026-06-07T12:04:00.000Z",
       });
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(builder.build())));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(builder.build())));
     const event = report.events.find((item) => item.method === "survey-interpretation");
 
     assert.equal(event?.claimId, "claim.example.target-resolution");
@@ -659,7 +659,7 @@ describe("Survey Surface projection", () => {
     };
 
     assert.throws(
-      () => buildSurveyTrustInput(ambiguousInput),
+      () => buildSurveyTrustBundle(ambiguousInput),
       /Interpretation interpretation\.example\.target-resolution target policyApplication\.status is ambiguous/,
     );
   });
@@ -705,7 +705,7 @@ describe("Survey Surface projection", () => {
       }))
       .build();
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(input)));
     const evidence = report.evidence.find((item) => item.claimId === "claim.entity-1.registration-status");
 
     assert.equal(input.rawSources[0]?.id, "api-record:public-records://entity/entity-1");
@@ -775,7 +775,7 @@ describe("Survey Surface projection", () => {
       }))
       .build();
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(input)));
     const claim = report.claims.find((item) => item.id === "claim.rule.threshold.primary.2026");
     const evidence = report.evidence.find((item) => item.claimId === claim?.id);
 
@@ -857,7 +857,7 @@ describe("Survey Surface projection", () => {
       .addObservation(observation)
       .build();
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(input)));
     const claim = report.claims.find((item) => item.id === "claim.rule.maximum-value.2026");
     const evidence = report.evidence.find((item) => item.claimId === claim?.id);
 
@@ -1065,7 +1065,7 @@ describe("Survey Surface projection", () => {
       }))
       .build();
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(input)));
     const claim = report.claims.find((item) => item.id === "claim.listing.item-1.eligibility-range.proposed");
     const evidence = report.evidence.find((item) => item.claimId === claim?.id);
 
@@ -1148,7 +1148,7 @@ describe("Survey Surface projection", () => {
   });
 
   it("projects Candidate Conflict to a disputed claim with candidate-conflict event", () => {
-    const input = buildSurveyTrustInput({
+    const input = buildSurveyTrustBundle({
       source: "survey.candidate-conflict.fixture",
       generatedAt: "2026-05-31T16:00:00.000Z",
       rawSources: [
@@ -1229,7 +1229,7 @@ describe("Survey Surface projection", () => {
         },
       ],
     });
-    const valid = validateTrustInput(input);
+    const valid = validateTrustBundle(input);
     const report = buildTrustReport(valid);
 
     assert.equal(report.summary.byStatus.disputed, 1);
@@ -1323,7 +1323,7 @@ describe("Survey Surface projection", () => {
       generatedAt: "2026-05-31T16:00:00.000Z",
     }).addClaimRecords(records).build();
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(input)));
     const selected = report.claims.find((claim) => claim.id === "claim.entity-1.amount.corrected");
     const unselected = report.claims.find((claim) => claim.id === "claim.entity-1.amount.original");
     const selectedSurveyMetadata = selected?.metadata?.survey as
@@ -1409,7 +1409,7 @@ describe("Survey Surface projection", () => {
       })
       .build();
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(input)));
     const surveyMetadata = report.claims[0]?.metadata?.survey as
       | {
           rejectionReason?: string;
@@ -1496,7 +1496,7 @@ describe("Survey Surface projection", () => {
       generatedAt: "2026-05-31T16:00:00.000Z",
     }).addClaimRecords(records).build();
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(input)));
     const selected = report.claims.find((claim) => claim.id === "claim.entity-1.contact-phone");
     const unselected = report.claims.find((claim) => claim.id === "claim.entity-1.contact-phone.proposed-candidate");
 
@@ -1518,7 +1518,7 @@ describe("Survey Surface projection", () => {
     broken.claims[0] = { ...broken.claims[0], status: "verified" };
 
     assert.throws(
-      () => buildSurveyTrustInput(broken),
+      () => buildSurveyTrustBundle(broken),
       /cannot be verified without a review outcome/,
     );
   });
@@ -1528,7 +1528,7 @@ describe("Survey Surface projection", () => {
     broken.extractions[0] = { ...broken.extractions[0], locator: undefined };
 
     assert.throws(
-      () => buildSurveyTrustInput(broken),
+      () => buildSurveyTrustBundle(broken),
       /needs a source locator/,
     );
   });
@@ -1547,7 +1547,7 @@ describe("Survey Surface projection", () => {
       })
       .build();
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(input)));
     assert.equal(report.summary.byStatus.verified, 1);
   });
 
@@ -1590,7 +1590,7 @@ describe("Survey Surface projection", () => {
       })
       .build();
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(input)));
     assert.equal(report.summary.byStatus.verified, 1);
     const surveyMetadata = report.claims[0]?.metadata?.survey as { candidateSetId?: string } | undefined;
     assert.equal(surveyMetadata?.candidateSetId, "observation.entity-1.availability.candidates");
@@ -1650,7 +1650,7 @@ describe("Survey Surface projection", () => {
       }))
       .build();
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(input)));
     const claim = report.claims[0]!;
     const surveyMetadata = claim.metadata?.survey as {
       repeated?: { representation?: string; itemCount?: number; sourceCollection?: string };
@@ -1709,7 +1709,7 @@ describe("Survey Surface projection", () => {
       }))
       .build();
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(input)));
     const claim = report.claims[0]!;
     const surveyMetadata = claim.metadata?.survey as {
       field?: { representation?: string };
@@ -1765,7 +1765,7 @@ describe("Survey Surface projection", () => {
       }))
       .build();
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(input)));
     const claim = report.claims[0]!;
 
     assert.equal(report.summary.byStatus.proposed, 1);
@@ -1906,7 +1906,7 @@ describe("Survey Surface projection", () => {
     assert.equal(input.reviewOutcomes[0]?.candidateId, "candidate.registration-status.active");
     assert.equal(input.reviewOutcomes[0]?.status, "verified");
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(input)));
     const verifiedClaim = report.claims.find((claim) => claim.id === "claim.entity-1.registration-status.registry");
     const supersededClaim = report.claims.find((claim) => claim.id === "claim.entity-1.registration-status.archive");
     const registryEvidence = report.evidence.find((evidence) => evidence.claimId === verifiedClaim?.id);
@@ -2214,7 +2214,7 @@ describe("Survey Surface projection", () => {
   });
 
   it("projects an escalated candidate set to a disputed claim with candidate-escalation event", () => {
-    const input = buildSurveyTrustInput({
+    const input = buildSurveyTrustBundle({
       source: "survey.escalated.fixture",
       generatedAt: "2026-05-31T16:00:00.000Z",
       rawSources: [{
@@ -2260,7 +2260,7 @@ describe("Survey Surface projection", () => {
         collectedBy: "records-importer",
       }],
     });
-    const report = buildTrustReport(validateTrustInput(input));
+    const report = buildTrustReport(validateTrustBundle(input));
 
     assert.equal(report.summary.byStatus.disputed, 1);
     assert.equal(report.claims[0]?.status, "disputed");
@@ -2268,7 +2268,7 @@ describe("Survey Surface projection", () => {
   });
 
   it("projects a comfort-zone flag to structured claim metadata", () => {
-    const input = buildSurveyTrustInput({
+    const input = buildSurveyTrustBundle({
       source: "survey.comfort-zone.fixture",
       generatedAt: "2026-05-31T16:00:00.000Z",
       rawSources: [{
@@ -2330,7 +2330,7 @@ describe("Survey Surface projection", () => {
         },
       }],
     });
-    const report = buildTrustReport(validateTrustInput(input));
+    const report = buildTrustReport(validateTrustBundle(input));
     const event = report.events[0];
     const surveyMetadata = report.claims[0]?.metadata?.survey as
       | {
@@ -2393,7 +2393,7 @@ describe("Survey Surface projection", () => {
       attachToClaimId: "claim.entity-1.fair-value",
     });
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(builder.build())));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(builder.build())));
     const escalationEvent = report.events.find((e) => e.method === "candidate-escalation");
 
     assert.ok(escalationEvent, "escalation event should exist");
@@ -2445,7 +2445,7 @@ describe("Survey Surface projection", () => {
       resolvedBy: "observation.entity-1.fair-value.current",
     });
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(builder.build())));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(builder.build())));
     const escalationEvent = report.events.find((e) => e.method === "candidate-escalation");
 
     assert.equal(escalationEvent, undefined, "resolved escalation should not generate an event");
@@ -2467,7 +2467,7 @@ describe("Survey Surface projection", () => {
     });
 
     assert.throws(
-      () => buildSurveyTrustInput(builder.build()),
+      () => buildSurveyTrustBundle(builder.build()),
       /references unknown claim claim\.does-not-exist/,
     );
   });
@@ -2613,7 +2613,7 @@ describe("Survey Surface projection", () => {
       }))
       .build();
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(input)));
     const claim = report.claims[0]!;
     const surveyMetadata = claim.metadata?.survey as {
       repeated?: { representation?: string; itemCount?: number };
@@ -2665,7 +2665,7 @@ describe("Survey Surface projection", () => {
       }))
       .build();
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(input)));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(input)));
     const claim = report.claims[0]!;
     const surveyMetadata = claim.metadata?.survey as {
       repeated?: { representation?: string; itemCount?: number };

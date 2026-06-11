@@ -14,7 +14,7 @@ The canonical integration path is:
    event store.
 4. Producer exports `ReviewWorkbenchResult` and `ReviewDecision` resources.
 5. Producer applies product policy locally and, when appropriate, projects
-   Survey records into Surface with `buildSurveyTrustInput`.
+   Survey records into Surface with `buildSurveyTrustBundle`.
 
 Survey should not own the producer queue, auth, tenancy, parser policy, source
 ranking policy, final apply semantics, or product field catalog.
@@ -30,7 +30,7 @@ The reusable boundary is intentionally small:
 | Presentation | Human labels, value summaries, and links back to product records, sources, claims, or traces. | `ReviewPresentationAdapter` hooks plus deterministic item/result presentation builders. |
 | Events | Durable event storage, optimistic concurrency, and reviewer identity from trusted product context. | `ReviewSessionEvent` resources and replay/validation helpers. |
 | Apply | Current-state validation, product policy, mutating writes, audit tables, and downstream jobs. | `ReviewWorkbenchResult` and `ReviewDecision` derived from a pre-decision review snapshot plus persisted events. |
-| Surface handoff | Which reviewed observations become claims and when to publish them. | Normal Survey observation/claim records and `buildSurveyTrustInput` projection into Surface. |
+| Surface handoff | Which reviewed observations become claims and when to publish them. | Normal Survey observation/claim records and `buildSurveyTrustBundle` projection into Surface. |
 
 `ReviewPresentationAdapter` is display-only. It lets a product explain ids and
 values without changing canonical `ReviewItem` data or apply authority.
@@ -171,7 +171,7 @@ for (const result of applyResult.results) {
 Surface projection is still the normal Survey path. A review result tells the
 producer which candidate was selected; producer code then emits the reviewed
 source/extraction/candidate/review/claim records it wants to publish and calls
-`buildSurveyTrustInput`. The workbench also exposes a projection preview for UI
+`buildSurveyTrustBundle`. The workbench also exposes a projection preview for UI
 explanation, but that preview is not a separate write path.
 
 `persistReviewSessionEvents` returns the event array accepted for replay. If a
@@ -584,15 +584,15 @@ write stamps, and conflict handling.
 
 Review resources are not a second Surface projection path. When a producer is
 ready to expose trust state, it should emit normal Survey observations or claim
-records and then call `buildSurveyTrustInput`.
+records and then call `buildSurveyTrustBundle`.
 
 ```ts
 import {
-  buildSurveyTrustInput,
+  buildSurveyTrustBundle,
   reviewedCurrentProposedResolution,
   SurveyInputBuilder,
 } from "@kontourai/survey";
-import { buildTrustReport, validateTrustInput } from "@kontourai/surface";
+import { buildTrustReport, validateTrustBundle } from "@kontourai/surface";
 
 const surveyInput = new SurveyInputBuilder({
   source: "example-producer.review-session-1",
@@ -612,8 +612,8 @@ const surveyInput = new SurveyInputBuilder({
   }))
   .build();
 
-const report = buildTrustReport(validateTrustInput(
-  buildSurveyTrustInput(surveyInput),
+const report = buildTrustReport(validateTrustBundle(
+  buildSurveyTrustBundle(surveyInput),
 ));
 ```
 
@@ -642,4 +642,4 @@ Use this checklist before adding Survey to a producer:
   `sessionExport.results` payloads.
 - Product write routes stamp mutating actor and time from authenticated server
   context.
-- Surface projection uses `buildSurveyTrustInput`, not private review UI state.
+- Surface projection uses `buildSurveyTrustBundle`, not private review UI state.

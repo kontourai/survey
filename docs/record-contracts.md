@@ -75,7 +75,7 @@ reasons.
 ```ts
 import {
   apiRecordSource,
-  buildSurveyTrustInput,
+  buildSurveyTrustBundle,
   fieldObservation,
   policyStandardSource,
   SurveyInputBuilder,
@@ -130,7 +130,7 @@ const surveyInput = new SurveyInputBuilder({ source: "example-producer:run-1" })
   })
   .build();
 
-const trustInput = buildSurveyTrustInput(surveyInput);
+const trustBundle = buildSurveyTrustBundle(surveyInput);
 ```
 
 Projection emits a normal Surface verification event with
@@ -162,7 +162,7 @@ path.
 
 ```ts
 import {
-  buildSurveyTrustInput,
+  buildSurveyTrustBundle,
   fieldObservation,
   SurveyInputBuilder,
 } from "@kontourai/survey";
@@ -206,7 +206,7 @@ const surveyInput = new SurveyInputBuilder({
   }))
   .build();
 
-const trustInput = buildSurveyTrustInput(surveyInput);
+const trustBundle = buildSurveyTrustBundle(surveyInput);
 ```
 
 `fieldObservation` sets `extraction.target` and `claim.fieldOrBehavior` from
@@ -243,7 +243,7 @@ reserved for actor, credential, role, organization, policy, or system authority.
 
 ```ts
 import {
-  buildSurveyTrustInput,
+  buildSurveyTrustBundle,
   sourceOfAuthorityObservationBuilder,
   SurveyInputBuilder,
   uploadedDocumentSource,
@@ -301,7 +301,7 @@ const surveyInput = new SurveyInputBuilder({
     .build())
   .build();
 
-const trustInput = buildSurveyTrustInput(surveyInput);
+const trustBundle = buildSurveyTrustBundle(surveyInput);
 ```
 
 `sourceOfAuthorityObservation` remains available as the lower-level object
@@ -365,7 +365,7 @@ and the same Surface projection path.
 
 ```ts
 import {
-  buildSurveyTrustInput,
+  buildSurveyTrustBundle,
   repeatedObservation,
   SurveyInputBuilder,
 } from "@kontourai/survey";
@@ -414,7 +414,7 @@ const surveyInput = new SurveyInputBuilder({
   }))
   .build();
 
-const trustInput = buildSurveyTrustInput(surveyInput);
+const trustBundle = buildSurveyTrustBundle(surveyInput);
 ```
 
 `repeatedObservation` sets `extraction.target` and
@@ -531,7 +531,7 @@ status projection.
 
 A candidate set with status `"conflict"` represents a Survey-side Candidate
 Conflict before review has resolved which candidate should win. When no review
-outcome overrides it, `buildSurveyTrustInput` projects the claim to Surface
+outcome overrides it, `buildSurveyTrustBundle` projects the claim to Surface
 status `"disputed"` and records a `"candidate-conflict"` verification event.
 
 
@@ -594,11 +594,11 @@ SHA-256 over that JSON. The result should equal
 Survey-specific anchor metadata, and a source/time pointer for display. Claims
 without a selected review outcome are not anchored by `{ reviewProofs: true }`.
 
-When the Surface projection proof option is enabled, `buildSurveyTrustInput`
+When the Surface projection proof option is enabled, `buildSurveyTrustBundle`
 will attach the same kind of anchor to the projected reviewed claim:
 
 ```ts
-const trustInput = buildSurveyTrustInput(surveyInput, { reviewProofs: true });
+const trustBundle = buildSurveyTrustBundle(surveyInput, { reviewProofs: true });
 ```
 
 The proof provides hash-only tamper evidence for the Survey review/provenance
@@ -644,3 +644,144 @@ reviewOutcome: {
   comfortZoneNote: "Renewal clause interpretation requires specialist counsel.",
 },
 ```
+
+
+## Inquiry mappings
+
+An **InquiryMapping** is the durable reviewed artifact that records "this
+natural-language question maps to this canonical claim or derivation rule."
+Mappings are memoized; answers are never cached.  Every answer recomputes from
+the live TrustBundle state at resolution time (ADR 0003 §6).
+
+A mapping proposal is a reviewable record with provenance.  The proposal goes
+through Survey's existing candidate → review machinery; no mapping is accepted
+silently (ADR 0003 §4).
+
+```ts
+import {
+  applyAutoAcceptPolicy,
+  applyMappingReview,
+  lookupMapping,
+  normalizeQuestion,
+  proposalsToCandidateSet,
+  referenceMappingProposer,
+  resolveQuestion,
+} from "@kontourai/survey";
+import type { TrustBundle, DerivationRule } from "@kontourai/surface";
+
+// 1. Normalise — deterministic, exact-text memoization (not semantic matching)
+const normalized = normalizeQuestion("Is entity-1 ACTIVE?");
+// → "is entity-1 active"
+
+// 2. Propose — pluggable; use your own proposer in production
+const proposals = referenceMappingProposer.propose(
+  "is entity-1 active",
+  { bundle, rules },
+);
+
+// 3. Project into Survey candidate/review machinery
+const { candidateSet, candidates } = proposalsToCandidateSet(
+  "is entity-1 active",
+  proposals,
+);
+// candidateSet.status is "needs-review" when proposals agree,
+// "conflict" when they disagree.
+
+// 4a. Human review path
+const reviewOutcome = {
+  id: "review-1",
+  candidateSetId: candidateSet.id,
+  candidateId: candidates[0]!.id,
+  status: "verified" as const,
+  actor: "reviewer@example.test",
+  reviewedAt: new Date().toISOString(),
+};
+const mapping = applyMappingReview(candidateSet, reviewOutcome);
+
+// 4b. Auto-accept policy path (proposals at or above threshold → "assumed")
+const autoMappings = applyAutoAcceptPolicy(proposals, { minConfidence: 0.85 });
+
+// 5. Resolve — looks up mapping by exact normalized text; answer always live
+const record = resolveQuestion(bundle, "is entity-1 active", {
+  mappings: [mapping],
+  rules,
+  now: new Date(),
+  askedBy: "consumer-actor",
+});
+// record.outcome: "matched" | "derived" | "unsupported"
+// Rejected mappings are remembered but never resolve; lookupRejectedMapping
+// checks whether a question was previously rejected.
+```
+
+Key contracts:
+
+- `normalizeQuestion` is exact normalized-text memoization — two questions with
+  different wording but the same meaning are NOT matched here; a MappingProposer
+  handles that.
+- Rejected mappings are remembered and prevent re-proposing without escalation.
+  Call `lookupRejectedMapping` to distinguish "never seen" from "previously
+  rejected."
+- `resolveQuestion` never caches the answer; it always calls `resolveInquiry`
+  on the live bundle.
+- `proposalsToCandidateSet` uses `RawSourceKind: "inquiry-question"` and the
+  normalized question as the CandidateSet target, so mapping candidates flow
+  through the same workbench as all other Survey candidates.
+- `buildMappingReviewItems` produces ReviewItem payloads for the existing
+  workbench; no UI changes required.
+
+
+## Agent-utterance producer profile
+
+`surveyAgentUtterance` is Survey used as a producer pointed at agent-generated
+text instead of structured sources.  Each statement the extractor finds in agent
+prose is resolved against the TrustBundle via the Inquiry pipeline, and the
+result is a per-statement badge.
+
+This is the "spell-check for evidence" integration point.  Flow-agent hook
+wiring (connecting this function to a live agent output pipeline) is out of scope
+for this module and lives in the flow-agents repo.
+
+```ts
+import {
+  surveyAgentUtterance,
+  referenceUtteranceExtractor,
+} from "@kontourai/survey";
+import type { UtteranceClaimExtractor } from "@kontourai/survey";
+
+// Use a domain-aware extractor in production; the reference extractor
+// is for tests only (it sets subjectType: "unknown").
+const report = await surveyAgentUtterance(
+  "entity-1 registration-status is ACTIVE and coverage-score is 95",
+  referenceUtteranceExtractor,
+  {
+    bundle,
+    mappings,   // optional; enables mapping-based resolution
+    rules,      // optional derivation rules
+    now: new Date(),
+    agentId: "agent-run-1234",
+  },
+);
+
+// report.source.kind === "agent-utterance"
+// report.source.locatorScheme === "text-span"
+for (const stmt of report.statements) {
+  console.log(stmt.badge, stmt.target, stmt.excerpt);
+  // badge: "verified" | "assumed" | "stale" | "disputed" | "rejected" | "unsupported"
+}
+```
+
+Key contracts:
+
+- The `RawSource` for the utterance uses `kind: "agent-utterance"` and
+  `locatorScheme: "text-span"`.  Each extracted statement carries a
+  `text-span:<start>-<end>` locator on its Extraction record.
+- The `UtteranceClaimExtractor` interface is pluggable.  Provide a
+  domain-aware extractor that emits the correct `subjectType` for canonical
+  key matching.  The reference extractor always emits `subjectType: "unknown"`
+  and is only suitable for tests.
+- Badges derive directly from the InquiryRecord outcome and answer status.
+  `"unsupported"` means either the outcome is unsupported or the answer status
+  is absent — the gap is honest and recordable rather than silently treated as
+  passing.
+- `surveyAgentUtterance` is `async` to support async extractors, but it works
+  equally well with synchronous extractors.

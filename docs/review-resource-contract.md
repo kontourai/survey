@@ -51,7 +51,7 @@ replay and apply boundary.
 Producers own acquisition, parsing, candidate ranking, review UX, vertical
 policy, field catalogs, reviewer assignment, and operational state. Survey owns
 the portable source, extraction, candidate, review, claim target, and projection
-record shapes needed to build Surface `TrustInput`.
+record shapes needed to build a Surface Trust Bundle.
 
 Field ownership:
 
@@ -84,7 +84,7 @@ Session resource mapping and the snapshot-safe replay/export helpers are covered
 in detail in [`consumer-integration-guide.md`](consumer-integration-guide.md).
 
 Adapters should emit normal `SurveyInput` records and then call
-`buildSurveyTrustInput`. Review resources are a durable neutral contract for
+`buildSurveyTrustBundle`. Review resources are a durable neutral contract for
 review payloads, not a second Surface projection path.
 
 Rejected candidates and comfort-zone review posture are separate signals.

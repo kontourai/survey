@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildTrustReport, validateTrustInput } from "@kontourai/surface";
+import { buildTrustReport, validateTrustBundle } from "@kontourai/surface";
 import { correctedDocumentCandidatesFixture } from "../fixtures/corrected-document-candidates.js";
 import {
   publicDirectoryReviewDecisionFixture,
@@ -9,7 +9,7 @@ import {
 import { publicFieldReviewFixture } from "../fixtures/public-field-review.js";
 import { regulatedDocumentReviewItemFixture } from "../fixtures/regulated-document-review-resource.js";
 import {
-  buildSurveyTrustInput,
+  buildSurveyTrustBundle,
   type CandidateSet,
   type ClaimTarget,
   type Extraction,
@@ -96,7 +96,7 @@ describe("Review resource contract", () => {
     assertReviewCandidateMapsToSurveyRecord(proposed, publicFieldReviewFixture);
     assertReviewDecisionMapsToSurveyRecord(publicDirectoryReviewDecisionFixture, publicFieldReviewFixture);
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(publicFieldReviewFixture)));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(publicFieldReviewFixture)));
     assert.equal(report.summary.byStatus.verified, 1);
     assert.equal(report.summary.byStatus.proposed, 1);
   });
@@ -115,7 +115,7 @@ describe("Review resource contract", () => {
       assertReviewCandidateMapsToSurveyRecord(candidate, correctedDocumentCandidatesFixture);
     });
 
-    const report = buildTrustReport(validateTrustInput(buildSurveyTrustInput(correctedDocumentCandidatesFixture)));
+    const report = buildTrustReport(validateTrustBundle(buildSurveyTrustBundle(correctedDocumentCandidatesFixture)));
     assert.ok(report.claims.some((claim) => claim.id === item.spec.candidates[0]?.projection?.claimId));
     assert.ok(report.claims.some((claim) => claim.id === item.spec.candidates[1]?.projection?.claimId));
   });

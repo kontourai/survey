@@ -46,8 +46,8 @@ is proposed, assumed, verified, disputed, or stale.
 
 5. Project through Survey.
    Use `sourceOfAuthorityObservationBuilder` for each source-authority value,
-   reviewed or proposed, then `buildSurveyTrustInput` to produce Surface
-   `TrustInput`.
+   reviewed or proposed, then `buildSurveyTrustBundle` to produce a Surface
+   Trust Bundle.
 
 6. Inspect through Surface.
    Surface reports show claims, evidence, status, gaps, and metadata. Producers
@@ -90,7 +90,7 @@ Recommended Survey projection:
 
 - rebuild a source-of-authority candidate from the saved source context
 - attach a `reviewOutcome` with the confirmer, time, status, and rationale
-- produce a Surface `TrustInput` with `buildSurveyTrustInput`
+- produce a Surface Trust Bundle with `buildSurveyTrustBundle`
 - keep `authorityTrace` empty unless a separate actor/system authority record
   exists
 
@@ -120,8 +120,8 @@ Examples:
 ## Public Implementation Pattern
 
 A producer-owned confirmation flow keeps operational state in its own status
-store, then projects confirmed source context through Survey into Surface
-`TrustInput`. Surface validation and report APIs can then inspect the public
+store, then projects confirmed source context through Survey into a Surface
+Trust Bundle. Surface validation and report APIs can then inspect the public
 claim, evidence, status, gap, and metadata records. Manual file references are
 valid source references; they remain source context and do not become Surface
 Authority Trace records.

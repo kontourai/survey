@@ -57,7 +57,7 @@
     "docs:check": "npm run docs:build && node scripts/docs-site/check-links.ts"
   },
   "dependencies": {
-    "@kontourai/surface": "^0.5.1"
+    "@kontourai/surface": "^0.6.0"
   },
   "devDependencies": {
     "@kontourai/console-kit": "^0.1.0",
