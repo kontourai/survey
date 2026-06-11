@@ -141,3 +141,39 @@ function validateAuthorizedAction(
 export function isValidAuthorizing(block: unknown): block is ReviewAuthorizing {
   return validateAuthorizing(block).length === 0;
 }
+
+export interface BuildAuthorizedActionAuthorizingInput {
+  readonly promptRef: string;
+  readonly renderedPrompt: string;
+  readonly action: ReviewAuthorizingAuthorizedAction["action"];
+  readonly authorityRef: string;
+}
+
+/**
+ * Helper for consumers building `authorized-action` authorizing blocks outside
+ * the workbench. Constructs the block and validates it; throws if the result
+ * would be invalid so callers catch configuration errors at build time.
+ *
+ * For workbench-internal construction, use the workbench path directly — it
+ * runs validateAuthorizing and degrades gracefully instead of throwing.
+ */
+export function buildAuthorizedActionAuthorizing(
+  input: BuildAuthorizedActionAuthorizingInput,
+): ReviewAuthorizingAuthorizedAction {
+  const block: ReviewAuthorizingAuthorizedAction = {
+    kind: "authorized-action",
+    promptRef: input.promptRef,
+    renderedPrompt: input.renderedPrompt,
+    action: input.action,
+    authorityRef: input.authorityRef,
+  };
+
+  const issues = validateAuthorizedAction(block);
+  if (issues.length > 0) {
+    throw new Error(
+      `buildAuthorizedActionAuthorizing: invalid authorized-action block: ${issues.map((issue) => issue.message).join(" ")}`,
+    );
+  }
+
+  return block;
+}

@@ -41,6 +41,8 @@ import {
   type ReviewSession,
   type ReviewSessionEvent,
 } from "../review-resource.js";
+import { validateAuthorizing, buildAuthorizedActionAuthorizing } from "../review-authorizing.js";
+import { humanizeIdentifier } from "./review-presentation.js";
 
 export {
   buildReviewSessionEvents,
@@ -128,12 +130,83 @@ export function buildReviewDecision(state: ReviewWorkbenchState): ReviewDecision
       },
       reviewedAt: state.reviewedAt,
       rationale: state.note,
+      authorizing: buildDecisionCardAuthorizing(state),
       projection,
     },
     status: {
       appliedToClaimIds: candidate.projection?.claimId ? [candidate.projection.claimId] : undefined,
     },
   };
+}
+
+/**
+ * Stable versioned prompt identifier for the workbench decision card control.
+ * Derived from the component naming convention: <module>/<component>@<version>.
+ */
+const DECISION_CARD_PROMPT_REF = "review-workbench/decision-card@v1";
+
+/**
+ * Constructs the `authorized-action` authorizing block for a workbench decision.
+ * On validation failure, emits a console warning and returns undefined so the
+ * outcome is recorded without authorizing (transparency-gap-not-blocker per ADR 0004).
+ */
+function buildDecisionCardAuthorizing(
+  state: ReviewWorkbenchState,
+): ReviewDecision["spec"]["authorizing"] {
+  if (!state.decision) {
+    return undefined;
+  }
+
+  const targetLabel = humanizeIdentifier(state.item.spec.target);
+  const renderedPrompt = decisionCardRenderedPrompt(state, targetLabel);
+  // Reviewer note present means the reviewer also typed a rationale — "typed".
+  // Control-only affirmation (no note) is "affirmed-control".
+  const action: "affirmed-control" | "typed" = state.note?.trim() ? "typed" : "affirmed-control";
+  const authorityRef = `actor:${state.actorId}`;
+
+  try {
+    const block = buildAuthorizedActionAuthorizing({
+      promptRef: DECISION_CARD_PROMPT_REF,
+      renderedPrompt,
+      action,
+      authorityRef,
+    });
+
+    const issues = validateAuthorizing(block);
+    if (issues.length > 0) {
+      console.warn(
+        "[survey] buildDecisionCardAuthorizing: authorizing block failed validation — recording outcome without authorizing.",
+        issues,
+      );
+      return undefined;
+    }
+
+    return block;
+  } catch (err) {
+    console.warn(
+      "[survey] buildDecisionCardAuthorizing: failed to construct authorizing block — recording outcome without authorizing.",
+      err,
+    );
+    return undefined;
+  }
+}
+
+/**
+ * Derives the exact decision prompt rendered on the workbench decision card
+ * for a given review item and decision.
+ *
+ * Format mirrors the review question shown in the workbench header:
+ * "For {target}, decide whether {proposed} should replace {current}."
+ * followed by the selected decision label so the block is self-contained.
+ */
+function decisionCardRenderedPrompt(state: ReviewWorkbenchState, targetLabel: string): string {
+  const currentCandidate = state.item.spec.candidates.find((c) => c.role === "current");
+  const proposedCandidate = state.item.spec.candidates.find((c) => c.role === "proposed");
+  const currentValue = formatValue(currentCandidate?.value ?? "");
+  const proposedValue = formatValue(proposedCandidate?.value ?? "");
+  const decisionLabel = state.decision ? workbenchDecisionDefinitions[state.decision].label : "";
+
+  return `For ${targetLabel}, decide whether ${proposedValue} should replace ${currentValue}. Selected decision: ${decisionLabel}.`;
 }
 
 export interface ReviewWorkbenchSessionExport {

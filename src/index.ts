@@ -179,5 +179,9 @@ export type {
   SchemaMappingOptions,
   SystemFieldRef,
 } from "./schema-mapping.js";
-export { isValidAuthorizing, validateAuthorizing } from "./review-authorizing.js";
-export type { ReviewAuthorizingIssue, ReviewAuthorizingIssueCode } from "./review-authorizing.js";
+export { buildAuthorizedActionAuthorizing, isValidAuthorizing, validateAuthorizing } from "./review-authorizing.js";
+export type {
+  BuildAuthorizedActionAuthorizingInput,
+  ReviewAuthorizingIssue,
+  ReviewAuthorizingIssueCode,
+} from "./review-authorizing.js";

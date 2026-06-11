@@ -3,6 +3,7 @@ import type {
   ClaimTarget,
   Extraction,
   RawSource,
+  ReviewAuthorizing,
   ReviewOutcome,
 } from "./types.js";
 
@@ -124,6 +125,10 @@ export interface ReviewDecisionSpec {
   evidenceIds?: string[];
   withinComfortZone?: boolean;
   comfortZoneNote?: string;
+  /** Optional testimony provenance. Populated by the workbench on the
+   *  `authorized-action` channel; consumers on other channels may supply
+   *  their own admissible block. */
+  authorizing?: ReviewAuthorizing;
   projection?: SurveyRecordProjectionHint;
 }
 

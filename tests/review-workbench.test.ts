@@ -1652,3 +1652,224 @@ function unescapeHtml(value: string): string {
     .replaceAll("&lt;", "<")
     .replaceAll("&amp;", "&");
 }
+
+// ── authorizing provenance tests ─────────────────────────────────────────────
+
+import {
+  buildAuthorizedActionAuthorizing,
+  isValidAuthorizing,
+  validateAuthorizing,
+} from "../src/review-authorizing.js";
+
+describe("buildReviewDecision: authorizing provenance", () => {
+  it("populates a valid authorized-action authorizing block on the workbench path", () => {
+    const state = {
+      ...initialReviewWorkbenchState(),
+      decision: "accept-proposed" as ReviewWorkbenchDecision,
+      note: "",
+    };
+
+    const decision = buildReviewDecision(state);
+
+    assert.ok(decision, "decision should be defined");
+    assert.ok(decision.spec.authorizing, "authorizing should be present");
+    assert.equal(decision.spec.authorizing?.kind, "authorized-action");
+
+    const issues = validateAuthorizing(decision.spec.authorizing);
+    assert.deepEqual(issues, [], `Expected no validation issues but got: ${JSON.stringify(issues)}`);
+  });
+
+  it("sets promptRef to the stable decision-card version identifier", () => {
+    const state = {
+      ...initialReviewWorkbenchState(),
+      decision: "keep-current" as ReviewWorkbenchDecision,
+    };
+
+    const decision = buildReviewDecision(state);
+
+    assert.ok(decision?.spec.authorizing);
+    assert.equal(
+      (decision.spec.authorizing as { promptRef?: string }).promptRef,
+      "review-workbench/decision-card@v1",
+    );
+  });
+
+  it("sets action to affirmed-control when no reviewer note is present", () => {
+    const state = {
+      ...initialReviewWorkbenchState(),
+      decision: "accept-proposed" as ReviewWorkbenchDecision,
+      note: "",
+    };
+
+    const decision = buildReviewDecision(state);
+
+    assert.ok(decision?.spec.authorizing);
+    assert.equal((decision.spec.authorizing as { action?: string }).action, "affirmed-control");
+  });
+
+  it("sets action to typed when the reviewer supplies a note", () => {
+    const state = {
+      ...initialReviewWorkbenchState(),
+      decision: "accept-proposed" as ReviewWorkbenchDecision,
+      note: "Verified against source extract.",
+    };
+
+    const decision = buildReviewDecision(state);
+
+    assert.ok(decision?.spec.authorizing);
+    assert.equal((decision.spec.authorizing as { action?: string }).action, "typed");
+  });
+
+  it("sets authorityRef to actor:<actorId>", () => {
+    const state = {
+      ...initialReviewWorkbenchState(),
+      decision: "keep-current" as ReviewWorkbenchDecision,
+      actorId: "operator-jane",
+    };
+
+    const decision = buildReviewDecision(state);
+
+    assert.ok(decision?.spec.authorizing);
+    assert.equal(
+      (decision.spec.authorizing as { authorityRef?: string }).authorityRef,
+      "actor:operator-jane",
+    );
+  });
+
+  it("includes the target label and decision label in renderedPrompt", () => {
+    const state = {
+      ...initialReviewWorkbenchState(),
+      decision: "accept-proposed" as ReviewWorkbenchDecision,
+    };
+
+    const decision = buildReviewDecision(state);
+
+    assert.ok(decision?.spec.authorizing);
+    const renderedPrompt = (decision.spec.authorizing as { renderedPrompt?: string }).renderedPrompt ?? "";
+    // The public directory item target is "availabilityStatus" → "Availability Status"
+    assert.match(renderedPrompt, /Availability Status|availabilityStatus/i);
+    // Decision label from workbench definitions
+    assert.match(renderedPrompt, /Accept proposed/i);
+    // Both candidate values are included
+    assert.match(renderedPrompt, /AVAILABLE/);
+    assert.match(renderedPrompt, /WAITLIST/);
+  });
+
+  it("produces a valid authorizing block for all three workbench decision types", () => {
+    const decisions: ReviewWorkbenchDecision[] = ["accept-proposed", "keep-current", "reject-proposed"];
+
+    for (const decision of decisions) {
+      const state = {
+        ...initialReviewWorkbenchState(),
+        decision,
+      };
+
+      const reviewDecision = buildReviewDecision(state);
+      assert.ok(reviewDecision?.spec.authorizing, `${decision} should have authorizing`);
+      const issues = validateAuthorizing(reviewDecision.spec.authorizing);
+      assert.deepEqual(issues, [], `${decision} authorizing block has validation issues: ${JSON.stringify(issues)}`);
+    }
+  });
+
+  it("returns undefined authorizing when no decision is made", () => {
+    const state = initialReviewWorkbenchState();
+    const decision = buildReviewDecision(state);
+    assert.equal(decision, undefined);
+  });
+});
+
+describe("buildReviewDecision: authorizing degrades gracefully", () => {
+  it("session export decisions carry valid authorizing blocks", () => {
+    const session = {
+      ...initialReviewQueueSessionState([publicDirectoryReviewItemExample]),
+      decisionsByItemName: {
+        [publicDirectoryReviewItemExample.metadata.name]: "accept-proposed" as const,
+      },
+      actorId: "test-operator",
+    };
+
+    const exportResult = buildReviewWorkbenchResultsFromSession(session);
+    const result = exportResult[0];
+    assert.ok(result, "should have a result");
+
+    const authorizing = result.reviewDecision.spec.authorizing;
+    assert.ok(authorizing, "reviewDecision should carry authorizing");
+    assert.equal(isValidAuthorizing(authorizing), true);
+  });
+});
+
+describe("buildAuthorizedActionAuthorizing helper", () => {
+  it("builds a valid authorized-action block from correct inputs", () => {
+    const block = buildAuthorizedActionAuthorizing({
+      promptRef: "review-workbench/decision-card@v1",
+      renderedPrompt: "For availabilityStatus, decide whether WAITLIST should replace AVAILABLE. Selected decision: Accept proposed.",
+      action: "affirmed-control",
+      authorityRef: "actor:operator-jane",
+    });
+
+    assert.equal(block.kind, "authorized-action");
+    assert.equal(block.promptRef, "review-workbench/decision-card@v1");
+    assert.equal(block.action, "affirmed-control");
+    assert.equal(block.authorityRef, "actor:operator-jane");
+    assert.deepEqual(validateAuthorizing(block), []);
+  });
+
+  it("builds a typed action block", () => {
+    const block = buildAuthorizedActionAuthorizing({
+      promptRef: "review-workbench/decision-card@v1",
+      renderedPrompt: "For threshold, decide whether 16000 should replace 15000. Selected decision: Accept proposed.",
+      action: "typed",
+      authorityRef: "actor:senior-reviewer",
+    });
+
+    assert.equal(block.action, "typed");
+    assert.deepEqual(validateAuthorizing(block), []);
+  });
+
+  it("throws when promptRef is empty", () => {
+    assert.throws(
+      () => buildAuthorizedActionAuthorizing({
+        promptRef: "",
+        renderedPrompt: "Some prompt text.",
+        action: "affirmed-control",
+        authorityRef: "actor:test",
+      }),
+      /missing-prompt-ref|invalid/i,
+    );
+  });
+
+  it("throws when renderedPrompt is missing", () => {
+    assert.throws(
+      () => buildAuthorizedActionAuthorizing({
+        promptRef: "review-workbench/decision-card@v1",
+        renderedPrompt: "   ",
+        action: "affirmed-control",
+        authorityRef: "actor:test",
+      }),
+      /missing-rendered-prompt|invalid/i,
+    );
+  });
+
+  it("throws when action is invalid", () => {
+    assert.throws(
+      () => buildAuthorizedActionAuthorizing({
+        promptRef: "review-workbench/decision-card@v1",
+        renderedPrompt: "Some prompt.",
+        action: "clicked" as "affirmed-control",
+        authorityRef: "actor:test",
+      }),
+    );
+  });
+
+  it("throws when authorityRef is empty", () => {
+    assert.throws(
+      () => buildAuthorizedActionAuthorizing({
+        promptRef: "review-workbench/decision-card@v1",
+        renderedPrompt: "Some prompt.",
+        action: "affirmed-control",
+        authorityRef: "",
+      }),
+      /missing-authority-ref|invalid/i,
+    );
+  });
+});
