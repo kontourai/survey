@@ -95,19 +95,19 @@ not be modeled as `withinComfortZone: false` just to produce
 explicitly records that the conclusion is outside their authority or domain
 comfort and needs a different authority to confirm.
 
-## Fixtures
+## Examples
 
-The public-directory fixture demonstrates a current/proposed field review. The
-regulated-document fixture demonstrates multi-candidate source-version and
-computed roles without requiring current/proposed semantics. Both fixtures are
+The public-directory example demonstrates a current/proposed field review. The
+regulated-document example demonstrates multi-candidate source-version and
+computed roles without requiring current/proposed semantics. Both examples are
 plain serializable TypeScript objects and avoid private downstream product
 names.
 
 ## Prototype
 
 See [`review-workbench-prototype.md`](review-workbench-prototype.md) for the
-fixture-backed browser prototype that renders a browser-safe copy of the
-public-directory `ReviewItem`, guarded against drift from the canonical fixture,
+example-backed browser prototype that renders a browser-safe copy of the
+public-directory `ReviewItem`, guarded against drift from the canonical example,
 and emits local in-memory `ReviewDecision` payloads for accept proposed, keep
 current, and reject proposed decisions.
 

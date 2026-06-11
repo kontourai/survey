@@ -145,7 +145,7 @@ keys, typed edge details are preserved on the projected claim at
 ## Review resources
 
 Survey also exports producer-neutral `ReviewItem`, `ReviewCandidate`, and
-`ReviewDecision` TypeScript resource shapes for review UI and adapter fixtures.
+`ReviewDecision` TypeScript resource shapes for review UI and adapter examples.
 They use `apiVersion`, `kind`, `metadata`, `spec`, and `status` fields while
 mapping back to the existing Survey record layer. See
 [`docs/review-resource-contract.md`](review-resource-contract.md) for

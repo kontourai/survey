@@ -30,7 +30,7 @@ Survey does not decide whether a real-world value is true. It preserves the prod
 
 ## See it
 
-The Review Workbench rendering a real fixture queue — current vs proposed values, source evidence, decision effect, and the Surface projection preview:
+The Review Workbench rendering a real example queue — current vs proposed values, source evidence, decision effect, and the Surface projection preview:
 
 ![Survey Review Workbench showing a review queue, current versus proposed values, decision controls, and a Surface preview](docs/assets/review-workbench-desktop.png)
 
@@ -150,7 +150,7 @@ Survey feeds Surface; Surface-shaped evidence feeds Flow gates; Flow's adversari
 | [Consumer Integration Guide](docs/consumer-integration-guide.md) | the full consumer path: ReviewItem queues, the workbench, persisted events, the server apply boundary |
 | [Review Resource Contract](docs/review-resource-contract.md) | the Kontour Resource shapes for review sessions and events |
 | [Source-Authority Review Pattern](docs/source-authority-review-pattern.md) | record discipline for sources the producer treats as authoritative |
-| [Review Workbench Prototype](docs/review-workbench-prototype.md) | running the fixture-backed standalone demo locally |
+| [Review Workbench Prototype](docs/review-workbench-prototype.md) | running the example-backed standalone demo locally |
 | [Releasing](docs/RELEASING.md) | release prep and publish flow |
 
 ## Product boundary

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildTrustReport, validateTrustBundle } from "@kontourai/surface";
-import { correctedDocumentCandidatesFixture } from "../fixtures/corrected-document-candidates.js";
-import { publicFieldReviewFixture } from "../fixtures/public-field-review.js";
+import { correctedDocumentCandidatesExample } from "../example-data/corrected-document-candidates.js";
+import { publicFieldReviewExample } from "../example-data/public-field-review.js";
 import {
   buildCanonicalReviewProofPayload,
   buildSurveyTrustBundle,
@@ -24,7 +24,7 @@ import {
 
 describe("Survey Surface projection", () => {
   it("projects a reviewed public field into valid Surface trust input", () => {
-    const input = buildSurveyTrustBundle(publicFieldReviewFixture);
+    const input = buildSurveyTrustBundle(publicFieldReviewExample);
     const valid = validateTrustBundle(input);
     const report = buildTrustReport(valid);
 
@@ -36,17 +36,17 @@ describe("Survey Surface projection", () => {
   });
 
   it("optionally attaches recomputable review proof anchors to reviewed Surface claims", () => {
-    const input = buildSurveyTrustBundle(publicFieldReviewFixture, { reviewProofs: true });
+    const input = buildSurveyTrustBundle(publicFieldReviewExample, { reviewProofs: true });
     const valid = validateTrustBundle(input);
     const report = buildTrustReport(valid);
     const claim = report.claims.find((item) => item.id === "public-field.entity-123.availability-status.current");
     const proposedClaim = report.claims.find((item) => item.id === "public-field.entity-123.availability-status.proposal-456");
-    const rawSource = publicFieldReviewFixture.rawSources[0]!;
-    const extraction = publicFieldReviewFixture.extractions[0]!;
-    const candidateSet = publicFieldReviewFixture.candidateSets[0]!;
+    const rawSource = publicFieldReviewExample.rawSources[0]!;
+    const extraction = publicFieldReviewExample.extractions[0]!;
+    const candidateSet = publicFieldReviewExample.candidateSets[0]!;
     const candidate = candidateSet.candidates[0]!;
-    const reviewOutcome = publicFieldReviewFixture.reviewOutcomes[0]!;
-    const projection = publicFieldReviewFixture.claims[0]!;
+    const reviewOutcome = publicFieldReviewExample.reviewOutcomes[0]!;
+    const projection = publicFieldReviewExample.claims[0]!;
     const payload = buildCanonicalReviewProofPayload({
       rawSource,
       extraction,
@@ -76,7 +76,7 @@ describe("Survey Surface projection", () => {
   });
 
   it("projects corrected document candidates and preserves Claim Dependency recompute pressure", () => {
-    const input = buildSurveyTrustBundle(correctedDocumentCandidatesFixture);
+    const input = buildSurveyTrustBundle(correctedDocumentCandidatesExample);
     const valid = validateTrustBundle(input);
     const report = buildTrustReport(valid);
     const currentPosition = report.claims.find((claim) => claim.id === "document.entity-1.statement-position.current");
@@ -1513,7 +1513,7 @@ describe("Survey Surface projection", () => {
   });
 
   it("rejects verified claims without review authority", () => {
-    const broken = structuredClone(publicFieldReviewFixture);
+    const broken = structuredClone(publicFieldReviewExample);
     broken.reviewOutcomes = [];
     broken.claims[0] = { ...broken.claims[0], status: "verified" };
 
@@ -1524,7 +1524,7 @@ describe("Survey Surface projection", () => {
   });
 
   it("rejects non-manual source claims without locators", () => {
-    const broken = structuredClone(publicFieldReviewFixture);
+    const broken = structuredClone(publicFieldReviewExample);
     broken.extractions[0] = { ...broken.extractions[0], locator: undefined };
 
     assert.throws(
@@ -1539,11 +1539,11 @@ describe("Survey Surface projection", () => {
         generatedAt: "2026-05-31T16:00:00.000Z",
       })
       .addClaimRecord({
-        rawSource: publicFieldReviewFixture.rawSources[0]!,
-        extraction: publicFieldReviewFixture.extractions[0]!,
-        candidateSet: publicFieldReviewFixture.candidateSets[0]!,
-        reviewOutcome: publicFieldReviewFixture.reviewOutcomes[0]!,
-        claim: publicFieldReviewFixture.claims[0]!,
+        rawSource: publicFieldReviewExample.rawSources[0]!,
+        extraction: publicFieldReviewExample.extractions[0]!,
+        candidateSet: publicFieldReviewExample.candidateSets[0]!,
+        reviewOutcome: publicFieldReviewExample.reviewOutcomes[0]!,
+        claim: publicFieldReviewExample.claims[0]!,
       })
       .build();
 

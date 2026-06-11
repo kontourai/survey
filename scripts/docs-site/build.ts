@@ -282,7 +282,7 @@ function landingContent(): string {
 
 <section class="showcase">
   <h2>The Review Workbench</h2>
-  <p>A fixture-backed queue rendered by the embeddable workbench: current vs proposed values, source refs and excerpts, decision effect, and the Surface projection preview.</p>
+  <p>A example-backed queue rendered by the embeddable workbench: current vs proposed values, source refs and excerpts, decision effect, and the Surface projection preview.</p>
   <p><a class="button primary" href="demo/">Open the live demo</a></p>
   <img src="assets/review-workbench-desktop.png" alt="Survey Review Workbench showing a review queue, current versus proposed values, decision controls, and a Surface preview" loading="lazy">
 </section>
@@ -316,12 +316,12 @@ async function build(): Promise<void> {
 
   for (const page of pages) await renderDocPage(page);
 
-  // Host the fixture-backed Review Workbench as a live demo at /demo/.
+  // Host the example-backed Review Workbench as a live demo at /demo/.
   const demoDir = path.join(outDir, "demo");
   await mkdir(demoDir, { recursive: true });
   await cp(path.join(repoRoot, "examples", "review-workbench", "vendor"), path.join(demoDir, "vendor"), { recursive: true });
   await cp(path.join(repoRoot, "examples", "review-workbench", "review-workbench.css"), path.join(demoDir, "review-workbench.css"));
-  for (const compiled of ["src", "examples", "fixtures"]) {
+  for (const compiled of ["src", "examples", "example-data"]) {
     await cp(path.join(repoRoot, "dist", compiled), path.join(demoDir, "dist", compiled), { recursive: true });
   }
   const demoHtml = await readFile(path.join(repoRoot, "examples", "review-workbench", "index.html"), "utf8");

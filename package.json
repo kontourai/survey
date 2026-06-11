@@ -32,14 +32,14 @@
     },
     "./review-workbench.css": "./dist/src/review-workbench/review-workbench.css",
     "./review-workbench/standalone.css": "./dist/src/review-workbench/review-workbench.standalone.css",
-    "./fixtures/public-field-review": "./dist/fixtures/public-field-review.js",
-    "./fixtures/corrected-document-candidates": "./dist/fixtures/corrected-document-candidates.js",
-    "./fixtures/public-directory-review-resource": "./dist/fixtures/public-directory-review-resource.js",
-    "./fixtures/regulated-document-review-resource": "./dist/fixtures/regulated-document-review-resource.js"
+    "./example-data/public-field-review": "./dist/example-data/public-field-review.js",
+    "./example-data/corrected-document-candidates": "./dist/example-data/corrected-document-candidates.js",
+    "./example-data/public-directory-review-resource": "./dist/example-data/public-directory-review-resource.js",
+    "./example-data/regulated-document-review-resource": "./dist/example-data/regulated-document-review-resource.js"
   },
   "files": [
     "dist/examples/",
-    "dist/fixtures/",
+    "dist/example-data/",
     "dist/src/",
     "README.md"
   ],

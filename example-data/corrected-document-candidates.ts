@@ -2,8 +2,8 @@ import type { SurveyInput } from "../src/index.js";
 
 const generatedAt = "2026-05-31T16:00:00.000Z";
 
-export const correctedDocumentCandidatesFixture: SurveyInput = {
-  source: "survey.fixture.corrected-document-candidates",
+export const correctedDocumentCandidatesExample: SurveyInput = {
+  source: "survey.example.corrected-document-candidates",
   generatedAt,
   rawSources: [
     {
@@ -177,7 +177,7 @@ function computationClaim(id: "current" | "original", status: "proposed" | "stal
     impactLevel: "high" as const,
     evidenceType: "calculation_trace" as const,
     evidenceMethod: "validation" as const,
-    collectedBy: "survey-document-fixture",
+    collectedBy: "survey-document-example",
     eventMethod: "rule-application",
     derivedFrom: inputClaimIds,
     derivationEdges: inputClaimIds.map((inputClaimId, index) => ({

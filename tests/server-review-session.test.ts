@@ -15,16 +15,16 @@ import {
   StaleServerReviewSessionError,
   validateServerReviewSessionEvents,
 } from "../src/review-workbench/server-review-session.js";
-import { publicDirectoryReviewItemFixture } from "../fixtures/public-directory-review-resource.js";
+import { publicDirectoryReviewItemExample } from "../example-data/public-directory-review-resource.js";
 import type { ReviewSessionEvent } from "../src/review-resource.js";
 
 describe("server-owned review sessions", () => {
   it("hashes snapshots stably across JSON and Date round trips", () => {
     const snapshot = {
       ...initialReviewQueueSessionState([{
-        ...publicDirectoryReviewItemFixture,
+        ...publicDirectoryReviewItemExample,
         metadata: {
-          ...publicDirectoryReviewItemFixture.metadata,
+          ...publicDirectoryReviewItemExample.metadata,
           producer: {
             observedAt: new Date("2026-06-05T12:34:56.000Z"),
             nested: {
@@ -132,9 +132,9 @@ describe("server-owned review sessions", () => {
 
   it("validates server-owned events against session name and snapshot containment", () => {
     const snapshot = {
-      ...initialReviewQueueSessionState([publicDirectoryReviewItemFixture]),
+      ...initialReviewQueueSessionState([publicDirectoryReviewItemExample]),
       decisionsByItemName: {
-        [publicDirectoryReviewItemFixture.metadata.name]: "accept-proposed" as const,
+        [publicDirectoryReviewItemExample.metadata.name]: "accept-proposed" as const,
       },
     };
     const record = createServerReviewSessionRecord({
@@ -150,7 +150,7 @@ describe("server-owned review sessions", () => {
       sessionName: "server-review-1",
       sequence: 2,
       eventType: "decision-submitted",
-      reviewItemName: publicDirectoryReviewItemFixture.metadata.name,
+      reviewItemName: publicDirectoryReviewItemExample.metadata.name,
       candidateId: "not-in-snapshot",
       status: "verified",
       data: {
@@ -208,7 +208,7 @@ describe("server-owned review sessions", () => {
     const reviewedSession = {
       ...snapshot,
       decisionsByItemName: {
-        [publicDirectoryReviewItemFixture.metadata.name]: "accept-proposed" as const,
+        [publicDirectoryReviewItemExample.metadata.name]: "accept-proposed" as const,
       },
     };
     const record = createServerReviewSessionRecord({
@@ -226,7 +226,7 @@ describe("server-owned review sessions", () => {
 
     assert.equal(result.ok, true);
     assert.equal(result.results.length, 1);
-    assert.equal(result.results[0]?.reviewItemName, publicDirectoryReviewItemFixture.metadata.name);
+    assert.equal(result.results[0]?.reviewItemName, publicDirectoryReviewItemExample.metadata.name);
   });
 
   it("rejects server apply when the stored snapshot hash or event stream is invalid", () => {

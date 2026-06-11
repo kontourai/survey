@@ -39,7 +39,7 @@ export interface DownstreamPublicDirectoryProposal {
   crawlTriggeredBy?: string | null;
 }
 
-export const downstreamPublicDirectoryProposalFixture = {
+export const downstreamPublicDirectoryProposalExample = {
   id: "proposal-public-456",
   publicRecordId: "record-123",
   crawlRunId: "crawl-run-2026-05-31",

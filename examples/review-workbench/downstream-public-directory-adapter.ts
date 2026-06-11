@@ -1,5 +1,5 @@
 import { reviewResourceApiVersion, type ReviewCandidate, type ReviewItem } from "../../src/review-resource.js";
-import type { DownstreamFieldDiff, DownstreamPublicDirectoryProposal } from "../../fixtures/downstream-public-directory-proposal.js";
+import type { DownstreamFieldDiff, DownstreamPublicDirectoryProposal } from "../../example-data/downstream-public-directory-proposal.js";
 
 export function downstreamPublicDirectoryProposalToReviewItem(
   proposal: DownstreamPublicDirectoryProposal,

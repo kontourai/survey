@@ -4,14 +4,14 @@ import {
   facilityCredentialConsumerExample,
 } from "../examples/review-workbench/facility-credential-consumer.js";
 import {
-  facilityCredentialCurrentRecordFixture,
+  facilityCredentialCurrentRecordExample,
   prepareFacilityCredentialServerApply,
 } from "../examples/review-workbench/server-apply-consumer.js";
 
 describe("generic server apply consumer example", () => {
   it("prepares a product-owned mutation from persisted Survey events", () => {
     const prepared = prepareFacilityCredentialServerApply({
-      currentRecord: facilityCredentialCurrentRecordFixture,
+      currentRecord: facilityCredentialCurrentRecordExample,
       reviewSessionSnapshot: facilityCredentialConsumerExample.reviewSessionSnapshot,
       events: facilityCredentialConsumerExample.persistedEvents,
       actorId: "server-admin@example.test",
@@ -27,7 +27,7 @@ describe("generic server apply consumer example", () => {
 
   it("fails closed when persisted events do not replay against the pre-decision snapshot", () => {
     const prepared = prepareFacilityCredentialServerApply({
-      currentRecord: facilityCredentialCurrentRecordFixture,
+      currentRecord: facilityCredentialCurrentRecordExample,
       reviewSessionSnapshot: facilityCredentialConsumerExample.reviewSessionSnapshot,
       events: [],
       actorId: "server-admin@example.test",
@@ -41,7 +41,7 @@ describe("generic server apply consumer example", () => {
   it("keeps product current-state validation outside Survey", () => {
     const prepared = prepareFacilityCredentialServerApply({
       currentRecord: {
-        ...facilityCredentialCurrentRecordFixture,
+        ...facilityCredentialCurrentRecordExample,
         credential: { licenseNumber: "changed-after-review" },
       },
       reviewSessionSnapshot: facilityCredentialConsumerExample.reviewSessionSnapshot,

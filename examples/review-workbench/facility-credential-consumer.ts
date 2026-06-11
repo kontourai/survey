@@ -1,4 +1,4 @@
-import { facilityCredentialReviewItemFixture } from "../../src/review-workbench/review-workbench-data.js";
+import { facilityCredentialReviewItemExample } from "../../src/review-workbench/review-workbench-data.js";
 import {
   buildReviewItemPresentation,
   buildReviewResultPresentation,
@@ -62,17 +62,17 @@ export const facilityCredentialPresentationAdapter: ReviewPresentationAdapter = 
 
 export async function buildFacilityCredentialConsumerExample(): Promise<FacilityCredentialConsumerExample> {
   const reviewSessionSnapshot = {
-    ...initialReviewQueueSessionState([facilityCredentialReviewItemFixture]),
+    ...initialReviewQueueSessionState([facilityCredentialReviewItemExample]),
     actorId: "review-operator@example.test",
     reviewedAt: "2026-01-17T16:15:00.000Z",
   };
   const reviewedSnapshot = {
     ...reviewSessionSnapshot,
     decisionsByItemName: {
-      [facilityCredentialReviewItemFixture.metadata.name]: "accept-proposed" as const,
+      [facilityCredentialReviewItemExample.metadata.name]: "accept-proposed" as const,
     },
     notesByItemName: {
-      [facilityCredentialReviewItemFixture.metadata.name]: "Registry credential supersedes the managed snapshot.",
+      [facilityCredentialReviewItemExample.metadata.name]: "Registry credential supersedes the managed snapshot.",
     },
   };
 
@@ -106,16 +106,16 @@ export async function buildFacilityCredentialConsumerExample(): Promise<Facility
   }
 
   const itemPresentation = buildReviewItemPresentation(
-    facilityCredentialReviewItemFixture,
+    facilityCredentialReviewItemExample,
     facilityCredentialPresentationAdapter,
   );
   const resultPresentation = buildReviewResultPresentation(
     result,
-    facilityCredentialReviewItemFixture,
+    facilityCredentialReviewItemExample,
     facilityCredentialPresentationAdapter,
   );
   const surfaceProjectionPreview = buildSurfaceProjectionPreview(
-    facilityCredentialReviewItemFixture,
+    facilityCredentialReviewItemExample,
     result.reviewDecision,
     facilityCredentialPresentationAdapter,
   );
@@ -124,7 +124,7 @@ export async function buildFacilityCredentialConsumerExample(): Promise<Facility
   }
 
   return {
-    reviewItem: facilityCredentialReviewItemFixture,
+    reviewItem: facilityCredentialReviewItemExample,
     reviewSessionSnapshot,
     reviewedSnapshot,
     eventsToPersist,
@@ -140,7 +140,7 @@ export async function buildFacilityCredentialConsumerExample(): Promise<Facility
 export const facilityCredentialConsumerExample = await buildFacilityCredentialConsumerExample();
 
 export interface FacilityCredentialConsumerExample {
-  readonly reviewItem: typeof facilityCredentialReviewItemFixture;
+  readonly reviewItem: typeof facilityCredentialReviewItemExample;
   readonly reviewSessionSnapshot: ReturnType<typeof initialReviewQueueSessionState>;
   readonly reviewedSnapshot: ReturnType<typeof initialReviewQueueSessionState>;
   readonly eventsToPersist: readonly ReviewSessionEvent[];

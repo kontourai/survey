@@ -79,10 +79,10 @@ async function main() {
   assertExcludes(embedCss, "position: fixed;");
   assertExcludes(embedCss, "\nbody {");
   assertExcludes(embedCss, "\n:root {");
-  assertIncludes(dataJs, "publicDirectoryReviewItemFixture");
-  assertIncludes(dataJs, "facilityCredentialReviewItemFixture");
+  assertIncludes(dataJs, "publicDirectoryReviewItemExample");
+  assertIncludes(dataJs, "facilityCredentialReviewItemExample");
   assertIncludes(dataJs, "facility-credential-review-operating-license");
-  assertIncludes(dataJs, "reviewWorkbenchQueueFixtures");
+  assertIncludes(dataJs, "reviewWorkbenchQueueExamples");
   assertIncludes(presentationJs, "buildReviewItemPresentation");
   assertIncludes(presentationJs, "buildReviewResultPresentation");
   assertIncludes(presentationJs, "humanizeIdentifier");
@@ -129,22 +129,22 @@ async function main() {
   assertExcludes(surfacePreviewJs, "@kontourai/surface");
   assertExcludes(surfacePreviewJs, "src/to-surface");
   assertExcludes(surfacePreviewJs, "src/review-proof");
-  await assertBrowserDataMatchesCanonicalFixture();
+  await assertBrowserDataMatchesCanonicalExample();
 
-  console.log("Review workbench static artifact and fixture provenance check passed.");
+  console.log("Review workbench static artifact and example provenance check passed.");
 }
 
-async function assertBrowserDataMatchesCanonicalFixture() {
-  const canonicalModule = await import(pathToFileURL(path.join(root, "dist/fixtures/public-directory-review-resource.js")).href);
+async function assertBrowserDataMatchesCanonicalExample() {
+  const canonicalModule = await import(pathToFileURL(path.join(root, "dist/example-data/public-directory-review-resource.js")).href);
   const browserModule = await import(pathToFileURL(path.join(root, "dist/src/review-workbench/review-workbench-data.js")).href);
 
-  const canonicalFixture = canonicalModule.publicDirectoryReviewItemFixture;
-  const browserFixture = browserModule.publicDirectoryReviewItemFixture;
+  const canonicalExample = canonicalModule.publicDirectoryReviewItemExample;
+  const browserExample = browserModule.publicDirectoryReviewItemExample;
 
-  if (JSON.stringify(browserFixture) !== JSON.stringify(canonicalFixture)) {
+  if (JSON.stringify(browserExample) !== JSON.stringify(canonicalExample)) {
     throw new Error(
-      "Review workbench browser-safe fixture drifted from fixtures/public-directory-review-resource.ts. " +
-        "Update examples/review-workbench/review-workbench-data.ts to match the canonical ReviewItem fixture.",
+      "Review workbench browser-safe example drifted from example-data/public-directory-review-resource.ts. " +
+        "Update examples/review-workbench/review-workbench-data.ts to match the canonical ReviewItem example.",
     );
   }
 }

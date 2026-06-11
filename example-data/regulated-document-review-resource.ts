@@ -1,7 +1,7 @@
 import type { ReviewItem } from "../src/index.js";
 import { reviewResourceApiVersion } from "../src/index.js";
 
-export const regulatedDocumentReviewItemFixture = {
+export const regulatedDocumentReviewItemExample = {
   apiVersion: reviewResourceApiVersion,
   kind: "ReviewItem",
   metadata: {
@@ -58,7 +58,7 @@ export const regulatedDocumentReviewItemFixture = {
           impactLevel: "high",
           evidenceType: "calculation_trace",
           evidenceMethod: "validation",
-          collectedBy: "survey-document-fixture",
+          collectedBy: "survey-document-example",
           derivedFrom: [
             "document.entity-1.statement.amount.original",
             "document.entity-1.statement.credit.original",
@@ -110,7 +110,7 @@ export const regulatedDocumentReviewItemFixture = {
           impactLevel: "high",
           evidenceType: "calculation_trace",
           evidenceMethod: "validation",
-          collectedBy: "survey-document-fixture",
+          collectedBy: "survey-document-example",
           derivedFrom: [
             "document.entity-1.statement.amount.corrected",
             "document.entity-1.statement.credit.corrected",
