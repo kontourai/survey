@@ -23,7 +23,7 @@ for (const file of await htmlFiles(siteDir)) {
   const html = await readFile(file, "utf8");
   for (const match of html.matchAll(/(?:href|src)="([^"]+)"/g)) {
     const href = match[1];
-    if (/^(https?:|mailto:|#)/.test(href)) continue;
+    if (/^(https?:|mailto:|data:|#)/.test(href)) continue;
     const target = path.join(path.dirname(file), href.split("#")[0]);
     if (!existsSync(target)) {
       console.error(`BROKEN ${path.relative(repoRoot, file)}: ${href}`);

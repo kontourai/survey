@@ -175,6 +175,7 @@ mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "neutral" });
   </a>
   <nav class="header-links" aria-label="Primary">
     <a href="${toRoot}record-contracts.html">Docs</a>
+    <a href="${toRoot}demo/">Live Demo</a>
     <a href="${repoUrl}" rel="noopener">GitHub</a>
     <a href="https://www.npmjs.com/package/@kontourai/survey" rel="noopener">npm</a>
   </nav>
@@ -282,6 +283,7 @@ function landingContent(): string {
 <section class="showcase">
   <h2>The Review Workbench</h2>
   <p>A fixture-backed queue rendered by the embeddable workbench: current vs proposed values, source refs and excerpts, decision effect, and the Surface projection preview.</p>
+  <p><a class="button primary" href="demo/">Open the live demo</a></p>
   <img src="assets/review-workbench-desktop.png" alt="Survey Review Workbench showing a review queue, current versus proposed values, decision controls, and a Surface preview" loading="lazy">
 </section>
 
@@ -313,6 +315,17 @@ async function build(): Promise<void> {
   await writeFile(path.join(outDir, ".nojekyll"), "");
 
   for (const page of pages) await renderDocPage(page);
+
+  // Host the fixture-backed Review Workbench as a live demo at /demo/.
+  const demoDir = path.join(outDir, "demo");
+  await mkdir(demoDir, { recursive: true });
+  await cp(path.join(repoRoot, "examples", "review-workbench", "vendor"), path.join(demoDir, "vendor"), { recursive: true });
+  await cp(path.join(repoRoot, "examples", "review-workbench", "review-workbench.css"), path.join(demoDir, "review-workbench.css"));
+  for (const compiled of ["src", "examples", "fixtures"]) {
+    await cp(path.join(repoRoot, "dist", compiled), path.join(demoDir, "dist", compiled), { recursive: true });
+  }
+  const demoHtml = await readFile(path.join(repoRoot, "examples", "review-workbench", "index.html"), "utf8");
+  await writeFile(path.join(demoDir, "index.html"), demoHtml.replace("../../dist/", "./dist/"));
 
   const landing = layout({
     title: "Kontour Survey — producer-side evidence and review contracts",
