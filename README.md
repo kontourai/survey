@@ -89,16 +89,29 @@ One observation, one chain: the page it came from, what the extractor read, who 
 
 ## The producer validation path
 
-1. Build Survey observations with source, extraction, candidate, review, and claim records.
+1. Build Survey observations covering each link in the evidence chain.
 2. Call `buildSurveyTrustBundle` to project the Survey records into a Surface Trust Bundle.
 3. Call Surface `validateTrustBundle` on the Trust Bundle.
 4. Optionally call public Surface report APIs such as `buildTrustReport` to inspect claims, evidence, status, gaps, and metadata.
 
-Keep producer operational state outside Survey. Queue status, reviewer form state, retries, source caches, and product policy decisions belong in the producer's own data model. Survey carries only the portable source, extraction, candidate, review, and claim projection records needed by Surface.
+Keep producer operational state outside Survey. Queue status, reviewer form state, retries, source caches, and product policy decisions belong in the producer's own data model. Survey carries only the portable evidence chain records needed by Surface.
 
 ## Review Workbench embed
 
-For downstream products that already produce `ReviewItem` queues:
+**Web component** (shadow DOM, no framework required):
+
+```html
+<link rel="stylesheet" href="@kontourai/survey/review-workbench/standalone.css">
+<survey-review-workbench theme="survey" color-scheme="dark"></survey-review-workbench>
+<script type="module">
+  import "@kontourai/survey/review-workbench/element";
+  const el = document.querySelector("survey-review-workbench");
+  el.session = reviewQueueSession;
+  el.presentationAdapter = myAdapter;
+</script>
+```
+
+**Direct mount** into an existing element:
 
 ```ts
 import {
@@ -117,15 +130,29 @@ const presentationAdapter = {
 mountReviewWorkbench(element, reviewQueueSession, { presentationAdapter });
 ```
 
-The stylesheet is scoped to `.survey-workbench-embed` and bundles the Console Kit tokens it needs, so it will not rewrite the host application's `body` or `:root` styles. Mount into:
+The embedded stylesheet is scoped to `.survey-workbench-embed` and bundles Console Kit tokens, so it will not rewrite the host application's `body` or `:root` styles. Mount into:
 
 ```html
 <div class="survey-workbench-embed theme-survey"></div>
 ```
 
-`@kontourai/survey/review-workbench/standalone.css` exists for pages Survey owns entirely. Server code persisting browser-submitted review events should use `persistReviewSessionEvents`, then `deriveReviewSessionApplyResultForSnapshot` (or the composed `deriveServerReviewSessionApplyResult` with the freshness and event assertions from `@kontourai/survey/review-workbench/server-review-session`) before applying product policy — write results derive from pre-decision snapshots plus persisted events, never from browser-computed decisions.
+`@kontourai/survey/review-workbench/standalone.css` exists for pages Survey owns entirely.
 
-The [Consumer Integration Guide](docs/consumer-integration-guide.md) covers the full path from `ReviewItem` construction through persisted review events, exported results, and optional Surface projection, with test-covered examples under [`examples/review-workbench/`](examples/review-workbench/).
+## Review MCP
+
+Drive review-queue decisions from an MCP agent (Claude Desktop, Cursor, or any MCP host):
+
+```sh
+npx survey-review-mcp --session path/to/session.json
+```
+
+Three tools: `survey_review_queue` (queue state), `survey_review_item` (item detail), and `survey_review_decide` (record a decision). Each queue and item call includes an embedded, fully self-contained review card with Accept / Hold / Reject buttons. See [docs/review-mcp.md](docs/review-mcp.md).
+
+At viewports ≤ 980 px, the queue panel becomes a slide-in drawer with a compact progress bar. At narrow container widths, `cqi`-based type scaling keeps candidate values from overflowing at 360 px. CSS custom properties (`--k-*`) inherit through the shadow boundary so the host can theme either mode without forking styles.
+
+Server code persisting browser-submitted review events should use `persistReviewSessionEvents`, then `deriveReviewSessionApplyResultForSnapshot` (or the composed `deriveServerReviewSessionApplyResult` from `@kontourai/survey/review-workbench/server-review-session`) before applying product policy — write results derive from pre-decision snapshots plus persisted events, never from browser-computed decisions.
+
+The [Consumer Integration Guide](docs/consumer-integration-guide.md) covers the full path from `ReviewItem` construction through persisted review events, exported results, Surface projection, and the full `--k-*` theming token list. Test-covered examples are under [`examples/review-workbench/`](examples/review-workbench/). To run the standalone demo locally, see [Review Workbench Prototype](docs/review-workbench-prototype.md).
 
 ## Where Survey fits
 
@@ -155,7 +182,7 @@ Survey feeds Surface; Surface-shaped evidence feeds Flow gates; Flow's adversari
 
 ## Product boundary
 
-Survey does not crawl pages, parse PDFs, rank candidates, decide review policy, or claim a value is true. Producers own acquisition, extraction, ranking, review UX, materiality, and domain policy. Survey gives those producers a consistent source → extraction → candidate → review → claim contract before the records enter Surface.
+Survey does not crawl pages, parse PDFs, rank candidates, decide review policy, or claim a value is true. Producers own acquisition, extraction, ranking, review UX, materiality, and domain policy. Survey gives those producers a consistent evidence chain contract before the records enter Surface.
 
 ## Contributor checks
 

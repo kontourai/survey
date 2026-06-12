@@ -1,0 +1,878 @@
+{
+  "session": {
+    "apiVersion": "survey.kontourai.io/v1alpha1",
+    "kind": "ReviewSession",
+    "metadata": {
+      "name": "mcp-review-session"
+    },
+    "spec": {
+      "reviewItemNames": [
+        "public-directory-hours",
+        "public-directory-phone",
+        "public-directory-availability",
+        "public-directory-address",
+        "public-directory-license",
+        "regulated-rule-conflict-standard-threshold"
+      ],
+      "actor": {
+        "id": "review-workbench-operator"
+      },
+      "startedAt": "2026-06-04T00:00:00.000Z"
+    },
+    "status": {
+      "activeItemName": "public-directory-hours",
+      "eventCount": 2,
+      "decisionCount": 0
+    }
+  },
+  "snapshot": {
+    "items": [
+      {
+        "apiVersion": "survey.kontourai.io/v1alpha1",
+        "kind": "ReviewItem",
+        "metadata": {
+          "name": "public-directory-hours",
+          "labels": {
+            "domain": "public-directory"
+          },
+          "producer": {
+            "displayName": "Example Program",
+            "slug": "example-program"
+          }
+        },
+        "spec": {
+          "target": "hours",
+          "selectedCandidateId": "public-directory-hours:candidate:current",
+          "candidateSetStatus": "needs-review",
+          "rationale": "Example-backed local review queue item for hours.",
+          "candidates": [
+            {
+              "id": "public-directory-hours:candidate:current",
+              "role": "current",
+              "value": "Weekdays 9am-5pm",
+              "confidence": 0.91,
+              "source": {
+                "sourceId": "public-directory-hours:source:current",
+                "sourceRef": "https://example.test/listings/example-program",
+                "kind": "web-page",
+                "observedAt": "2026-05-30T18:00:00.000Z",
+                "fetchedAt": "2026-05-30T18:00:00.000Z",
+                "locatorScheme": "html"
+              },
+              "locator": {
+                "scheme": "html",
+                "locator": "html:field=availabilityStatus",
+                "excerpt": "Availability is open for the example program."
+              },
+              "extraction": {
+                "extractionId": "public-directory-hours:extraction:current",
+                "target": "hours",
+                "confidence": 0.91,
+                "extractor": "example-field-review",
+                "extractedAt": "2026-05-30T18:00:00.000Z"
+              },
+              "claimTarget": {
+                "claimId": "public-field.entity-123.hours.current",
+                "subjectType": "public-record.entity",
+                "subjectId": "entity-123",
+                "surface": "public-record.profile",
+                "claimType": "public-data.field",
+                "fieldOrBehavior": "hours",
+                "impactLevel": "medium",
+                "collectedBy": "example-field-review"
+              },
+              "projection": {
+                "rawSourceId": "public-directory-hours:source:current",
+                "extractionId": "public-directory-hours:extraction:current",
+                "candidateSetId": "public-directory-hours:candidate-set",
+                "candidateId": "public-directory-hours:projection:current",
+                "claimId": "public-field.entity-123.hours.current"
+              },
+              "producer": {
+                "sourceAuthority": {
+                  "authorityClass": "public-directory-listing",
+                  "declaredBy": "Example Program public directory",
+                  "scope": "availabilityStatus field on entity-123"
+                }
+              }
+            },
+            {
+              "id": "public-directory-hours:candidate:proposed",
+              "role": "proposed",
+              "value": "Weekdays 8am-6pm",
+              "confidence": 0.82,
+              "source": {
+                "sourceId": "public-directory-hours:source:proposed",
+                "sourceRef": "https://example.test/listings/example-program",
+                "kind": "web-page",
+                "observedAt": "2026-05-31T15:00:00.000Z",
+                "fetchedAt": "2026-05-31T15:00:00.000Z",
+                "locatorScheme": "html"
+              },
+              "locator": {
+                "scheme": "html",
+                "locator": "html:field=availabilityStatus",
+                "excerpt": "Join the waitlist for this listing."
+              },
+              "extraction": {
+                "extractionId": "public-directory-hours:extraction:proposed",
+                "target": "hours",
+                "confidence": 0.82,
+                "extractor": "example-crawl",
+                "extractedAt": "2026-05-31T15:00:00.000Z"
+              },
+              "claimTarget": {
+                "claimId": "public-field.entity-123.hours.proposed",
+                "subjectType": "public-record.entity",
+                "subjectId": "entity-123",
+                "surface": "public-record.profile",
+                "claimType": "public-data.field-candidate",
+                "fieldOrBehavior": "hours",
+                "impactLevel": "medium",
+                "collectedBy": "example-crawl"
+              },
+              "projection": {
+                "rawSourceId": "public-directory-hours:source:proposed",
+                "extractionId": "public-directory-hours:extraction:proposed",
+                "candidateSetId": "public-directory-hours:candidate-set",
+                "candidateId": "public-directory-hours:projection:proposed",
+                "claimId": "public-field.entity-123.hours.proposed"
+              },
+              "producer": {
+                "proposalId": "proposal-456",
+                "oldValue": "AVAILABLE",
+                "sourceAuthority": {
+                  "authorityClass": "public-directory-listing",
+                  "declaredBy": "Example Program public directory crawler",
+                  "scope": "availabilityStatus field on entity-123"
+                }
+              }
+            }
+          ],
+          "producerPolicy": {
+            "feedbackTags": [
+              "hours-change",
+              "crawler-suggested"
+            ]
+          }
+        },
+        "status": {
+          "observedCandidateCount": 2,
+          "selectedCandidateId": "public-directory-hours:candidate:current"
+        }
+      },
+      {
+        "apiVersion": "survey.kontourai.io/v1alpha1",
+        "kind": "ReviewItem",
+        "metadata": {
+          "name": "public-directory-phone",
+          "labels": {
+            "domain": "public-directory"
+          },
+          "producer": {
+            "displayName": "Example Program",
+            "slug": "example-program"
+          }
+        },
+        "spec": {
+          "target": "phoneNumber",
+          "selectedCandidateId": "public-directory-phone:candidate:current",
+          "candidateSetStatus": "needs-review",
+          "rationale": "Example-backed local review queue item for phoneNumber.",
+          "candidates": [
+            {
+              "id": "public-directory-phone:candidate:current",
+              "role": "current",
+              "value": "+1-555-0100",
+              "confidence": 0.91,
+              "source": {
+                "sourceId": "public-directory-phone:source:current",
+                "sourceRef": "https://example.test/listings/example-program",
+                "kind": "web-page",
+                "observedAt": "2026-05-30T18:00:00.000Z",
+                "fetchedAt": "2026-05-30T18:00:00.000Z",
+                "locatorScheme": "html"
+              },
+              "locator": {
+                "scheme": "html",
+                "locator": "html:field=availabilityStatus",
+                "excerpt": "Availability is open for the example program."
+              },
+              "extraction": {
+                "extractionId": "public-directory-phone:extraction:current",
+                "target": "phoneNumber",
+                "confidence": 0.91,
+                "extractor": "example-field-review",
+                "extractedAt": "2026-05-30T18:00:00.000Z"
+              },
+              "claimTarget": {
+                "claimId": "public-field.entity-123.phoneNumber.current",
+                "subjectType": "public-record.entity",
+                "subjectId": "entity-123",
+                "surface": "public-record.profile",
+                "claimType": "public-data.field",
+                "fieldOrBehavior": "phoneNumber",
+                "impactLevel": "medium",
+                "collectedBy": "example-field-review"
+              },
+              "projection": {
+                "rawSourceId": "public-directory-phone:source:current",
+                "extractionId": "public-directory-phone:extraction:current",
+                "candidateSetId": "public-directory-phone:candidate-set",
+                "candidateId": "public-directory-phone:projection:current",
+                "claimId": "public-field.entity-123.phoneNumber.current"
+              },
+              "producer": {
+                "sourceAuthority": {
+                  "authorityClass": "public-directory-listing",
+                  "declaredBy": "Example Program public directory",
+                  "scope": "availabilityStatus field on entity-123"
+                }
+              }
+            },
+            {
+              "id": "public-directory-phone:candidate:proposed",
+              "role": "proposed",
+              "value": "+1-555-0199",
+              "confidence": 0.82,
+              "source": {
+                "sourceId": "public-directory-phone:source:proposed",
+                "sourceRef": "https://example.test/listings/example-program",
+                "kind": "web-page",
+                "observedAt": "2026-05-31T15:00:00.000Z",
+                "fetchedAt": "2026-05-31T15:00:00.000Z",
+                "locatorScheme": "html"
+              },
+              "locator": {
+                "scheme": "html",
+                "locator": "html:field=availabilityStatus",
+                "excerpt": "Join the waitlist for this listing."
+              },
+              "extraction": {
+                "extractionId": "public-directory-phone:extraction:proposed",
+                "target": "phoneNumber",
+                "confidence": 0.82,
+                "extractor": "example-crawl",
+                "extractedAt": "2026-05-31T15:00:00.000Z"
+              },
+              "claimTarget": {
+                "claimId": "public-field.entity-123.phoneNumber.proposed",
+                "subjectType": "public-record.entity",
+                "subjectId": "entity-123",
+                "surface": "public-record.profile",
+                "claimType": "public-data.field-candidate",
+                "fieldOrBehavior": "phoneNumber",
+                "impactLevel": "medium",
+                "collectedBy": "example-crawl"
+              },
+              "projection": {
+                "rawSourceId": "public-directory-phone:source:proposed",
+                "extractionId": "public-directory-phone:extraction:proposed",
+                "candidateSetId": "public-directory-phone:candidate-set",
+                "candidateId": "public-directory-phone:projection:proposed",
+                "claimId": "public-field.entity-123.phoneNumber.proposed"
+              },
+              "producer": {
+                "proposalId": "proposal-456",
+                "oldValue": "AVAILABLE",
+                "sourceAuthority": {
+                  "authorityClass": "public-directory-listing",
+                  "declaredBy": "Example Program public directory crawler",
+                  "scope": "availabilityStatus field on entity-123"
+                }
+              }
+            }
+          ],
+          "producerPolicy": {
+            "feedbackTags": [
+              "contact-field",
+              "source-conflict"
+            ]
+          }
+        },
+        "status": {
+          "observedCandidateCount": 2,
+          "selectedCandidateId": "public-directory-phone:candidate:current"
+        }
+      },
+      {
+        "apiVersion": "survey.kontourai.io/v1alpha1",
+        "kind": "ReviewItem",
+        "metadata": {
+          "name": "public-directory-availability",
+          "labels": {
+            "domain": "public-directory"
+          },
+          "producer": {
+            "displayName": "Example Program",
+            "slug": "example-program"
+          }
+        },
+        "spec": {
+          "target": "availabilityStatus",
+          "selectedCandidateId": "public-directory:candidate:current",
+          "candidateSetStatus": "resolved",
+          "rationale": "Reviewed public directory field and retained the current value.",
+          "candidates": [
+            {
+              "id": "public-directory:candidate:current",
+              "role": "current",
+              "value": "AVAILABLE",
+              "confidence": 0.91,
+              "source": {
+                "sourceId": "public-field:source:approved-page",
+                "sourceRef": "https://example.test/listings/example-program",
+                "kind": "web-page",
+                "observedAt": "2026-05-30T18:00:00.000Z",
+                "fetchedAt": "2026-05-30T18:00:00.000Z",
+                "locatorScheme": "html"
+              },
+              "locator": {
+                "scheme": "html",
+                "locator": "html:field=availabilityStatus",
+                "excerpt": "Availability is open for the example program."
+              },
+              "extraction": {
+                "extractionId": "public-field:extraction:approved",
+                "target": "availabilityStatus",
+                "confidence": 0.91,
+                "extractor": "example-field-review",
+                "extractedAt": "2026-05-30T18:00:00.000Z"
+              },
+              "claimTarget": {
+                "claimId": "public-field.entity-123.availability-status.current",
+                "subjectType": "public-record.entity",
+                "subjectId": "entity-123",
+                "surface": "public-record.profile",
+                "claimType": "public-data.field",
+                "fieldOrBehavior": "availabilityStatus",
+                "impactLevel": "medium",
+                "collectedBy": "example-field-review"
+              },
+              "projection": {
+                "rawSourceId": "public-field:source:approved-page",
+                "extractionId": "public-field:extraction:approved",
+                "candidateSetId": "public-field:candidates:current",
+                "candidateId": "public-field:candidate:approved",
+                "reviewOutcomeId": "public-field:review:approved",
+                "claimId": "public-field.entity-123.availability-status.current"
+              },
+              "producer": {
+                "sourceAuthority": {
+                  "authorityClass": "public-directory-listing",
+                  "declaredBy": "Example Program public directory",
+                  "scope": "availabilityStatus field on entity-123"
+                }
+              }
+            },
+            {
+              "id": "public-directory:candidate:proposed",
+              "role": "proposed",
+              "value": "WAITLIST",
+              "confidence": 0.82,
+              "source": {
+                "sourceId": "public-field:source:proposal-page",
+                "sourceRef": "https://example.test/listings/example-program",
+                "kind": "web-page",
+                "observedAt": "2026-05-31T15:00:00.000Z",
+                "fetchedAt": "2026-05-31T15:00:00.000Z",
+                "locatorScheme": "html"
+              },
+              "locator": {
+                "scheme": "html",
+                "locator": "html:field=availabilityStatus",
+                "excerpt": "Join the waitlist for this listing."
+              },
+              "extraction": {
+                "extractionId": "public-field:extraction:proposal",
+                "target": "availabilityStatus",
+                "confidence": 0.82,
+                "extractor": "example-crawl",
+                "extractedAt": "2026-05-31T15:00:00.000Z"
+              },
+              "claimTarget": {
+                "claimId": "public-field.entity-123.availability-status.proposal-456",
+                "subjectType": "public-record.entity",
+                "subjectId": "entity-123",
+                "surface": "public-record.profile",
+                "claimType": "public-data.field-candidate",
+                "fieldOrBehavior": "availabilityStatus",
+                "impactLevel": "medium",
+                "collectedBy": "example-crawl"
+              },
+              "projection": {
+                "rawSourceId": "public-field:source:proposal-page",
+                "extractionId": "public-field:extraction:proposal",
+                "candidateSetId": "public-field:candidates:proposal",
+                "candidateId": "public-field:candidate:proposal",
+                "claimId": "public-field.entity-123.availability-status.proposal-456"
+              },
+              "producer": {
+                "proposalId": "proposal-456",
+                "oldValue": "AVAILABLE",
+                "sourceAuthority": {
+                  "authorityClass": "public-directory-listing",
+                  "declaredBy": "Example Program public directory crawler",
+                  "scope": "availabilityStatus field on entity-123"
+                }
+              }
+            }
+          ]
+        },
+        "status": {
+          "observedCandidateCount": 2,
+          "selectedCandidateId": "public-directory:candidate:current",
+          "reviewDecisionName": "public-directory-availability-operator-decision"
+        }
+      },
+      {
+        "apiVersion": "survey.kontourai.io/v1alpha1",
+        "kind": "ReviewItem",
+        "metadata": {
+          "name": "public-directory-address",
+          "labels": {
+            "domain": "public-directory"
+          },
+          "producer": {
+            "displayName": "Example Program",
+            "slug": "example-program"
+          }
+        },
+        "spec": {
+          "target": "streetAddress",
+          "selectedCandidateId": "public-directory-address:candidate:current",
+          "candidateSetStatus": "needs-review",
+          "rationale": "Example-backed local review queue item for streetAddress.",
+          "candidates": [
+            {
+              "id": "public-directory-address:candidate:current",
+              "role": "current",
+              "value": "100 Main Street",
+              "confidence": 0.91,
+              "source": {
+                "sourceId": "public-directory-address:source:current",
+                "sourceRef": "https://example.test/listings/example-program",
+                "kind": "web-page",
+                "observedAt": "2026-05-30T18:00:00.000Z",
+                "fetchedAt": "2026-05-30T18:00:00.000Z",
+                "locatorScheme": "html"
+              },
+              "locator": {
+                "scheme": "html",
+                "locator": "html:field=availabilityStatus",
+                "excerpt": "Availability is open for the example program."
+              },
+              "extraction": {
+                "extractionId": "public-directory-address:extraction:current",
+                "target": "streetAddress",
+                "confidence": 0.91,
+                "extractor": "example-field-review",
+                "extractedAt": "2026-05-30T18:00:00.000Z"
+              },
+              "claimTarget": {
+                "claimId": "public-field.entity-123.streetAddress.current",
+                "subjectType": "public-record.entity",
+                "subjectId": "entity-123",
+                "surface": "public-record.profile",
+                "claimType": "public-data.field",
+                "fieldOrBehavior": "streetAddress",
+                "impactLevel": "medium",
+                "collectedBy": "example-field-review"
+              },
+              "projection": {
+                "rawSourceId": "public-directory-address:source:current",
+                "extractionId": "public-directory-address:extraction:current",
+                "candidateSetId": "public-directory-address:candidate-set",
+                "candidateId": "public-directory-address:projection:current",
+                "claimId": "public-field.entity-123.streetAddress.current"
+              },
+              "producer": {
+                "sourceAuthority": {
+                  "authorityClass": "public-directory-listing",
+                  "declaredBy": "Example Program public directory",
+                  "scope": "availabilityStatus field on entity-123"
+                }
+              }
+            },
+            {
+              "id": "public-directory-address:candidate:proposed",
+              "role": "proposed",
+              "value": "102 Main Street",
+              "confidence": 0.82,
+              "source": {
+                "sourceId": "public-directory-address:source:proposed",
+                "sourceRef": "https://example.test/listings/example-program",
+                "kind": "web-page",
+                "observedAt": "2026-05-31T15:00:00.000Z",
+                "fetchedAt": "2026-05-31T15:00:00.000Z",
+                "locatorScheme": "html"
+              },
+              "locator": {
+                "scheme": "html",
+                "locator": "html:field=availabilityStatus",
+                "excerpt": "Join the waitlist for this listing."
+              },
+              "extraction": {
+                "extractionId": "public-directory-address:extraction:proposed",
+                "target": "streetAddress",
+                "confidence": 0.82,
+                "extractor": "example-crawl",
+                "extractedAt": "2026-05-31T15:00:00.000Z"
+              },
+              "claimTarget": {
+                "claimId": "public-field.entity-123.streetAddress.proposed",
+                "subjectType": "public-record.entity",
+                "subjectId": "entity-123",
+                "surface": "public-record.profile",
+                "claimType": "public-data.field-candidate",
+                "fieldOrBehavior": "streetAddress",
+                "impactLevel": "medium",
+                "collectedBy": "example-crawl"
+              },
+              "projection": {
+                "rawSourceId": "public-directory-address:source:proposed",
+                "extractionId": "public-directory-address:extraction:proposed",
+                "candidateSetId": "public-directory-address:candidate-set",
+                "candidateId": "public-directory-address:projection:proposed",
+                "claimId": "public-field.entity-123.streetAddress.proposed"
+              },
+              "producer": {
+                "proposalId": "proposal-456",
+                "oldValue": "AVAILABLE",
+                "sourceAuthority": {
+                  "authorityClass": "public-directory-listing",
+                  "declaredBy": "Example Program public directory crawler",
+                  "scope": "availabilityStatus field on entity-123"
+                }
+              }
+            }
+          ],
+          "producerPolicy": {
+            "feedbackTags": [
+              "address-change",
+              "producer-escalation-candidate"
+            ]
+          }
+        },
+        "status": {
+          "observedCandidateCount": 2,
+          "selectedCandidateId": "public-directory-address:candidate:current"
+        }
+      },
+      {
+        "apiVersion": "survey.kontourai.io/v1alpha1",
+        "kind": "ReviewItem",
+        "metadata": {
+          "name": "public-directory-license",
+          "labels": {
+            "domain": "public-directory"
+          },
+          "producer": {
+            "displayName": "Example Program",
+            "slug": "example-program"
+          }
+        },
+        "spec": {
+          "target": "licenseStatus",
+          "selectedCandidateId": "public-directory-license:candidate:current",
+          "candidateSetStatus": "escalated",
+          "rationale": "Example-backed local review queue item for licenseStatus.",
+          "candidates": [
+            {
+              "id": "public-directory-license:candidate:current",
+              "role": "current",
+              "value": "ACTIVE",
+              "confidence": 0.91,
+              "source": {
+                "sourceId": "public-directory-license:source:current",
+                "sourceRef": "https://example.test/listings/example-program",
+                "kind": "web-page",
+                "observedAt": "2026-05-30T18:00:00.000Z",
+                "fetchedAt": "2026-05-30T18:00:00.000Z",
+                "locatorScheme": "html"
+              },
+              "locator": {
+                "scheme": "html",
+                "locator": "html:field=availabilityStatus",
+                "excerpt": "Availability is open for the example program."
+              },
+              "extraction": {
+                "extractionId": "public-directory-license:extraction:current",
+                "target": "licenseStatus",
+                "confidence": 0.91,
+                "extractor": "example-field-review",
+                "extractedAt": "2026-05-30T18:00:00.000Z"
+              },
+              "claimTarget": {
+                "claimId": "public-field.entity-123.licenseStatus.current",
+                "subjectType": "public-record.entity",
+                "subjectId": "entity-123",
+                "surface": "public-record.profile",
+                "claimType": "public-data.field",
+                "fieldOrBehavior": "licenseStatus",
+                "impactLevel": "medium",
+                "collectedBy": "example-field-review"
+              },
+              "projection": {
+                "rawSourceId": "public-directory-license:source:current",
+                "extractionId": "public-directory-license:extraction:current",
+                "candidateSetId": "public-directory-license:candidate-set",
+                "candidateId": "public-directory-license:projection:current",
+                "claimId": "public-field.entity-123.licenseStatus.current"
+              },
+              "producer": {
+                "sourceAuthority": {
+                  "authorityClass": "public-directory-listing",
+                  "declaredBy": "Example Program public directory",
+                  "scope": "availabilityStatus field on entity-123"
+                }
+              }
+            },
+            {
+              "id": "public-directory-license:candidate:proposed",
+              "role": "proposed",
+              "value": "EXPIRED",
+              "confidence": 0.82,
+              "source": {
+                "sourceId": "public-directory-license:source:proposed",
+                "sourceRef": "https://example.test/listings/example-program",
+                "kind": "web-page",
+                "observedAt": "2026-05-31T15:00:00.000Z",
+                "fetchedAt": "2026-05-31T15:00:00.000Z",
+                "locatorScheme": "html"
+              },
+              "locator": {
+                "scheme": "html",
+                "locator": "html:field=availabilityStatus",
+                "excerpt": "Join the waitlist for this listing."
+              },
+              "extraction": {
+                "extractionId": "public-directory-license:extraction:proposed",
+                "target": "licenseStatus",
+                "confidence": 0.82,
+                "extractor": "example-crawl",
+                "extractedAt": "2026-05-31T15:00:00.000Z"
+              },
+              "claimTarget": {
+                "claimId": "public-field.entity-123.licenseStatus.proposed",
+                "subjectType": "public-record.entity",
+                "subjectId": "entity-123",
+                "surface": "public-record.profile",
+                "claimType": "public-data.field-candidate",
+                "fieldOrBehavior": "licenseStatus",
+                "impactLevel": "medium",
+                "collectedBy": "example-crawl"
+              },
+              "projection": {
+                "rawSourceId": "public-directory-license:source:proposed",
+                "extractionId": "public-directory-license:extraction:proposed",
+                "candidateSetId": "public-directory-license:candidate-set",
+                "candidateId": "public-directory-license:projection:proposed",
+                "claimId": "public-field.entity-123.licenseStatus.proposed"
+              },
+              "producer": {
+                "proposalId": "proposal-456",
+                "oldValue": "AVAILABLE",
+                "sourceAuthority": {
+                  "authorityClass": "public-directory-listing",
+                  "declaredBy": "Example Program public directory crawler",
+                  "scope": "availabilityStatus field on entity-123"
+                }
+              }
+            }
+          ],
+          "producerPolicy": {
+            "feedbackTags": [
+              "licensing",
+              "manual-review-required"
+            ]
+          }
+        },
+        "status": {
+          "observedCandidateCount": 2,
+          "selectedCandidateId": "public-directory-license:candidate:current"
+        }
+      },
+      {
+        "apiVersion": "survey.kontourai.io/v1alpha1",
+        "kind": "ReviewItem",
+        "metadata": {
+          "name": "regulated-rule-conflict-standard-threshold",
+          "labels": {
+            "domain": "regulated-rule-source"
+          },
+          "producer": {
+            "displayName": "Regulated Rule Review",
+            "jurisdiction": "example-jurisdiction",
+            "reportingPeriod": "2026"
+          }
+        },
+        "spec": {
+          "target": "standardThreshold",
+          "selectedCandidateId": "regulated-rule-conflict-standard-threshold:candidate:current",
+          "candidateSetStatus": "conflict",
+          "rationale": "A newly extracted source candidate conflicts with the currently managed rule value.",
+          "projection": {
+            "candidateSetId": "regulated-rule-conflict-standard-threshold:candidate-set"
+          },
+          "producerPolicy": {
+            "decisionMode": "keep-current",
+            "sourceAuthorityProjection": "only-for-selected-source-backed-value",
+            "feedbackTags": [
+              "rule-conflict",
+              "source-extraction-review"
+            ]
+          },
+          "candidates": [
+            {
+              "id": "regulated-rule-conflict-standard-threshold:candidate:current",
+              "role": "current",
+              "value": 15000,
+              "confidence": 1,
+              "source": {
+                "sourceId": "regulated-rule-conflict-standard-threshold:source:current",
+                "sourceRef": "survey-example://rules/example-jurisdiction/2026/standardThreshold",
+                "kind": "manual-entry",
+                "observedAt": "2026-06-03T00:00:00.000Z",
+                "locatorScheme": "structured-field"
+              },
+              "locator": {
+                "scheme": "structured-field",
+                "locator": "managed-rules:path=standardThreshold",
+                "excerpt": "Current managed rule value."
+              },
+              "extraction": {
+                "extractionId": "regulated-rule-conflict-standard-threshold:extraction:current",
+                "target": "standardThreshold",
+                "confidence": 1,
+                "extractor": "example-rule-manager",
+                "extractedAt": "2026-06-03T00:00:00.000Z"
+              },
+              "claimTarget": {
+                "claimId": "regulated-rule.example-jurisdiction.2026.standard-threshold.current",
+                "subjectType": "regulated-rule-source",
+                "subjectId": "example-jurisdiction:2026:standardThreshold",
+                "surface": "regulated.rules",
+                "claimType": "regulated.rule-source-value",
+                "fieldOrBehavior": "standardThreshold",
+                "impactLevel": "high",
+                "evidenceType": "human_attestation",
+                "evidenceMethod": "attestation",
+                "collectedBy": "example-rule-manager"
+              },
+              "projection": {
+                "rawSourceId": "regulated-rule-conflict-standard-threshold:source:current",
+                "extractionId": "regulated-rule-conflict-standard-threshold:extraction:current",
+                "candidateSetId": "regulated-rule-conflict-standard-threshold:candidate-set",
+                "candidateId": "regulated-rule-conflict-standard-threshold:projection:current",
+                "claimId": "regulated-rule.example-jurisdiction.2026.standard-threshold.current"
+              },
+              "producer": {
+                "status": "current-managed-value"
+              }
+            },
+            {
+              "id": "regulated-rule-conflict-standard-threshold:candidate:proposed",
+              "role": "proposed",
+              "value": 16000,
+              "confidence": 0.95,
+              "sourceRank": 1,
+              "source": {
+                "sourceId": "regulated-rule-conflict-standard-threshold:source:proposed",
+                "sourceRef": "https://example.test/regulatory-bulletins/2026-thresholds.pdf",
+                "kind": "uploaded-document",
+                "observedAt": "2026-06-03T00:30:00.000Z",
+                "locatorScheme": "pdf"
+              },
+              "locator": {
+                "scheme": "pdf",
+                "locator": "pdf:page=12;section=Standard%20Threshold;path=standardThreshold",
+                "excerpt": "Example Individual Standard Threshold $16,000"
+              },
+              "extraction": {
+                "extractionId": "regulated-rule-conflict-standard-threshold:extraction:proposed",
+                "target": "standardThreshold",
+                "confidence": 0.95,
+                "extractor": "example-rule-source-parser",
+                "extractedAt": "2026-06-03T00:30:00.000Z"
+              },
+              "claimTarget": {
+                "claimId": "regulated-rule.example-jurisdiction.2026.standard-threshold.proposed",
+                "subjectType": "regulated-rule-source",
+                "subjectId": "example-jurisdiction:2026:standardThreshold",
+                "surface": "regulated.rules",
+                "claimType": "regulated.rule-source-value",
+                "fieldOrBehavior": "standardThreshold",
+                "impactLevel": "high",
+                "evidenceType": "policy_rule",
+                "evidenceMethod": "extraction",
+                "collectedBy": "example-rule-source-parser"
+              },
+              "projection": {
+                "rawSourceId": "regulated-rule-conflict-standard-threshold:source:proposed",
+                "extractionId": "regulated-rule-conflict-standard-threshold:extraction:proposed",
+                "candidateSetId": "regulated-rule-conflict-standard-threshold:candidate-set",
+                "candidateId": "regulated-rule-conflict-standard-threshold:projection:proposed",
+                "claimId": "regulated-rule.example-jurisdiction.2026.standard-threshold.proposed"
+              },
+              "producer": {
+                "sourceSection": "Standard Threshold",
+                "sourcePage": 12,
+                "sourceAuthority": {
+                  "authorityClass": "official_publication",
+                  "declaredBy": "Example regulatory source registry",
+                  "scope": "standardThreshold rule value for example-jurisdiction 2026"
+                }
+              }
+            }
+          ]
+        },
+        "status": {
+          "observedCandidateCount": 2,
+          "selectedCandidateId": "regulated-rule-conflict-standard-threshold:candidate:current"
+        }
+      }
+    ],
+    "activeItemName": "public-directory-hours",
+    "notesByItemName": {},
+    "decisionsByItemName": {},
+    "reviewedAt": "2026-06-04T00:00:00.000Z",
+    "actorId": "review-workbench-operator"
+  },
+  "events": [
+    {
+      "apiVersion": "survey.kontourai.io/v1alpha1",
+      "kind": "ReviewSessionEvent",
+      "metadata": {
+        "name": "mcp-review-session-0001-session-started"
+      },
+      "spec": {
+        "sessionName": "mcp-review-session",
+        "sequence": 1,
+        "eventType": "session-started",
+        "occurredAt": "2026-06-04T00:00:00.000Z",
+        "actor": {
+          "id": "review-workbench-operator"
+        }
+      }
+    },
+    {
+      "apiVersion": "survey.kontourai.io/v1alpha1",
+      "kind": "ReviewSessionEvent",
+      "metadata": {
+        "name": "mcp-review-session-0002-item-selected"
+      },
+      "spec": {
+        "sessionName": "mcp-review-session",
+        "sequence": 2,
+        "eventType": "item-selected",
+        "occurredAt": "2026-06-04T00:00:00.000Z",
+        "activeItemName": "public-directory-hours",
+        "reviewItemName": "public-directory-hours",
+        "actor": {
+          "id": "review-workbench-operator"
+        }
+      }
+    }
+  ]
+}

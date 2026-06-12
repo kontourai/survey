@@ -825,9 +825,12 @@ function renderReviewQueueSessionHtml(
   return `
     <section class="workbench-shell" aria-label="Survey review workbench">
       ${renderWorkbenchHeader(state, presentationAdapter)}
+      ${renderMobileQueueBar(session, state, presentationAdapter)}
       ${renderActiveReviewStrip(session, state, presentationAdapter)}
       <div class="queue-layout">
-        <aside class="queue-panel" aria-label="Review queue">
+        <div class="queue-drawer-backdrop" data-testid="queue-drawer-backdrop" aria-hidden="true"></div>
+        <aside class="queue-panel" aria-label="Review queue" role="dialog" aria-modal="false" id="queue-panel">
+          <button class="queue-drawer-close" type="button" data-testid="queue-drawer-close" aria-label="Close queue panel">&#x2715;</button>
           ${renderQueueRows(session, presentationAdapter)}
           ${renderSessionSummary(session)}
           ${renderSessionAudit(session, sessionExport)}
@@ -839,6 +842,34 @@ function renderReviewQueueSessionHtml(
         </div>
       </div>
     </section>
+  `;
+}
+
+function renderMobileQueueBar(
+  session: ReviewQueueSessionState,
+  state: ReviewWorkbenchState,
+  presentationAdapter?: ReviewPresentationAdapter,
+): string {
+  const activeIndex = session.items.findIndex((item) => item.metadata.name === session.activeItemName);
+  const position = activeIndex >= 0 ? activeIndex + 1 : 1;
+  const resolved = Object.keys(session.decisionsByItemName).length;
+  const presentation = buildReviewItemPresentation(state.item, presentationAdapter);
+
+  return `
+    <div class="mobile-queue-bar" data-testid="mobile-queue-bar" aria-label="Queue progress">
+      <div class="mobile-queue-progress">
+        <span class="field-label">Queue · ${resolved} of ${session.items.length} resolved</span>
+        <span class="mobile-queue-item-label">${escapeHtml(presentation.targetLabel)}</span>
+      </div>
+      <button
+        class="mobile-queue-open"
+        type="button"
+        data-testid="mobile-queue-open"
+        aria-controls="queue-panel"
+        aria-expanded="false"
+        aria-label="Open review queue"
+      >Queue</button>
+    </div>
   `;
 }
 
@@ -982,18 +1013,14 @@ function renderActiveReviewStrip(
 }
 
 function renderWorkbenchHeader(state: ReviewWorkbenchState, presentationAdapter?: ReviewPresentationAdapter): string {
-  const current = candidateByRole(state.item, "current");
-  const proposed = candidateByRole(state.item, "proposed");
   const presentation = buildReviewItemPresentation(state.item, presentationAdapter);
-  const currentPresentation = buildReviewCandidatePresentation(state.item, current, presentationAdapter, presentation.targetLabel);
-  const proposedPresentation = buildReviewCandidatePresentation(state.item, proposed, presentationAdapter, presentation.targetLabel);
 
   return `
     <header class="topbar">
       <div>
         <p class="eyebrow">${escapeHtml(String(state.item.metadata.producer?.displayName ?? "Survey"))}</p>
         <h1>Review candidate update</h1>
-        <p class="review-question">For <strong>${escapeHtml(presentation.targetLabel)}</strong>, decide whether <strong>${escapeHtml(proposedPresentation.valueText)}</strong> should replace <strong>${escapeHtml(currentPresentation.valueText)}</strong>.</p>
+        <p class="review-target-label" data-testid="review-target-label"><strong>${escapeHtml(presentation.targetLabel)}</strong></p>
       </div>
       <dl class="meta-grid">
         ${metaItem("Item", state.item.metadata.name)}
@@ -1141,34 +1168,33 @@ function renderSurfacePreview(state: ReviewWorkbenchState, presentationAdapter?:
 
 function renderPendingSurfacePreview(): string {
   return `
-    <section class="surface-preview" data-testid="surface-preview" aria-label="Surface preview">
-      <div class="surface-head">
-        <h2>Surface preview</h2>
+    <details class="surface-preview" data-testid="surface-preview" aria-label="Surface preview">
+      <summary class="surface-summary">
+        <span class="surface-summary-label">Surface preview</span>
         <span class="state-label">pending</span>
-      </div>
-      <p class="preview-disclaimer">Choose a review decision to preview the source and review posture that would project toward Surface. Survey does not validate real-world truth.</p>
-    </section>
+      </summary>
+      <p class="preview-disclaimer">Choose a review decision to preview the source and review posture that would project toward Surface.</p>
+    </details>
   `;
 }
 
 function renderPopulatedSurfacePreview(preview: SurfaceProjectionPreview): string {
   return `
-    <section class="surface-preview" data-testid="surface-preview" aria-label="Surface preview">
-      <div class="surface-head">
-        <h2>Surface preview</h2>
+    <details class="surface-preview" data-testid="surface-preview" aria-label="Surface preview">
+      <summary class="surface-summary">
+        <span class="surface-summary-label">Surface preview</span>
         <span class="state-label">local preview</span>
-      </div>
-      <p class="preview-disclaimer" data-testid="surface-preview-disclaimer">${escapeHtml(preview.postureDisclaimer)}</p>
+      </summary>
       <div class="preview-section-grid">
         ${renderSurfacePreviewSections(preview)}
       </div>
-    </section>
+      <p class="preview-disclaimer preview-disclaimer-footer" data-testid="surface-preview-disclaimer">${escapeHtml(preview.postureDisclaimer)}</p>
+    </details>
   `;
 }
 
 function renderSurfacePreviewSections(preview: SurfaceProjectionPreview): string {
   return [
-    renderCanonicalClaim(preview),
     renderCandidateHistory(preview),
     renderSourceEvidence(preview),
     renderReviewEvent(preview),
@@ -1445,11 +1471,13 @@ function renderCurrentState(
   bindQueueRows(root, (itemName) => {
     controller.selectQueueItem(itemName);
     controller.renderCurrentState();
+    closeQueueDrawer(root);
   });
   bindNextUnresolved(root, () => {
     controller.goToNextUnresolved();
     controller.renderCurrentState();
   });
+  bindQueueDrawer(root);
 }
 
 function queueSessionFromStartState(
@@ -1511,6 +1539,57 @@ function bindNextUnresolved(root: HTMLElement, goToNextUnresolved: () => void): 
         scrollActiveReviewIntoView(root);
       });
     });
+}
+
+function bindQueueDrawer(root: HTMLElement): void {
+  const openButton = root.querySelector<HTMLButtonElement>("[data-testid='mobile-queue-open']");
+  const closeButton = root.querySelector<HTMLButtonElement>("[data-testid='queue-drawer-close']");
+  const backdrop = root.querySelector<HTMLElement>("[data-testid='queue-drawer-backdrop']");
+  const panel = root.querySelector<HTMLElement>("#queue-panel");
+
+  openButton?.addEventListener("click", () => openQueueDrawer(root));
+  closeButton?.addEventListener("click", () => closeQueueDrawer(root));
+  backdrop?.addEventListener("click", () => closeQueueDrawer(root));
+
+  if (typeof root.addEventListener === "function") {
+    root.addEventListener("keydown", (event) => {
+      if ((event as KeyboardEvent).key === "Escape" && panel?.classList.contains("is-open")) {
+        closeQueueDrawer(root);
+      }
+    });
+  }
+}
+
+function openQueueDrawer(root: HTMLElement): void {
+  const panel = root.querySelector<HTMLElement>("#queue-panel");
+  const backdrop = root.querySelector<HTMLElement>("[data-testid='queue-drawer-backdrop']");
+  const openButton = root.querySelector<HTMLButtonElement>("[data-testid='mobile-queue-open']");
+
+  if (!panel) {
+    return;
+  }
+
+  panel.classList.add("is-open");
+  panel.setAttribute("aria-modal", "true");
+  backdrop?.classList.add("is-visible");
+  openButton?.setAttribute("aria-expanded", "true");
+  panel.querySelector<HTMLElement>("button, [tabindex]")?.focus();
+}
+
+function closeQueueDrawer(root: HTMLElement): void {
+  const panel = root.querySelector<HTMLElement>("#queue-panel");
+  const backdrop = root.querySelector<HTMLElement>("[data-testid='queue-drawer-backdrop']");
+  const openButton = root.querySelector<HTMLButtonElement>("[data-testid='mobile-queue-open']");
+
+  if (!panel) {
+    return;
+  }
+
+  panel.classList.remove("is-open");
+  panel.setAttribute("aria-modal", "false");
+  backdrop?.classList.remove("is-visible");
+  openButton?.setAttribute("aria-expanded", "false");
+  openButton?.focus();
 }
 
 function scrollActiveReviewIntoView(root: HTMLElement): void {

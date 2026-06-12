@@ -450,6 +450,89 @@ const ruleConflictReviewItem = {
 } satisfies ReviewItem;
 ```
 
+## Web Component
+
+`@kontourai/survey/review-workbench/element` exports a `<survey-review-workbench>` custom element.
+It works like `<surface-trust-panel>`: data via the `.session` property or a `src` attribute
+that fetches JSON, shadow DOM isolates styles, and `--k-*` tokens inherit through the shadow
+boundary. The element is self-contained — a single module import is all that is needed; no
+separate stylesheet import is required.
+
+**Single-import usage**
+
+```ts
+import "@kontourai/survey/review-workbench/element";
+
+// Property assignment — primary API
+const el = document.querySelector("survey-review-workbench");
+el.session = reviewQueueSession;         // ReviewQueueSessionState | ReviewWorkbenchState
+el.presentationAdapter = myAdapter;      // ReviewPresentationAdapter | undefined
+```
+
+```html
+<survey-review-workbench theme="survey" color-scheme="dark"></survey-review-workbench>
+```
+
+**src attribute**
+
+Set a `src` attribute to fetch a JSON-serialised `ReviewQueueSessionState` from a URL.
+The element fetches the URL, parses the JSON, and calls `this.session = parsed` — identical
+to setting the property directly.
+
+```html
+<survey-review-workbench src="/api/review-sessions/my-session.json"
+                          theme="survey" color-scheme="dark">
+</survey-review-workbench>
+```
+
+Changing the `src` attribute at runtime re-fetches. If the fetch fails or returns a non-2xx
+status, an inline error message is rendered inside the shadow root. While no session is loaded
+(before the first assignment or before the fetch resolves) the element renders a neutral empty
+state message.
+
+**Attributes**
+
+| Attribute | Values | Default |
+|---|---|---|
+| `theme` | `survey` `console` `flow` `surface` | `survey` |
+| `color-scheme` | `dark` `light` | `dark` |
+| `src` | URL string | — |
+
+**Theming token contract**
+
+CSS custom properties inherit through the shadow boundary. Set any `--k-*` token
+on `survey-review-workbench` or an ancestor to override the shadow defaults.
+The element declares default token values on `:host` so host-page rules always win.
+
+| Token | Default | Role |
+|---|---|---|
+| `--k-bg` | `#060a10` | Shell background |
+| `--k-panel` | `#101822` | Panel background |
+| `--k-panel-raised` | `#161e2b` | Raised panel layer |
+| `--k-text` | `#e8eaf0` | Primary text |
+| `--k-text-muted` | `#8b93a8` | Secondary text |
+| `--k-text-faint` | `#4e5870` | Tertiary / label text |
+| `--k-line` | `rgba(255,255,255,0.08)` | Subtle borders |
+| `--k-line-strong` | `rgba(255,255,255,0.14)` | Visible borders |
+| `--k-brand` | `#5ce0c6` | Accent / brand colour |
+| `--k-active` | `#7aa2ff` | Proposed-candidate highlight |
+| `--k-positive` | `#34d399` | Accept / verified indicator |
+| `--k-caution` | `#f3b14b` | Escalate / hold indicator |
+| `--k-negative` | `#ff6f6f` | Reject indicator |
+| `--k-radius-md` | `10px` | Panel border radius |
+| `--k-radius-sm` | `6px` | Inner element radius |
+| `--k-font-ui` | `"Hanken Grotesk", system-ui, sans-serif` | UI typeface |
+
+When using `@kontourai/console-kit` tokens, those values flow through automatically.
+
+**Mobile drawer**
+
+At viewports ≤ 980 px (or when the embed container width is ≤ 980 px), the queue
+panel becomes a slide-in drawer. A compact progress bar at the top of the workbench
+shows "Queue · N of M resolved" and the current item label with a "Queue" button
+that opens the drawer. The drawer closes on item selection, backdrop tap, or Escape.
+Focus is moved into the drawer on open and returned to the open button on close.
+
 ## Mount The Workbench
 
 The workbench accepts a queue-shaped session. The producer owns how items are
