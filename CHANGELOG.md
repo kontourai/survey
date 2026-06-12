@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/kontourai/survey/compare/v0.7.0...v0.7.1) (2026-06-12)
+
+
+### Fixes
+
+* **review-workbench:** literal :host token defaults; browser integration tests for embeddable artifacts ([#76](https://github.com/kontourai/survey/issues/76)) ([d81d474](https://github.com/kontourai/survey/commit/d81d474d19f7afd19c26aa222be4632dbd6297b8))
+
 ## [0.7.0](https://github.com/kontourai/survey/compare/v0.6.0...v0.7.0) (2026-06-12)
 
 
