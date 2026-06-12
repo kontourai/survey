@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/kontourai/survey/compare/v0.6.0...v0.7.0) (2026-06-12)
+
+
+### Features
+
+* add oversight-quality metrics layer (EU AI Act Art. 14) ([#74](https://github.com/kontourai/survey/issues/74)) ([208304b](https://github.com/kontourai/survey/commit/208304bd9bdd76993bf16764c3e1f8b1d2a4bf37))
+
 ## [0.6.0](https://github.com/kontourai/survey/compare/v0.5.1...v0.6.0) (2026-06-12)
 
 
