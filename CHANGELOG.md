@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/kontourai/survey/compare/v0.7.2...v0.8.0) (2026-06-12)
+
+
+### Features
+
+* **console:** standalone review console; workbench UX polish and light mode ([#79](https://github.com/kontourai/survey/issues/79)) ([8a0091a](https://github.com/kontourai/survey/commit/8a0091a0db248c9b1353ab46126488a64c7afb1e))
+
 ## [0.7.2](https://github.com/kontourai/survey/compare/v0.7.1...v0.7.2) (2026-06-12)
 
 
