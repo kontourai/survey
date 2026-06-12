@@ -38,6 +38,73 @@ import {
 import type { ReviewPresentationAdapter } from "./review-presentation.js";
 import { REVIEW_WORKBENCH_CSS } from "./review-workbench-css.generated.js";
 
+/** @internal Second adopted stylesheet: host token defaults + inheritance delegation.
+ *
+ * This sheet is adopted AFTER the main workbench CSS (adoptedStyleSheets[1]).
+ * It serves two purposes:
+ *
+ * 1.  :host literal defaults — non-self-referential literal values for all --k-* tokens.
+ *     These provide a baseline when the host page does not load Console Kit.
+ *     Because they are literal (not var()), there is no self-reference cycle.
+ *     Inline styles on the host element always win over :host rules, so setting
+ *     `--k-brand: hotpink` on the element naturally overrides the #5ce0c6 default.
+ *
+ * 2.  .survey-workbench-embed[class] inherit delegation — using specificity (0,2,0)
+ *     to match the theme class selectors (e.g. .survey-workbench-embed.theme-survey).
+ *     Source order (after the workbench sheet) makes these inherit rules win, so the
+ *     embed's tokens propagate upward to :host, picking up any host overrides.
+ */
+const TOKEN_INHERIT_CSS = `/* 1. Host token defaults — literal values, not var() self-references.
+   Inline styles on the host element always win over :host rules so external
+   overrides (e.g. style="--k-brand: hotpink") propagate through automatically. */
+:host {
+  display: block;
+  container-type: inline-size;
+  --k-bg: #060a10;
+  --k-panel: #101822;
+  --k-panel-raised: #161e2b;
+  --k-text: #e8eaf0;
+  --k-text-muted: #8b93a8;
+  --k-text-faint: #4e5870;
+  --k-line: rgba(255,255,255,0.08);
+  --k-line-strong: rgba(255,255,255,0.14);
+  --k-brand: #5ce0c6;
+  --k-active: #7aa2ff;
+  --k-positive: #34d399;
+  --k-caution: #f3b14b;
+  --k-negative: #ff6f6f;
+  --k-neutral: #8b93a8;
+  --k-radius-md: 10px;
+  --k-radius-sm: 6px;
+  --k-font-ui: "Hanken Grotesk", system-ui, sans-serif;
+}
+/* 2. Token inheritance delegation — re-delegate --k-* tokens on the embed root
+   to inherit from :host, so external overrides set on the host element propagate
+   through the shadow boundary. The [class] attribute selector raises specificity
+   to (0,2,0) — matching the theme class selectors — and this sheet comes AFTER
+   the workbench defaults, so source order makes these rules win. */
+.survey-workbench-embed[class] {
+  --k-bg: inherit;
+  --k-panel: inherit;
+  --k-panel-raised: inherit;
+  --k-text: inherit;
+  --k-text-muted: inherit;
+  --k-text-faint: inherit;
+  --k-line: inherit;
+  --k-line-strong: inherit;
+  --k-brand: inherit;
+  --k-active: inherit;
+  --k-positive: inherit;
+  --k-caution: inherit;
+  --k-negative: inherit;
+  --k-neutral: inherit;
+  --k-radius-md: inherit;
+  --k-radius-sm: inherit;
+  --k-font-ui: inherit;
+  --k-font-mono: inherit;
+  --k-font-display: inherit;
+}`;
+
 export class SurveyReviewWorkbenchElement extends HTMLElement {
   static readonly observedAttributes = ["theme", "color-scheme", "src"];
 
@@ -61,33 +128,34 @@ export class SurveyReviewWorkbenchElement extends HTMLElement {
       this.#root.appendChild(styleEl);
     }
 
-    // Host token defaults: CSS custom properties inherit through the shadow
-    // boundary so host overrides win automatically. These are the defaults
-    // that apply when no ancestor sets the tokens.
+    // Fallback <style> element for browsers that do not support adoptedStyleSheets.
+    // When adoptedStyleSheets are available, TOKEN_INHERIT_CSS (the second adopted
+    // sheet) handles :host defaults and embed token delegation — and wins over this
+    // <style> element in the cascade.  This <style> is only active in the fallback
+    // path, so using literal values here is safe: there is no self-reference cycle.
     const hostStyle = document.createElement("style");
     hostStyle.textContent = `
       :host {
         display: block;
         container-type: inline-size;
-        /* --k-bg, --k-panel, etc. are set by the Console Kit theme stylesheet.
-           Declare fallback token values here so shadow content has something
-           to work with even if the host doesn't load Console Kit. */
-        --k-bg: var(--k-bg, #060a10);
-        --k-panel: var(--k-panel, #101822);
-        --k-panel-raised: var(--k-panel-raised, #161e2b);
-        --k-text: var(--k-text, #e8eaf0);
-        --k-text-muted: var(--k-text-muted, #8b93a8);
-        --k-text-faint: var(--k-text-faint, #4e5870);
-        --k-line: var(--k-line, rgba(255,255,255,0.08));
-        --k-line-strong: var(--k-line-strong, rgba(255,255,255,0.14));
-        --k-brand: var(--k-brand, #5ce0c6);
-        --k-active: var(--k-active, #7aa2ff);
-        --k-positive: var(--k-positive, #34d399);
-        --k-caution: var(--k-caution, #f3b14b);
-        --k-negative: var(--k-negative, #ff6f6f);
-        --k-radius-md: var(--k-radius-md, 10px);
-        --k-radius-sm: var(--k-radius-sm, 6px);
-        --k-font-ui: var(--k-font-ui, "Hanken Grotesk", system-ui, sans-serif);
+        /* Literal token defaults (no var() self-references) so the values resolve
+           correctly even when the adopted inheritance sheet is unavailable. */
+        --k-bg: #060a10;
+        --k-panel: #101822;
+        --k-panel-raised: #161e2b;
+        --k-text: #e8eaf0;
+        --k-text-muted: #8b93a8;
+        --k-text-faint: #4e5870;
+        --k-line: rgba(255,255,255,0.08);
+        --k-line-strong: rgba(255,255,255,0.14);
+        --k-brand: #5ce0c6;
+        --k-active: #7aa2ff;
+        --k-positive: #34d399;
+        --k-caution: #f3b14b;
+        --k-negative: #ff6f6f;
+        --k-radius-md: 10px;
+        --k-radius-sm: 6px;
+        --k-font-ui: "Hanken Grotesk", system-ui, sans-serif;
       }
       .workbench-empty, .workbench-error {
         display: flex;
@@ -103,6 +171,30 @@ export class SurveyReviewWorkbenchElement extends HTMLElement {
       }
       .workbench-error {
         color: var(--k-negative, #ff6f6f);
+      }
+      /* Delegate k-tokens from :host to the embed container so host-element inline
+         style overrides propagate through the shadow boundary. This rule has same
+         specificity as the workbench CSS token defaults but comes after them in
+         document order, so it wins and allows inheritance from :host. */
+      .survey-workbench-embed {
+        --k-bg: inherit;
+        --k-panel: inherit;
+        --k-panel-raised: inherit;
+        --k-text: inherit;
+        --k-text-muted: inherit;
+        --k-text-faint: inherit;
+        --k-line: inherit;
+        --k-line-strong: inherit;
+        --k-brand: inherit;
+        --k-active: inherit;
+        --k-positive: inherit;
+        --k-caution: inherit;
+        --k-negative: inherit;
+        --k-radius-md: inherit;
+        --k-radius-sm: inherit;
+        --k-font-ui: inherit;
+        --k-font-mono: inherit;
+        --k-font-display: inherit;
       }
     `;
     this.#root.appendChild(hostStyle);
@@ -212,15 +304,27 @@ export class SurveyReviewWorkbenchElement extends HTMLElement {
     this.#mounted = false;
   }
 
-  /** Attempt to inject the workbench CSS via constructable CSSStyleSheet. */
+  /** Attempt to inject the workbench CSS via constructable CSSStyleSheet.
+   *
+   * Two sheets are adopted: the main workbench CSS first, then a
+   * token-inheritance sheet that resets all --k-* tokens to `inherit`
+   * on .survey-workbench-embed.  Because later entries in adoptedStyleSheets
+   * win over earlier ones at equal specificity, the inheritance rules
+   * override the workbench token defaults.  This allows host-element inline
+   * style overrides (or any ancestor's CSS custom properties) to propagate
+   * through the shadow boundary.
+   */
   #adoptCss(): boolean {
     try {
       if (typeof CSSStyleSheet === "undefined" || !this.#root.adoptedStyleSheets) {
         return false;
       }
-      const sheet = new CSSStyleSheet();
-      sheet.replaceSync(REVIEW_WORKBENCH_CSS);
-      this.#root.adoptedStyleSheets = [sheet];
+      const workbenchSheet = new CSSStyleSheet();
+      workbenchSheet.replaceSync(REVIEW_WORKBENCH_CSS);
+      // Inheritance delegation sheet — must come AFTER the workbench sheet.
+      const inheritanceSheet = new CSSStyleSheet();
+      inheritanceSheet.replaceSync(TOKEN_INHERIT_CSS);
+      this.#root.adoptedStyleSheets = [workbenchSheet, inheritanceSheet];
       return true;
     } catch {
       return false;

@@ -53,3 +53,22 @@ Releases are automated with release-please: merges to main accumulate into a rel
 https://github.com/kontourai/survey
 
 All projects are Apache-2.0.
+
+## Integration tests
+
+Every embeddable artifact (web component, MCP UI resource) must have:
+
+(a) **Protocol/contract tests** that spawn the real process or build the real artifact
+    and exercise the full protocol — e.g. `tests/review-mcp.test.ts` for the stdio MCP server.
+
+(b) **A browser spec** in `tests/browser/` that renders the artifact in a real browser
+    (Playwright) and exercises at least one real interaction. Required cases:
+    - loads and renders with its own embedded styles (proves single-import contract)
+    - data-driven attribute or property path (e.g. `src=` or `.session=`)
+    - graceful error state on bad input (e.g. 404 `src=`)
+    - empty/no-data state
+    - **hostile input**: any artifact that interpolates data into HTML must include a test
+      with `</script><script>` and `<img onerror=>` payloads in every interpolated field,
+      asserting `window.__pwned` is undefined and no unexpected DOM elements appear.
+
+`tests/browser/` runs in CI as part of `npm run verify` via `npm run test:browser`.

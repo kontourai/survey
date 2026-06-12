@@ -73,6 +73,30 @@ async function buildEmbeddedWorkbenchCss() {
 }
 
 /**
+ * Post-process scoped token CSS so that `--k-xxx: <value>` declarations become
+ * `--k-xxx: var(--k-xxx, <value>)`.  This allows host-element inline styles (or
+ * any ancestor's custom properties) to propagate through the shadow boundary:
+ * when no override is present the fallback value keeps the default appearance.
+ *
+ * Only transforms bare --k-* declarations (not ones that already contain var()).
+ * Declarations that themselves reference another --k-* token are left unchanged
+ * because they will resolve transitively once the root tokens are overridable.
+ */
+function makeTokensInheritable(css) {
+  // Transform `--k-xxx: <value>;` to `--k-xxx: var(--k-xxx, <value>);` so that
+  // host-element inline styles propagate through the shadow boundary via CSS
+  // custom-property inheritance.  Values that already contain a var() reference
+  // are left unchanged to avoid self-referential cycles (e.g. --k-positive-soft).
+  return css.replace(
+    /([ \t]*)(--k-[\w-]+):\s*([^;]+);/g,
+    (match, indent, prop, value) => {
+      if (value.includes('var(')) return match;
+      return `${indent}${prop}: var(${prop}, ${value.trim()});`;
+    },
+  );
+}
+
+/**
  * Wrap CSS text in a TS module that exports it as a default string.
  * The element imports this at build time so no runtime fetch is required.
  */
