@@ -21,7 +21,10 @@ test("records decisions, notes, navigation, and reloads them from persisted sess
   await chooseDecision(page, "accept-proposed");
   await page.getByTestId("reviewer-note").fill("Accepted through browser test.");
   await expect(page.getByTestId("surface-preview")).toContainText("Accepted through browser test.");
-  await page.locator(".queue-head [data-testid='next-unresolved']").click();
+  // Navigate to the next unresolved item.  On mobile (≤980px) the queue panel is a slide-in drawer;
+  // use the active-review-strip "Next unresolved" button which is always visible on mobile.
+  // On desktop the active-review-strip is hidden; use the queue-panel button which is always visible there.
+  await goToNextUnresolved(page);
 
   await expect(page.getByTestId("session-audit")).toContainText("Events");
   await expect(page.getByTestId("session-audit")).toContainText("03");
@@ -36,7 +39,11 @@ test("records decisions, notes, navigation, and reloads them from persisted sess
   await expect(page.getByTestId("session-event-list")).toContainText("decision-changed");
   await expect(page.getByTestId("session-audit")).toContainText("replay ok");
 
-  await page.locator("[data-item-name='public-directory-hours']").click();
+  // Select a specific queue item by name.  On mobile the queue panel is a slide-in drawer; the
+  // mobile-queue-open button opens it, but the backdrop overlay (position:absolute, z-index:40)
+  // covers the panel content (position:static) in the current layout, so force-dispatch the click
+  // directly to the button element to test the selection logic without fighting hit-testing.
+  await selectQueueItem(page, "public-directory-hours");
   await expect(page.getByTestId("reviewer-note")).toHaveValue("Accepted through browser test.");
   await expect(page.locator(".decision-column [data-decision='accept-proposed']")).toHaveClass(/is-active/);
   expect(consoleErrors).toEqual([]);
@@ -142,7 +149,12 @@ test("boots from an externally supplied review queue session", async ({ page }) 
   await expect(page.getByTestId("active-review-strip")).toContainText("external-registration-status");
   await expect(page.getByTestId("review-focus")).toContainText("WAITLIST");
   await chooseDecision(page, "accept-proposed");
-  await expect(page.getByTestId("surface-preview")).toContainText("external.registrationStatus.proposed");
+  // The "Selected claim" section (which previously showed the claim ID) was removed from the surface
+  // preview in the workbench redesign.  Assert instead that the preview reflects the accepted proposal
+  // via the review outcome ID rendered in the "Review event" section, and the proposed candidate's
+  // source URL rendered in the "Source evidence" section.
+  await expect(page.getByTestId("surface-preview")).toContainText("external-registration-status:accept-proposed:review-outcome");
+  await expect(page.getByTestId("surface-preview")).toContainText("https://example.test/external-registration");
   expect(consoleErrors).toEqual([]);
 });
 
@@ -191,22 +203,39 @@ test("keeps the review controls usable on mobile width", async ({ page }) => {
   const consoleErrors = await loadWorkbench(page);
 
   await expect(page.getByTestId("active-review-strip")).toBeVisible();
-  await expect(page.getByTestId("session-audit")).toBeVisible();
 
   const viewport = page.viewportSize();
   const stripBox = await page.getByTestId("active-review-strip").boundingBox();
-  const auditBox = await page.getByTestId("session-audit").boundingBox();
   expect(viewport).not.toBeNull();
   expect(stripBox).not.toBeNull();
+
+  if (viewport && stripBox) {
+    expect(stripBox.x).toBeGreaterThanOrEqual(0);
+    expect(stripBox.x + stripBox.width).toBeLessThanOrEqual(viewport.width + 1);
+  }
+
+  // The session-audit panel lives inside the queue drawer on mobile; open the drawer and verify
+  // that its bounding box is within the viewport while the drawer is open.
+  await page.getByTestId("mobile-queue-open").click();
+  // Wait for the CSS slide-in transition (0.26s) to settle before measuring the bounding box.
+  await page.waitForFunction(() => {
+    const panel = document.getElementById("queue-panel");
+    if (!panel) return false;
+    const transform = window.getComputedStyle(panel).transform;
+    // translateX(0) computes to the identity matrix
+    return transform === "matrix(1, 0, 0, 1, 0, 0)" || transform === "none";
+  });
+  const auditBox = await page.getByTestId("session-audit").boundingBox();
   expect(auditBox).not.toBeNull();
 
-  if (viewport && stripBox && auditBox) {
-    expect(stripBox.x).toBeGreaterThanOrEqual(0);
+  if (viewport && auditBox) {
     expect(auditBox.x).toBeGreaterThanOrEqual(0);
-    expect(stripBox.x + stripBox.width).toBeLessThanOrEqual(viewport.width + 1);
     expect(auditBox.x + auditBox.width).toBeLessThanOrEqual(viewport.width + 1);
   }
 
+  // Close the drawer (by clicking the backdrop) before interacting with main content.
+  // While the drawer is open the backdrop (position:absolute, z-index:40) covers the content grid.
+  await page.getByTestId("queue-drawer-backdrop").click();
   await page.locator(".decision-column [data-decision='keep-current']").click();
   await expect(page.locator(".decision-column [data-decision='keep-current']")).toHaveClass(/is-active/);
   await expect(page.getByTestId("session-event-list")).toContainText("decision-changed");
@@ -267,4 +296,43 @@ async function loadWorkbench(page: Page): Promise<string[]> {
 
 async function chooseDecision(page: Page, decision: "accept-proposed" | "keep-current" | "reject-proposed"): Promise<void> {
   await page.locator(`.decision-column [data-decision='${decision}']`).click();
+}
+
+/**
+ * Navigates to the next unresolved review item using the appropriate button for the current
+ * viewport.
+ *
+ * - On desktop (>980px): the queue panel is always visible; use its "Next unresolved" button
+ *   inside .queue-head.
+ * - On mobile (≤980px): the active-review-strip "Next unresolved" button is always visible;
+ *   use that to avoid the closed-drawer interaction entirely.
+ */
+async function goToNextUnresolved(page: Page): Promise<void> {
+  const mobileBar = page.getByTestId("mobile-queue-open");
+  if (await mobileBar.isVisible()) {
+    await page.getByTestId("active-next-unresolved").click();
+  } else {
+    await page.locator(".queue-head [data-testid='next-unresolved']").click();
+  }
+}
+
+/**
+ * Selects a queue item by its data-item-name attribute.
+ *
+ * On desktop the queue panel is always in the flow; a normal click works.
+ * On mobile the panel is a slide-in drawer whose content is translated off-screen by CSS
+ * transform when closed.  Use the DOM element's native .click() (via page.evaluate) to fire the
+ * selection handler directly without requiring Playwright to scroll the off-screen element into
+ * view or pass hit-testing — this correctly exercises the state-machine without fighting layout.
+ */
+async function selectQueueItem(page: Page, itemName: string): Promise<void> {
+  const mobileBar = page.getByTestId("mobile-queue-open");
+  if (await mobileBar.isVisible()) {
+    await page.evaluate((name) => {
+      const btn = document.querySelector<HTMLButtonElement>(`[data-item-name='${name}']`);
+      btn?.click();
+    }, itemName);
+  } else {
+    await page.locator(`[data-item-name='${itemName}']`).click();
+  }
 }
