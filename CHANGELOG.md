@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.2](https://github.com/kontourai/survey/compare/v0.7.1...v0.7.2) (2026-06-12)
+
+
+### Fixes
+
+* **ci:** author release PRs via kontour-release-bot app token ([98caaeb](https://github.com/kontourai/survey/commit/98caaeb7b29e0f7eaf92cb22253777b464265f8b))
+
 ## [0.7.1](https://github.com/kontourai/survey/compare/v0.7.0...v0.7.1) (2026-06-12)
 
 
