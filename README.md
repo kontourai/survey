@@ -154,6 +154,17 @@ Server code persisting browser-submitted review events should use `persistReview
 
 The [Consumer Integration Guide](docs/consumer-integration-guide.md) covers the full path from `ReviewItem` construction through persisted review events, exported results, Surface projection, and the full `--k-*` theming token list. Test-covered examples are under [`examples/review-workbench/`](examples/review-workbench/). To run the standalone demo locally, see [Review Workbench Prototype](docs/review-workbench-prototype.md).
 
+
+## Standalone review console
+
+Spawn a loopback browser dashboard backed directly by a session file:
+
+```sh
+npx survey-review-console --session path/to/session.json [--port 4243]
+```
+
+Opens the full Review Workbench in your browser. Every decision you make is persisted back to the session file atomically via the same `deriveServerReviewSessionApplyResult` validation the MCP server uses. An SSE stream watches the file for changes, so the browser and any concurrent MCP agent converge live on the same event queue — no page refresh required. See [docs/review-console.md](docs/review-console.md).
+
 ## Where Survey fits
 
 Kontour AI shows the work behind AI. Survey is the producer-side primitive:
@@ -178,6 +189,8 @@ Survey feeds Surface; Surface-shaped evidence feeds Flow gates; Flow's adversari
 | [Review Resource Contract](docs/review-resource-contract.md) | the Kontour Resource shapes for review sessions and events |
 | [Source-Authority Review Pattern](docs/source-authority-review-pattern.md) | record discipline for sources the producer treats as authoritative |
 | [Review Workbench Prototype](docs/review-workbench-prototype.md) | running the example-backed standalone demo locally |
+| [Review Console](docs/review-console.md) | standalone local dashboard: browser + MCP agent share the session file |
+| [Review MCP](docs/review-mcp.md) | MCP server for agent-driven review-queue decisions |
 | [Releasing](docs/RELEASING.md) | release prep and publish flow |
 
 ## Product boundary

@@ -14,6 +14,7 @@ Survey turns raw sources into Surface-ready trust evidence through a consistent
 | Understand the review resource envelope (UI/adapter) | [review-resource-contract.md](review-resource-contract.md) |
 | Try the browser-based review workbench demo | [review-workbench-prototype.md](review-workbench-prototype.md) |
 | Drive review decisions from an MCP agent | [review-mcp.md](review-mcp.md) |
+| Open the standalone browser review console | [review-console.md](review-console.md) |
 | Cut a release | [RELEASING.md](RELEASING.md) |
 | Review architecture decisions | [adr/](adr/) |
 
@@ -26,6 +27,7 @@ Survey turns raw sources into Surface-ready trust evidence through a consistent
 - [review-resource-contract.md](review-resource-contract.md) — producer-neutral review resource envelope for UI prototypes and adapter tests
 - [review-workbench-prototype.md](review-workbench-prototype.md) — browser demo for inspecting a ReviewItem and generating a ReviewDecision payload
 - [review-mcp.md](review-mcp.md) — MCP server for review-queue tools and interactive UI card
+- [review-console.md](review-console.md) — standalone local review console (browser dashboard over the session file)
 - [RELEASING.md](RELEASING.md) — release checklist and release-please workflow
 - [adr/0001-reviewed-current-proposed-resolution.md](adr/0001-reviewed-current-proposed-resolution.md) — ADR: reviewed current/proposed resolution as a generic candidate-resolution pattern
 
