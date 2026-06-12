@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.0](https://github.com/kontourai/survey/compare/v0.8.0...v1.0.0) (2026-06-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* require Node >= 22; verify on current LTS (22, 24) ([#81](https://github.com/kontourai/survey/issues/81))
+
+### Features
+
+* require Node &gt;= 22; verify on current LTS (22, 24) ([#81](https://github.com/kontourai/survey/issues/81)) ([8831a84](https://github.com/kontourai/survey/commit/8831a844eb98e95a840724c0ca1477b4411d836f))
+
 ## [0.8.0](https://github.com/kontourai/survey/compare/v0.7.2...v0.8.0) (2026-06-12)
 
 
