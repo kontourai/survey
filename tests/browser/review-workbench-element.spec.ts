@@ -533,3 +533,68 @@ test.describe("HOSTILE INPUT: XSS escaping in shadow DOM", () => {
     expect(shadowText).toContain('<img src=x onerror="window.__pwned=2">');
   });
 });
+
+// ---------------------------------------------------------------------------
+// TEST 6: LIGHT MODE RENDERING
+// ---------------------------------------------------------------------------
+
+test.describe("LIGHT MODE: color-scheme=light produces correct token flip", () => {
+  test("setting color-scheme=light changes background and text contrast tokens in shadow DOM", async ({ page }) => {
+    const { consoleErrors, pageErrors } = await loadFixture(page);
+
+    await assignSession(page, SESSION_FIXTURE);
+
+    // Capture dark-mode --k-bg and --k-text token values from the embed root.
+    // These CSS custom property values are what drive all color decisions in the workbench.
+    const darkTokens: { bg: string; text: string } = await page.evaluate(() => {
+      const host = document.getElementById("wbe");
+      if (!host?.shadowRoot) return { bg: "", text: "" };
+      const embed = host.shadowRoot.querySelector<HTMLElement>(".survey-workbench-embed");
+      if (!embed) return { bg: "", text: "" };
+      const styles = window.getComputedStyle(embed);
+      return {
+        bg: styles.getPropertyValue("--k-bg").trim(),
+        text: styles.getPropertyValue("--k-text").trim(),
+      };
+    });
+    // Dark mode tokens must be present and non-empty
+    expect(darkTokens.bg).not.toBe("");
+    expect(darkTokens.text).not.toBe("");
+
+    // Switch to light mode by setting the color-scheme attribute
+    await page.evaluate(() => {
+      const el = document.getElementById("wbe")!;
+      el.setAttribute("color-scheme", "light");
+    });
+
+    // Wait for the embed root to have data-theme="light"
+    await page.waitForFunction(() => {
+      const host = document.getElementById("wbe");
+      if (!host?.shadowRoot) return false;
+      const embed = host.shadowRoot.querySelector(".survey-workbench-embed");
+      return embed?.getAttribute("data-theme") === "light";
+    });
+
+    // Read the light-mode token values — they must have flipped
+    const lightTokens: { bg: string; text: string } = await page.evaluate(() => {
+      const host = document.getElementById("wbe");
+      if (!host?.shadowRoot) return { bg: "", text: "" };
+      const embed = host.shadowRoot.querySelector<HTMLElement>(".survey-workbench-embed");
+      if (!embed) return { bg: "", text: "" };
+      const styles = window.getComputedStyle(embed);
+      return {
+        bg: styles.getPropertyValue("--k-bg").trim(),
+        text: styles.getPropertyValue("--k-text").trim(),
+      };
+    });
+
+    // --k-bg must flip: dark mode is very dark (~#060a10), light mode is light (~#f5f4ef)
+    expect(lightTokens.bg).not.toBe(darkTokens.bg);
+    // --k-text must flip: dark mode is near-white (#eef3f8), light mode is near-black (#202124)
+    expect(lightTokens.text).not.toBe(darkTokens.text);
+
+    // No JS exceptions
+    expect(pageErrors).toEqual([]);
+    expect(consoleErrors).toEqual([]);
+  });
+});
