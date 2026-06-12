@@ -17,6 +17,9 @@ import { createInterface } from "node:readline";
 import { copyFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 // ---------------------------------------------------------------------------
 // Shared stdio MCP helper (mirrors tests/review-mcp.test.ts collectResponses)
@@ -94,7 +97,7 @@ async function startMcpServer(sessionSourcePath: string): Promise<McpServer> {
 
   const server = spawn("node", ["bin/survey-review-mcp.mjs", "--session", sessionPath], {
     stdio: ["pipe", "pipe", "inherit"],
-    cwd: "/Users/brian/dev/github/kontourai/survey",
+    cwd: REPO_ROOT,
   });
   const responses = collectMcpResponses(server.stdout!);
 
@@ -133,7 +136,7 @@ function extractCardHtml(resp: JsonRpcResponse): string {
 // Example session path (absolute so tests work from any cwd)
 // ---------------------------------------------------------------------------
 
-const EXAMPLE_SESSION_PATH = "/Users/brian/dev/github/kontourai/survey/example-data/mcp-review-session.json";
+const EXAMPLE_SESSION_PATH = join(REPO_ROOT, "example-data", "mcp-review-session.json");
 
 // ---------------------------------------------------------------------------
 // TEST 1: RENDER
