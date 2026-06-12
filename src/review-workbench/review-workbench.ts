@@ -1061,7 +1061,7 @@ function renderReviewFocus(state: ReviewWorkbenchState, presentationAdapter?: Re
       <dl class="focus-evidence">
         ${fieldItem("Target", presentation.targetLabel)}
         ${fieldItem("Proposed source", proposed.source.sourceRef)}
-        ${fieldItem("Proposed excerpt", proposed.locator?.excerpt ?? "none", "excerpt")}
+        ${fieldItemClamped("Proposed excerpt", proposed.locator?.excerpt ?? "none", "excerpt")}
       </dl>
     </section>
   `;
@@ -1214,13 +1214,18 @@ function renderCanonicalClaim(preview: SurfaceProjectionPreview): string {
 }
 
 function renderReviewEvent(preview: SurfaceProjectionPreview): string {
-  return renderPreviewSection("Review event", "surface-review-event", [
-    ["Actor", preview.reviewEvent?.actor ?? "unknown"],
-    ["Reviewed at", preview.reviewEvent?.reviewedAt ?? "not recorded"],
-    ["Status", preview.reviewEvent?.status ?? "pending"],
-    ["Rationale", preview.reviewEvent?.rationale ?? "No reviewer rationale provided."],
-    ["Outcome", preview.reviewEvent?.reviewOutcomeId ?? "not provided"],
-  ]);
+  return `
+    <section class="preview-section" data-testid="surface-review-event">
+      <h3>${escapeHtml("Review event")}</h3>
+      <dl class="field-stack compact">
+        ${fieldItem("Actor", preview.reviewEvent?.actor ?? "unknown")}
+        ${fieldItem("Reviewed at", preview.reviewEvent?.reviewedAt ?? "not recorded")}
+        ${fieldItem("Status", preview.reviewEvent?.status ?? "pending")}
+        ${fieldItem("Rationale", preview.reviewEvent?.rationale ?? "No reviewer rationale provided.", "rationale-clamp")}
+        ${fieldItem("Outcome", preview.reviewEvent?.reviewOutcomeId ?? "not provided")}
+      </dl>
+    </section>
+  `;
 }
 
 function renderIntegrityPosture(preview: SurfaceProjectionPreview): string {
@@ -1241,40 +1246,79 @@ function renderAuthorityTrace(preview: SurfaceProjectionPreview): string {
 }
 
 function renderCandidateHistory(preview: SurfaceProjectionPreview): string {
-  const rows: Array<readonly [string, string]> = preview.candidateHistory.length === 0
-    ? [["History", "No unselected candidates."]]
-    : preview.candidateHistory.flatMap((candidate) => [
-      ["History", candidate.historyLabel],
-      ["Value", candidate.value],
-    ] as Array<readonly [string, string]>);
-  const references: Array<readonly [string, string]> = preview.candidateHistory.flatMap((candidate) => [
-    ["Candidate ID", candidate.candidateId],
-  ] as Array<readonly [string, string]>);
+  if (preview.candidateHistory.length === 0) {
+    return renderPreviewSection("Unselected candidate history", "surface-candidate-history", [["History", "No unselected candidates."]], undefined, []);
+  }
 
-  return renderPreviewSection("Unselected candidate history", "surface-candidate-history", rows, undefined, references);
+  const VISIBLE_COUNT = 3;
+  const total = preview.candidateHistory.length;
+  const visibleCandidates = preview.candidateHistory.slice(0, VISIBLE_COUNT);
+  const overflowCandidates = preview.candidateHistory.slice(VISIBLE_COUNT);
+
+  const renderHistoryRows = (candidates: typeof preview.candidateHistory): string =>
+    candidates.flatMap((candidate) => [
+      fieldItem("History", candidate.historyLabel),
+      fieldItem("Value", candidate.value),
+    ]).join("");
+
+  const referenceRows = preview.candidateHistory.map((candidate) =>
+    fieldItem("Candidate ID", candidate.candidateId),
+  ).join("");
+
+  const overflowHtml = overflowCandidates.length > 0
+    ? `<div class="history-overflow">${renderHistoryRows(overflowCandidates)}</div>`
+    : "";
+
+  const expanderHtml = overflowCandidates.length > 0
+    ? `<button class="history-expand-btn" type="button" data-history-expand aria-expanded="false">
+         <span class="expand-label">view all (${total})</span>
+         <span class="collapse-label">show less</span>
+       </button>`
+    : "";
+
+  return `
+    <section class="preview-section" data-testid="surface-candidate-history">
+      <h3>${escapeHtml("Unselected candidate history")}</h3>
+      <div class="history-expander${overflowCandidates.length > 0 ? "" : ""}" data-history-expander>
+        <dl class="field-stack compact">
+          ${renderHistoryRows(visibleCandidates)}
+          ${overflowHtml}
+        </dl>
+        ${expanderHtml}
+      </div>
+      ${preview.candidateHistory.length > 0 ? `<details class="reference-details">
+        <summary>IDs and trace links</summary>
+        <dl class="field-stack compact">${referenceRows}</dl>
+      </details>` : ""}
+    </section>
+  `;
 }
 
 function renderSourceEvidence(preview: SurfaceProjectionPreview): string {
-  const rows: Array<readonly [string, string]> = [
-    ["Source URL", preview.sourceEvidence.sourceRef],
-    ["Excerpt", preview.sourceEvidence.excerpt],
-    ["Extractor", preview.sourceEvidence.extractor],
-    ["Observed", preview.sourceEvidence.observedAt],
-  ];
-  const references: Array<readonly [string, string]> = [
-    ["Source ID", preview.sourceEvidence.sourceId],
-    ["Extraction ID", preview.sourceEvidence.extractionId],
-  ];
+  // Excerpt uses a 3-line clamp wrapper with a toggle button.
+  const clampedExcerptHtml = fieldItemClamped("Excerpt", preview.sourceEvidence.excerpt, "excerpt");
 
-  if (preview.sourceEvidence.sourceAuthority) {
-    rows.push(
-      ["Source authority class", preview.sourceEvidence.sourceAuthority.authorityClass],
-      ["Declared by", preview.sourceEvidence.sourceAuthority.declaredBy],
-      ["Authority scope", preview.sourceEvidence.sourceAuthority.scope],
-    );
-  }
-
-  return renderPreviewSection("Source evidence", "surface-source-evidence", rows);
+  // Build source evidence section with clamped excerpt inline
+  return `
+    <section class="preview-section" data-testid="surface-source-evidence">
+      <h3>${escapeHtml("Source evidence")}</h3>
+      <dl class="field-stack compact">
+        ${fieldItem("Source URL", preview.sourceEvidence.sourceRef)}
+        ${clampedExcerptHtml}
+        ${fieldItem("Extractor", preview.sourceEvidence.extractor)}
+        ${fieldItem("Observed", preview.sourceEvidence.observedAt)}
+        ${preview.sourceEvidence.sourceAuthority ? [
+          fieldItem("Source authority class", preview.sourceEvidence.sourceAuthority.authorityClass),
+          fieldItem("Declared by", preview.sourceEvidence.sourceAuthority.declaredBy),
+          fieldItem("Authority scope", preview.sourceEvidence.sourceAuthority.scope),
+        ].join("") : ""}
+      </dl>
+      ${renderReferenceDetails([
+        ["Source ID", preview.sourceEvidence.sourceId],
+        ["Extraction ID", preview.sourceEvidence.extractionId],
+      ])}
+    </section>
+  `;
 }
 
 function renderPreviewSection(
@@ -1478,6 +1522,8 @@ function renderCurrentState(
     controller.renderCurrentState();
   });
   bindQueueDrawer(root);
+  bindClampToggles(root);
+  bindHistoryExpanders(root);
 }
 
 function queueSessionFromStartState(
@@ -1539,6 +1585,29 @@ function bindNextUnresolved(root: HTMLElement, goToNextUnresolved: () => void): 
         scrollActiveReviewIntoView(root);
       });
     });
+}
+
+function bindClampToggles(root: HTMLElement): void {
+  root.querySelectorAll<HTMLButtonElement>("[data-clamp-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const clampContainer = button.closest("[data-clamp]");
+      if (!clampContainer) return;
+      const expanded = clampContainer.classList.toggle("is-expanded");
+      button.setAttribute("aria-expanded", String(expanded));
+      button.textContent = expanded ? "less" : "more";
+    });
+  });
+}
+
+function bindHistoryExpanders(root: HTMLElement): void {
+  root.querySelectorAll<HTMLButtonElement>("[data-history-expand]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const expander = button.closest("[data-history-expander]");
+      if (!expander) return;
+      const expanded = expander.classList.toggle("is-expanded");
+      button.setAttribute("aria-expanded", String(expanded));
+    });
+  });
 }
 
 function bindQueueDrawer(root: HTMLElement): void {
@@ -1626,7 +1695,12 @@ function refreshDecisionOutputs(
 
   const wrapper = document.createElement("div");
   wrapper.innerHTML = renderSurfacePreview(state, presentationAdapter);
-  preview.replaceWith(wrapper.firstElementChild as HTMLElement);
+  const newPreview = wrapper.firstElementChild as HTMLElement;
+  preview.replaceWith(newPreview);
+  if (newPreview && typeof newPreview.querySelectorAll === "function") {
+    bindClampToggles(newPreview);
+    bindHistoryExpanders(newPreview);
+  }
 }
 
 function refreshSessionAudit(
@@ -1685,7 +1759,7 @@ function renderCandidateCard(
       <dl class="field-stack">
         ${fieldItem("Source URL", presentation.sourceText)}
         ${fieldItem("Locator", candidate.locator?.locator ?? candidate.locator?.scheme ?? "none")}
-        ${fieldItem("Excerpt", candidate.locator?.excerpt ?? "none", "excerpt")}
+        ${fieldItemClamped("Excerpt", candidate.locator?.excerpt ?? "none", "excerpt")}
         ${fieldItem("Extraction confidence", confidence === undefined ? "unknown" : formatConfidence(confidence))}
         ${fieldItem("Extractor", candidate.extraction.extractor ?? "unknown")}
       </dl>
@@ -1713,6 +1787,18 @@ function metaItem(label: string, value: unknown): string {
     <div class="meta-item">
       <dt class="field-label">${escapeHtml(label)}</dt>
       <dd class="meta-value">${escapeHtml(value)}</dd>
+    </div>
+  `;
+}
+
+function fieldItemClamped(label: string, value: unknown, extraClass = ""): string {
+  return `
+    <div class="field ${extraClass}">
+      <dt class="field-label">${escapeHtml(label)}</dt>
+      <div class="excerpt-clamp" data-clamp>
+        <dd class="field-value">${escapeHtml(value)}</dd>
+        <button class="clamp-toggle" type="button" data-clamp-toggle aria-expanded="false">more</button>
+      </div>
     </div>
   `;
 }

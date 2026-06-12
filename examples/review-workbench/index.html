@@ -7,9 +7,66 @@
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2319202a'/%3E%3Cpath d='M4 8.2 6.7 11 12 5' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="./vendor/console-kit/tokens/index.css">
     <link rel="stylesheet" href="./review-workbench.css">
+    <!-- Apply persisted theme before first paint to avoid flash -->
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem("survey-demo-color-scheme");
+          if (saved === "light") {
+            document.documentElement.setAttribute("data-theme", "light");
+          }
+        } catch (_) {}
+      })();
+    </script>
   </head>
   <body>
+    <div class="demo-toolbar" aria-label="Demo toolbar">
+      <button
+        class="theme-toggle"
+        type="button"
+        id="demo-theme-toggle"
+        aria-label="Toggle light/dark theme"
+        data-testid="demo-theme-toggle"
+      >
+        <span class="theme-toggle-icon" aria-hidden="true">☀</span>
+        <span class="theme-toggle-label">Light</span>
+      </button>
+    </div>
     <main id="review-workbench" class="workbench" data-testid="review-workbench"></main>
     <script type="module" src="../../dist/examples/review-workbench/review-workbench.js"></script>
+    <script>
+      (function () {
+        var toggle = document.getElementById("demo-theme-toggle");
+        if (!toggle) return;
+
+        function currentScheme() {
+          return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+        }
+
+        function applyScheme(scheme) {
+          if (scheme === "light") {
+            document.documentElement.setAttribute("data-theme", "light");
+            toggle.querySelector(".theme-toggle-label").textContent = "Dark";
+            toggle.querySelector(".theme-toggle-icon").textContent = "☽";
+            toggle.setAttribute("aria-label", "Switch to dark theme");
+          } else {
+            document.documentElement.removeAttribute("data-theme");
+            toggle.querySelector(".theme-toggle-label").textContent = "Light";
+            toggle.querySelector(".theme-toggle-icon").textContent = "☀";
+            toggle.setAttribute("aria-label", "Switch to light theme");
+          }
+          try {
+            localStorage.setItem("survey-demo-color-scheme", scheme);
+          } catch (_) {}
+        }
+
+        // Sync button label with current (possibly pre-applied) scheme
+        applyScheme(currentScheme());
+
+        toggle.addEventListener("click", function () {
+          applyScheme(currentScheme() === "light" ? "dark" : "light");
+        });
+      })();
+    </script>
   </body>
 </html>

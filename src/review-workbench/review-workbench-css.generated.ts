@@ -164,11 +164,11 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   /* Local aliases preserve the existing workbench selectors while the values
      come from the shared Console Kit token contract. */
   --ink-1000: var(--k-bg);
-  --ink-900: #0a0e13;
-  --ink-850: #0d1219;
+  --ink-900: color-mix(in srgb, var(--k-bg) 60%, var(--k-panel));
+  --ink-850: color-mix(in srgb, var(--k-bg) 40%, var(--k-panel));
   --ink-800: var(--k-panel);
   --ink-750: var(--k-panel-raised);
-  --ink-700: #1d2937;
+  --ink-700: color-mix(in srgb, var(--k-panel-raised) 80%, var(--k-line-strong));
   --paper: var(--k-text);
   --paper-dim: var(--k-text-muted);
   --paper-faint: var(--k-text-faint);
@@ -183,9 +183,50 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   --radius: var(--k-radius-md);
   --radius-sm: var(--k-radius-sm);
 
+  /* Panel surface alpha — stronger contrast in light mode, subtle in dark */
+  --surface-alpha: 0.55;
+  /* Overlay tint alpha for brand-coloured gradient overlays */
+  --overlay-alpha: 0.10;
+  /* Grain overlay: visible dark only, 0 in light */
+  --grain-opacity: 0.04;
+  /* VS marker bg */
+  --vs-bg: var(--ink-750);
+
   font-family: var(--k-font-ui);
   background: var(--ink-1000);
   color: var(--paper);
+}
+
+/* ---- Light mode token overrides --------------------------------------- */
+/* The token sheet already flips --k-bg/panel/text etc. for [data-theme="light"].
+   Here we tune the workbench-specific overlay and surface alphas so the
+   grain/gradient overlays are invisible in light mode, and panel surfaces
+   have enough contrast without the dark alpha tricks. */
+.survey-workbench-embed[data-theme="light"]{
+  color-scheme: light;
+  /* Structural tokens: override .theme-survey which hardcodes dark values.
+     These match the [data-theme="light"] block in tokens.css. */
+  --k-bg: #f5f4ef;
+  --k-panel: #ffffff;
+  --k-panel-raised: #fbfaf7;
+  --k-line: rgba(36, 40, 46, 0.12);
+  --k-line-strong: rgba(36, 40, 46, 0.20);
+  --k-text: #202124;
+  --k-text-muted: #5b626b;
+  --k-text-faint: #707782;
+  --k-positive: #168257;
+  --k-caution: #8a5a00;
+  --k-negative: #c83b3b;
+  --k-active: #3f6fd6;
+  /* Workbench-specific overlay and surface alphas */
+  --grain-opacity: 0;
+  --overlay-alpha: 0.06;
+  --surface-alpha: 0.70;
+  --vs-bg: var(--ink-750);
+  /* In light mode the brand accent is remapped by themes.css — ensure the
+     ink aliases derive cleanly from the token bg/panel values. */
+  --ink-900: color-mix(in srgb, var(--k-bg) 60%, var(--k-panel));
+  --ink-850: color-mix(in srgb, var(--k-bg) 40%, var(--k-panel));
 }
 
 .survey-workbench-embed *{
@@ -197,14 +238,15 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   min-width: 320px;
   position: relative;
   background:
-    radial-gradient(1100px 620px at 12% -8%, rgba(92, 224, 198, 0.12), transparent 60%),
-    radial-gradient(900px 560px at 100% 0%, rgba(122, 162, 255, 0.12), transparent 55%),
-    radial-gradient(800px 800px at 88% 110%, rgba(243, 177, 75, 0.07), transparent 60%),
+    radial-gradient(1100px 620px at 12% -8%, color-mix(in srgb, var(--k-brand) 10%, transparent), transparent 60%),
+    radial-gradient(900px 560px at 100% 0%, color-mix(in srgb, var(--k-active) 10%, transparent), transparent 55%),
+    radial-gradient(800px 800px at 88% 110%, color-mix(in srgb, var(--k-caution) 7%, transparent), transparent 60%),
     linear-gradient(180deg, var(--ink-1000), var(--ink-900) 55%, var(--ink-1000));
   background-attachment: fixed;
 }
 
-/* Grain + faint engineering grid for control-room atmosphere. */
+/* Grain + faint engineering grid for control-room atmosphere.
+   Grain opacity is 0 in light mode via --grain-opacity. */
 .survey-workbench-embed::before{
   content: "";
   position: absolute;
@@ -212,8 +254,50 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   z-index: 0;
   pointer-events: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
-  opacity: 0.04;
+  opacity: var(--grain-opacity);
   mix-blend-mode: screen;
+}
+
+/* ---- Demo page chrome -------------------------------------------------- */
+/* Light/dark toggle button on the demo wrapper around the workbench */
+.survey-workbench-embed .demo-toolbar{
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.survey-workbench-embed.theme-toggle{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--k-panel) 90%, transparent);
+  color: var(--paper-dim);
+  cursor: pointer;
+  font-family: var(--k-font-mono, "IBM Plex Mono", monospace);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  backdrop-filter: blur(6px);
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.survey-workbench-embed.theme-toggle:hover{
+  background: color-mix(in srgb, var(--k-panel) 100%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.survey-workbench-embed.theme-toggle-icon{
+  font-size: 14px;
+  line-height: 1;
 }
 
 .survey-workbench-embed button,
@@ -281,9 +365,9 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
   background:
-    linear-gradient(135deg, rgba(92, 224, 198, 0.08), transparent 42%),
+    linear-gradient(135deg, color-mix(in srgb, var(--k-brand) 8%, transparent), transparent 42%),
     linear-gradient(180deg, var(--ink-800), var(--ink-850));
-  box-shadow: 0 24px 60px -34px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  box-shadow: var(--k-shadow, 0 24px 60px -34px rgba(0, 0, 0, 0.9)), inset 0 1px 0 var(--line);
   animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -349,7 +433,11 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   padding: 11px 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: rgba(8, 12, 18, 0.55);
+  background: color-mix(in srgb, var(--k-bg) 55%, var(--k-panel));
+}
+
+.survey-workbench-embed[data-theme="light"] .meta-item{
+  background: color-mix(in srgb, var(--k-bg) 70%, var(--k-panel));
 }
 
 .survey-workbench-embed .meta-value{
@@ -400,7 +488,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   position: absolute;
   inset: 0;
   z-index: 40;
-  background: rgba(0, 0, 0, 0.55);
+  background: color-mix(in srgb, var(--k-bg) 55%, transparent);
   backdrop-filter: blur(2px);
   opacity: 0;
   transition: opacity 0.22s ease;
@@ -423,7 +511,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   height: 30px;
   border: 1px solid var(--line-strong);
   border-radius: 999px;
-  background: rgba(8, 12, 18, 0.8);
+  background: color-mix(in srgb, var(--k-bg) 80%, transparent);
   color: var(--paper-faint);
   cursor: pointer;
   font-size: 14px;
@@ -440,7 +528,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   border-radius: var(--radius);
   background: linear-gradient(180deg, var(--ink-800), var(--ink-850));
   padding: 14px;
-  box-shadow: 0 22px 50px -38px rgba(0, 0, 0, 0.9);
+  box-shadow: var(--k-shadow, 0 22px 50px -38px rgba(0, 0, 0, 0.9));
   animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: 0.05s;
 }
@@ -477,7 +565,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   border-radius: var(--radius-sm);
   margin-top: 8px;
   padding: 9px 10px;
-  background: rgba(8, 12, 18, 0.5);
+  background: color-mix(in srgb, var(--k-bg) 50%, var(--k-panel));
   color: var(--paper);
   cursor: pointer;
   text-align: left;
@@ -487,12 +575,12 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 .survey-workbench-embed .queue-row:hover{
   transform: translateX(2px);
   border-color: var(--line-strong);
-  background: rgba(16, 24, 34, 0.8);
+  background: color-mix(in srgb, var(--k-bg) 20%, var(--k-panel));
 }
 
 .survey-workbench-embed .queue-row.is-active{
   border-left-width: 3px;
-  background: linear-gradient(90deg, rgba(92, 224, 198, 0.12), rgba(8, 12, 18, 0.5) 60%);
+  background: color-mix(in srgb, var(--k-brand) 8%, var(--k-panel));
   box-shadow: inset 0 0 0 1px var(--line-strong);
 }
 
@@ -536,22 +624,22 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   border-radius: 999px;
   text-align: center;
   color: var(--paper-dim);
-  background: rgba(8, 12, 18, 0.6);
+  background: color-mix(in srgb, var(--k-bg) 60%, var(--k-panel));
   letter-spacing: 0.08em;
   font-size: 9.5px;
 }
 
-.survey-workbench-embed .queue-row[data-queue-status="resolved"] .state-label{ color: var(--verify); border-color: rgba(52, 211, 153, 0.4); }
-.survey-workbench-embed .queue-row[data-queue-status="rejected"] .state-label{ color: var(--reject); border-color: rgba(255, 111, 111, 0.4); }
-.survey-workbench-embed .queue-row[data-queue-status="escalated"] .state-label{ color: var(--hold); border-color: rgba(243, 177, 75, 0.4); }
-.survey-workbench-embed .queue-row[data-queue-status="in-review"] .state-label{ color: var(--accent); border-color: rgba(92, 224, 198, 0.4); }
+.survey-workbench-embed .queue-row[data-queue-status="resolved"] .state-label{ color: var(--verify); border-color: color-mix(in srgb, var(--verify) 40%, transparent); }
+.survey-workbench-embed .queue-row[data-queue-status="rejected"] .state-label{ color: var(--reject); border-color: color-mix(in srgb, var(--reject) 40%, transparent); }
+.survey-workbench-embed .queue-row[data-queue-status="escalated"] .state-label{ color: var(--hold); border-color: color-mix(in srgb, var(--hold) 40%, transparent); }
+.survey-workbench-embed .queue-row[data-queue-status="in-review"] .state-label{ color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
 
 .survey-workbench-embed .next-button{
   min-height: 34px;
   padding: 0 14px;
   border: 1px solid var(--line-strong);
   border-radius: 999px;
-  background: rgba(92, 224, 198, 0.08);
+  background: color-mix(in srgb, var(--k-brand) 8%, transparent);
   color: var(--accent);
   cursor: pointer;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
@@ -562,7 +650,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 }
 
 .survey-workbench-embed .next-button:hover{
-  background: rgba(92, 224, 198, 0.16);
+  background: color-mix(in srgb, var(--k-brand) 16%, transparent);
   border-color: var(--accent);
 }
 
@@ -579,7 +667,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   display: grid;
   gap: 2px;
   padding: 10px;
-  background: rgba(8, 12, 18, 0.6);
+  background: color-mix(in srgb, var(--k-bg) 60%, var(--k-panel));
 }
 
 .survey-workbench-embed .summary-grid .meta-value{
@@ -636,7 +724,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   padding: 8px;
-  background: rgba(6, 9, 13, 0.45);
+  background: color-mix(in srgb, var(--k-bg) 45%, transparent);
 }
 
 .survey-workbench-embed .event-sequence{
@@ -716,13 +804,13 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   display: grid;
   gap: 12px;
   min-width: 0;
-  border: 1px solid rgba(92, 224, 198, 0.28);
+  border: 1px solid color-mix(in srgb, var(--k-brand) 28%, transparent);
   border-radius: var(--radius);
   padding: 14px;
   background:
-    linear-gradient(135deg, rgba(92, 224, 198, 0.12), transparent 34%),
+    linear-gradient(135deg, color-mix(in srgb, var(--k-brand) 12%, transparent), transparent 34%),
     linear-gradient(180deg, var(--ink-800), var(--ink-850));
-  box-shadow: 0 26px 60px -42px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow: var(--k-shadow, 0 26px 60px -42px rgba(0, 0, 0, 0.95)), inset 0 1px 0 var(--line);
 }
 
 .survey-workbench-embed .focus-head,
@@ -745,7 +833,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   padding: 10px 12px;
-  background: rgba(6, 9, 13, 0.56);
+  background: color-mix(in srgb, var(--k-bg) 56%, var(--k-panel));
 }
 
 .survey-workbench-embed .focus-value strong{
@@ -767,8 +855,8 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 }
 
 .survey-workbench-embed .focus-value.is-proposed{
-  border-color: rgba(122, 162, 255, 0.34);
-  background: linear-gradient(180deg, rgba(122, 162, 255, 0.1), rgba(6, 9, 13, 0.56));
+  border-color: color-mix(in srgb, var(--k-active) 34%, transparent);
+  background: color-mix(in srgb, var(--k-active) 10%, color-mix(in srgb, var(--k-bg) 56%, var(--k-panel)));
 }
 
 .survey-workbench-embed .focus-value.is-proposed strong{
@@ -811,12 +899,12 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   place-items: center;
   border-radius: 999px;
   border: 1px solid var(--line-strong);
-  background: var(--ink-750);
+  background: var(--vs-bg);
   color: var(--paper-faint);
   font-family: "Fraunces", Georgia, serif;
   font-style: italic;
   font-size: 13px;
-  box-shadow: 0 10px 26px -12px rgba(0, 0, 0, 0.9);
+  box-shadow: var(--k-shadow, 0 10px 26px -12px rgba(0, 0, 0, 0.9));
 }
 
 .survey-workbench-embed .candidate-card,
@@ -826,7 +914,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: linear-gradient(180deg, var(--ink-800), var(--ink-850));
-  box-shadow: 0 26px 60px -42px rgba(0, 0, 0, 0.95);
+  box-shadow: var(--k-shadow, 0 26px 60px -42px rgba(0, 0, 0, 0.95));
 }
 
 .survey-workbench-embed .candidate-card{
@@ -843,7 +931,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 
 /* The proposed candidate (2nd card) is the incoming change — flag it. */
 .survey-workbench-embed .candidate-card:nth-child(2){
-  border-color: rgba(122, 162, 255, 0.32);
+  border-color: color-mix(in srgb, var(--k-active) 32%, transparent);
 }
 
 .survey-workbench-embed .candidate-card:nth-child(2)::after{
@@ -851,12 +939,12 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(420px 200px at 80% -10%, rgba(122, 162, 255, 0.12), transparent 70%);
+  background: radial-gradient(420px 200px at 80% -10%, color-mix(in srgb, var(--k-active) 12%, transparent), transparent 70%);
 }
 
 .survey-workbench-embed .candidate-card.is-selected{
-  border-color: rgba(52, 211, 153, 0.55);
-  box-shadow: 0 26px 60px -36px rgba(0, 0, 0, 0.95), inset 0 0 0 1px rgba(52, 211, 153, 0.35), inset 0 0 60px -30px rgba(52, 211, 153, 0.6);
+  border-color: color-mix(in srgb, var(--k-positive) 55%, transparent);
+  box-shadow: 0 26px 60px -36px rgba(0, 0, 0, 0.95), inset 0 0 0 1px color-mix(in srgb, var(--k-positive) 35%, transparent), inset 0 0 60px -30px color-mix(in srgb, var(--k-positive) 60%, transparent);
 }
 
 .survey-workbench-embed .candidate-card.is-unselected{
@@ -897,8 +985,8 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 
 .survey-workbench-embed .is-selected .state-label{
   color: var(--verify);
-  border-color: rgba(52, 211, 153, 0.5);
-  background: rgba(52, 211, 153, 0.12);
+  border-color: color-mix(in srgb, var(--verify) 50%, transparent);
+  background: color-mix(in srgb, var(--verify) 12%, transparent);
 }
 
 /* The value — the single most important datapoint on the screen. */
@@ -952,9 +1040,9 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   display: inline-block;
   margin-top: 5px;
   padding: 4px 9px;
-  border: 1px solid rgba(92, 224, 198, 0.35);
+  border: 1px solid color-mix(in srgb, var(--k-brand) 35%, transparent);
   border-radius: 999px;
-  background: rgba(92, 224, 198, 0.1);
+  background: color-mix(in srgb, var(--k-brand) 10%, transparent);
   color: var(--accent);
   font-size: 11.5px;
   font-weight: 600;
@@ -968,6 +1056,94 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 .survey-workbench-embed .excerpt .field-value{
   font-style: italic;
   color: var(--paper-dim) !important;
+}
+
+/* ---- Excerpt / rationale 3-line clamp with inline expander ----------- */
+/* Applied to .field-value inside .excerpt or .excerpt-clamp containers,
+   and to .rationale-clamp for reviewer rationale fields.
+   The "more / less" toggle is a <button class="clamp-toggle"> sibling. */
+
+.survey-workbench-embed .excerpt-clamp .field-value,
+.survey-workbench-embed .rationale-clamp .field-value{
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.survey-workbench-embed .excerpt-clamp.is-expanded .field-value,
+.survey-workbench-embed .rationale-clamp.is-expanded .field-value{
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+.survey-workbench-embed .clamp-toggle{
+  display: inline;
+  margin-left: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  vertical-align: baseline;
+}
+
+.survey-workbench-embed .clamp-toggle:hover{
+  color: var(--paper);
+}
+
+/* ---- Candidate history expander -------------------------------------- */
+/* When there are >3 unselected candidates the UI renders the first 3 and
+   hides the rest behind a "view all (N)" expander. */
+
+.survey-workbench-embed .history-overflow{
+  display: none;
+}
+
+.survey-workbench-embed .history-expander.is-expanded .history-overflow{
+  display: contents;
+}
+
+.survey-workbench-embed .history-expand-btn{
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--k-brand) 6%, transparent);
+  color: var(--accent);
+  cursor: pointer;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+
+.survey-workbench-embed .history-expand-btn:hover{
+  background: color-mix(in srgb, var(--k-brand) 14%, transparent);
+  border-color: var(--accent);
+}
+
+.survey-workbench-embed .history-expander.is-expanded .history-expand-btn .expand-label{
+  display: none;
+}
+
+.survey-workbench-embed .history-expander.is-expanded .history-expand-btn .collapse-label{
+  display: inline;
+}
+
+.survey-workbench-embed .history-expand-btn .collapse-label{
+  display: none;
 }
 
 /* ---- Decision column -------------------------------------------------- */
@@ -997,7 +1173,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   border-radius: var(--radius-sm);
   padding: 10px;
   color: var(--paper);
-  background: rgba(6, 9, 13, 0.7);
+  background: color-mix(in srgb, var(--k-bg) 70%, var(--k-panel));
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 12px;
   line-height: 1.5;
@@ -1010,7 +1186,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 .survey-workbench-embed textarea:focus{
   border-color: var(--accent);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(92, 224, 198, 0.18);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--k-brand) 18%, transparent);
 }
 
 /* Decision actions — color-coded to outcome (accept / keep / reject). */
@@ -1025,7 +1201,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   min-height: 42px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
-  background: rgba(8, 12, 18, 0.6);
+  background: color-mix(in srgb, var(--k-bg) 60%, var(--k-panel));
   color: var(--paper);
   cursor: pointer;
   font-weight: 700;
@@ -1040,18 +1216,18 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   outline: none;
 }
 
-.survey-workbench-embed .decision-button:nth-child(1):hover{ border-color: var(--verify); box-shadow: 0 10px 24px -14px rgba(52, 211, 153, 0.8); }
-.survey-workbench-embed .decision-button:nth-child(2):hover{ border-color: var(--hold); box-shadow: 0 10px 24px -14px rgba(243, 177, 75, 0.8); }
-.survey-workbench-embed .decision-button:nth-child(3):hover{ border-color: var(--reject); box-shadow: 0 10px 24px -14px rgba(255, 111, 111, 0.8); }
+.survey-workbench-embed .decision-button:nth-child(1):hover{ border-color: var(--verify); box-shadow: 0 10px 24px -14px color-mix(in srgb, var(--verify) 80%, transparent); }
+.survey-workbench-embed .decision-button:nth-child(2):hover{ border-color: var(--hold); box-shadow: 0 10px 24px -14px color-mix(in srgb, var(--hold) 80%, transparent); }
+.survey-workbench-embed .decision-button:nth-child(3):hover{ border-color: var(--reject); box-shadow: 0 10px 24px -14px color-mix(in srgb, var(--reject) 80%, transparent); }
 
 .survey-workbench-embed .decision-button.is-active{
-  color: var(--ink-1000);
+  color: var(--k-bg);
   border-color: transparent;
 }
 
-.survey-workbench-embed .decision-button:nth-child(1).is-active{ background: var(--verify); box-shadow: 0 14px 30px -14px rgba(52, 211, 153, 0.9); }
-.survey-workbench-embed .decision-button:nth-child(2).is-active{ background: var(--hold); box-shadow: 0 14px 30px -14px rgba(243, 177, 75, 0.9); }
-.survey-workbench-embed .decision-button:nth-child(3).is-active{ background: var(--reject); box-shadow: 0 14px 30px -14px rgba(255, 111, 111, 0.9); }
+.survey-workbench-embed .decision-button:nth-child(1).is-active{ background: var(--verify); box-shadow: 0 14px 30px -14px color-mix(in srgb, var(--verify) 90%, transparent); }
+.survey-workbench-embed .decision-button:nth-child(2).is-active{ background: var(--hold); box-shadow: 0 14px 30px -14px color-mix(in srgb, var(--hold) 90%, transparent); }
+.survey-workbench-embed .decision-button:nth-child(3).is-active{ background: var(--reject); box-shadow: 0 14px 30px -14px color-mix(in srgb, var(--reject) 90%, transparent); }
 
 .survey-workbench-embed .effect{
   display: grid;
@@ -1085,7 +1261,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   border: 1px solid var(--line-strong);
   border-radius: 999px;
   padding: 5px 11px;
-  background: rgba(122, 162, 255, 0.08);
+  background: color-mix(in srgb, var(--k-active) 8%, transparent);
   color: var(--proposed);
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 11px;
@@ -1093,7 +1269,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 }
 
 .survey-workbench-embed .tag.is-empty{
-  background: rgba(8, 12, 18, 0.6);
+  background: color-mix(in srgb, var(--k-bg) 60%, var(--k-panel));
   color: var(--paper-faint);
 }
 
@@ -1191,7 +1367,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   padding: 10px 11px;
-  background: rgba(6, 9, 13, 0.55);
+  background: color-mix(in srgb, var(--k-bg) 55%, var(--k-panel));
 }
 
 .survey-workbench-embed .preview-section h3{
@@ -1217,7 +1393,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 .survey-workbench-embed .preview-section.is-neutral{
   border-style: dashed;
   border-color: var(--line);
-  background: rgba(6, 9, 13, 0.35);
+  background: color-mix(in srgb, var(--k-bg) 35%, var(--k-panel));
 }
 
 .survey-workbench-embed .preview-section.is-neutral h3{
@@ -1290,7 +1466,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   border-radius: var(--radius-sm);
   background: var(--ink-1000);
   padding: 11px;
-  color: #b6f3df;
+  color: color-mix(in srgb, var(--k-positive) 80%, var(--k-text));
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 11px;
   line-height: 1.55;
@@ -1350,9 +1526,9 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
     border-radius: var(--radius);
     padding: 13px 14px;
     background:
-      linear-gradient(90deg, rgba(92, 224, 198, 0.12), transparent 46%),
+      linear-gradient(90deg, color-mix(in srgb, var(--k-brand) 12%, transparent), transparent 46%),
       linear-gradient(180deg, var(--ink-800), var(--ink-850));
-    box-shadow: 0 18px 44px -36px rgba(0, 0, 0, 0.9);
+    box-shadow: var(--k-shadow, 0 18px 44px -36px rgba(0, 0, 0, 0.9));
   }
 
   .survey-workbench-embed .active-review-copy,
@@ -1417,7 +1593,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
     padding: 11px 14px;
     margin-bottom: 14px;
     background:
-      linear-gradient(90deg, rgba(92, 224, 198, 0.08), transparent 46%),
+      linear-gradient(90deg, color-mix(in srgb, var(--k-brand) 8%, transparent), transparent 46%),
       linear-gradient(180deg, var(--ink-800), var(--ink-850));
     animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
@@ -1443,7 +1619,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
     padding: 0 14px;
     border: 1px solid var(--line-strong);
     border-radius: 999px;
-    background: rgba(92, 224, 198, 0.08);
+    background: color-mix(in srgb, var(--k-brand) 8%, transparent);
     color: var(--accent);
     cursor: pointer;
     font-family: "IBM Plex Mono", ui-monospace, monospace;
@@ -1454,7 +1630,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   }
 
   .survey-workbench-embed .mobile-queue-open:hover{
-    background: rgba(92, 224, 198, 0.16);
+    background: color-mix(in srgb, var(--k-brand) 16%, transparent);
     border-color: var(--accent);
   }
 
@@ -1692,6 +1868,41 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   .survey-workbench-embed pre{
     max-height: 360px;
     padding: 11px;
+  }
+}
+
+/* ---- Type legibility: serif → UI sans below 480px -------------------- */
+/* At small container sizes the Fraunces display font reads poorly; fall back
+   to the UI sans-serif stack for headings while keeping serif on desktop. */
+@media (max-width: 480px) {
+  .survey-workbench-embed h1,
+  .survey-workbench-embed h2,
+  .survey-workbench-embed h3,
+  .survey-workbench-embed .role,
+  .survey-workbench-embed .surface-summary-label,
+  .survey-workbench-embed .queue-head h2,
+  .survey-workbench-embed .session-summary h2,
+  .survey-workbench-embed .session-audit h2,
+  .survey-workbench-embed .surface-head h2,
+  .survey-workbench-embed .summary-grid .meta-value{
+    font-family: var(--k-font-ui, "Hanken Grotesk", system-ui, sans-serif);
+    letter-spacing: -0.01em;
+  }
+}
+
+@container (max-width: 480px) {
+  .survey-workbench-embed h1,
+  .survey-workbench-embed h2,
+  .survey-workbench-embed h3,
+  .survey-workbench-embed .role,
+  .survey-workbench-embed .surface-summary-label,
+  .survey-workbench-embed .queue-head h2,
+  .survey-workbench-embed .session-summary h2,
+  .survey-workbench-embed .session-audit h2,
+  .survey-workbench-embed .surface-head h2,
+  .survey-workbench-embed .summary-grid .meta-value{
+    font-family: var(--k-font-ui, "Hanken Grotesk", system-ui, sans-serif);
+    letter-spacing: -0.01em;
   }
 }
 

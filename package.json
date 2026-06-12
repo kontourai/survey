@@ -90,6 +90,7 @@
     "node": ">=20"
   },
   "bin": {
-    "survey-review-mcp": "./bin/survey-review-mcp.mjs"
+    "survey-review-mcp": "./bin/survey-review-mcp.mjs",
+    "survey-review-console": "./bin/survey-review-console.mjs"
   }
 }

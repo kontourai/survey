@@ -103,6 +103,27 @@ const TOKEN_INHERIT_CSS = `/* 1. Host token defaults — literal values, not var
   --k-font-ui: inherit;
   --k-font-mono: inherit;
   --k-font-display: inherit;
+}
+/* 3. Light mode token overrides — applied when color-scheme="light" sets data-theme="light"
+   on the embed root. These are literal values (not var()) to avoid self-reference cycles.
+   The [data-theme="light"] selector has specificity (0,1,0) which is overridden by the
+   .survey-workbench-embed[class] inheritance block above for the embed container,
+   but the override chain means host-level --k-* tokens still win. */
+.survey-workbench-embed[data-theme="light"] {
+  color-scheme: light;
+  --k-bg: #f5f4ef;
+  --k-panel: #ffffff;
+  --k-panel-raised: #fbfaf7;
+  --k-line: rgba(36, 40, 46, 0.12);
+  --k-line-strong: rgba(36, 40, 46, 0.20);
+  --k-text: #202124;
+  --k-text-muted: #5b626b;
+  --k-text-faint: #707782;
+  --k-brand: #16806f;
+  --k-positive: #168257;
+  --k-caution: #8a5a00;
+  --k-negative: #c83b3b;
+  --k-active: #3f6fd6;
 }`;
 
 export class SurveyReviewWorkbenchElement extends HTMLElement {
@@ -268,9 +289,13 @@ export class SurveyReviewWorkbenchElement extends HTMLElement {
     const colorScheme = this.getAttribute("color-scheme") ?? "dark";
     this.#mountRoot.className = `workbench survey-workbench-embed theme-${theme}`;
     this.#mountRoot.setAttribute("data-color-scheme", colorScheme);
+    // data-theme="light" is required by the token sheet for light mode token overrides.
+    // data-dark is kept for any existing selectors that used it.
     if (colorScheme === "light") {
+      this.#mountRoot.setAttribute("data-theme", "light");
       this.#mountRoot.removeAttribute("data-dark");
     } else {
+      this.#mountRoot.removeAttribute("data-theme");
       this.#mountRoot.setAttribute("data-dark", "");
     }
   }

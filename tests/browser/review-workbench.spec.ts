@@ -330,3 +330,219 @@ async function selectQueueItem(page: Page, itemName: string): Promise<void> {
     await page.locator(`[data-item-name='${itemName}']`).click();
   }
 }
+
+// ---------------------------------------------------------------------------
+// EXCERPT CLAMP: 3-line clamp with inline "more / less" expander
+// ---------------------------------------------------------------------------
+
+test("excerpt clamp toggle expands and collapses long excerpts", async ({ page }) => {
+  test.skip(test.info().project.name !== "chromium-desktop", "clamp test uses desktop viewport");
+
+  // Inject a session with a very long excerpt to guarantee the clamp is active.
+  await page.addInitScript(() => {
+    const longExcerpt = "This is a very long excerpt text that should be clamped to three lines when rendered in the workbench. ".repeat(8);
+    window.kontourSurveyReviewWorkbench = {
+      startState: {
+        items: [
+          {
+            apiVersion: "survey.kontourai.io/v1alpha1",
+            kind: "ReviewItem",
+            metadata: { name: "clamp-test-item", producer: { displayName: "Clamp Test" } },
+            spec: {
+              target: "clampField",
+              candidateSetStatus: "needs-review",
+              candidates: [
+                {
+                  id: "clamp-test:current",
+                  role: "current",
+                  value: "current value",
+                  source: { sourceRef: "https://example.test/clamp", kind: "web-page", observedAt: "2026-06-04T00:00:00.000Z" },
+                  locator: { scheme: "html", locator: "html:field=clampField", excerpt: longExcerpt },
+                  extraction: { target: "clampField", extractor: "test", extractedAt: "2026-06-04T00:00:00.000Z" },
+                  claimTarget: { claimId: "clamp.current", subjectType: "test", subjectId: "x", surface: "test", claimType: "test", fieldOrBehavior: "clampField", impactLevel: "low" },
+                },
+                {
+                  id: "clamp-test:proposed",
+                  role: "proposed",
+                  value: "proposed value",
+                  source: { sourceRef: "https://example.test/clamp-proposed", kind: "web-page", observedAt: "2026-06-04T01:00:00.000Z" },
+                  locator: { scheme: "html", locator: "html:field=clampField", excerpt: longExcerpt },
+                  extraction: { target: "clampField", extractor: "test-crawler", extractedAt: "2026-06-04T01:00:00.000Z" },
+                  claimTarget: { claimId: "clamp.proposed", subjectType: "test", subjectId: "x", surface: "test", claimType: "test", fieldOrBehavior: "clampField", impactLevel: "low" },
+                },
+              ],
+            },
+            status: { observedCandidateCount: 2 },
+          },
+        ],
+        activeItemName: "clamp-test-item",
+        notesByItemName: {},
+        decisionsByItemName: {},
+        reviewedAt: "2026-06-04T00:00:00.000Z",
+        actorId: "clamp-tester",
+      },
+    } as unknown as Window["kontourSurveyReviewWorkbench"];
+  });
+
+  const consoleErrors = await loadWorkbench(page);
+
+  // The candidate card excerpt should have a clamp container with toggle button
+  const clampContainer = page.locator(".candidate-card .excerpt-clamp").first();
+  const toggleButton = clampContainer.locator("[data-clamp-toggle]");
+
+  await expect(clampContainer).toBeVisible();
+  await expect(toggleButton).toBeVisible();
+  await expect(toggleButton).toHaveText("more");
+  await expect(toggleButton).toHaveAttribute("aria-expanded", "false");
+
+  // The clamp container should NOT have is-expanded initially
+  await expect(clampContainer).not.toHaveClass(/is-expanded/);
+
+  // Click "more" to expand
+  await toggleButton.click();
+  await expect(toggleButton).toHaveText("less");
+  await expect(toggleButton).toHaveAttribute("aria-expanded", "true");
+  await expect(clampContainer).toHaveClass(/is-expanded/);
+
+  // Click "less" to collapse
+  await toggleButton.click();
+  await expect(toggleButton).toHaveText("more");
+  await expect(toggleButton).toHaveAttribute("aria-expanded", "false");
+  await expect(clampContainer).not.toHaveClass(/is-expanded/);
+
+  expect(consoleErrors).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------
+// CANDIDATE HISTORY EXPANDER: >3 entries show first 3 + "view all (N)"
+// ---------------------------------------------------------------------------
+
+test("candidate history expander shows first 3 entries and expands to all", async ({ page }) => {
+  test.skip(test.info().project.name !== "chromium-desktop", "history expander test uses desktop viewport");
+
+  // Inject a session with 5 candidates so history has >3 unselected.
+  await page.addInitScript(() => {
+    const makeCand = (id: string, role: string, value: string) => ({
+      id,
+      role,
+      value,
+      source: { sourceRef: `https://example.test/${id}`, kind: "web-page", observedAt: "2026-06-04T00:00:00.000Z" },
+      locator: { scheme: "html", locator: "html:field=historyField", excerpt: `Excerpt for ${id}` },
+      extraction: { target: "historyField", extractor: "test", extractedAt: "2026-06-04T00:00:00.000Z" },
+      claimTarget: { claimId: `history.${id}`, subjectType: "test", subjectId: "x", surface: "test", claimType: "test", fieldOrBehavior: "historyField", impactLevel: "low" },
+    });
+    window.kontourSurveyReviewWorkbench = {
+      startState: {
+        items: [
+          {
+            apiVersion: "survey.kontourai.io/v1alpha1",
+            kind: "ReviewItem",
+            metadata: { name: "history-test-item", producer: { displayName: "History Test" } },
+            spec: {
+              target: "historyField",
+              candidateSetStatus: "needs-review",
+              candidates: [
+                makeCand("history:current", "current", "val-current"),
+                makeCand("history:proposed", "proposed", "val-proposed"),
+                makeCand("history:extra-1", "candidate", "val-extra-1"),
+                makeCand("history:extra-2", "candidate", "val-extra-2"),
+                makeCand("history:extra-3", "candidate", "val-extra-3"),
+              ],
+            },
+            status: { observedCandidateCount: 5 },
+          },
+        ],
+        activeItemName: "history-test-item",
+        notesByItemName: {},
+        decisionsByItemName: { "history-test-item": "accept-proposed" },
+        reviewedAt: "2026-06-04T00:00:00.000Z",
+        actorId: "history-tester",
+      },
+    } as unknown as Window["kontourSurveyReviewWorkbench"];
+  });
+
+  const consoleErrors = await loadWorkbench(page);
+
+  // Open the surface preview (it's a <details> element)
+  await page.locator("[data-testid='surface-preview'] .surface-summary").click();
+
+  const historySection = page.getByTestId("surface-candidate-history");
+  await expect(historySection).toBeVisible();
+
+  // The "view all (N)" button should be present since we have >3 unselected
+  const expandBtn = historySection.locator("[data-history-expand]");
+  await expect(expandBtn).toBeVisible();
+  await expect(expandBtn).toContainText("view all");
+
+  // The overflow entries should not be visible initially
+  const overflowDiv = historySection.locator(".history-overflow");
+  await expect(overflowDiv).not.toBeVisible();
+
+  // Click to expand
+  await expandBtn.click();
+  await expect(overflowDiv).toBeVisible();
+  await expect(expandBtn).toContainText("show less");
+  await expect(expandBtn).toHaveAttribute("aria-expanded", "true");
+
+  // Click to collapse
+  await expandBtn.click();
+  await expect(overflowDiv).not.toBeVisible();
+  await expect(expandBtn).toContainText("view all");
+
+  expect(consoleErrors).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------
+// DEMO PAGE CHROME: light/dark toggle persisted
+// ---------------------------------------------------------------------------
+
+test("demo page light/dark toggle changes theme and persists to localStorage", async ({ page }) => {
+  test.skip(test.info().project.name !== "chromium-desktop", "theme toggle test uses desktop viewport");
+  const consoleErrors = await loadWorkbench(page);
+
+  // Toggle button should be present
+  const toggle = page.getByTestId("demo-theme-toggle");
+  await expect(toggle).toBeVisible();
+
+  // Default is dark — no data-theme attribute on <html>
+  const initialTheme = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
+  expect(initialTheme).toBeNull();
+
+  // Capture dark-mode --k-bg token on <html>
+  const darkKBg = await page.evaluate(() =>
+    window.getComputedStyle(document.documentElement).getPropertyValue("--k-bg").trim(),
+  );
+  expect(darkKBg).not.toBe("");
+
+  // Click toggle to switch to light
+  await toggle.click();
+
+  // Verify data-theme="light" was applied
+  const lightTheme = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
+  expect(lightTheme).toBe("light");
+
+  // Verify localStorage was updated
+  const stored = await page.evaluate(() => {
+    try { return localStorage.getItem("survey-demo-color-scheme"); } catch { return null; }
+  });
+  expect(stored).toBe("light");
+
+  // --k-bg must flip: light mode token differs from dark mode token
+  const lightKBg = await page.evaluate(() =>
+    window.getComputedStyle(document.documentElement).getPropertyValue("--k-bg").trim(),
+  );
+  expect(lightKBg).not.toBe(darkKBg);
+
+  // Click again to go back to dark
+  await toggle.click();
+  const backToDark = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
+  expect(backToDark).toBeNull();
+
+  // localStorage should now reflect dark again
+  const storedAfterDark = await page.evaluate(() => {
+    try { return localStorage.getItem("survey-demo-color-scheme"); } catch { return null; }
+  });
+  expect(storedAfterDark).toBe("dark");
+
+  expect(consoleErrors).toEqual([]);
+});
