@@ -185,3 +185,16 @@ export type {
   ReviewAuthorizingIssue,
   ReviewAuthorizingIssueCode,
 } from "./review-authorizing.js";
+export {
+  deriveOversightMetrics,
+  mergeTrustBundleWithOversightMetrics,
+  oversightMetricsToClaims,
+} from "./oversight-metrics.js";
+export type {
+  AggregateOversightMetrics,
+  DeriveOversightMetricsOptions,
+  OversightMetrics,
+  OversightMetricsClaimsSubject,
+  OversightQualityClaim,
+  ReviewerOversightMetrics,
+} from "./oversight-metrics.js";

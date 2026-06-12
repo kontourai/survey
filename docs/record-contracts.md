@@ -923,3 +923,70 @@ const record = resolveInquiry(bundle, {
 - The `SchemaMappingExtractor` interface is synchronous or async; `surveySchemaMapping` always awaits it.
 - Auto-accept mirrors `applyAutoAcceptPolicy` in `inquiry-mapping`: non-conflicting proposals above the threshold are accepted as `"assumed"`, never as `"verified"`.  Conflicts require explicit human review.
 - `referenceSchemaExtractor` is deterministic and test-only.  Its matching strategy (exact field-name, optional type-token match) is intentionally simple and transparent.
+
+
+## Oversight-quality metrics
+
+`deriveOversightMetrics` computes per-reviewer and aggregate indicators from a
+stream of `ReviewDecision` resources.  `oversightMetricsToClaims` projects those
+indicators as Surface-ready claims with `claimType: "oversight-quality"`, one
+claim per metric, so Annex-pack rules can apply value predicates (e.g.
+`overrideRate gte 0.02`, `decisionsPerHour lte 60`).
+
+```ts
+import {
+  deriveOversightMetrics,
+  mergeTrustBundleWithOversightMetrics,
+  oversightMetricsToClaims,
+} from "@kontourai/survey";
+
+const metrics = deriveOversightMetrics(decisions, {
+  now: new Date(),
+  windowDays: 7,          // optional rolling window
+  presentedCount: 120,    // optional denominator for samplingCoverage
+});
+
+// metrics.aggregate: decisionCount, decisionsPerHour, overrideRate,
+//   typedRationaleRate, medianInterDecisionSeconds, samplingCoverage?
+// metrics.byReviewer: one row per actorId
+
+const subject = {
+  subjectType: "review-session",
+  subjectId: "session-xyz",
+  surface: "review.oversight",
+  actor: "oversight-collector",
+  observedAt: new Date().toISOString(),
+  collectedBy: "oversight-metrics",
+};
+
+const claimRecords = oversightMetricsToClaims(metrics, subject);
+const bundle = mergeTrustBundleWithOversightMetrics(existingBundle, claimRecords);
+```
+
+### Override detection
+
+A decision counts as an override when the reviewer chose a candidate that differs
+from the item's pre-selected (proposed) candidate.  The workbench `ReviewDecision`
+carries the selected `spec.candidateId` and the projection `spec.projection.candidateId`.
+When those differ — or when `spec.status === "rejected"` — the decision is an override.
+When neither signal is available the decision is treated as non-override to avoid false
+positives.
+
+### Honest limits
+
+These metrics are **indicators, not proof of reviewer cognition**:
+
+- **Pace statistics can be gamed.** A reviewer who clicks quickly with occasional
+  typed rationale notes will produce metrics that look engaged.  Metrics complement
+  identity signing and `authorizing` provenance; they do not replace either.
+- **Override rate is a proxy.** Disagreeing with the proposed value is consistent with
+  engagement, but a reviewer who always overrides is not necessarily more careful than
+  one who almost always agrees.  Domain context — not a single ratio — determines what
+  a healthy override rate looks like.
+- **Typed rationale indicates effort, not correctness.** A reviewer can write a note
+  without reading the source.
+- **Sampling coverage depends on a caller-supplied denominator.** When `presentedCount`
+  is not provided the metric is omitted rather than fabricated.
+- **Status is `"proposed"` for all oversight claims.** Oversight-quality claims are
+  derived computations, not externally verified facts.  Downstream consumers should
+  treat them as decision-support signals, not authoritative verdicts.
