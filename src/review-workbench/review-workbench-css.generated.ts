@@ -1458,7 +1458,9 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
     border-color: var(--accent);
   }
 
-  .survey-workbench-embed .queue-panel{
+  /* Higher specificity than the @container stacked-layout fallback below:
+     on a narrow viewport the drawer must win even inside a narrow container. */
+  .survey-workbench-embed .queue-layout .queue-panel{
     position: absolute;
     top: 0;
     left: 0;
@@ -1473,7 +1475,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
     padding-top: 50px;
   }
 
-  .survey-workbench-embed .queue-panel.is-open{
+  .survey-workbench-embed .queue-layout .queue-panel.is-open{
     transform: translateX(0);
   }
 
@@ -1483,10 +1485,6 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 
   .survey-workbench-embed .candidate-grid::before{
     display: none;
-  }
-
-  .survey-workbench-embed .queue-panel{
-    position: static;
   }
 
   .survey-workbench-embed .content-grid,

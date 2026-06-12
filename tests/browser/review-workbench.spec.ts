@@ -233,9 +233,9 @@ test("keeps the review controls usable on mobile width", async ({ page }) => {
     expect(auditBox.x + auditBox.width).toBeLessThanOrEqual(viewport.width + 1);
   }
 
-  // Close the drawer (by clicking the backdrop) before interacting with main content.
-  // While the drawer is open the backdrop (position:absolute, z-index:40) covers the content grid.
-  await page.getByTestId("queue-drawer-backdrop").click();
+  // Close the drawer by clicking the backdrop area to the right of the 320px-wide
+  // drawer panel (the panel sits above the backdrop and would intercept a center click).
+  await page.getByTestId("queue-drawer-backdrop").click({ position: { x: 380, y: 400 } });
   await page.locator(".decision-column [data-decision='keep-current']").click();
   await expect(page.locator(".decision-column [data-decision='keep-current']")).toHaveClass(/is-active/);
   await expect(page.getByTestId("session-event-list")).toContainText("decision-changed");
@@ -317,21 +317,15 @@ async function goToNextUnresolved(page: Page): Promise<void> {
 }
 
 /**
- * Selects a queue item by its data-item-name attribute.
- *
- * On desktop the queue panel is always in the flow; a normal click works.
- * On mobile the panel is a slide-in drawer whose content is translated off-screen by CSS
- * transform when closed.  Use the DOM element's native .click() (via page.evaluate) to fire the
- * selection handler directly without requiring Playwright to scroll the off-screen element into
- * view or pass hit-testing — this correctly exercises the state-machine without fighting layout.
+ * Selects a queue item by its data-item-name attribute, the way a user would:
+ * on mobile the queue panel is a slide-in drawer, so open it from the sticky
+ * bar first, then click the row (the drawer closes on selection).
  */
 async function selectQueueItem(page: Page, itemName: string): Promise<void> {
   const mobileBar = page.getByTestId("mobile-queue-open");
   if (await mobileBar.isVisible()) {
-    await page.evaluate((name) => {
-      const btn = document.querySelector<HTMLButtonElement>(`[data-item-name='${name}']`);
-      btn?.click();
-    }, itemName);
+    await mobileBar.click();
+    await page.locator(`[data-item-name='${itemName}']`).click();
   } else {
     await page.locator(`[data-item-name='${itemName}']`).click();
   }

@@ -1305,7 +1305,9 @@ pre {
     border-color: var(--accent);
   }
 
-  .queue-panel {
+  /* Higher specificity than the @container stacked-layout fallback below:
+     on a narrow viewport the drawer must win even inside a narrow container. */
+  .queue-layout .queue-panel {
     position: fixed;
     top: 0;
     left: 0;
@@ -1320,7 +1322,7 @@ pre {
     padding-top: 50px;
   }
 
-  .queue-panel.is-open {
+  .queue-layout .queue-panel.is-open {
     transform: translateX(0);
   }
 
@@ -1330,10 +1332,6 @@ pre {
 
   .candidate-grid::before {
     display: none;
-  }
-
-  .queue-panel {
-    position: static;
   }
 
   .content-grid,
