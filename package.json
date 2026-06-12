@@ -87,7 +87,7 @@
     "typescript": "^5.8.0"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "bin": {
     "survey-review-mcp": "./bin/survey-review-mcp.mjs",
