@@ -2,8 +2,8 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
-const installedKitRoot = path.join(root, "node_modules", "@kontourai", "console-kit");
-const target = path.join(root, "examples", "review-workbench", "vendor", "console-kit", "tokens");
+const installedKitRoot = path.join(root, "node_modules", "@kontourai", "ui");
+const target = path.join(root, "examples", "review-workbench", "vendor", "kontourai-ui", "tokens");
 const checkOnly = process.argv.includes("--check");
 
 main().catch((error) => {
@@ -17,20 +17,20 @@ async function main() {
 
   if (checkOnly) {
     await compareDirectories(source, target);
-    console.log("Survey review workbench Console Kit assets are synced.");
+    console.log("Survey review workbench Kontour UI assets are synced.");
     return;
   }
 
   await fs.rm(path.dirname(target), { recursive: true, force: true });
   await fs.mkdir(path.dirname(target), { recursive: true });
   await fs.cp(source, target, { recursive: true });
-  console.log("Synced Survey review workbench Console Kit assets.");
+  console.log("Synced Survey review workbench Kontour UI assets.");
 }
 
 async function resolveKitRoot() {
   const stat = await fs.lstat(installedKitRoot).catch(() => undefined);
   if (!stat?.isDirectory() && !stat?.isSymbolicLink()) {
-    throw new Error("Missing @kontourai/console-kit. Run npm install before syncing review workbench assets.");
+    throw new Error("Missing @kontourai/ui. Run npm install before syncing review workbench assets.");
   }
   await assertPackageName(installedKitRoot);
   return installedKitRoot;
@@ -38,8 +38,8 @@ async function resolveKitRoot() {
 
 async function assertPackageName(candidate) {
   const packageJson = JSON.parse(await fs.readFile(path.join(candidate, "package.json"), "utf8"));
-  if (packageJson.name !== "@kontourai/console-kit") {
-    throw new Error(`Expected @kontourai/console-kit at ${candidate}, found ${packageJson.name ?? "unnamed package"}.`);
+  if (packageJson.name !== "@kontourai/ui") {
+    throw new Error(`Expected @kontourai/ui at ${candidate}, found ${packageJson.name ?? "unnamed package"}.`);
   }
 }
 

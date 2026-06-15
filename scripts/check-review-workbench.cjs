@@ -6,10 +6,10 @@ const root = process.cwd();
 const requiredFiles = [
   "examples/review-workbench/index.html",
   "examples/review-workbench/review-workbench.css",
-  "examples/review-workbench/vendor/console-kit/tokens/index.css",
-  "examples/review-workbench/vendor/console-kit/tokens/tokens.css",
-  "examples/review-workbench/vendor/console-kit/tokens/themes.css",
-  "examples/review-workbench/vendor/console-kit/tokens/fonts.css",
+  "examples/review-workbench/vendor/kontourai-ui/tokens/index.css",
+  "examples/review-workbench/vendor/kontourai-ui/tokens/tokens.css",
+  "examples/review-workbench/vendor/kontourai-ui/tokens/themes.css",
+  "examples/review-workbench/vendor/kontourai-ui/tokens/fonts.css",
   "examples/review-workbench/review-workbench.ts",
   "src/review-workbench/review-workbench-data.ts",
   "src/review-workbench/review-presentation.ts",
@@ -60,7 +60,7 @@ main().catch((error) => {
 async function main() {
   assertIncludes(html, "id=\"review-workbench\"");
   assertIncludes(html, "class=\"theme-survey\"");
-  assertIncludes(html, "./vendor/console-kit/tokens/index.css");
+  assertIncludes(html, "./vendor/kontourai-ui/tokens/index.css");
   assertIncludes(html, "./review-workbench.css");
   assertIncludes(html, "rel=\"icon\"");
   assertIncludes(html, "data:image/svg+xml");

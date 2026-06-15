@@ -90,8 +90,8 @@ describe("survey-review-console server", () => {
     assert.ok(ct.includes("css"), `expected css, got: ${ct}`);
   });
 
-  test("GET /dist/src/review-workbench/vendor/console-kit/tokens/index.css returns 200 with CSS", async () => {
-    const res = await fetch(`${handle.url}dist/src/review-workbench/vendor/console-kit/tokens/index.css`);
+  test("GET /dist/src/review-workbench/vendor/kontourai-ui/tokens/index.css returns 200 with CSS", async () => {
+    const res = await fetch(`${handle.url}dist/src/review-workbench/vendor/kontourai-ui/tokens/index.css`);
     assert.equal(res.status, 200);
     const ct = res.headers.get("content-type") ?? "";
     assert.ok(ct.includes("css"), `expected css, got: ${ct}`);

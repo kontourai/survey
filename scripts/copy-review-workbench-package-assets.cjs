@@ -51,7 +51,7 @@ async function main() {
 }
 
 async function buildEmbeddedWorkbenchCss() {
-  const tokenRoot = path.join(sourceRoot, "vendor", "console-kit", "tokens");
+  const tokenRoot = path.join(sourceRoot, "vendor", "kontourai-ui", "tokens");
   const tokensCss = await fs.readFile(path.join(tokenRoot, "tokens.css"), "utf8");
   const themesCss = await fs.readFile(path.join(tokenRoot, "themes.css"), "utf8");
   const workbenchCss = await fs.readFile(path.join(sourceRoot, "review-workbench.css"), "utf8");

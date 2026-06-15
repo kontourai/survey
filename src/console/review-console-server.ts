@@ -237,7 +237,7 @@ function buildConsoleHtml(sessionPath: string): string {
   // workbench.js lives at dist/src/review-workbench/review-workbench.js relative to distRoot
   const workbenchJsPath = "/dist/src/review-workbench/review-workbench.js";
   const workbenchCssPath = "/dist/src/review-workbench/review-workbench.css";
-  const tokensIndexPath = "/dist/src/review-workbench/vendor/console-kit/tokens/index.css";
+  const tokensIndexPath = "/dist/src/review-workbench/vendor/kontourai-ui/tokens/index.css";
 
   return `<!doctype html>
 <html lang="en" class="theme-survey">
@@ -356,9 +356,11 @@ body {
 <body>
 <header class="console-topbar" role="banner">
   <div class="console-topbar-logo">
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <rect width="14" height="14" rx="3" fill="#5ce0c6" fill-opacity="0.15"/>
-      <path d="M3.5 7.2L5.9 9.8L10.5 4.5" stroke="#5ce0c6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <svg class="product-mark" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Survey product mark">
+      <circle cx="10" cy="10" r="5.5"/>
+      <path d="M14 14 19.5 19.5"/>
+      <path d="M7.6 9H12.4"/>
+      <path d="M7.6 11.2H11.2"/>
     </svg>
     Survey Review Console
   </div>

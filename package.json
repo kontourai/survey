@@ -80,7 +80,7 @@
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.54.0",
-    "@kontourai/console-kit": "^0.1.0",
+    "@kontourai/ui": "^1.1.0",
     "@playwright/test": "^1.60.0",
     "@types/node": "^25.6.0",
     "marked": "^16.4.2",
