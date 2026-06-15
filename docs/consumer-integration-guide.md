@@ -523,7 +523,7 @@ The element declares default token values on `:host` so host-page rules always w
 | `--k-radius-sm` | `6px` | Inner element radius |
 | `--k-font-ui` | `"Hanken Grotesk", system-ui, sans-serif` | UI typeface |
 
-When using `@kontourai/console-kit` tokens, those values flow through automatically.
+When using `@kontourai/ui` tokens, those values flow through automatically.
 
 **Mobile drawer**
 
