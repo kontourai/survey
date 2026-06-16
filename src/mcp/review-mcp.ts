@@ -33,6 +33,18 @@ import type { ReviewItem, ReviewSession, ReviewSessionEvent } from "../review-re
 const PROTOCOL_VERSION = "2025-06-18";
 const SESSION_NAME = "mcp-review-session";
 
+// MCP Apps extension (SEP-1865). The review card is offered under both UI
+// conventions so one server renders across hosts: the existing mcp-ui.dev
+// embedded resource in tool results, AND a declared `ui://` resource that the
+// official Apps hosts (ChatGPT/Claude) and Station's SEP-1865 resolver read via
+// resources/read. The canonical pointer is the FLAT `_meta["ui/resourceUri"]`
+// key (what registerAppTool emits); the nested `_meta.ui.resourceUri` is the
+// convenience shape some hosts read — we emit both.
+const UI_RESOURCE_URI_META_KEY = "ui/resourceUri";
+const UI_CAPABILITY_EXTENSION = "io.modelcontextprotocol/ui";
+const QUEUE_PANEL_URI = "ui://survey/review-card/queue";
+const UI_RESOURCE_MIME = "text/html;profile=mcp-app";
+
 // MCP tool decision strings → ReviewWorkbenchDecision
 const MCP_DECISION_MAP: Record<string, ReviewWorkbenchDecision> = {
   accept: "accept-proposed",
@@ -552,6 +564,16 @@ function buildUiResource(
   };
 }
 
+// Render the SEP-1865 declared review card: load the configured session, replay
+// to current state, and render the active item's card HTML (the same HTML the
+// embedded `queue` resource carries — here served via resources/read).
+async function readQueuePanelHtml(options: ReviewMcpOptions): Promise<string> {
+  const { snapshot, events } = await readSessionFile(options.sessionPath);
+  const current = events.length > 0 ? replayReviewSessionEvents(snapshot, events) : snapshot;
+  const activeItem = currentReviewItem(current);
+  return buildReviewCardHtml(activeItem, snapshot, events);
+}
+
 // ---- Domain error (maps to isError:true, not a JSON-RPC error) -----------
 
 class DomainError extends Error {
@@ -586,7 +608,14 @@ async function handleLine(
         id,
         result: {
           protocolVersion: PROTOCOL_VERSION,
-          capabilities: { tools: { listChanged: false } },
+          capabilities: {
+            tools: { listChanged: false },
+            // Resources back the SEP-1865 ui:// review card (unless --no-ui).
+            ...(options.noUi ? {} : { resources: { listChanged: false } }),
+            ...(options.noUi
+              ? {}
+              : { extensions: { [UI_CAPABILITY_EXTENSION]: {} } }),
+          },
           serverInfo: { name: "survey-review-mcp", title: "Survey Review MCP", version: serverVersion },
           instructions:
             "Use survey_review_queue to inspect the queue, survey_review_item to drill into a single item, and survey_review_decide to record a decision. Decisions are persisted to the session file and are irreversible within this session.",
@@ -606,6 +635,15 @@ async function handleLine(
               description:
                 "Return a text summary and JSON of the current review queue: all items with their status (pending, in-review, resolved, rejected, escalated), the active item, resolved/total counts, and session summary totals.",
               inputSchema: { type: "object", properties: {} },
+              // SEP-1865 UI pointer (both flat canonical + nested), unless --no-ui.
+              ...(options.noUi
+                ? {}
+                : {
+                    _meta: {
+                      [UI_RESOURCE_URI_META_KEY]: QUEUE_PANEL_URI,
+                      ui: { resourceUri: QUEUE_PANEL_URI, visibility: ["model", "app"] },
+                    },
+                  }),
             },
             {
               name: "survey_review_item",
@@ -641,6 +679,36 @@ async function handleLine(
             },
           ],
         },
+      });
+    } else if (method === "resources/list") {
+      send({
+        jsonrpc: "2.0",
+        id,
+        result: {
+          resources: options.noUi
+            ? []
+            : [
+                {
+                  uri: QUEUE_PANEL_URI,
+                  name: "Survey review workbench",
+                  description:
+                    "Interactive review card for the active item in the configured review session (MCP Apps UI resource).",
+                  mimeType: UI_RESOURCE_MIME,
+                },
+              ],
+        },
+      });
+    } else if (method === "resources/read") {
+      const uri = typeof params?.uri === "string" ? params.uri : "";
+      if (options.noUi || uri !== QUEUE_PANEL_URI) {
+        send({ jsonrpc: "2.0", id, error: { code: -32602, message: `Unknown resource: ${uri || "(missing uri)"}` } });
+        return;
+      }
+      const html = await readQueuePanelHtml(options);
+      send({
+        jsonrpc: "2.0",
+        id,
+        result: { contents: [{ uri: QUEUE_PANEL_URI, mimeType: UI_RESOURCE_MIME, text: html }] },
       });
     } else if (method === "tools/call") {
       const name = typeof params?.name === "string" ? params.name : "";

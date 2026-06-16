@@ -92,6 +92,14 @@ describe("survey-review-mcp", () => {
       assert.equal(initialize.result?.serverInfo?.name, "survey-review-mcp");
       assert.equal(initialize.result?.protocolVersion, "2025-06-18");
       assert.ok(initialize.result?.capabilities?.tools);
+      // SEP-1865: resources back the ui:// review card + the MCP Apps extension.
+      assert.ok((initialize.result?.capabilities as Record<string, unknown>)?.resources);
+      assert.ok(
+        (
+          (initialize.result?.capabilities as Record<string, Record<string, unknown>>)
+            ?.extensions as Record<string, unknown>
+        )?.["io.modelcontextprotocol/ui"],
+      );
 
       send(server, { jsonrpc: "2.0", method: "notifications/initialized" });
 
@@ -111,6 +119,43 @@ describe("survey-review-mcp", () => {
         assert.equal(typeof tool.description, "string");
         assert.equal(tool.inputSchema.type, "object");
       }
+      // survey_review_queue declares its SEP-1865 UI in both key shapes.
+      const queueTool = (toolsList.result?.tools ?? []).find(
+        (t: { name: string }) => t.name === "survey_review_queue",
+      ) as Record<string, any> | undefined;
+      assert.equal(queueTool?._meta["ui/resourceUri"], "ui://survey/review-card/queue");
+      assert.equal(queueTool?._meta.ui.resourceUri, "ui://survey/review-card/queue");
+
+      // SEP-1865 declared-resource path: list + read the review card.
+      send(server, { jsonrpc: "2.0", id: 4, method: "resources/list" });
+      const resourcesList = await responses.next(4);
+      const listed = ((resourcesList.result as any)?.resources ?? []) as Array<Record<string, unknown>>;
+      assert.equal(listed.length, 1);
+      assert.equal(listed[0].uri, "ui://survey/review-card/queue");
+      assert.equal(listed[0].mimeType, "text/html;profile=mcp-app");
+
+      send(server, {
+        jsonrpc: "2.0",
+        id: 5,
+        method: "resources/read",
+        params: { uri: "ui://survey/review-card/queue" },
+      });
+      const resourceRead = await responses.next(5);
+      const contents = ((resourceRead.result as any)?.contents ?? []) as Array<Record<string, string>>;
+      assert.equal(contents.length, 1);
+      assert.equal(contents[0].uri, "ui://survey/review-card/queue");
+      assert.equal(contents[0].mimeType, "text/html;profile=mcp-app");
+      assert.match(contents[0].text, /<!doctype html>/i);
+      assert.match(contents[0].text, /survey_review_decide/);
+
+      send(server, {
+        jsonrpc: "2.0",
+        id: 6,
+        method: "resources/read",
+        params: { uri: "ui://survey/does-not-exist" },
+      });
+      const unknownResource = await responses.next(6);
+      assert.equal(unknownResource.error?.code, -32602);
     } finally {
       server.stdin!.end();
       await once(server, "exit");
@@ -333,8 +378,22 @@ describe("survey-review-mcp", () => {
 
     try {
       send(server, { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "0" } } });
-      await responses.next(1);
+      const noUiInitialize = await responses.next(1);
+      // --no-ui suppresses the resources capability and the MCP Apps extension.
+      assert.equal((noUiInitialize.result?.capabilities as Record<string, unknown>)?.resources, undefined);
+      assert.equal((noUiInitialize.result?.capabilities as Record<string, unknown>)?.extensions, undefined);
       send(server, { jsonrpc: "2.0", method: "notifications/initialized" });
+
+      // No UI resources are advertised, and survey_review_queue carries no _meta.
+      send(server, { jsonrpc: "2.0", id: 10, method: "resources/list" });
+      const noUiResources = await responses.next(10);
+      assert.equal(((noUiResources.result as any)?.resources ?? []).length, 0);
+      send(server, { jsonrpc: "2.0", id: 11, method: "tools/list" });
+      const noUiTools = await responses.next(11);
+      const noUiQueue = (noUiTools.result?.tools ?? []).find(
+        (t: { name: string }) => t.name === "survey_review_queue",
+      ) as Record<string, any> | undefined;
+      assert.equal(noUiQueue?._meta, undefined);
 
       send(server, { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "survey_review_queue", arguments: {} } });
       const queueResult = await responses.next(2);
@@ -366,7 +425,7 @@ describe("survey-review-mcp", () => {
       send(server, { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "0" } } });
       await responses.next(1);
 
-      send(server, { jsonrpc: "2.0", id: 2, method: "resources/list" });
+      send(server, { jsonrpc: "2.0", id: 2, method: "no/such/method" });
       const unknownMethod = await responses.next(2);
       assert.equal(unknownMethod.error?.code, -32601);
     } finally {
