@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.0](https://github.com/kontourai/survey/compare/v1.0.0...v1.1.0) (2026-06-17)
+
+
+### Features
+
+* **mcp:** serve the review card as a declared MCP Apps (SEP-1865) resource ([#87](https://github.com/kontourai/survey/issues/87)) ([b27cf19](https://github.com/kontourai/survey/commit/b27cf195e6a5a64515a07d707e6f0c2b57370f4c))
+* migrate design system from console-kit to @kontourai/ui ([#83](https://github.com/kontourai/survey/issues/83)) ([af4102a](https://github.com/kontourai/survey/commit/af4102a1f8f19d5d3cf55a68a9ece77194c37d35))
+
 ## [1.0.0](https://github.com/kontourai/survey/compare/v0.8.0...v1.0.0) (2026-06-12)
 
 
