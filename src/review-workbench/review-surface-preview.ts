@@ -191,7 +191,7 @@ function buildIntegrityPosture(
 }
 
 function postureDisclaimer(): string {
-  return "Survey records source and review posture for projection; it does not validate real-world truth.";
+  return "Survey records Raw Source, Source Reference, and review posture for projection; it does not validate real-world truth.";
 }
 
 function sourceAuthorityFromProducer(value: unknown): PreviewSourceAuthority | undefined {
@@ -218,7 +218,7 @@ function portableAuthorityTrace(value: unknown): PreviewAuthorityTrace {
   return {
     status: "empty",
     label: "Empty / not provided",
-    detail: "No portable authority trace is present. SourceAuthority metadata is shown as source evidence and is not promoted into authorityTrace.",
+    detail: "No portable authority trace is present. SourceAuthority metadata is shown with Raw Source and Source Reference posture and is not promoted into authorityTrace.",
   };
 }
 

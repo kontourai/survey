@@ -174,10 +174,16 @@ describe("review workbench prototype", () => {
     assert.equal(presentation.statusLabel, "Resolved");
     assert.equal(presentation.reviewItemLink?.href, "/review/public-directory-availability");
     assert.equal(presentation.candidates[0]?.roleLabel, "Current value");
+    assert.equal(presentation.candidates[0]?.sourceLabel, "Source Reference");
     assert.equal(presentation.candidates[0]?.valueText, "current:available");
     assert.equal(presentation.candidates[1]?.roleLabel, "Proposed value");
+    assert.equal(presentation.candidates[1]?.sourceLabel, "Source Reference");
     assert.equal(presentation.candidates[1]?.valueText, "proposed:waitlist");
     assert.equal(presentation.candidates[1]?.sourceLink?.href, "https://example.test/listings/example-program");
+    assert.equal(
+      presentation.candidates[1]?.traceRefs.find((ref) => ref.kind === "source")?.label,
+      "Raw Source ID",
+    );
     assert.equal(
       presentation.candidates[1]?.traceRefs.find((ref) => ref.kind === "candidate")?.link?.href,
       "/trace/public-directory%3Acandidate%3Aproposed",
@@ -205,6 +211,23 @@ describe("review workbench prototype", () => {
     assert.equal(presentation.applyMeaning, "Saved decision applies proposed value");
     assert.equal(presentation.traceRefs[0]?.label, "Survey ReviewItem");
     assert.equal(presentation.traceRefs[1]?.value, "public-directory:candidate:proposed");
+  });
+
+  it("renders needs-review status as Needs Review without renaming persisted status", () => {
+    const item: ReviewItem = {
+      ...publicDirectoryReviewItemExample,
+      spec: {
+        ...publicDirectoryReviewItemExample.spec,
+        candidateSetStatus: "needs-review",
+      },
+    };
+
+    const presentation = buildReviewItemPresentation(item);
+    const html = renderReviewWorkbenchHtml(initialReviewWorkbenchState(item));
+
+    assert.equal(item.spec.candidateSetStatus, "needs-review");
+    assert.equal(presentation.statusLabel, "Needs Review");
+    assert.match(html, /Needs Review/);
   });
 
   it("renders embedded workbench labels and value summaries from the presentation adapter", () => {
@@ -1125,7 +1148,7 @@ describe("review workbench prototype", () => {
     assert.match(html, /WAITLIST/);
   });
 
-  it("AC3 shows source evidence, sourceAuthority metadata, and review event for keep-current", () => {
+  it("AC3 shows Raw Source, Source Reference, sourceAuthority metadata, and review event for keep-current", () => {
     const state = {
       ...initialReviewWorkbenchState(),
       decision: "keep-current" as const,
@@ -1152,6 +1175,9 @@ describe("review workbench prototype", () => {
 
     const html = renderReviewWorkbenchHtml(state);
     assert.match(html, /data-testid="surface-source-evidence"/);
+    assert.match(html, />Raw Source</);
+    assert.match(html, /Source Reference/);
+    assert.match(html, /Raw Source ID/);
     assert.match(html, /https:\/\/example\.test\/listings\/example-program/);
     assert.match(html, /public-field:source:approved-page/);
     assert.match(html, /Availability is open for the example program\./);
@@ -1166,7 +1192,7 @@ describe("review workbench prototype", () => {
     assert.match(html, /Reviewed against approved page\./);
   });
 
-  it("AC3 shows source evidence and review event for accept-proposed", () => {
+  it("AC3 shows Raw Source and review event for accept-proposed", () => {
     const state = {
       ...initialReviewWorkbenchState(),
       decision: "accept-proposed" as const,
@@ -1199,14 +1225,14 @@ describe("review workbench prototype", () => {
     assert.ok(preview);
     assert.equal(preview.authorityTrace.status, "empty");
     assert.equal(preview.authorityTrace.label, "Empty / not provided");
-    assert.match(preview.authorityTrace.detail, /SourceAuthority metadata is shown as source evidence/);
+    assert.match(preview.authorityTrace.detail, /SourceAuthority metadata is shown with Raw Source and Source Reference posture/);
     assert.match(preview.postureDisclaimer, /does not validate real-world truth/);
 
     const html = renderReviewWorkbenchHtml(state);
     assert.match(html, /data-testid="surface-authority-trace"/);
     assert.match(html, /Empty \/ not provided/);
     assert.match(html, /is-neutral/);
-    assert.match(html, /Survey records source and review posture/);
+    assert.match(html, /Survey records Raw Source, Source Reference, and review posture/);
     assert.match(html, /does not validate real-world truth/);
   });
 

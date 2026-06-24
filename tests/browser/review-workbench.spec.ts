@@ -152,8 +152,10 @@ test("boots from an externally supplied review queue session", async ({ page }) 
   // The "Selected claim" section (which previously showed the claim ID) was removed from the surface
   // preview in the workbench redesign.  Assert instead that the preview reflects the accepted proposal
   // via the review outcome ID rendered in the "Review event" section, and the proposed candidate's
-  // source URL rendered in the "Source evidence" section.
+  // Source Reference rendered in the "Raw Source" section.
   await expect(page.getByTestId("surface-preview")).toContainText("external-registration-status:accept-proposed:review-outcome");
+  await expect(page.getByTestId("surface-preview")).toContainText("Raw Source");
+  await expect(page.getByTestId("surface-preview")).toContainText("Source Reference");
   await expect(page.getByTestId("surface-preview")).toContainText("https://example.test/external-registration");
   expect(consoleErrors).toEqual([]);
 });

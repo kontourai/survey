@@ -107,7 +107,7 @@ export function buildReviewCandidatePresentation(
     roleLabel: adapter.labelForCandidateRole?.(candidate.role, context) ?? defaultCandidateRoleLabel(candidate.role),
     valueLabel: targetLabel,
     valueText: adapter.summarizeValue?.(candidate.value, { ...context, value: candidate.value }) ?? formatValue(candidate.value),
-    sourceLabel: "Source",
+    sourceLabel: "Source Reference",
     sourceText: sourceLink?.label ?? sourceRef,
     sourceLink,
     traceRefs: traceRefsForCandidate(item, candidate, adapter),
@@ -178,7 +178,7 @@ function traceRefsForCandidate(
       kind: "claim",
     },
     {
-      label: "Source ID",
+      label: "Raw Source ID",
       value: candidate.source.sourceId ?? candidate.source.sourceRef,
       kind: "source",
     },
