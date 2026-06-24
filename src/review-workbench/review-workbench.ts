@@ -1060,7 +1060,7 @@ function renderReviewFocus(state: ReviewWorkbenchState, presentationAdapter?: Re
       </div>
       <dl class="focus-evidence">
         ${fieldItem("Target", presentation.targetLabel)}
-        ${fieldItem("Proposed source", proposed.source.sourceRef)}
+        ${fieldItem("Proposed Source Reference", proposed.source.sourceRef)}
         ${fieldItemClamped("Proposed excerpt", proposed.locator?.excerpt ?? "none", "excerpt")}
       </dl>
     </section>
@@ -1173,7 +1173,7 @@ function renderPendingSurfacePreview(): string {
         <span class="surface-summary-label">Surface preview</span>
         <span class="state-label">pending</span>
       </summary>
-      <p class="preview-disclaimer">Choose a review decision to preview the source and review posture that would project toward Surface.</p>
+      <p class="preview-disclaimer">Choose a review decision to preview the Raw Source, Source Reference, and review posture that would project toward Surface.</p>
     </details>
   `;
 }
@@ -1298,12 +1298,12 @@ function renderSourceEvidence(preview: SurfaceProjectionPreview): string {
   // Excerpt uses a 3-line clamp wrapper with a toggle button.
   const clampedExcerptHtml = fieldItemClamped("Excerpt", preview.sourceEvidence.excerpt, "excerpt");
 
-  // Build source evidence section with clamped excerpt inline
+  // Build Raw Source section with clamped excerpt inline.
   return `
     <section class="preview-section" data-testid="surface-source-evidence">
-      <h3>${escapeHtml("Source evidence")}</h3>
+      <h3>${escapeHtml("Raw Source")}</h3>
       <dl class="field-stack compact">
-        ${fieldItem("Source URL", preview.sourceEvidence.sourceRef)}
+        ${fieldItem("Source Reference", preview.sourceEvidence.sourceRef)}
         ${clampedExcerptHtml}
         ${fieldItem("Extractor", preview.sourceEvidence.extractor)}
         ${fieldItem("Observed", preview.sourceEvidence.observedAt)}
@@ -1314,7 +1314,7 @@ function renderSourceEvidence(preview: SurfaceProjectionPreview): string {
         ].join("") : ""}
       </dl>
       ${renderReferenceDetails([
-        ["Source ID", preview.sourceEvidence.sourceId],
+        ["Raw Source ID", preview.sourceEvidence.sourceId],
         ["Extraction ID", preview.sourceEvidence.extractionId],
       ])}
     </section>
@@ -1757,7 +1757,7 @@ function renderCandidateCard(
         <p class="field-value">${escapeHtml(presentation.valueText)}</p>
       </div>
       <dl class="field-stack">
-        ${fieldItem("Source URL", presentation.sourceText)}
+        ${fieldItem(presentation.sourceLabel, presentation.sourceText)}
         ${fieldItem("Locator", candidate.locator?.locator ?? candidate.locator?.scheme ?? "none")}
         ${fieldItemClamped("Excerpt", candidate.locator?.excerpt ?? "none", "excerpt")}
         ${fieldItem("Extraction confidence", confidence === undefined ? "unknown" : formatConfidence(confidence))}
