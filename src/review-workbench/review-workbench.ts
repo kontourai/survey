@@ -1,3 +1,4 @@
+import { canonicalJson } from "./canonical.js";
 import {
   candidateForDecision,
   buildReviewSessionEvent,
@@ -547,22 +548,7 @@ function matchingSelectedCandidate(
 }
 
 function structuralEqual(left: unknown, right: unknown): boolean {
-  return JSON.stringify(canonicalJson(left)) === JSON.stringify(canonicalJson(right));
-}
-
-function canonicalJson(value: unknown): unknown {
-  if (!value || typeof value !== "object") {
-    return value;
-  }
-  if (Array.isArray(value)) {
-    return value.map(canonicalJson);
-  }
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .filter(([, entry]) => entry !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, entry]) => [key, canonicalJson(entry)]),
-  );
+  return canonicalJson(left) === canonicalJson(right);
 }
 
 export function buildReviewWorkbenchResultsFromSession(session: ReviewQueueSessionState): ReviewWorkbenchResult[] {
