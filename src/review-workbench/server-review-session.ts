@@ -10,6 +10,7 @@ import {
 } from "./review-session-replay.js";
 import type { ReviewSessionEvent } from "../review-resource.js";
 import type { ReviewQueueSessionState } from "./review-queue-session.js";
+import { canonicalJson } from "./canonical.js";
 
 export interface ServerReviewSessionRecord {
   readonly sessionName: string;
@@ -211,30 +212,6 @@ function staleIssuesForComparison(
   }
 
   return issues;
-}
-
-function canonicalJson(value: unknown): string {
-  return JSON.stringify(canonicalize(value));
-}
-
-function canonicalize(value: unknown): unknown {
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((entry) => canonicalize(entry));
-  }
-
-  if (value && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, entryValue]) => entryValue !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right));
-
-    return Object.fromEntries(entries.map(([key, entryValue]) => [key, canonicalize(entryValue)]));
-  }
-
-  return value;
 }
 
 function sha256(value: string): string {
