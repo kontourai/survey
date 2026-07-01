@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/kontourai/survey/compare/v1.1.1...v1.2.0) (2026-07-01)
+
+
+### Features
+
+* **producer-kit:** ReviewItem builder, one-call apply, vocabulary primitives, record versioning ([#94](https://github.com/kontourai/survey/issues/94)) ([8204435](https://github.com/kontourai/survey/commit/82044359cc5ab3938163ec1374f2682be51db12d))
+
 ## [1.1.1](https://github.com/kontourai/survey/compare/v1.1.0...v1.1.1) (2026-06-29)
 
 
