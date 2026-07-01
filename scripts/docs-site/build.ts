@@ -32,7 +32,8 @@ const pages: PageDef[] = [
   { src: "source-authority-review-pattern.md", out: "source-authority-review-pattern.html", navTitle: "Source Authority", section: "Reference" },
   { src: "review-workbench-prototype.md", out: "review-workbench-prototype.html", navTitle: "Workbench Demo", section: "Project" },
   { src: "RELEASING.md", out: "releasing.html", navTitle: "Releasing", section: "Project" },
-  { src: "adr/0001-reviewed-current-proposed-resolution.md", out: "adr/0001-reviewed-current-proposed-resolution.html", navTitle: "ADR 0001: Current/Proposed", section: "Decisions" }
+  { src: "adr/0001-reviewed-current-proposed-resolution.md", out: "adr/0001-reviewed-current-proposed-resolution.html", navTitle: "ADR 0001: Current/Proposed", section: "Decisions" },
+  { src: "adr/0003-inquiry-mapping-and-producer-proposals.md", out: "adr/0003-inquiry-mapping-and-producer-proposals.html", navTitle: "ADR 0003: Inquiry Mapping", section: "Decisions" }
 ];
 
 const navSections: NavSection[] = ["Reference", "Project", "Decisions"].map((title) => ({

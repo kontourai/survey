@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { buildTrustReport, validateTrustBundle } from "@kontourai/surface";
 import { correctedDocumentCandidatesExample } from "../example-data/corrected-document-candidates.js";
 import { publicFieldReviewExample } from "../example-data/public-field-review.js";
+import { SURVEY_INPUT_CONTRACT_VERSION } from "../src/types.js";
 import {
   buildCanonicalReviewProofPayload,
   buildSurveyTrustBundle,
@@ -18,6 +19,7 @@ import {
   sourceOfAuthorityObservation,
   sourceOfAuthorityObservationBuilder,
   SurveyInputBuilder,
+  type SurveyInput,
   uploadedDocumentSource,
   webPageSource,
 } from "../src/index.js";
@@ -2676,5 +2678,43 @@ describe("Survey Surface projection", () => {
     assert.equal(surveyMetadata?.repeated?.representation, "aggregate-array");
     assert.equal(surveyMetadata?.repeated?.itemCount, 0);
     assert.equal(report.evidence[0]?.excerptOrSummary, "publicNotices: 0 item(s)");
+  });
+});
+
+
+describe("SurveyInput contract version", () => {
+  it("stamps the default contract version on builder output", () => {
+    const input = new SurveyInputBuilder({
+      source: "survey.contract-version.default",
+      generatedAt: "2026-06-07T12:00:00.000Z",
+    }).build();
+
+    assert.equal(input.contractVersion, SURVEY_INPUT_CONTRACT_VERSION);
+    assert.equal(input.contractVersion, "1");
+  });
+
+  it("respects an explicit contract version override on the builder", () => {
+    const input = new SurveyInputBuilder({
+      source: "survey.contract-version.override",
+      generatedAt: "2026-06-07T12:00:00.000Z",
+      contractVersion: "2",
+    }).build();
+
+    assert.equal(input.contractVersion, "2");
+  });
+
+  it("keeps hand-built SurveyInput records without a contract version valid", () => {
+    const input: SurveyInput = {
+      source: "survey.contract-version.legacy",
+      generatedAt: "2026-06-07T12:00:00.000Z",
+      rawSources: [],
+      extractions: [],
+      candidateSets: [],
+      reviewOutcomes: [],
+      claims: [],
+    };
+
+    assert.equal(input.contractVersion, undefined);
+    assert.doesNotThrow(() => buildSurveyTrustBundle(input));
   });
 });

@@ -96,6 +96,8 @@ One observation, one chain: the page it came from, what the extractor read, who 
 
 Keep producer operational state outside Survey. Queue status, reviewer form state, retries, source caches, and product policy decisions belong in the producer's own data model. Survey carries only the portable evidence chain records needed by Surface.
 
+When you build an `authorized-action` authorizing block outside the workbench, pair `buildAuthorizedActionAuthorizing` with `buildPromptRef({ module, component, version?, scheme? })` — `buildPromptRef` formats a well-formed, versioned `promptRef` (bare `"review-workbench/decision-card@v1"` or scheme-prefixed `"survey://<module>/<component>@v1"`) that `buildAuthorizedActionAuthorizing` accepts directly, instead of hand-formatting the string.
+
 ## Review Workbench embed
 
 **Web component** (shadow DOM, no framework required):

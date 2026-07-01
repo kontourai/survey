@@ -58,10 +58,10 @@ Field ownership:
 | Field area | Owner | Notes |
 | --- | --- | --- |
 | `metadata.name`, `labels`, `annotations` | producer | Stable producer identity and grouping labels. |
-| `metadata.producer`, `spec.producerPolicy`, `candidate.producer` | producer | Domain context and policy hints; Survey treats these as opaque data. |
+| `metadata.producer`, `spec.producerPolicy`, `candidate.producer` | producer | Domain context and policy hints; Survey treats these as opaque data. As of this delivery, the well-known `decisionMode` sub-key is typed (`ReviewDecisionMode`) and can be optionally enforced via `applyReviewSession`'s `enforceProducerPolicy` option or `assertReviewDecisionModeAllows` directly; all other keys remain opaque, and enforcement is off by default — unset `producerPolicy`/`decisionMode` never changes behavior. |
 | `candidate.source` | producer declares, Survey maps | Maps to `RawSource` when an adapter emits Survey records. |
 | `candidate.locator`, `candidate.extraction` | producer declares, Survey maps | Maps to `Extraction`, including locator, excerpt, confidence, extractor, and extracted time. |
-| `candidate.role`, `spec.selectedCandidateId` | producer declares | Survey does not enforce current/proposed-only policy. |
+| `candidate.role`, `spec.selectedCandidateId` | producer declares | Survey does not enforce current/proposed-only policy by default. A producer may opt in via `producerPolicy.decisionMode` (see [Producer decision mode](#producer-decision-mode)). |
 | `candidate.rejectionReason` | producer declares | Optional rationale for a candidate the producer already treats as non-selected, superseded, or rejected; Survey records it without ranking candidates or defining rejection policy. A rejection reason is not a comfort-zone signal by itself. |
 | `candidate.claimTarget` | shared boundary | Producer identifies the desired Surface claim target; Survey preserves compatible `ClaimTarget` fields. |
 | `ReviewDecision.spec` | producer reviewer event | Maps to `ReviewOutcome` without bringing producer queues into Survey. |
@@ -159,3 +159,67 @@ Validation is available via `validateAuthorizing(block)` from
 `@kontourai/survey`. It returns structured issues for transparency-gap reporting;
 it does not hard-block decisions. Gaps are flagged for human review, never
 silently resolved by model judgment.
+
+For consumers building an `authorized-action` `promptRef` outside the workbench,
+use `buildPromptRef({ module, component, version?, scheme? })` from
+`@kontourai/survey` to construct a well-formed `promptRef` for
+`buildAuthorizedActionAuthorizing` instead of hand-formatting the string. Without
+a `scheme` it yields the bare workbench form
+(`"review-workbench/decision-card@v1"`); with a `scheme` it yields the prefixed
+form (`"survey://rules-admin/keep-current@v1"`).
+
+## Producer decision mode
+
+`producerPolicy.decisionMode` declares how a `ReviewItem` is allowed to be
+resolved. It is typed as `ReviewDecisionMode` and takes one of three values:
+
+- `keep-current` — only a keep-current decision is admissible.
+- `current-proposed` — only the current or proposed candidate may be selected.
+- `free-select` — any candidate declared on the item may be selected.
+
+Enforcement is **opt-in**. Survey never inspects `decisionMode` unless a consumer
+asks it to, either by passing `enforceProducerPolicy: true` to `applyReviewSession`
+or by calling `assertReviewDecisionModeAllows(item, result)` /
+`validateReviewDecisionMode(item, result)` from `@kontourai/survey/review-workbench`
+directly. When `producerPolicy` or `decisionMode` is absent, the validators are a
+no-op and behavior is unchanged.
+
+Enforcement fails closed: an unrecognized `decisionMode` string reports an
+`unknown-decision-mode` issue rather than being silently ignored. All other
+`producerPolicy` keys (for example `sourceAuthorityProjection`, `feedbackTags`)
+remain opaque and are never inspected.
+
+### TypeScript migration note: `decisionMode` is now a literal union
+
+`ProducerPolicy.decisionMode` is typed as `ReviewDecisionMode`, a 3-value
+string-literal union (`"keep-current" | "current-proposed" | "free-select"`),
+not `string`. Object literals using one of the three literal values (the shape
+both known real consumers already produce) keep typechecking unchanged. The
+index signature on `ProducerPolicy` still tolerates unknown keys, but it does
+**not** widen `decisionMode` back to `string` — this is a source-breaking
+narrowing for a TypeScript caller that assigns a plain `string`-typed value
+(for example, a value read from configuration, or a `switch` default branch)
+to `decisionMode`:
+
+```ts
+declare const dynamicMode: string;
+
+// Before this delivery: producerPolicy was Record<string, unknown>, so this
+// compiled unconditionally.
+const policy: ProducerPolicy = {
+  decisionMode: dynamicMode, // ts(2322): Type 'string' is not assignable to type 'ReviewDecisionMode | undefined'.
+};
+```
+
+Fix by narrowing the value to the literal union before assigning it — either
+validate it explicitly, or assert it with `as const`/a type assertion once you
+know it is one of the three allowed values:
+
+```ts
+const policy: ProducerPolicy = {
+  decisionMode: dynamicMode as ReviewDecisionMode, // caller-verified narrowing
+};
+```
+
+Producers that always assign one of the three literal values directly (as both
+known real consumers do) are unaffected and require no changes.

@@ -77,6 +77,27 @@ export interface SurveyRecordProjectionHint {
   claimId?: ClaimTarget["id"];
 }
 
+/**
+ * Well-known decision-mode vocabulary for {@link ProducerPolicy.decisionMode}.
+ * A producer declares how a ReviewItem is allowed to be resolved:
+ *   `keep-current`     — only a keep-current decision is admissible.
+ *   `current-proposed` — only the current or proposed candidate may be selected.
+ *   `free-select`      — any declared candidate may be selected.
+ * Enforcement is opt-in; see `assertReviewDecisionModeAllows` and the
+ * `enforceProducerPolicy` option on `applyReviewSession`.
+ */
+export type ReviewDecisionMode = "keep-current" | "current-proposed" | "free-select";
+
+/**
+ * Producer-declared policy carried on a ReviewItem. The well-known
+ * `decisionMode` sub-key is typed and optionally enforceable; all other keys
+ * remain opaque to Survey (tolerated via the index signature, never inspected).
+ */
+export interface ProducerPolicy {
+  decisionMode?: ReviewDecisionMode;
+  [key: string]: unknown;
+}
+
 export interface ReviewCandidate {
   id: string;
   role?: CandidateRole;
@@ -98,7 +119,7 @@ export interface ReviewItemSpec {
   candidateSetStatus?: CandidateSetStatus;
   selectedCandidateId?: string;
   rationale?: string;
-  producerPolicy?: Record<string, unknown>;
+  producerPolicy?: ProducerPolicy;
   projection?: SurveyRecordProjectionHint;
 }
 

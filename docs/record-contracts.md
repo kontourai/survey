@@ -2,6 +2,28 @@
 
 Survey's job is a consistent `source -> extraction -> candidate -> review -> claim` chain. This reference covers every record shape in that chain — what each one means, what it requires, and how it projects into Surface. The [consumer integration guide](consumer-integration-guide.md) covers the end-to-end consumer path; this page is the contract-by-contract reference.
 
+
+## Versioning
+
+`SurveyInput.contractVersion` identifies the shape contract for `rawSources`,
+`extractions`, `candidateSets`, `reviewOutcomes`, and `claims` in this batch. It
+is optional and defaults to `SURVEY_INPUT_CONTRACT_VERSION` (currently `"1"`)
+when omitted, so `SurveyInput` records built before this field existed remain
+valid without any change. Survey does not reject, transform, or otherwise gate
+`SurveyInput` records based on `contractVersion`; it is a compatibility marker,
+not a runtime policy. Downstream consumers (Surface, `buildSurveyTrustBundle`)
+MAY read it to decide how to interpret a batch once the contract changes. A
+future breaking change to any record shape in this chain MUST bump
+`SURVEY_INPUT_CONTRACT_VERSION` and document the from/to migration in this file
+before release. `contractVersion` is a batch-level marker, not a per-record
+`apiVersion`; the portable review envelopes (`ReviewItem`, `ReviewDecision`,
+`ReviewSession`, `ReviewSessionEvent`) already carry the full Kontour Resource
+Shape and are versioned independently via `reviewResourceApiVersion` in
+`review-resource.ts`.
+
+`SurveyInputBuilder.build()` stamps the default automatically; pass
+`contractVersion` to the builder constructor to override it.
+
 ## Raw sources
 
 Use raw-source helpers when a producer wants Survey to shape source identity
@@ -651,11 +673,11 @@ reviewOutcome: {
 An **InquiryMapping** is the durable reviewed artifact that records "this
 natural-language question maps to this canonical claim or derivation rule."
 Mappings are memoized; answers are never cached.  Every answer recomputes from
-the live TrustBundle state at resolution time (ADR 0003 §6).
+the live TrustBundle state at resolution time ([ADR 0003 §6](adr/0003-inquiry-mapping-and-producer-proposals.md#6-memoize-the-mapping-never-the-answer)).
 
 A mapping proposal is a reviewable record with provenance.  The proposal goes
 through Survey's existing candidate → review machinery; no mapping is accepted
-silently (ADR 0003 §4).
+silently ([ADR 0003 §4](adr/0003-inquiry-mapping-and-producer-proposals.md#4-proposals-only-rule-hard-constraint)).
 
 ```ts
 import {

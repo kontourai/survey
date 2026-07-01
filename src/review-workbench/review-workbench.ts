@@ -100,6 +100,14 @@ export {
   type ReviewSessionReplayIssue,
   type ReviewSessionReplayIssueCode,
 } from "./review-session-replay.js";
+export {
+  assertReviewDecisionModeAllows,
+  DecisionModeViolationError,
+  validateReviewDecisionMode,
+  type ReviewDecisionModeIssue,
+  type ReviewDecisionModeIssueCode,
+  type ReviewDecisionModeResult,
+} from "./producer-decision-mode.js";
 
 export function buildReviewDecision(state: ReviewWorkbenchState): ReviewDecision | undefined {
   if (!state.decision) {

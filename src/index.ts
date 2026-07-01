@@ -19,16 +19,19 @@ export type {
   ReviewStatus,
   SurveyInput,
 } from "./types.js";
+export { SURVEY_INPUT_CONTRACT_VERSION } from "./types.js";
 export { reviewResourceApiVersion } from "./review-resource.js";
 export type {
   CandidateRole,
   ClaimTargetHint,
+  ProducerPolicy,
   ExtractionReference,
   ResourceEnvelope,
   ResourceMetadata,
   ReviewActor,
   ReviewCandidate,
   ReviewDecision,
+  ReviewDecisionMode,
   ReviewDecisionSpec,
   ReviewDecisionStatus,
   ReviewItem,
@@ -48,7 +51,7 @@ export type {
   SourceReference,
   SurveyRecordProjectionHint,
 } from "./review-resource.js";
-export { candidateReviewRecord, SurveyInputBuilder } from "./builder.js";
+export { candidateReviewRecord, candidateSetStatusFor, SurveyInputBuilder } from "./builder.js";
 export type {
   CandidateReviewRecordInput,
   SurveyClaimRecord,
@@ -177,12 +180,23 @@ export type {
   SchemaMappingOptions,
   SystemFieldRef,
 } from "./schema-mapping.js";
-export { buildAuthorizedActionAuthorizing, isValidAuthorizing, validateAuthorizing } from "./review-authorizing.js";
+export { buildAuthorizedActionAuthorizing, buildPromptRef, isValidAuthorizing, validateAuthorizing } from "./review-authorizing.js";
 export type {
   BuildAuthorizedActionAuthorizingInput,
+  BuildPromptRefInput,
   ReviewAuthorizingIssue,
   ReviewAuthorizingIssueCode,
 } from "./review-authorizing.js";
+export { confidenceBasisForReview, defineProductVocabulary, stableId } from "./vocabulary.js";
+export type {
+  ConfidenceBasisForReviewInput,
+  ProductVocabularyDefinition,
+} from "./vocabulary.js";
+export { currentProposedReviewItem } from "./current-proposed-review-item.js";
+export type {
+  CurrentProposedCandidateInput,
+  CurrentProposedReviewItemInput,
+} from "./current-proposed-review-item.js";
 export {
   deriveOversightMetrics,
   mergeTrustBundleWithOversightMetrics,
