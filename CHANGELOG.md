@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/kontourai/survey/compare/v1.2.0...v1.2.1) (2026-07-01)
+
+
+### Fixes
+
+* **deps:** bump @kontourai/surface pin to ^1.3.0 ([#96](https://github.com/kontourai/survey/issues/96)) ([2308a7a](https://github.com/kontourai/survey/commit/2308a7a3a360a030733b4823c6bb861cf7e3ce78))
+
 ## [1.2.0](https://github.com/kontourai/survey/compare/v1.1.1...v1.2.0) (2026-07-01)
 
 
