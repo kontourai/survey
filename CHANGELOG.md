@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/kontourai/survey/compare/v1.1.0...v1.1.1) (2026-06-29)
+
+
+### Fixes
+
+* **survey:** unify the two canonicalJson implementations ([#24](https://github.com/kontourai/survey/issues/24)) ([#90](https://github.com/kontourai/survey/issues/90)) ([5a3e507](https://github.com/kontourai/survey/commit/5a3e507bc75712a2fa7230923460b3dfc4817919))
+
 ## [1.1.0](https://github.com/kontourai/survey/compare/v1.0.0...v1.1.0) (2026-06-17)
 
 
