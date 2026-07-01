@@ -30,6 +30,7 @@ Survey turns raw sources into Surface-ready trust evidence through a consistent
 - [review-console.md](review-console.md) — standalone local review console (browser dashboard over the session file)
 - [RELEASING.md](RELEASING.md) — release checklist and release-please workflow
 - [adr/0001-reviewed-current-proposed-resolution.md](adr/0001-reviewed-current-proposed-resolution.md) — ADR: reviewed current/proposed resolution as a generic candidate-resolution pattern
+- [adr/0003-inquiry-mapping-and-producer-proposals.md](adr/0003-inquiry-mapping-and-producer-proposals.md) — ADR: inquiry mapping and producer proposals (reconstructed)
 
 ## Assets
 

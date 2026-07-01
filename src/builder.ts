@@ -10,10 +10,12 @@ import type {
   ReviewOutcome,
   SurveyInput,
 } from "./types.js";
+import { SURVEY_INPUT_CONTRACT_VERSION } from "./types.js";
 
 export interface SurveyInputBuilderArgs {
   source: string;
   generatedAt?: string;
+  contractVersion?: string;
 }
 
 export interface SurveyClaimRecord {
@@ -62,6 +64,7 @@ export interface CandidateReviewRecordInput {
 export class SurveyInputBuilder {
   private readonly source: string;
   private readonly generatedAt: string;
+  private readonly contractVersion: string;
   private readonly rawSources = new Map<string, RawSource>();
   private readonly extractions = new Map<string, Extraction>();
   private readonly candidateSets = new Map<string, CandidateSet>();
@@ -73,6 +76,7 @@ export class SurveyInputBuilder {
   constructor(args: SurveyInputBuilderArgs) {
     this.source = args.source;
     this.generatedAt = args.generatedAt ?? new Date().toISOString();
+    this.contractVersion = args.contractVersion ?? SURVEY_INPUT_CONTRACT_VERSION;
   }
 
   addRawSource(rawSource: RawSource): this {
@@ -135,6 +139,7 @@ export class SurveyInputBuilder {
 
   build(): SurveyInput {
     return {
+      contractVersion: this.contractVersion,
       source: this.source,
       generatedAt: this.generatedAt,
       rawSources: [...this.rawSources.values()],
@@ -298,7 +303,7 @@ function observationIds(rootId: string, observation: SurveyObservationInput): {
   };
 }
 
-function candidateSetStatusFor(reviewStatus?: ReviewStatus): CandidateSet["status"] {
+export function candidateSetStatusFor(reviewStatus?: ReviewStatus): CandidateSet["status"] {
   if (!reviewStatus || reviewStatus === "proposed") return "needs-review";
   return "resolved";
 }

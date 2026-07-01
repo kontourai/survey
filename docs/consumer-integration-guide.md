@@ -73,6 +73,80 @@ derive results again from the pre-decision review queue snapshot. Browser
 exports and presentation payloads are useful for inspection, not write
 authority.
 
+
+## Vocabulary And Id Primitives
+
+Producers that project into Survey repeatedly need the same three primitives:
+stable identifiers, a typed product vocabulary, and a `ConfidenceBasis`. Survey
+exports them so consumers do not hand-roll a copy each.
+
+`stableId(parts)` builds a deterministic, url-safe id from ordered parts —
+lowercased, non-alphanumeric runs collapsed to a hyphen, joined with a dot:
+
+```ts
+import { stableId } from "@kontourai/survey";
+
+const candidateSetId = stableId(["public-directory", "entity-123", "availabilityStatus"]);
+// "public-directory.entity-123.availabilitystatus"
+```
+
+`defineProductVocabulary(def)` freezes a product's subject type, surface,
+claim-type names, and decision-effect names into one discoverable value:
+
+```ts
+import { defineProductVocabulary } from "@kontourai/survey";
+
+const vocabulary = defineProductVocabulary({
+  subjectType: "public-directory.entity",
+  surface: "public-directory.entity-profile",
+  claimTypes: {
+    scalarField: "public-data.field",
+    scalarFieldCandidate: "public-data.field-candidate",
+  },
+  decisionEffects: {
+    acceptedCandidateValue: "accepted-candidate-value",
+    keptCurrentValue: "kept-current-value",
+  },
+});
+```
+
+`confidenceBasisForReview(input)` maps a reviewed status and impact level into a
+Surface `ConfidenceBasis`. It is **conservative by default**: `sourceQuality`
+defaults to `"unknown"` and `evidenceStrength` defaults to `"none"` — the
+weakest values Surface accepts — unless the caller passes an explicit value.
+The only field derived from `status` without an override is
+`reviewerAuthority` (`"operator"` when `status` is `"verified"`, otherwise
+`"none"`). This helper does not reproduce any one app's hand-rolled confidence
+algorithm; known consumers use different domain heuristics for `sourceQuality`
+and `evidenceStrength` (for example, deriving `sourceQuality` from an
+extracted document's source type), so producers with that kind of domain
+knowledge should pass `sourceQuality`/`evidenceStrength` explicitly rather
+than rely on the bare defaults:
+
+```ts
+import { confidenceBasisForReview } from "@kontourai/survey";
+
+// Bare defaults: conservative floor values, only reviewerAuthority is status-driven.
+const conservativeBasis = confidenceBasisForReview({
+  status: "verified",
+  impactLevel: "medium",
+  extractionConfidence: 0.91,
+});
+// -> { sourceQuality: "unknown", reviewerAuthority: "operator", evidenceStrength: "none",
+//      impactLevel: "medium", extractionConfidence: 0.91 }
+
+// A producer with domain knowledge of its own source quality passes it explicitly,
+// e.g. a source-type-driven mapping (strong for a corrected/high-confidence
+// document, moderate for medium-confidence, weak otherwise):
+const domainAwareBasis = confidenceBasisForReview({
+  status: "verified",
+  impactLevel: "medium",
+  extractionConfidence: 0.91,
+  sourceQuality: "strong",
+  evidenceStrength: "strong",
+});
+```
+
 ## Server-Owned Review Sessions
 
 For browser-backed review flows, the server should own the review snapshot. A
@@ -325,9 +399,23 @@ A regulated-rule producer may also have current and proposed values, but the
 review semantics are different. The proposed value may come from an official
 publication and the current value may be a managed rule value. Product policy
 may allow only "keep current" for a particular conflict until a specialist
-resolves it, but the current Survey workbench does not enforce that policy from
-`producerPolicy`. The producer must validate supported actions before applying
-a `ReviewDecision`.
+resolves it. `producerPolicy.decisionMode` is now typed and *optionally*
+enforceable: by default Survey still treats it as opaque and the producer
+validates supported actions before applying a `ReviewDecision`, so the example
+below works exactly as documented. A producer that wants Survey to enforce the
+declared mode can opt in with `enforceProducerPolicy: true` on
+`applyReviewSession` (or call `assertReviewDecisionModeAllows` directly).
+
+> **TypeScript migration note:** `ProducerPolicy.decisionMode` is typed as the
+> 3-value literal union `ReviewDecisionMode` (`"keep-current" |
+> "current-proposed" | "free-select"`), not `string`. Object literals using one
+> of the three literal values keep typechecking unchanged, but assigning a
+> plain `string`-typed variable (e.g. read from configuration) to
+> `decisionMode` now fails to compile. One-line fix: narrow it first, for
+> example `decisionMode: dynamicMode as ReviewDecisionMode` once you have
+> verified the value is one of the three allowed strings. See
+> [Producer decision mode](./review-resource-contract.md#producer-decision-mode)
+> for the full migration note.
 
 The same `ReviewItem` contract works because the candidate shape carries typed
 values, source posture, locators, evidence type, claim target hints, and
@@ -448,6 +536,50 @@ const ruleConflictReviewItem = {
     selectedCandidateId: "regulated-rule-conflict-standard-threshold.current",
   },
 } satisfies ReviewItem;
+```
+
+The same `ReviewItem` can be assembled with `currentProposedReviewItem`, which
+owns the generic envelope, candidate ids, roles, and candidate-set wiring while
+the producer keeps its domain value and claim vocabulary:
+
+```ts
+import { currentProposedReviewItem } from "@kontourai/survey";
+
+const ruleConflictItem = currentProposedReviewItem({
+  name: "regulated-rule-conflict-standard-threshold",
+  target: "standardThreshold",
+  candidateSetStatus: "conflict",
+  selectedCandidateRole: "current",
+  labels: { domain: "regulated-rule-source" },
+  rationale: "Extracted source value conflicts with the managed value.",
+  producerPolicy: {
+    decisionMode: "keep-current",
+    sourceAuthorityProjection: "only-for-selected-source-backed-value",
+  },
+  current: currentRuleCandidate, // domain value/claim shaping stays with the producer
+  proposed: proposedRuleCandidate,
+});
+```
+
+Because this item declares `decisionMode: "keep-current"`, a consumer can ask
+Survey to enforce it at apply time. With `enforceProducerPolicy: true`, a
+synthetic `accept-proposed` decision for this item is rejected as a
+`decision-mode-violation` instead of being applied:
+
+```ts
+import { applyReviewSession } from "@kontourai/survey/review-workbench/server-review-session";
+
+const applied = applyReviewSession({
+  snapshot: reviewSessionSnapshot,
+  sessionName,
+  events: persistedEvents, // a synthetic accept-proposed decision, for illustration
+  requiredResolvedItems: "any",
+  enforceProducerPolicy: true,
+});
+
+if (!applied.ok) {
+  // applied.issues includes { code: "decision-mode-violation", reviewItemName, ... }
+}
 ```
 
 ## Web Component
@@ -641,6 +773,43 @@ for (const result of applyResult.results) {
     selectedValue: result.selectedValue,
     status: result.status,
   });
+}
+```
+
+`applyReviewSession` is the recommended one-call entry point for this path. It
+collapses the resolve-record → derive → normalize-errors → enforce-policy →
+map-to-actions choreography into a single call that returns a discriminated
+`{ ok }` result instead of throwing, and it never changes behavior unless you opt
+in to `enforceProducerPolicy`. The manual `deriveServerReviewSessionApplyResult`
+and `mapReviewWorkbenchResultsToApplyActions` pieces above remain available for
+custom choreography:
+
+```ts
+import { applyReviewSession } from "@kontourai/survey/review-workbench/server-review-session";
+
+const applied = applyReviewSession({
+  snapshot: reviewSessionSnapshot,
+  sessionName,
+  events: persistedEvents,
+  requiredResolvedItems: "all",
+  mapActions: {
+    requireUniqueTargets: true,
+    map: ({ result, target }) =>
+      result.decision === "accept-proposed"
+        ? { kind: "apply-field", target }
+        : { kind: "leave-current", target },
+  },
+});
+
+if (!applied.ok) {
+  // applied.issues carries normalized { code } values: "stale-session",
+  // "invalid-events", "unresolved-review-item", "decision-mode-violation",
+  // or "action-mapping-failed".
+  throw new Error(applied.issues.map((issue) => issue.message).join(" "));
+}
+
+for (const { action } of applied.actions) {
+  applyProductAction(action);
 }
 ```
 

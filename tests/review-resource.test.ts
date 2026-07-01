@@ -18,11 +18,13 @@ import {
   type ReviewCandidate,
   type ReviewDecision,
   type ReviewItem,
+  type ReviewItemSpec,
   type ReviewOutcome,
   type ReviewSession,
   type ReviewSessionEvent,
   type SurveyInput,
 } from "../src/index.js";
+import type { ProducerPolicy, ReviewDecisionMode } from "../src/review-resource.js";
 
 describe("Review resource contract", () => {
   it("exports serializable ReviewItem and ReviewDecision resources", () => {
@@ -221,3 +223,43 @@ function findById<T extends { id: string }>(records: T[], id: string, label: str
   assert.ok(record, `Missing ${label}: ${id}`);
   return record;
 }
+
+
+describe("Typed producerPolicy", () => {
+  it("accepts the current/proposed producer policy shape with extra opaque keys", () => {
+    const policy: ProducerPolicy = {
+      decisionMode: "current-proposed",
+      sourceAuthorityProjection: "only-for-selected-source-backed-value",
+      feedbackTags: ["accuracy", "freshness"],
+    };
+    assert.equal(policy.decisionMode, "current-proposed");
+    assert.deepEqual(policy.feedbackTags, ["accuracy", "freshness"]);
+  });
+
+  it("accepts the keep-current producer policy shape", () => {
+    const policy: ProducerPolicy = {
+      decisionMode: "keep-current",
+      sourceAuthorityProjection: "retain-current-only",
+    };
+    assert.equal(policy.decisionMode, "keep-current");
+  });
+
+  it("accepts a producer policy with only unrelated opaque keys", () => {
+    const policy: ProducerPolicy = {
+      feedbackTags: ["completeness"],
+      customRoutingHint: "escalate",
+    };
+    assert.equal(policy.decisionMode, undefined);
+    assert.equal(policy.customRoutingHint, "escalate");
+  });
+
+  it("carries a typed producerPolicy on a ReviewItemSpec", () => {
+    const modes: ReviewDecisionMode[] = ["keep-current", "current-proposed", "free-select"];
+    const spec: ReviewItemSpec = {
+      target: "availabilityStatus",
+      candidates: [],
+      producerPolicy: { decisionMode: modes[1] },
+    };
+    assert.equal(spec.producerPolicy?.decisionMode, "current-proposed");
+  });
+});

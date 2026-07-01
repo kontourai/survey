@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  buildAuthorizedActionAuthorizing,
+  buildPromptRef,
   isValidAuthorizing,
   validateAuthorizing,
 } from "../src/review-authorizing.js";
@@ -296,5 +298,46 @@ describe("isValidAuthorizing type guard", () => {
     assert.equal(isValidAuthorizing(null), false);
     assert.equal(isValidAuthorizing({ kind: "exchange" }), false);
     assert.equal(isValidAuthorizing({ kind: "authorized-action", promptRef: "v1" }), false);
+  });
+});
+
+
+describe("buildPromptRef", () => {
+  it("builds a bare prompt ref matching the workbench convention", () => {
+    assert.equal(
+      buildPromptRef({ module: "review-workbench", component: "decision-card" }),
+      "review-workbench/decision-card@v1",
+    );
+  });
+
+  it("builds a scheme-prefixed prompt ref for namespaced producers", () => {
+    assert.equal(
+      buildPromptRef({ scheme: "survey", module: "rules-admin", component: "keep-current" }),
+      "survey://rules-admin/keep-current@v1",
+    );
+  });
+
+  it("honours an explicit version", () => {
+    assert.equal(
+      buildPromptRef({ module: "review-workbench", component: "decision-card", version: "v2" }),
+      "review-workbench/decision-card@v2",
+    );
+  });
+
+  it("produces a promptRef accepted by buildAuthorizedActionAuthorizing", () => {
+    const promptRef = buildPromptRef({ scheme: "survey", module: "rules-admin", component: "keep-current" });
+    const block = buildAuthorizedActionAuthorizing({
+      promptRef,
+      renderedPrompt: "Keep the current value.",
+      action: "affirmed-control",
+      authorityRef: "authority-trace-1",
+    });
+    assert.equal(block.promptRef, promptRef);
+    assert.equal(isValidAuthorizing(block), true);
+  });
+
+  it("throws on empty module or component", () => {
+    assert.throws(() => buildPromptRef({ module: "", component: "decision-card" }), /module/);
+    assert.throws(() => buildPromptRef({ module: "review-workbench", component: "  " }), /component/);
   });
 });

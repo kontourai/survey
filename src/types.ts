@@ -149,7 +149,24 @@ export interface ClaimTarget {
   metadata?: Record<string, unknown>;
 }
 
+/**
+ * Shape-contract version for the flat record arrays in a {@link SurveyInput}
+ * batch (`rawSources`, `extractions`, `candidateSets`, `reviewOutcomes`,
+ * `claims`). Stamped by {@link SurveyInputBuilder.build} when a batch does not
+ * set one of its own. See `docs/record-contracts.md` for the compatibility
+ * policy — a future breaking change to any of those record shapes must bump
+ * this constant and document the migration before release.
+ */
+export const SURVEY_INPUT_CONTRACT_VERSION = "1";
+
 export interface SurveyInput {
+  /**
+   * Identifies the shape contract for the record arrays in this batch. Optional
+   * and defaults to {@link SURVEY_INPUT_CONTRACT_VERSION} when omitted, so
+   * batches built before this field existed remain valid. Compatibility marker
+   * only — Survey does not gate records on it. See `docs/record-contracts.md`.
+   */
+  contractVersion?: string;
   source: string;
   generatedAt: string;
   rawSources: RawSource[];

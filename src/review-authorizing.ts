@@ -177,3 +177,39 @@ export function buildAuthorizedActionAuthorizing(
 
   return block;
 }
+
+
+export interface BuildPromptRefInput {
+  readonly module: string;
+  readonly component: string;
+  readonly version?: string;
+  readonly scheme?: string;
+}
+
+/**
+ * Builds a well-formed `promptRef` for an `authorized-action` authorizing block,
+ * generalizing the workbench's `<module>/<component>@<version>` convention.
+ *
+ * Without a `scheme` the result is bare (`"review-workbench/decision-card@v1"`),
+ * matching the workbench's own internal prompt refs. With a `scheme` the result
+ * is prefixed (`"survey://rules-admin/keep-current@v1"`) for producers that
+ * namespace their prompt refs. `version` defaults to `"v1"`.
+ *
+ * The returned string is a valid `promptRef` input to
+ * {@link buildAuthorizedActionAuthorizing}. Throws on an empty `module` or
+ * `component`, mirroring that helper's throw-on-invalid-input style.
+ */
+export function buildPromptRef(input: BuildPromptRefInput): string {
+  const module = input.module?.trim();
+  const component = input.component?.trim();
+  if (!module) {
+    throw new Error("buildPromptRef: 'module' must be a non-empty string.");
+  }
+  if (!component) {
+    throw new Error("buildPromptRef: 'component' must be a non-empty string.");
+  }
+  const version = input.version?.trim() || "v1";
+  const scheme = input.scheme?.trim();
+  const ref = `${module}/${component}@${version}`;
+  return scheme ? `${scheme}://${ref}` : ref;
+}

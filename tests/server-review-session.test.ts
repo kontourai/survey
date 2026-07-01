@@ -5,6 +5,7 @@ import {
   initialReviewQueueSessionState,
 } from "../src/review-workbench/review-workbench.js";
 import {
+  applyReviewSession,
   assertServerReviewSessionEvents,
   assertServerReviewSessionFreshness,
   compareServerReviewSessionFreshness,
@@ -16,7 +17,7 @@ import {
   validateServerReviewSessionEvents,
 } from "../src/review-workbench/server-review-session.js";
 import { publicDirectoryReviewItemExample } from "../example-data/public-directory-review-resource.js";
-import type { ReviewSessionEvent } from "../src/review-resource.js";
+import type { ReviewItem, ReviewSessionEvent } from "../src/review-resource.js";
 
 describe("server-owned review sessions", () => {
   it("hashes snapshots stably across JSON and Date round trips", () => {
@@ -264,6 +265,144 @@ describe("server-owned review sessions", () => {
       }),
       ServerReviewSessionEventValidationError,
     );
+  });
+});
+
+describe("applyReviewSession one-call apply", () => {
+  const itemName = publicDirectoryReviewItemExample.metadata.name;
+
+  function reviewedEvents(sessionName: string, decision = "accept-proposed" as const): readonly ReviewSessionEvent[] {
+    const snapshot = initialReviewQueueSessionState([publicDirectoryReviewItemExample]);
+    return buildReviewSessionEvents({ ...snapshot, decisionsByItemName: { [itemName]: decision } }, sessionName);
+  }
+
+  it("applies a reviewed session and maps results to product actions in one call", () => {
+    const snapshot = initialReviewQueueSessionState([publicDirectoryReviewItemExample]);
+    const applied = applyReviewSession<{ kind: string; target: string }>({
+      snapshot,
+      sessionName: "server-review-1",
+      events: reviewedEvents("server-review-1"),
+      requiredResolvedItems: "any",
+      mapActions: {
+        map: ({ result, target }) =>
+          result.decision === "accept-proposed" ? { kind: "apply-field", target } : undefined,
+      },
+    });
+
+    assert.equal(applied.ok, true);
+    assert.equal(applied.results.length, 1);
+    assert.equal(applied.results[0]?.reviewItemName, itemName);
+    assert.deepEqual(applied.actions.map((entry) => entry.action), [
+      { kind: "apply-field", target: "availabilityStatus" },
+    ]);
+  });
+
+  it("builds a server record from a session name carried on the events", () => {
+    const snapshot = initialReviewQueueSessionState([publicDirectoryReviewItemExample]);
+    const applied = applyReviewSession({
+      snapshot,
+      events: reviewedEvents("server-review-events-name"),
+      requiredResolvedItems: "any",
+    });
+
+    assert.equal(applied.ok, true);
+  });
+
+  it("normalizes a stale server record into a stale-session issue instead of throwing", () => {
+    const snapshot = initialReviewQueueSessionState([publicDirectoryReviewItemExample]);
+    const record = {
+      ...createServerReviewSessionRecord({ sessionName: "server-review-1", snapshot, updatedAt: "2026-06-06T00:00:00.000Z" }),
+      snapshotHash: "not-the-stored-snapshot-hash",
+    };
+    const applied = applyReviewSession({ record, events: reviewedEvents("server-review-1"), requiredResolvedItems: "any" });
+
+    assert.equal(applied.ok, false);
+    assert.deepEqual(applied.issues.map((issue) => issue.code), ["stale-session"]);
+  });
+
+  it("normalizes invalid events into an invalid-events issue instead of throwing", () => {
+    const snapshot = initialReviewQueueSessionState([publicDirectoryReviewItemExample]);
+    const applied = applyReviewSession({
+      snapshot,
+      sessionName: "server-review-1",
+      events: reviewedEvents("a-different-session"),
+      requiredResolvedItems: "any",
+    });
+
+    assert.equal(applied.ok, false);
+    assert.deepEqual(applied.issues.map((issue) => issue.code), ["invalid-events"]);
+  });
+
+  it("passes derive-level issues through for unresolved required items", () => {
+    const snapshot = initialReviewQueueSessionState([publicDirectoryReviewItemExample]);
+    const applied = applyReviewSession({
+      snapshot,
+      sessionName: "server-review-1",
+      events: buildReviewSessionEvents(snapshot, "server-review-1"),
+      requiredResolvedItems: "all",
+    });
+
+    assert.equal(applied.ok, false);
+    assert.deepEqual(applied.issues.map((issue) => issue.code), ["unresolved-review-item"]);
+  });
+
+  it("reports a decision-mode violation when enforceProducerPolicy is on", () => {
+    const enforcedItem: ReviewItem = {
+      ...publicDirectoryReviewItemExample,
+      spec: {
+        ...publicDirectoryReviewItemExample.spec,
+        producerPolicy: { decisionMode: "keep-current" },
+      },
+    };
+    const snapshot = initialReviewQueueSessionState([enforcedItem]);
+    const events = buildReviewSessionEvents(
+      { ...snapshot, decisionsByItemName: { [itemName]: "accept-proposed" as const } },
+      "server-review-1",
+    );
+    const applied = applyReviewSession({
+      snapshot,
+      sessionName: "server-review-1",
+      events,
+      requiredResolvedItems: "any",
+      enforceProducerPolicy: true,
+    });
+
+    assert.equal(applied.ok, false);
+    assert.deepEqual(applied.issues.map((issue) => issue.code), ["decision-mode-violation"]);
+  });
+
+  it("does not enforce producerPolicy by default", () => {
+    const enforcedItem: ReviewItem = {
+      ...publicDirectoryReviewItemExample,
+      spec: {
+        ...publicDirectoryReviewItemExample.spec,
+        producerPolicy: { decisionMode: "keep-current" },
+      },
+    };
+    const snapshot = initialReviewQueueSessionState([enforcedItem]);
+    const events = buildReviewSessionEvents(
+      { ...snapshot, decisionsByItemName: { [itemName]: "accept-proposed" as const } },
+      "server-review-1",
+    );
+    const applied = applyReviewSession({ snapshot, sessionName: "server-review-1", events, requiredResolvedItems: "any" });
+
+    assert.equal(applied.ok, true);
+  });
+
+  it("normalizes an action-mapping failure into an action-mapping-failed issue", () => {
+    const snapshot = initialReviewQueueSessionState([publicDirectoryReviewItemExample]);
+    const applied = applyReviewSession({
+      snapshot,
+      sessionName: "server-review-1",
+      events: reviewedEvents("server-review-1"),
+      requiredResolvedItems: "any",
+      mapActions: {
+        map: () => undefined,
+      },
+    });
+
+    assert.equal(applied.ok, false);
+    assert.deepEqual(applied.issues.map((issue) => issue.code), ["action-mapping-failed"]);
   });
 });
 
