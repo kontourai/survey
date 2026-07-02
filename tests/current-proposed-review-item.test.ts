@@ -17,7 +17,7 @@ function candidate(overrides: Partial<CurrentProposedCandidateInput> & { value: 
     claimTarget: {
       subjectType: "public-directory.entity",
       subjectId: "entity-123",
-      surface: "public-directory.entity-profile",
+      facet: "public-directory.entity-profile",
       claimType: "public-data.field",
       fieldOrBehavior: "availabilityStatus",
       impactLevel: "medium",

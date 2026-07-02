@@ -241,7 +241,7 @@ export function utteranceToSurveyInput(
       candidateId,
       subjectType: statement.target.subjectType,
       subjectId: statement.target.subjectId,
-      surface: "agent-utterance.profile",
+      facet: "agent-utterance.profile",
       claimType: "agent-extraction",
       fieldOrBehavior: statement.target.fieldOrBehavior,
       value: statement.value,

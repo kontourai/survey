@@ -1893,7 +1893,7 @@ function isReviewCandidate(value: unknown): value is ReviewCandidate {
     && isRecord(value.claimTarget)
     && typeof value.claimTarget.subjectType === "string"
     && typeof value.claimTarget.subjectId === "string"
-    && typeof value.claimTarget.surface === "string"
+    && typeof value.claimTarget.facet === "string"
     && typeof value.claimTarget.claimType === "string"
     && typeof value.claimTarget.fieldOrBehavior === "string"
     && typeof value.claimTarget.impactLevel === "string";

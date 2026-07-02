@@ -44,7 +44,7 @@ export interface CanonicalReviewProofPayload {
       candidateId?: string;
       subjectType: string;
       subjectId: string;
-      surface: string;
+      facet: string;
       claimType: string;
       fieldOrBehavior: string;
     };
@@ -105,7 +105,7 @@ export interface CanonicalReviewProofPayload {
     candidateId?: string;
     subjectType: string;
     subjectId: string;
-    surface: string;
+    facet: string;
     claimType: string;
     fieldOrBehavior: string;
     value?: unknown;
@@ -143,7 +143,7 @@ export function buildCanonicalReviewProofPayload(input: ReviewProofInput): Canon
         candidateId: input.candidate.id,
         subjectType: input.claim.subjectType,
         subjectId: input.claim.subjectId,
-        surface: input.claim.surface,
+        facet: input.claim.facet,
         claimType: input.claim.claimType,
         fieldOrBehavior: input.claim.fieldOrBehavior,
       },
@@ -206,7 +206,7 @@ export function buildCanonicalReviewProofPayload(input: ReviewProofInput): Canon
       candidateId: input.claim.candidateId,
       subjectType: input.claim.subjectType,
       subjectId: input.claim.subjectId,
-      surface: input.claim.surface,
+      facet: input.claim.facet,
       claimType: input.claim.claimType,
       fieldOrBehavior: input.claim.fieldOrBehavior,
       value: input.claim.value,

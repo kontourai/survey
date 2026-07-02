@@ -58,7 +58,11 @@ export interface ClaimTargetHint {
   claimId?: string;
   subjectType: string;
   subjectId: string;
-  surface: string;
+  /**
+   * Producer-defined grouping or namespace for this claim (Hachure schema 5,
+   * surface@2.0.0: Claim.surface -> Claim.facet).
+   */
+  facet: string;
   claimType: string;
   fieldOrBehavior: string;
   impactLevel: ClaimTarget["impactLevel"];

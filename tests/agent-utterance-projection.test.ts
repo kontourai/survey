@@ -100,7 +100,7 @@ describe("utteranceToSurveyInput — structure", () => {
     assert.equal(input.claims[0]?.fieldOrBehavior, "uptime");
     assert.equal(input.claims[0]?.collectedBy, "test-extractor");
     assert.equal(input.claims[0]?.claimType, "agent-extraction");
-    assert.equal(input.claims[0]?.surface, "agent-utterance.profile");
+    assert.equal(input.claims[0]?.facet, "agent-utterance.profile");
     assert.equal(input.claims[0]?.impactLevel, "low");
   });
 

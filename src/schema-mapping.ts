@@ -348,7 +348,7 @@ export async function surveySchemaMapping(
         candidateId: selectedCandidate.id,
         subjectType: "system-field",
         subjectId: subjectId,
-        surface: "schema-mapping.profile",
+        facet: "schema-mapping.profile",
         claimType: "schema-mapping.field-link",
         fieldOrBehavior: "maps-to",
         value: {
@@ -547,7 +547,7 @@ export function mappingReviewToSurface(
       candidateId: rm.selectedCandidate.id,
       subjectType: "system-field",
       subjectId,
-      surface: "schema-mapping.profile",
+      facet: "schema-mapping.profile",
       claimType: "schema-mapping.field-link",
       fieldOrBehavior: "maps-to",
       value: { relation, sourceField, targetField, conversion },

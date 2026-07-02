@@ -86,7 +86,7 @@ function makeBundle(): TrustBundle {
         id: "claim.entity-1.registration-status",
         subjectType: "public-record.entity",
         subjectId: "entity-1",
-        surface: "public-record.profile",
+        facet: "public-record.profile",
         claimType: "public-data.field",
         fieldOrBehavior: "registration-status",
         value: "ACTIVE",

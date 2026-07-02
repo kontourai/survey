@@ -90,15 +90,17 @@ const candidateSetId = stableId(["public-directory", "entity-123", "availability
 // "public-directory.entity-123.availabilitystatus"
 ```
 
-`defineProductVocabulary(def)` freezes a product's subject type, surface,
-claim-type names, and decision-effect names into one discoverable value:
+`defineProductVocabulary(def)` freezes a product's subject type, facet,
+claim-type names, and decision-effect names into one discoverable value
+(the deprecated `surface` option is still accepted for one release — see
+the [Upgrade Guide](upgrade-guide.md#facet-rename-hachure-schema-5)):
 
 ```ts
 import { defineProductVocabulary } from "@kontourai/survey";
 
 const vocabulary = defineProductVocabulary({
   subjectType: "public-directory.entity",
-  surface: "public-directory.entity-profile",
+  facet: "public-directory.entity-profile",
   claimTypes: {
     scalarField: "public-data.field",
     scalarFieldCandidate: "public-data.field-candidate",
@@ -331,7 +333,7 @@ const registrationStatusReviewItem = {
           claimId: "public-record.entity-123.registrationStatus.current.claim",
           subjectType: "public-record.entity",
           subjectId: "entity-123",
-          surface: "public-directory.profile",
+          facet: "public-directory.profile",
           claimType: "public-data.field",
           fieldOrBehavior: "registrationStatus",
           impactLevel: "medium",
@@ -375,7 +377,7 @@ const registrationStatusReviewItem = {
           claimId: "public-record.entity-123.registrationStatus.proposed.claim",
           subjectType: "public-record.entity",
           subjectId: "entity-123",
-          surface: "public-directory.profile",
+          facet: "public-directory.profile",
           claimType: "public-data.field",
           fieldOrBehavior: "registrationStatus",
           impactLevel: "medium",
@@ -487,7 +489,7 @@ const ruleConflictReviewItem = {
           claimId: "regulated-rule.example.2026.standard-threshold.current",
           subjectType: "regulated-rule-source",
           subjectId: "example:2026:standardThreshold",
-          surface: "regulated.rules",
+          facet: "regulated.rules",
           claimType: "regulated.rule-source-value",
           fieldOrBehavior: "standardThreshold",
           impactLevel: "high",
@@ -523,7 +525,7 @@ const ruleConflictReviewItem = {
           claimId: "regulated-rule.example.2026.standard-threshold.proposed",
           subjectType: "regulated-rule-source",
           subjectId: "example:2026:standardThreshold",
-          surface: "regulated.rules",
+          facet: "regulated.rules",
           claimType: "regulated.rule-source-value",
           fieldOrBehavior: "standardThreshold",
           impactLevel: "high",

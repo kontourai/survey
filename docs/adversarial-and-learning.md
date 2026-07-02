@@ -46,7 +46,7 @@ const records = candidateReviewRecord({
       claim: {
         subjectType: "public-record.entity",
         subjectId: "entity-1",
-        surface: "public-record.profile",
+        facet: "public-record.profile",
         claimType: "public-data.field",
         impactLevel: "high",
         collectedBy: "agent-v1",
@@ -72,7 +72,7 @@ const records = candidateReviewRecord({
       claim: {
         subjectType: "public-record.entity",
         subjectId: "entity-1",
-        surface: "public-record.profile",
+        facet: "public-record.profile",
         claimType: "public-data.field",
         impactLevel: "high",
         collectedBy: "adversary-v1",

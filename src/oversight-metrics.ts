@@ -351,8 +351,8 @@ export interface OversightMetricsClaimsSubject {
   readonly subjectType: string;
   /** Surface subject id (e.g. a session name or actor id). */
   readonly subjectId: string;
-  /** Surface name (e.g. "review.oversight"). */
-  readonly surface: string;
+  /** Surface facet (e.g. "review.oversight"). */
+  readonly facet: string;
   /** Actor id to record on events. */
   readonly actor: string;
   /** ISO 8601 timestamp for claim created/updated times. */
@@ -400,7 +400,7 @@ export function oversightMetricsToClaims(
       id: claimId,
       subjectType: subject.subjectType,
       subjectId: subject.subjectId,
-      surface: subject.surface,
+      facet: subject.facet,
       claimType: "oversight-quality",
       fieldOrBehavior,
       value,

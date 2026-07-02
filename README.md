@@ -79,7 +79,7 @@ const surveyInput = new SurveyInputBuilder({
     claim: {
       subjectType: "public-record.entity",
       subjectId: "listing-123",
-      surface: "public-record.profile",
+      facet: "public-record.profile",
       claimType: "public-data.field",
       fieldOrBehavior: "availabilityStatus",
       impactLevel: "medium",
