@@ -40,6 +40,13 @@ The Review Workbench rendering a real example queue — current vs proposed valu
 npm install @kontourai/survey @kontourai/surface
 ```
 
+Requires Node.js >=22. TypeScript >=5.0 is required to compile against
+Survey's published type declarations (`defineProductVocabulary`'s `const`
+type parameters are TS 5.0+ syntax) — JavaScript consumers are unaffected;
+TypeScript consumers on an older compiler should stay on `1.2.x`. See the
+[Upgrade Guide](docs/upgrade-guide.md#consuming-decisioneffects-safely) for
+details.
+
 ```ts
 import { buildTrustReport, validateTrustBundle } from "@kontourai/surface";
 import { buildSurveyTrustBundle, SurveyInputBuilder } from "@kontourai/survey";

@@ -110,6 +110,12 @@ const vocabulary = defineProductVocabulary({
 });
 ```
 
+`defineProductVocabulary`'s type declarations require TypeScript 5.0+ to
+parse (`const` type parameters preserve `claimTypes`/`decisionEffects`
+literal types without `as const`); see the [Upgrade Guide's TypeScript
+5.0+ callout](upgrade-guide.md#consuming-decisioneffects-safely) if your
+project is still on an older TypeScript compiler.
+
 `confidenceBasisForReview(input)` maps a reviewed status and impact level into a
 Surface `ConfidenceBasis`. It is **conservative by default**: `sourceQuality`
 defaults to `"unknown"` and `evidenceStrength` defaults to `"none"` — the
@@ -416,6 +422,10 @@ declared mode can opt in with `enforceProducerPolicy: true` on
 > verified the value is one of the three allowed strings. See
 > [Producer decision mode](./review-resource-contract.md#producer-decision-mode)
 > for the full migration note.
+>
+> See also [Consuming `decisionEffects` safely](./upgrade-guide.md#consuming-decisioneffects-safely)
+> in the upgrade guide for the related `defineProductVocabulary`
+> vocabulary-object-specific gotcha this note does not cover.
 
 The same `ReviewItem` contract works because the candidate shape carries typed
 values, source posture, locators, evidence type, claim target hints, and

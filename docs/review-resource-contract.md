@@ -223,3 +223,7 @@ const policy: ProducerPolicy = {
 
 Producers that always assign one of the three literal values directly (as both
 known real consumers do) are unaffected and require no changes.
+
+See also [Consuming `decisionEffects` safely](./upgrade-guide.md#consuming-decisioneffects-safely)
+in the upgrade guide for the related `defineProductVocabulary`
+vocabulary-object-specific gotcha this note does not cover.
