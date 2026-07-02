@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/kontourai/survey/compare/v1.3.0...v1.4.0) (2026-07-02)
+
+
+### Features
+
+* **surface:** migrate to @kontourai/surface 2.0.0 facet rename ([#100](https://github.com/kontourai/survey/issues/100)) ([b3d4658](https://github.com/kontourai/survey/commit/b3d4658e2587567e939fb6250009c52ea057cc95))
+
 ## [1.3.0](https://github.com/kontourai/survey/compare/v1.2.1...v1.3.0) (2026-07-02)
 
 
