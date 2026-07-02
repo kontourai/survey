@@ -264,7 +264,7 @@ describe("oversightMetricsToClaims", () => {
   const subject = {
     subjectType: "review-session",
     subjectId: "session-abc",
-    surface: "review.oversight",
+    facet: "review.oversight",
     actor: "oversight-collector",
     observedAt,
     collectedBy: "oversight-metrics",
@@ -349,7 +349,7 @@ describe("buildSurveyTrustBundle integration", () => {
     const subject = {
       subjectType: "review-session",
       subjectId: "session-engaged",
-      surface: "review.oversight",
+      facet: "review.oversight",
       actor: "oversight-collector",
       observedAt,
       collectedBy: "oversight-metrics",
@@ -382,7 +382,7 @@ describe("buildSurveyTrustBundle integration", () => {
         claim: {
           subjectType: "test-entity",
           subjectId: "entity-1",
-          surface: "test.profile",
+          facet: "test.profile",
           claimType: "test-field",
           status: "verified",
           impactLevel: "medium",
@@ -411,7 +411,7 @@ describe("buildSurveyTrustBundle integration", () => {
     const subject = {
       subjectType: "review-session",
       subjectId: "session-stamp",
-      surface: "review.oversight",
+      facet: "review.oversight",
       actor: "oversight-collector",
       observedAt,
       collectedBy: "oversight-metrics",
@@ -443,7 +443,7 @@ describe("buildSurveyTrustBundle integration", () => {
         claim: {
           subjectType: "test-entity",
           subjectId: "stamp-1",
-          surface: "test.profile",
+          facet: "test.profile",
           claimType: "test-field",
           status: "verified",
           impactLevel: "medium",
@@ -473,7 +473,7 @@ describe("buildSurveyTrustBundle integration", () => {
     const makeSubject = (id: string) => ({
       subjectType: "review-session",
       subjectId: id,
-      surface: "review.oversight",
+      facet: "review.oversight",
       actor: "oversight-collector",
       observedAt,
       collectedBy: "oversight-metrics",

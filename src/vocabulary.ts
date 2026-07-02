@@ -22,26 +22,93 @@ export function stableId(parts: ReadonlyArray<string | number>): string {
 }
 
 /**
- * A product's Survey/Surface vocabulary: the subject type and surface it
+ * A product's Survey/Surface vocabulary: the subject type and facet it
  * projects onto, its claim-type names, and its decision-effect names. Generic
  * over the caller's claim-type and decision-effect key maps so the concrete
  * string literals stay visible to callers.
+ *
+ * `facet` mirrors Surface's `Claim.facet` (Hachure schema 5 facet rename:
+ * `Claim.surface` -> `Claim.facet`, surface@2.0.0). The now-deprecated
+ * `surface` property is kept, mirroring `facet`, for one release so existing
+ * readers of `.surface` do not break; read `.facet` going forward.
  */
 export interface ProductVocabularyDefinition<
   TClaimTypes extends Readonly<Record<string, string>>,
   TDecisionEffects extends Readonly<Record<string, string>>,
 > {
   readonly subjectType: string;
+  readonly facet: string;
+  /**
+   * @deprecated Renamed to {@link ProductVocabularyDefinition.facet} (Hachure
+   * schema 5 facet rename: `Claim.surface` -> `Claim.facet`). Mirrors `facet`
+   * for one release; read `.facet` going forward.
+   */
   readonly surface: string;
   readonly claimTypes: TClaimTypes;
   readonly decisionEffects: TDecisionEffects;
 }
 
 /**
+ * Input accepted by {@link defineProductVocabulary}: `facet` is the
+ * canonical name; the deprecated `surface` name is still accepted for one
+ * release as a read-compat alias (Hachure schema 5 facet rename). Exactly
+ * one of `facet` / `surface` is required — the union below is what makes
+ * "at least one of these two" a compile-time requirement rather than a
+ * runtime-only check.
+ */
+export type ProductVocabularyInput<
+  TClaimTypes extends Readonly<Record<string, string>>,
+  TDecisionEffects extends Readonly<Record<string, string>>,
+> = {
+  readonly subjectType: string;
+  readonly claimTypes: TClaimTypes;
+  readonly decisionEffects: TDecisionEffects;
+} & (
+  | { readonly facet: string; readonly surface?: string }
+  | {
+      readonly facet?: undefined;
+      /**
+       * @deprecated Renamed to `facet` (Hachure schema 5 facet rename:
+       * `Claim.surface` -> `Claim.facet`). Accepted for one release; using it
+       * without also passing `facet` emits a single deprecation warning per
+       * process. Prefer `facet`.
+       */
+      readonly surface: string;
+    }
+);
+
+let warnedLegacyVocabularySurfaceOnce = false;
+
+function warnLegacyVocabularySurfaceOnce(): void {
+  if (warnedLegacyVocabularySurfaceOnce) return;
+  warnedLegacyVocabularySurfaceOnce = true;
+  console.warn(
+    "[@kontourai/survey] deprecated: defineProductVocabulary's \"surface\" option is renamed to " +
+      "\"facet\" (Hachure schema 5 facet rename: Claim.surface -> Claim.facet, surface@2.0.0). " +
+      "Pass \"facet\" instead of \"surface\"; \"surface\" is accepted for one release as a read-compat alias.",
+  );
+}
+
+function resolveFacet(definition: { readonly facet?: string; readonly surface?: string }): string {
+  if (definition.facet !== undefined) return definition.facet;
+  if (definition.surface !== undefined) {
+    warnLegacyVocabularySurfaceOnce();
+    return definition.surface;
+  }
+  throw new Error('defineProductVocabulary requires "facet" (or deprecated "surface")');
+}
+
+/**
  * Defines a product vocabulary as a deep-frozen, discoverable value that a
  * `currentProposedReviewItem` caller can pass instead of loose top-level
- * constants. Returns the same shape it received, frozen so callers cannot
- * mutate a shared vocabulary at runtime.
+ * constants. Returns the same shape it received (plus the mirrored
+ * deprecated `surface` alias — see {@link ProductVocabularyDefinition}),
+ * frozen so callers cannot mutate a shared vocabulary at runtime.
+ *
+ * Accepts either the canonical `facet` option or the deprecated `surface`
+ * option (not both required — `facet` wins when both are supplied, and
+ * using `surface` alone emits a single deprecation warning per process; see
+ * {@link ProductVocabularyInput}).
  *
  * The type parameters carry the `const` modifier, so `claimTypes` and
  * `decisionEffects` string properties keep their literal types whether or
@@ -59,11 +126,13 @@ export function defineProductVocabulary<
   const TClaimTypes extends Readonly<Record<string, string>>,
   const TDecisionEffects extends Readonly<Record<string, string>>,
 >(
-  definition: ProductVocabularyDefinition<TClaimTypes, TDecisionEffects>,
+  definition: ProductVocabularyInput<TClaimTypes, TDecisionEffects>,
 ): ProductVocabularyDefinition<TClaimTypes, TDecisionEffects> {
+  const facet = resolveFacet(definition);
   return deepFreeze({
     subjectType: definition.subjectType,
-    surface: definition.surface,
+    facet,
+    surface: facet,
     claimTypes: { ...definition.claimTypes },
     decisionEffects: { ...definition.decisionEffects },
   });

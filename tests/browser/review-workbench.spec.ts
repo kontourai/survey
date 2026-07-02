@@ -90,7 +90,7 @@ test("boots from an externally supplied review queue session", async ({ page }) 
                     claimId: "external.registrationStatus.current",
                     subjectType: "external.entity",
                     subjectId: "entity-1",
-                    surface: "external.profile",
+                    facet: "external.profile",
                     claimType: "external.field",
                     fieldOrBehavior: "registrationStatus",
                     impactLevel: "medium",
@@ -121,7 +121,7 @@ test("boots from an externally supplied review queue session", async ({ page }) 
                     claimId: "external.registrationStatus.proposed",
                     subjectType: "external.entity",
                     subjectId: "entity-1",
-                    surface: "external.profile",
+                    facet: "external.profile",
                     claimType: "external.field-candidate",
                     fieldOrBehavior: "registrationStatus",
                     impactLevel: "medium",
@@ -361,7 +361,7 @@ test("excerpt clamp toggle expands and collapses long excerpts", async ({ page }
                   source: { sourceRef: "https://example.test/clamp", kind: "web-page", observedAt: "2026-06-04T00:00:00.000Z" },
                   locator: { scheme: "html", locator: "html:field=clampField", excerpt: longExcerpt },
                   extraction: { target: "clampField", extractor: "test", extractedAt: "2026-06-04T00:00:00.000Z" },
-                  claimTarget: { claimId: "clamp.current", subjectType: "test", subjectId: "x", surface: "test", claimType: "test", fieldOrBehavior: "clampField", impactLevel: "low" },
+                  claimTarget: { claimId: "clamp.current", subjectType: "test", subjectId: "x", facet: "test", claimType: "test", fieldOrBehavior: "clampField", impactLevel: "low" },
                 },
                 {
                   id: "clamp-test:proposed",
@@ -370,7 +370,7 @@ test("excerpt clamp toggle expands and collapses long excerpts", async ({ page }
                   source: { sourceRef: "https://example.test/clamp-proposed", kind: "web-page", observedAt: "2026-06-04T01:00:00.000Z" },
                   locator: { scheme: "html", locator: "html:field=clampField", excerpt: longExcerpt },
                   extraction: { target: "clampField", extractor: "test-crawler", extractedAt: "2026-06-04T01:00:00.000Z" },
-                  claimTarget: { claimId: "clamp.proposed", subjectType: "test", subjectId: "x", surface: "test", claimType: "test", fieldOrBehavior: "clampField", impactLevel: "low" },
+                  claimTarget: { claimId: "clamp.proposed", subjectType: "test", subjectId: "x", facet: "test", claimType: "test", fieldOrBehavior: "clampField", impactLevel: "low" },
                 },
               ],
             },
@@ -431,7 +431,7 @@ test("candidate history expander shows first 3 entries and expands to all", asyn
       source: { sourceRef: `https://example.test/${id}`, kind: "web-page", observedAt: "2026-06-04T00:00:00.000Z" },
       locator: { scheme: "html", locator: "html:field=historyField", excerpt: `Excerpt for ${id}` },
       extraction: { target: "historyField", extractor: "test", extractedAt: "2026-06-04T00:00:00.000Z" },
-      claimTarget: { claimId: `history.${id}`, subjectType: "test", subjectId: "x", surface: "test", claimType: "test", fieldOrBehavior: "historyField", impactLevel: "low" },
+      claimTarget: { claimId: `history.${id}`, subjectType: "test", subjectId: "x", facet: "test", claimType: "test", fieldOrBehavior: "historyField", impactLevel: "low" },
     });
     window.kontourSurveyReviewWorkbench = {
       startState: {

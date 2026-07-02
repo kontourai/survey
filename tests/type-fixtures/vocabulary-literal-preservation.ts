@@ -23,7 +23,7 @@ import type { ProducerPolicy, ReviewDecisionMode } from "../../src/index.js";
 //    `string`; with the fix, it keeps its specific string literal type.
 const noAsConstVocabulary = defineProductVocabulary({
   subjectType: "public-directory.entity",
-  surface: "public-directory.entity-profile",
+  facet: "public-directory.entity-profile",
   claimTypes: {
     scalarField: "public-data.field",
   },
@@ -50,7 +50,7 @@ const noAsConstMismatchedLiteral: NoAsConstKeptCurrentValue = "accepted-candidat
 //    regression for callers who already wrote `as const`.
 const asConstVocabulary = defineProductVocabulary({
   subjectType: "regulated-rule",
-  surface: "regulated-rule.library",
+  facet: "regulated-rule.library",
   claimTypes: {
     rule: "regulated.rule",
   },
@@ -77,7 +77,7 @@ const policyFromAsConstVocabulary: ProducerPolicy = {
 
 const noAsConstDecisionEffectsVocabulary = defineProductVocabulary({
   subjectType: "public-directory.entity",
-  surface: "public-directory.entity-profile",
+  facet: "public-directory.entity-profile",
   claimTypes: {
     scalarField: "public-data.field",
   },

@@ -123,7 +123,7 @@ requiring `as const` at the call site:
 // the caller added `as const` — an undocumented requirement discovered mid-migration.
 const vocabulary = defineProductVocabulary({
   subjectType: "public-directory.entity",
-  surface: "public-directory.entity-profile",
+  facet: "public-directory.entity-profile",
   claimTypes: { scalarField: "public-data.field" },
   decisionEffects: { currentProposed: "current-proposed" },
 });
@@ -135,7 +135,7 @@ const vocabulary = defineProductVocabulary({
 // `"current-proposed"` as a literal type.
 const vocabulary = defineProductVocabulary({
   subjectType: "public-directory.entity",
-  surface: "public-directory.entity-profile",
+  facet: "public-directory.entity-profile",
   claimTypes: { scalarField: "public-data.field" },
   decisionEffects: { currentProposed: "current-proposed" },
 });
@@ -172,6 +172,57 @@ and
 [review-resource-contract.md](review-resource-contract.md#typescript-migration-note-decisionmode-is-now-a-literal-union) —
 this section documents the vocabulary-object-specific root cause those notes
 do not cover.
+
+## Facet rename (Hachure schema 5)
+
+`@kontourai/surface@2.0.0` renames the Claim field `surface` to `facet`
+(optional) and bumps `CURRENT_SCHEMA_VERSION` to `5`. This release of
+`@kontourai/survey` follows that rename across every place it emits or
+declares a claim-target facet:
+
+- `ClaimTarget.facet`, `ClaimTargetHint.facet`, and
+  `OversightMetricsClaimsSubject.facet` (previously `.surface`) — renamed,
+  no compatibility alias. Update object literals and property accesses from
+  `surface` to `facet`.
+- `buildSurveyTrustBundle` now writes `Claim.facet` (not `Claim.surface`) and
+  stamps `schemaVersion: 5` on every bundle it builds.
+- `defineProductVocabulary`'s `surface` option is renamed to `facet`, but —
+  unlike the fields above — this one keeps a **deprecated `surface` alias**
+  for one release: the function accepts either `facet` or `surface` (`facet`
+  wins if both are given), and the returned vocabulary carries both `.facet`
+  (canonical) and a deprecated `.surface` mirror. Passing `surface` alone
+  emits one `console.warn` per process, not one per call:
+
+  ```ts
+  // Still compiles for one release, but warns once per process:
+  const vocabulary = defineProductVocabulary({
+    subjectType: "public-directory.entity",
+    surface: "public-directory.entity-profile", // deprecated — use facet
+    claimTypes: { scalarField: "public-data.field" },
+    decisionEffects: { currentProposed: "current-proposed" },
+  });
+  vocabulary.facet;   // "public-directory.entity-profile"
+  vocabulary.surface; // "public-directory.entity-profile" (deprecated mirror)
+  ```
+
+  Migrate call sites to the canonical option; the alias is not guaranteed
+  to survive the next release:
+
+  ```ts
+  const vocabulary = defineProductVocabulary({
+    subjectType: "public-directory.entity",
+    facet: "public-directory.entity-profile",
+    claimTypes: { scalarField: "public-data.field" },
+    decisionEffects: { currentProposed: "current-proposed" },
+  });
+  ```
+
+Surface's own `validateTrustBundle` separately carries a read-tolerance shim
+for *legacy bundles on disk* that still have `Claim.surface` (warn-once,
+mapped onto `facet` at read time) — that shim is orthogonal to Survey's
+`defineProductVocabulary` alias above and lives entirely in
+`@kontourai/surface`; see that package's own release notes for its scope and
+lifetime.
 
 ## See also
 

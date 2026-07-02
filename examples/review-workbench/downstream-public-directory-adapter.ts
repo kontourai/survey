@@ -264,7 +264,7 @@ function candidateClaimTarget(args: CandidateArgs, claimId: string): ReviewCandi
     claimId,
     subjectType: "public-record.entity",
     subjectId: args.proposal.publicRecordId,
-    surface: "public-directory.profile",
+    facet: "public-directory.profile",
     claimType: args.role === "current" ? "public-data.field" : "public-data.field-candidate",
     fieldOrBehavior: args.field,
     impactLevel: "medium",

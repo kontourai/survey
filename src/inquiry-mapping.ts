@@ -435,7 +435,7 @@ export function buildMappingReviewItems(
       confidence?: number;
       source: { sourceRef: string; kind: "inquiry-question"; observedAt: string; locatorScheme: "text" };
       extraction: { target: string; confidence?: number; extractor: string; extractedAt: string };
-      claimTarget: { subjectType: string; subjectId: string; surface: string; claimType: string; fieldOrBehavior: string; impactLevel: "low" };
+      claimTarget: { subjectType: string; subjectId: string; facet: string; claimType: string; fieldOrBehavior: string; impactLevel: "low" };
       projection?: { candidateSetId: string; candidateId: string };
     }>;
     candidateSetStatus: "needs-review" | "conflict";
@@ -485,7 +485,7 @@ export function buildMappingReviewItems(
           claimTarget: {
             subjectType: meta?.proposedTarget?.subjectType ?? "inquiry",
             subjectId: meta?.proposedTarget?.subjectId ?? candidateSet.target,
-            surface: "inquiry.mapping",
+            facet: "inquiry.mapping",
             claimType: "inquiry-mapping",
             fieldOrBehavior: meta?.proposedTarget?.fieldOrBehavior ?? meta?.proposedRuleId ?? "unknown",
             impactLevel: "low" as const,

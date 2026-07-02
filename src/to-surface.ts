@@ -49,7 +49,7 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
       id: projection.id,
       subjectType: projection.subjectType,
       subjectId: projection.subjectId,
-      surface: projection.surface,
+      facet: projection.facet,
       claimType: projection.claimType,
       fieldOrBehavior: projection.fieldOrBehavior,
       value: claimValue,
@@ -152,7 +152,7 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
   }
 
   return {
-    schemaVersion: 3,
+    schemaVersion: 5,
     source: input.source,
     claims,
     evidence,

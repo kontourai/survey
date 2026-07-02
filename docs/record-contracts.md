@@ -62,7 +62,7 @@ const surveyInput = new SurveyInputBuilder({ source: "example-producer:run-1" })
     claim: {
       subjectType: "public-record.entity",
       subjectId: "entity-123",
-      surface: "example.profile",
+      facet: "example.profile",
       claimType: "public-data.field",
       status: "proposed",
       impactLevel: "medium",
@@ -135,7 +135,7 @@ const surveyInput = new SurveyInputBuilder({ source: "example-producer:run-1" })
       id: "claim.example.policy-application",
       subjectType: "example.application",
       subjectId: "application-1",
-      surface: "example.review",
+      facet: "example.review",
       claimType: "policy-application.status",
       impactLevel: "medium",
       collectedBy: "example-extractor",
@@ -216,7 +216,7 @@ const surveyInput = new SurveyInputBuilder({
     claim: {
       subjectType: "public-record.entity",
       subjectId: "entity-123",
-      surface: "example.profile",
+      facet: "example.profile",
       claimType: "public-data.field",
       status: "verified",
       impactLevel: "medium",
@@ -312,7 +312,7 @@ const surveyInput = new SurveyInputBuilder({
     .forClaim({
       subjectType: "regulated-rule",
       subjectId: "example:threshold:primary:2026",
-      surface: "regulated.rules",
+      facet: "regulated.rules",
       claimType: "regulated.rule-value",
       status: "verified",
       impactLevel: "high",
@@ -424,7 +424,7 @@ const surveyInput = new SurveyInputBuilder({
     claim: {
       subjectType: "public-record.entity",
       subjectId: "entity-123",
-      surface: "example.profile",
+      facet: "example.profile",
       claimType: "public-data.repeated-field",
       status: "verified",
       impactLevel: "medium",
@@ -483,7 +483,7 @@ const observations = [
       id: "claim.entity-123.status.registry",
       subjectType: "public-record.entity",
       subjectId: "entity-123",
-      surface: "example.profile",
+      facet: "example.profile",
       claimType: "public-data.field",
       status: "verified",
       impactLevel: "medium",
@@ -511,7 +511,7 @@ const observations = [
       id: "claim.entity-123.status.archive",
       subjectType: "public-record.entity",
       subjectId: "entity-123",
-      surface: "example.profile",
+      facet: "example.profile",
       claimType: "public-data.field",
       status: "superseded",
       impactLevel: "medium",
@@ -601,7 +601,7 @@ The canonical payload is the portable review proof contract. It contains:
 | `proof.issuer` | Survey producer identity, derived from the claim collector. |
 | `proof.producer` | Extraction producer identity, derived from the extractor id. |
 | `proof.issuedAt` | Proof envelope time, derived from review time, then claim update time, then extraction time. |
-| `proof.subject` | Claim identity: claim id, candidate set id, reviewed candidate id, subject, surface, claim type, and field/behavior. If the claim also names a candidate id, it must match the reviewed candidate id. |
+| `proof.subject` | Claim identity: claim id, candidate set id, reviewed candidate id, subject, facet, claim type, and field/behavior. If the claim also names a candidate id, it must match the reviewed candidate id. |
 | `proof.sourcePayload` / `rawSource.checksum` | Source payload identity, ref, and producer-supplied checksum when present. |
 | `extraction` | Extracted target, value, locator, excerpt, extractor, confidence, and extraction time. |
 | `candidate` / `candidateSet` | Candidate identity/value plus the ordered candidate set, selected candidate, status, and rationale. |
@@ -975,7 +975,7 @@ const metrics = deriveOversightMetrics(decisions, {
 const subject = {
   subjectType: "review-session",
   subjectId: "session-xyz",
-  surface: "review.oversight",
+  facet: "review.oversight",
   actor: "oversight-collector",
   observedAt: new Date().toISOString(),
   collectedBy: "oversight-metrics",

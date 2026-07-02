@@ -37,10 +37,10 @@ describe("stableId", () => {
 });
 
 describe("defineProductVocabulary", () => {
-  it("round-trips the definition it is given", () => {
+  it("round-trips the definition it is given, using the canonical facet option", () => {
     const vocabulary = defineProductVocabulary({
       subjectType: "public-directory.entity",
-      surface: "public-directory.entity-profile",
+      facet: "public-directory.entity-profile",
       claimTypes: {
         scalarField: "public-data.field",
         scalarFieldCandidate: "public-data.field-candidate",
@@ -52,7 +52,7 @@ describe("defineProductVocabulary", () => {
     });
 
     assert.equal(vocabulary.subjectType, "public-directory.entity");
-    assert.equal(vocabulary.surface, "public-directory.entity-profile");
+    assert.equal(vocabulary.facet, "public-directory.entity-profile");
     assert.equal(vocabulary.claimTypes.scalarField, "public-data.field");
     assert.equal(vocabulary.decisionEffects.keptCurrentValue, "kept-current-value");
   });
@@ -60,7 +60,7 @@ describe("defineProductVocabulary", () => {
   it("deep-freezes the returned vocabulary", () => {
     const vocabulary = defineProductVocabulary({
       subjectType: "regulated-rule",
-      surface: "regulated-rule.library",
+      facet: "regulated-rule.library",
       claimTypes: { rule: "regulated.rule" },
       decisionEffects: { keptCurrentValue: "kept-current-value" },
     });
@@ -71,6 +71,65 @@ describe("defineProductVocabulary", () => {
     assert.throws(() => {
       (vocabulary.claimTypes as Record<string, string>).rule = "mutated";
     }, TypeError);
+  });
+
+  describe("deprecated surface alias (Hachure schema 5 facet rename)", () => {
+    it("accepts the legacy surface option, mirrors it onto facet, and warns exactly once across repeated legacy calls", () => {
+      const originalWarn = console.warn;
+      const warnings: unknown[][] = [];
+      console.warn = (...args: unknown[]) => {
+        warnings.push(args);
+      };
+      try {
+        const vocabulary = defineProductVocabulary({
+          subjectType: "public-directory.entity",
+          surface: "public-directory.entity-profile",
+          claimTypes: { scalarField: "public-data.field" },
+          decisionEffects: { keptCurrentValue: "kept-current-value" },
+        });
+
+        assert.equal(vocabulary.facet, "public-directory.entity-profile");
+        assert.equal(vocabulary.surface, "public-directory.entity-profile");
+        assert.equal(warnings.length, 1);
+        assert.match(String(warnings[0]?.[0]), /"surface".*renamed.*"facet"/);
+
+        // A second legacy call in the same process must not warn again — the
+        // deprecation notice is warn-once per process, mirroring surface's
+        // own validateTrustBundle legacy-facet read shim.
+        defineProductVocabulary({
+          subjectType: "regulated-rule",
+          surface: "regulated-rule.library",
+          claimTypes: { rule: "regulated.rule" },
+          decisionEffects: { keptCurrentValue: "kept-current-value" },
+        });
+        assert.equal(warnings.length, 1);
+      } finally {
+        console.warn = originalWarn;
+      }
+    });
+
+    it("prefers facet over surface when both are supplied, without warning", () => {
+      const originalWarn = console.warn;
+      const warnings: unknown[][] = [];
+      console.warn = (...args: unknown[]) => {
+        warnings.push(args);
+      };
+      try {
+        const vocabulary = defineProductVocabulary({
+          subjectType: "public-directory.entity",
+          facet: "public-directory.entity-profile",
+          surface: "legacy-ignored-value",
+          claimTypes: { scalarField: "public-data.field" },
+          decisionEffects: { keptCurrentValue: "kept-current-value" },
+        });
+
+        assert.equal(vocabulary.facet, "public-directory.entity-profile");
+        assert.equal(vocabulary.surface, "public-directory.entity-profile");
+        assert.equal(warnings.length, 0);
+      } finally {
+        console.warn = originalWarn;
+      }
+    });
   });
 });
 

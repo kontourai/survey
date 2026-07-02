@@ -191,6 +191,7 @@ export { confidenceBasisForReview, defineProductVocabulary, stableId } from "./v
 export type {
   ConfidenceBasisForReviewInput,
   ProductVocabularyDefinition,
+  ProductVocabularyInput,
 } from "./vocabulary.js";
 export { currentProposedReviewItem } from "./current-proposed-review-item.js";
 export type {

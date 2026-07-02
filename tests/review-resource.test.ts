@@ -178,7 +178,7 @@ function assertReviewCandidateMapsToSurveyRecord(candidate: ReviewCandidate, sur
   assert.equal(claim.candidateId, surveyCandidate.id);
   assert.equal(candidate.claimTarget.subjectType, claim.subjectType);
   assert.equal(candidate.claimTarget.subjectId, claim.subjectId);
-  assert.equal(candidate.claimTarget.surface, claim.surface);
+  assert.equal(candidate.claimTarget.facet, claim.facet);
   assert.equal(candidate.claimTarget.claimType, claim.claimType);
   assert.equal(candidate.claimTarget.fieldOrBehavior, claim.fieldOrBehavior);
   assert.equal(candidate.claimTarget.impactLevel, claim.impactLevel);

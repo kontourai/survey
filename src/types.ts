@@ -130,7 +130,12 @@ export interface ClaimTarget {
   candidateId?: string;
   subjectType: string;
   subjectId: string;
-  surface: string;
+  /**
+   * Producer-defined grouping or namespace for this claim (Hachure schema 5,
+   * surface@2.0.0: Claim.surface -> Claim.facet). Projected onto the emitted
+   * Claim's `facet` field by {@link buildSurveyTrustBundle}.
+   */
+  facet: string;
   claimType: string;
   fieldOrBehavior: string;
   value?: unknown;
