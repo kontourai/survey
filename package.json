@@ -71,10 +71,14 @@
     "@kontourai/surface": "^1.3.0"
   },
   "peerDependencies": {
-    "@anthropic-ai/sdk": ">=0.20.0"
+    "@anthropic-ai/sdk": ">=0.20.0",
+    "typescript": ">=5.0.0"
   },
   "peerDependenciesMeta": {
     "@anthropic-ai/sdk": {
+      "optional": true
+    },
+    "typescript": {
       "optional": true
     }
   },

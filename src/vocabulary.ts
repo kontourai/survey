@@ -42,10 +42,22 @@ export interface ProductVocabularyDefinition<
  * `currentProposedReviewItem` caller can pass instead of loose top-level
  * constants. Returns the same shape it received, frozen so callers cannot
  * mutate a shared vocabulary at runtime.
+ *
+ * The type parameters carry the `const` modifier, so `claimTypes` and
+ * `decisionEffects` string properties keep their literal types whether or
+ * not the caller appends `as const` to the argument — do not re-add an
+ * `as const` requirement to this helper's documented usage; it is not
+ * needed here (requires TypeScript 5.0+; unlike a plain object literal
+ * passed to a non-`const` generic elsewhere), and callers who already write
+ * `as const` continue to compile identically. Note: the `const` type-
+ * parameter syntax itself requires a TypeScript 5.0+ compiler to parse this
+ * function's declaration at all (see `package.json`'s
+ * `peerDependencies.typescript` and `docs/upgrade-guide.md`); this is a
+ * types-only floor and does not affect JavaScript consumers.
  */
 export function defineProductVocabulary<
-  TClaimTypes extends Readonly<Record<string, string>>,
-  TDecisionEffects extends Readonly<Record<string, string>>,
+  const TClaimTypes extends Readonly<Record<string, string>>,
+  const TDecisionEffects extends Readonly<Record<string, string>>,
 >(
   definition: ProductVocabularyDefinition<TClaimTypes, TDecisionEffects>,
 ): ProductVocabularyDefinition<TClaimTypes, TDecisionEffects> {

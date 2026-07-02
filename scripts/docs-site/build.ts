@@ -28,6 +28,7 @@ const pages: PageDef[] = [
   { src: "record-contracts.md", out: "record-contracts.html", navTitle: "Record Contracts", section: "Reference" },
   { src: "adversarial-and-learning.md", out: "adversarial-and-learning.html", navTitle: "Adversarial & Learning", section: "Reference" },
   { src: "consumer-integration-guide.md", out: "consumer-integration-guide.html", navTitle: "Consumer Guide", section: "Reference" },
+  { src: "upgrade-guide.md", out: "upgrade-guide.html", navTitle: "Upgrade Guide", section: "Reference" },
   { src: "review-resource-contract.md", out: "review-resource-contract.html", navTitle: "Review Resources", section: "Reference" },
   { src: "source-authority-review-pattern.md", out: "source-authority-review-pattern.html", navTitle: "Source Authority", section: "Reference" },
   { src: "review-workbench-prototype.md", out: "review-workbench-prototype.html", navTitle: "Workbench Demo", section: "Project" },
