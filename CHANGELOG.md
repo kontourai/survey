@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/kontourai/survey/compare/v1.2.1...v1.3.0) (2026-07-02)
+
+
+### Features
+
+* **vocabulary:** const type parameters + upgrade guide (documented TS&gt;=5.0 types floor) ([#98](https://github.com/kontourai/survey/issues/98)) ([478da4a](https://github.com/kontourai/survey/commit/478da4a78522a4847f1be2381664e866b012a623))
+
 ## [1.2.1](https://github.com/kontourai/survey/compare/v1.2.0...v1.2.1) (2026-07-01)
 
 
