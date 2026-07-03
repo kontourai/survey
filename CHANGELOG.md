@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/kontourai/survey/compare/v1.5.0...v1.6.0) (2026-07-03)
+
+
+### Features
+
+* **producer-profile:** unify auto-accept policy in evaluateAutoAccept ([#111](https://github.com/kontourai/survey/issues/111)) ([1ab3c41](https://github.com/kontourai/survey/commit/1ab3c41d6b9ba7ff9aab040c23c0f3a7f180a494))
+
 ## [1.5.0](https://github.com/kontourai/survey/compare/v1.4.0...v1.5.0) (2026-07-03)
 
 
