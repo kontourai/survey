@@ -985,7 +985,7 @@ const record = resolveInquiry(bundle, {
 - `IdentityLink.subjects` use `subjectType: "system-field"` and `subjectId` in the form `"<system>::<entity>::<field>"`.
 - `IdentityLink.mappingClaimId` must point at a claim present in the same bundle; `resolveInquiry` uses it to compute the weakest-link ceiling.
 - The `SchemaMappingExtractor` interface is synchronous or async; `surveySchemaMapping` always awaits it.
-- Auto-accept shares its gate/rationale/`reviewedAt` decision with `applyAutoAcceptPolicy` in `inquiry-mapping` via the core `evaluateAutoAccept` function (`src/producer-profile.ts`, see [`docs/decisions/producer-profile.md`](./decisions/producer-profile.md)): the non-conflicting selected candidate is accepted as `"assumed"` when its own confidence is above the threshold, never as `"verified"`.  Conflicts require explicit human review.
+- Auto-accept shares its gate/rationale/`reviewedAt` decision with `applyAutoAcceptPolicy` in `inquiry-mapping` via the core `evaluateAutoAccept` function (`src/producer-profile.ts`, see `docs/decisions/producer-profile.md`): the non-conflicting selected candidate is accepted as `"assumed"` when its own confidence is above the threshold, never as `"verified"`.  Conflicts require explicit human review.
 - `referenceSchemaExtractor` is deterministic and test-only.  Its matching strategy (exact field-name, optional type-token match) is intentionally simple and transparent.
 
 
