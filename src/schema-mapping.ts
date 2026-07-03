@@ -22,7 +22,13 @@
  */
 
 import type { IdentityLink, IdentityLinkConversion, TrustBundle } from "@kontourai/surface";
-import { getProducerProposal, projectProposalsToCandidateSet } from "./producer-profile.js";
+import {
+  AUTO_ACCEPT_ACTOR,
+  AUTO_ACCEPT_WITHIN_COMFORT_ZONE,
+  getProducerProposal,
+  meetsAutoAcceptThreshold,
+  projectProposalsToCandidateSet,
+} from "./producer-profile.js";
 import type { CandidateSetProposal } from "./producer-profile.js";
 import { buildSurveyTrustBundle } from "./to-surface.js";
 import type {
@@ -337,7 +343,7 @@ export async function surveySchemaMapping(
     let autoReviewStatus: "assumed" | undefined;
     if (candidateSet.status !== "conflict" && options.autoAcceptMinConfidence !== undefined) {
       const topConfidence = Math.max(...pairProposals.map((p) => p.confidence));
-      if (topConfidence >= options.autoAcceptMinConfidence) {
+      if (meetsAutoAcceptThreshold(topConfidence, options.autoAcceptMinConfidence)) {
         autoReviewStatus = "assumed";
       }
     }
@@ -353,10 +359,10 @@ export async function surveySchemaMapping(
         candidateSetId,
         candidateId: selectedCandidate.id,
         status: autoReviewStatus,
-        actor: "auto-accept-policy",
+        actor: AUTO_ACCEPT_ACTOR,
         reviewedAt: generatedAt,
         rationale: `Auto-accepted: confidence ${selectedCandidate.confidence} >= threshold ${options.autoAcceptMinConfidence}`,
-        withinComfortZone: true,
+        withinComfortZone: AUTO_ACCEPT_WITHIN_COMFORT_ZONE,
       });
     }
 

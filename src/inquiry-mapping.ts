@@ -22,8 +22,17 @@ import type { DerivationRule, InquiryRecord, TrustBundle } from "@kontourai/surf
 import { resolveInquiry } from "@kontourai/surface";
 import type { CanonicalClaimTarget } from "@kontourai/surface";
 import type { Candidate, CandidateSet, ReviewOutcome } from "./types.js";
-import { getProducerProposal, hasCandidateConflict, projectProposalsToCandidateSet } from "./producer-profile.js";
+import {
+  AUTO_ACCEPT_ACTOR,
+  AUTO_ACCEPT_WITHIN_COMFORT_ZONE,
+  getProducerProposal,
+  hasCandidateConflict,
+  meetsAutoAcceptThreshold,
+  projectProposalsToCandidateSet,
+} from "./producer-profile.js";
 import type { CandidateSetProposal } from "./producer-profile.js";
+import type { ReviewItem } from "./review-resource.js";
+import { reviewResourceApiVersion } from "./review-resource.js";
 
 // ---------------------------------------------------------------------------
 // Core proposal and mapping types
@@ -295,17 +304,17 @@ export function applyAutoAcceptPolicy(
   if (hasCandidateConflict(proposals.map((p) => ({ equivalenceKey: mappingEquivalenceKey(p) })))) return [];
 
   return proposals
-    .filter((p) => p.confidence >= policy.minConfidence)
+    .filter((p) => meetsAutoAcceptThreshold(p.confidence, policy.minConfidence))
     .map((proposal) => ({
       id: `inquiry-mapping.auto.${normalizeQuestion(proposal.question)}`,
       normalizedQuestion: normalizeQuestion(proposal.question),
       target: proposal.proposedTarget,
       ruleId: proposal.proposedRuleId,
       status: "assumed" as const,
-      reviewedBy: "auto-accept-policy",
+      reviewedBy: AUTO_ACCEPT_ACTOR,
       reviewedAt: proposal.proposedAt,
       rationale: `Auto-accepted: confidence ${proposal.confidence} >= threshold ${policy.minConfidence}. ${proposal.rationale}`,
-      withinComfortZone: true,
+      withinComfortZone: AUTO_ACCEPT_WITHIN_COMFORT_ZONE,
       proposalId: proposal.id,
     }));
 }
@@ -430,29 +439,9 @@ export function resolveQuestion(
  */
 export function buildMappingReviewItems(
   candidateSets: Array<{ candidateSet: CandidateSet; candidates: Candidate[] }>,
-): Array<{
-  apiVersion: "survey.kontourai.io/v1alpha1";
-  kind: "ReviewItem";
-  metadata: { name: string; labels?: Record<string, string> };
-  spec: {
-    target: string;
-    candidates: Array<{
-      id: string;
-      role: "proposed";
-      value: unknown;
-      confidence?: number;
-      source: { sourceRef: string; kind: "inquiry-question"; observedAt: string; locatorScheme: "text" };
-      extraction: { target: string; confidence?: number; extractor: string; extractedAt: string };
-      claimTarget: { subjectType: string; subjectId: string; facet: string; claimType: string; fieldOrBehavior: string; impactLevel: "low" };
-      projection?: { candidateSetId: string; candidateId: string };
-    }>;
-    candidateSetStatus: "needs-review" | "conflict";
-    rationale?: string;
-  };
-  status: { observedCandidateCount: number };
-}> {
+): ReviewItem[] {
   return candidateSets.map(({ candidateSet, candidates }) => ({
-    apiVersion: "survey.kontourai.io/v1alpha1" as const,
+    apiVersion: reviewResourceApiVersion,
     kind: "ReviewItem" as const,
     metadata: {
       name: candidateSet.id,
@@ -498,7 +487,7 @@ export function buildMappingReviewItems(
           },
         };
       }),
-      candidateSetStatus: candidateSet.status as "needs-review" | "conflict",
+      candidateSetStatus: candidateSet.status,
       rationale: candidateSet.rationale,
     },
     status: {

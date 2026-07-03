@@ -205,3 +205,33 @@ describe("PRODUCER_PROPOSAL_METADATA_KEY", () => {
     assert.equal(PRODUCER_PROPOSAL_METADATA_KEY, "producerProposal");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Shared auto-accept primitives
+// ---------------------------------------------------------------------------
+
+import { AUTO_ACCEPT_ACTOR, AUTO_ACCEPT_WITHIN_COMFORT_ZONE, meetsAutoAcceptThreshold } from "../src/producer-profile.js";
+
+describe("meetsAutoAcceptThreshold", () => {
+  it("returns true when confidence is exactly the minConfidence boundary (inclusive >=)", () => {
+    assert.equal(meetsAutoAcceptThreshold(0.85, 0.85), true);
+  });
+
+  it("returns false when confidence is just below the minConfidence boundary", () => {
+    assert.equal(meetsAutoAcceptThreshold(0.84999, 0.85), false);
+  });
+
+  it("returns true when confidence is comfortably above the minConfidence boundary", () => {
+    assert.equal(meetsAutoAcceptThreshold(0.9, 0.85), true);
+  });
+});
+
+describe("auto-accept shared literals", () => {
+  it("AUTO_ACCEPT_ACTOR is the literal \"auto-accept-policy\"", () => {
+    assert.equal(AUTO_ACCEPT_ACTOR, "auto-accept-policy");
+  });
+
+  it("AUTO_ACCEPT_WITHIN_COMFORT_ZONE is the literal true", () => {
+    assert.equal(AUTO_ACCEPT_WITHIN_COMFORT_ZONE, true);
+  });
+});
