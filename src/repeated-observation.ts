@@ -1,40 +1,12 @@
 import type { SurveyObservationInput } from "./builder.js";
-import { buildObservation } from "./observation-helper.js";
+import { buildRepeatedObservation, type ObservationAuthoringInput } from "./observation-helper.js";
 
-export interface RepeatedObservationInput<TItem> {
-  id: string;
-  field: string;
-  value: readonly TItem[];
-  rawSource: SurveyObservationInput["rawSource"];
-  extraction: Omit<SurveyObservationInput["extraction"], "target" | "value" | "excerpt"> & {
-    target?: string;
-    excerpt?: string | null;
-  };
-  reviewOutcome?: SurveyObservationInput["reviewOutcome"];
-  claim: Omit<SurveyObservationInput["claim"], "fieldOrBehavior" | "value"> & {
-    fieldOrBehavior?: string;
-  };
-  candidate?: SurveyObservationInput["candidate"];
-  candidateSet?: SurveyObservationInput["candidateSet"];
+export interface RepeatedObservationInput<TItem> extends ObservationAuthoringInput<readonly TItem[]> {
   representation?: "aggregate-array";
-  metadata?: Record<string, unknown>;
 }
 
 export function repeatedObservation<TItem>(
   input: RepeatedObservationInput<TItem>,
 ): SurveyObservationInput {
-  const representation = input.representation ?? "aggregate-array";
-  const value = [...input.value];
-
-  return buildObservation({
-    ...input,
-    value,
-    surveyMetadata: {
-      repeated: {
-        representation,
-        itemCount: value.length,
-      },
-    },
-    defaultExcerpt: `${input.field}: ${value.length} item(s)`,
-  });
+  return buildRepeatedObservation(input);
 }

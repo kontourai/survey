@@ -48,29 +48,56 @@ export interface PolicyStandardSourceInput extends Omit<RawSourceInput, "locator
   metadata?: Record<string, unknown>;
 }
 
+/**
+ * Raw Source kinds whose factories accept a caller-supplied `locatorScheme`
+ * override and otherwise fall back to a per-kind default. `uploaded-document`
+ * has no default (`undefined`) because `UploadedDocumentSourceInput.locatorScheme`
+ * is required, not optional — modeled here as a real, explicit table entry
+ * rather than an omission, so a caller-supplied value is the only source of
+ * truth for that kind.
+ *
+ * Module-internal seam: consumed by relative import from
+ * `rawSourceWithDefaultLocatorScheme` below and by
+ * `tests/raw-source-defaults.test.ts`, NOT re-exported from `src/index.ts`.
+ */
+export const DEFAULT_LOCATOR_SCHEME: {
+  "uploaded-document": undefined;
+  "api-record": LocatorScheme;
+  "web-page": LocatorScheme;
+  "manual-entry": LocatorScheme;
+} = {
+  "uploaded-document": undefined,
+  "api-record": "structured-field",
+  "web-page": "html",
+  "manual-entry": "structured-field",
+};
+
+type LocatorSchemeDefaultKind = keyof typeof DEFAULT_LOCATOR_SCHEME;
+
+function rawSourceWithDefaultLocatorScheme(
+  kind: LocatorSchemeDefaultKind,
+  input: Omit<RawSourceInput, "locatorScheme"> & { locatorScheme?: LocatorScheme },
+): RawSource {
+  return rawSource(kind, {
+    locatorScheme: DEFAULT_LOCATOR_SCHEME[kind],
+    ...input,
+  } as RawSourceInput);
+}
+
 export function uploadedDocumentSource(input: UploadedDocumentSourceInput): RawSource {
-  return rawSource("uploaded-document", input);
+  return rawSourceWithDefaultLocatorScheme("uploaded-document", input);
 }
 
 export function apiRecordSource(input: ApiRecordSourceInput): RawSource {
-  return rawSource("api-record", {
-    locatorScheme: "structured-field",
-    ...input,
-  });
+  return rawSourceWithDefaultLocatorScheme("api-record", input);
 }
 
 export function webPageSource(input: WebPageSourceInput): RawSource {
-  return rawSource("web-page", {
-    locatorScheme: "html",
-    ...input,
-  });
+  return rawSourceWithDefaultLocatorScheme("web-page", input);
 }
 
 export function manualEntrySource(input: ManualEntrySourceInput): RawSource {
-  return rawSource("manual-entry", {
-    locatorScheme: "structured-field",
-    ...input,
-  });
+  return rawSourceWithDefaultLocatorScheme("manual-entry", input);
 }
 
 export function policyStandardSource(input: PolicyStandardSourceInput): RawSource {
