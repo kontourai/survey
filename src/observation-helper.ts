@@ -1,6 +1,43 @@
 import type { SurveyObservationInput } from "./builder.js";
 
-export interface BuildObservationInput<TValue> {
+/**
+ * Observation authoring core — CONTEXT.md "Observation" / "Field Observation
+ * and Repeated Observation" ("helper shapes for authoring Observations, not
+ * separate domain concepts").
+ *
+ * `buildObservation`/`BuildObservationInput` are the shared authoring
+ * primitive: they own the `extraction.target`/`value`/`excerpt` and
+ * `claim.fieldOrBehavior`/`value`/`metadata` assembly (including the
+ * three-way `claim.metadata` / caller `metadata` / representation-supplied
+ * `surveyMetadata` merge below). Consumed by relative import from
+ * `field-observation.ts`, `repeated-observation.ts` (via the
+ * representation-keyed `buildFieldObservation`/`buildRepeatedObservation`
+ * wrappers below), and `source-of-authority-observation.ts`, which calls
+ * `buildObservation` directly with its own `surveyMetadata`/`defaultExcerpt`.
+ * None of this is re-exported from `src/index.ts`.
+ *
+ * `ObservationAuthoringInput` is the shared base shape (id/field/value/
+ * rawSource/extraction/reviewOutcome/claim/candidate/candidateSet/metadata)
+ * common to `BuildObservationInput` and the two public skins' input types
+ * (`FieldObservationInput`, `RepeatedObservationInput`); the skins extend it
+ * with only their own `representation` literal.
+ *
+ * `buildFieldObservation`/`buildRepeatedObservation` are the representation-
+ * keyed layer above `buildObservation`: each owns the default-excerpt
+ * formula and the `surveyMetadata` sub-key (`field` vs `repeated`) for its
+ * representation. They do not change `buildObservation`'s own signature or
+ * body — `source-of-authority-observation.ts` depends on that staying
+ * exactly as-is.
+ *
+ * `mergeObservationMetadata`/`mergeNestedRecords` are exported as a
+ * module-internal seam (like `src/producer-discipline.ts`) purely for direct
+ * test import (`tests/observation-helper.test.ts`) — consumed by relative
+ * import only, NOT re-exported from `src/index.ts`. Their bodies, including
+ * the `mergeNestedRecords` nested-record-vs-scalar asymmetry and the `??`
+ * null/undefined coalescing, are unchanged characterization, not a defect.
+ */
+
+export interface ObservationAuthoringInput<TValue> {
   id: string;
   field: string;
   value: TValue;
@@ -16,6 +53,9 @@ export interface BuildObservationInput<TValue> {
   candidate?: SurveyObservationInput["candidate"];
   candidateSet?: SurveyObservationInput["candidateSet"];
   metadata?: Record<string, unknown>;
+}
+
+export interface BuildObservationInput<TValue> extends ObservationAuthoringInput<TValue> {
   surveyMetadata: Record<string, unknown>;
   defaultExcerpt: string;
 }
@@ -44,7 +84,55 @@ export function buildObservation<TValue>(
   };
 }
 
-function mergeObservationMetadata(
+/**
+ * Representation-keyed layer above `buildObservation`. Owns the
+ * `surveyMetadata` sub-key name, the default-`representation` literal, and
+ * the default-excerpt formula for the "field" (scalar) and "repeated"
+ * (aggregate-array) representations — the knowledge previously duplicated
+ * inline in `field-observation.ts`/`repeated-observation.ts`. Called only by
+ * the two thin public skins; `buildObservation` itself stays representation-
+ * agnostic.
+ */
+
+function valueSummary(value: unknown): string {
+  if (value === null || value === undefined) return "<empty>";
+  return String(value);
+}
+
+export function buildFieldObservation<TValue>(
+  input: ObservationAuthoringInput<TValue> & { representation?: "scalar" },
+): SurveyObservationInput {
+  const representation = input.representation ?? "scalar";
+
+  return buildObservation({
+    ...input,
+    surveyMetadata: {
+      field: { representation },
+    },
+    defaultExcerpt: `${input.field}: ${valueSummary(input.value)}`,
+  });
+}
+
+export function buildRepeatedObservation<TItem>(
+  input: ObservationAuthoringInput<readonly TItem[]> & { representation?: "aggregate-array" },
+): SurveyObservationInput {
+  const representation = input.representation ?? "aggregate-array";
+  const value = [...input.value];
+
+  return buildObservation({
+    ...input,
+    value,
+    surveyMetadata: {
+      repeated: {
+        representation,
+        itemCount: value.length,
+      },
+    },
+    defaultExcerpt: `${input.field}: ${value.length} item(s)`,
+  });
+}
+
+export function mergeObservationMetadata(
   claimMetadata: Record<string, unknown> | undefined,
   metadata: Record<string, unknown> | undefined,
   surveyMetadata: Record<string, unknown>,
@@ -63,7 +151,7 @@ function mergeObservationMetadata(
   };
 }
 
-function mergeNestedRecords(
+export function mergeNestedRecords(
   claimSurvey: Record<string, unknown>,
   survey: Record<string, unknown>,
   surveyMetadata: Record<string, unknown>,
