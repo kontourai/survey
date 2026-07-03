@@ -1149,6 +1149,97 @@ describe("Survey Surface projection", () => {
     );
   });
 
+  it("rejects verified source-of-authority observations with reviewOutcome entirely missing", () => {
+    const observedAt = "2026-06-01T10:00:00.000Z";
+    const rawSource = webPageSource({
+      sourceRef: "https://policy.example.test/rules",
+      observedAt,
+      checksum: "policy-page",
+    });
+    const base = {
+      id: "observation.policy.status",
+      field: "policy.status",
+      value: "ACTIVE",
+      sourceAuthority: {
+        authorityClass: "policy_document" as const,
+        scope: { productArea: "policy" },
+        declaredBy: "policy-importer",
+      },
+      rawSource,
+      extraction: {
+        confidence: 0.9,
+        locator: "css:#status",
+        extractor: "policy-importer",
+        extractedAt: observedAt,
+      },
+      reviewOutcome: {
+        status: "verified" as const,
+        actor: "policy-reviewer",
+        reviewedAt: "2026-06-01T10:05:00.000Z",
+      },
+      claim: {
+        subjectType: "policy",
+        subjectId: "policy-1",
+        facet: "policy.library",
+        claimType: "policy-field",
+        status: "verified" as const,
+        impactLevel: "medium" as const,
+        collectedBy: "policy-importer",
+      },
+    };
+
+    assert.throws(
+      () => sourceOfAuthorityObservation({ ...base, reviewOutcome: undefined }),
+      /cannot be verified without a review outcome/,
+    );
+  });
+
+  it("enforces review discipline for assumed-status source-of-authority observations", () => {
+    const observedAt = "2026-06-01T10:00:00.000Z";
+    const rawSource = webPageSource({
+      sourceRef: "https://policy.example.test/rules",
+      observedAt,
+      checksum: "policy-page",
+    });
+    const assumedBase = {
+      id: "observation.policy.status.assumed",
+      field: "policy.status",
+      value: "ACTIVE",
+      sourceAuthority: {
+        authorityClass: "policy_document" as const,
+        scope: { productArea: "policy" },
+        declaredBy: "policy-importer",
+      },
+      rawSource,
+      extraction: {
+        confidence: 0.9,
+        locator: "css:#status",
+        extractor: "policy-importer",
+        extractedAt: observedAt,
+      },
+      reviewOutcome: {
+        status: "assumed" as const,
+        actor: "policy-reviewer",
+        reviewedAt: "2026-06-01T10:05:00.000Z",
+      },
+      claim: {
+        subjectType: "policy",
+        subjectId: "policy-1",
+        facet: "policy.library",
+        claimType: "policy-field",
+        status: "assumed" as const,
+        impactLevel: "medium" as const,
+        collectedBy: "policy-importer",
+      },
+    };
+
+    assert.doesNotThrow(() => sourceOfAuthorityObservation(assumedBase));
+    assert.throws(
+      () => sourceOfAuthorityObservation({ ...assumedBase, reviewOutcome: undefined }),
+      /cannot be assumed without a review outcome/,
+    );
+  });
+
   it("projects Candidate Conflict to a disputed claim with candidate-conflict event", () => {
     const input = buildSurveyTrustBundle({
       source: "survey.candidate-conflict.fixture",
@@ -1533,6 +1624,108 @@ describe("Survey Surface projection", () => {
       () => buildSurveyTrustBundle(broken),
       /needs a source locator/,
     );
+  });
+
+  it("rejects assumed claims without a review outcome", () => {
+    const broken = structuredClone(publicFieldReviewExample);
+    broken.reviewOutcomes = [];
+    broken.claims[0] = { ...broken.claims[0], status: "assumed" };
+
+    assert.throws(
+      () => buildSurveyTrustBundle(broken),
+      /cannot be assumed without a review outcome/,
+    );
+  });
+
+  it("rejects verified claims with a review outcome present but missing actor", () => {
+    const broken = structuredClone(publicFieldReviewExample);
+    broken.claims[0] = { ...broken.claims[0], status: "verified" };
+    broken.reviewOutcomes[0] = { ...broken.reviewOutcomes[0], actor: undefined };
+
+    assert.throws(
+      () => buildSurveyTrustBundle(broken),
+      /without review actor authority/,
+    );
+  });
+
+  it("rejects verified claims with a review outcome present but missing reviewedAt", () => {
+    const broken = structuredClone(publicFieldReviewExample);
+    broken.claims[0] = { ...broken.claims[0], status: "verified" };
+    broken.reviewOutcomes[0] = { ...broken.reviewOutcomes[0], reviewedAt: undefined };
+
+    assert.throws(
+      () => buildSurveyTrustBundle(broken),
+      /without reviewedAt/,
+    );
+  });
+
+  it("exempts manual-entry sources from the source locator requirement", () => {
+    const observedAt = "2026-07-02T09:00:00.000Z";
+    const rawSource = manualEntrySource({
+      id: "source.manual.status",
+      sourceRef: "operator://entity/manual-status",
+      observedAt,
+    });
+    const bundle = buildSurveyTrustBundle({
+      source: "survey.manual-entry-locator-exemption.fixture",
+      generatedAt: "2026-07-02T09:10:00.000Z",
+      rawSources: [rawSource],
+      extractions: [
+        {
+          id: "extraction.manual.status",
+          sourceId: rawSource.id,
+          target: "status",
+          value: "ACTIVE",
+          confidence: 1,
+          extractor: "operator-entry",
+          extractedAt: observedAt,
+        },
+      ],
+      candidateSets: [
+        {
+          id: "candidate-set.manual.status",
+          target: "status",
+          selectedCandidateId: "candidate.manual.status",
+          status: "resolved",
+          candidates: [
+            {
+              id: "candidate.manual.status",
+              extractionId: "extraction.manual.status",
+              value: "ACTIVE",
+              confidence: 1,
+            },
+          ],
+        },
+      ],
+      reviewOutcomes: [
+        {
+          id: "review.manual.status",
+          candidateSetId: "candidate-set.manual.status",
+          candidateId: "candidate.manual.status",
+          status: "verified",
+          actor: "manual-operator",
+          reviewedAt: "2026-07-02T09:05:00.000Z",
+        },
+      ],
+      claims: [
+        {
+          id: "claim.manual.status",
+          candidateSetId: "candidate-set.manual.status",
+          candidateId: "candidate.manual.status",
+          subjectType: "manual-record",
+          subjectId: "entity-manual-1",
+          facet: "manual.status",
+          claimType: "manual-data.field",
+          fieldOrBehavior: "status",
+          status: "verified",
+          impactLevel: "medium",
+          collectedBy: "operator-entry",
+        },
+      ],
+    });
+
+    const claim = bundle.claims.find((item) => item.id === "claim.manual.status");
+    assert.equal(claim?.status, "verified");
   });
 
   it("builds Survey input through the record builder", () => {
@@ -2678,6 +2871,69 @@ describe("Survey Surface projection", () => {
     assert.equal(surveyMetadata?.repeated?.representation, "aggregate-array");
     assert.equal(surveyMetadata?.repeated?.itemCount, 0);
     assert.equal(report.evidence[0]?.excerptOrSummary, "publicNotices: 0 item(s)");
+  });
+
+  it("keeps the locator requirement status-gated: proposed source-of-authority observations without locators do not throw", () => {
+    // Pins the deliberate divergence documented in src/producer-discipline.ts's
+    // drift-table comment: to-surface's locator check is kind-gated (gates on
+    // rawSource.kind !== "manual-entry", regardless of status), while
+    // source-of-authority-observation's locator check is status-gated (runs
+    // only inside assertVerifiedPosture's verified/assumed branch, regardless
+    // of rawSource.kind). A non-triggering status like "proposed" must
+    // therefore skip the locator check entirely, even with extraction.locator
+    // omitted — a future unification of the two locator policies would
+    // silently break this. Exercised directly against
+    // sourceOfAuthorityObservation() rather than through the full
+    // buildSurveyTrustBundle projection, since to-surface's separate
+    // kind-gated locator check would otherwise mask this branch.
+    const observedAt = "2026-06-01T09:00:00.000Z";
+    const rawSource = webPageSource({
+      sourceRef: "https://publisher.example.test/listings/item-2",
+      observedAt,
+      fetchedAt: "2026-06-01T09:01:00.000Z",
+      checksum: "listing-page-2",
+      metadata: { provider: "Example Publisher" },
+    });
+
+    let record: ReturnType<typeof sourceOfAuthorityObservation> | undefined;
+    assert.doesNotThrow(() => {
+      record = sourceOfAuthorityObservation({
+        id: "observation.listing.item-2.eligibility-range",
+        field: "listing.item.eligibilityRange",
+        value: { min: 4, max: 9 },
+        sourceAuthority: {
+          authorityClass: "publisher_owned_page",
+          scope: {
+            productArea: "provider-listing",
+            providerId: "provider.example-publisher",
+            listingId: "item-2",
+          },
+          sourceOwner: "Example Publisher",
+          declaredBy: "listing-crawler",
+        },
+        rawSource,
+        extraction: {
+          confidence: 0.81,
+          extractor: "listing-crawler",
+          extractedAt: observedAt,
+          excerpt: "Eligibility range 4-9",
+        },
+        claim: {
+          id: "claim.listing.item-2.eligibility-range.proposed",
+          subjectType: "provider-listing",
+          subjectId: "item-2",
+          facet: "public-directory.listings",
+          claimType: "published-field",
+          status: "proposed",
+          impactLevel: "medium",
+          collectedBy: "listing-crawler",
+        },
+      });
+    });
+
+    assert.equal(record?.extraction.locator, undefined);
+    assert.equal(record?.claim.status, "proposed");
+    assert.deepEqual(record?.claim.value, { min: 4, max: 9 });
   });
 });
 

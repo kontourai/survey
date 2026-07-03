@@ -1,5 +1,6 @@
 import type { Claim, Evidence, TrustBundle, TrustStatus, VerificationEvent } from "@kontourai/surface";
 import { buildReviewProofAnchor } from "./review-proof.js";
+import { assertReviewOutcomeDiscipline } from "./producer-discipline.js";
 import type {
   Candidate,
   CandidateSet,
@@ -438,15 +439,11 @@ function assertProducerDiscipline(input: {
   rawSource: RawSource;
   projection: ClaimTarget;
 }): void {
-  if ((input.status === "verified" || input.status === "assumed") && !input.review) {
-    throw new Error(`Claim ${input.projection.id} cannot be ${input.status} without a review outcome`);
-  }
-  if ((input.status === "verified" || input.status === "assumed") && !input.review?.actor) {
-    throw new Error(`Claim ${input.projection.id} cannot be ${input.status} without review actor authority`);
-  }
-  if ((input.status === "verified" || input.status === "assumed") && !input.review?.reviewedAt) {
-    throw new Error(`Claim ${input.projection.id} cannot be ${input.status} without reviewedAt`);
-  }
+  assertReviewOutcomeDiscipline({
+    subject: `Claim ${input.projection.id}`,
+    status: input.status,
+    review: input.review,
+  });
   if (input.rawSource.kind !== "manual-entry" && !input.extraction.locator) {
     throw new Error(`Claim ${input.projection.id} needs a source locator for ${input.rawSource.kind}`);
   }
