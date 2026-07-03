@@ -112,6 +112,94 @@ export interface UtteranceStatementRecords {
   candidateSet: CandidateSet;
 }
 
+/**
+ * Parameters for buildUtteranceStatementRecords — narrow and explicit rather
+ * than either caller's own context object, so the builder has no implicit
+ * dependency on either call site's context shape.
+ */
+interface BuildUtteranceStatementRecordsParams {
+  sourceId: string;
+  idx: number;
+  statement: ExtractedStatement;
+  utterance: string;
+  extractorName: string;
+  observedAt: string;
+}
+
+/**
+ * Build the {extraction, candidate, candidateSet} record set for a single
+ * extracted statement. This centralizes the Source Locator rule (span-first,
+ * excerpt-fallback) and the id/status/metadata construction shared by
+ * utteranceToSurveyInput and surveyAgentUtterance, so both callers derive
+ * these records identically.
+ */
+export function buildUtteranceStatementRecords(
+  params: BuildUtteranceStatementRecordsParams,
+): UtteranceStatementRecords {
+  const { sourceId, idx, statement, utterance, extractorName, observedAt } = params;
+  const statementId = `${sourceId}.statement.${idx}`;
+  const extractionId = `${statementId}.extraction`;
+  const candidateId = `${statementId}.candidate`;
+  const candidateSetId = `${statementId}.candidate-set`;
+
+  // Compute locator — required for non-manual-entry sources
+  // (assertProducerDiscipline throws without it)
+  const locator = spanToLocator(statement.span) ?? excerptLocator(utterance, statement.excerpt);
+
+  const extraction: Extraction = {
+    id: extractionId,
+    sourceId,
+    target: canonicalTargetKey(statement.target),
+    value: statement.value ?? null,
+    confidence: statement.confidence,
+    locator,
+    excerpt: statement.excerpt,
+    extractor: extractorName,
+    extractedAt: observedAt,
+    metadata: {
+      agentUtterance: {
+        span: statement.span,
+        excerpt: statement.excerpt,
+        extractorName,
+        confidence: statement.confidence,
+      },
+    },
+  };
+
+  const candidate: Candidate = {
+    id: candidateId,
+    extractionId,
+    value: statement.value ?? null,
+    confidence: statement.confidence,
+    metadata: {
+      agentUtterance: {
+        span: statement.span,
+        excerpt: statement.excerpt,
+        extractorName,
+        confidence: statement.confidence,
+      },
+    },
+  };
+
+  // needs-review status → statusFor returns "proposed" (no review outcome)
+  const candidateSet: CandidateSet = {
+    id: candidateSetId,
+    target: canonicalTargetKey(statement.target),
+    candidates: [candidate],
+    selectedCandidateId: candidateId,
+    status: "needs-review",
+    metadata: {
+      agentUtterance: {
+        subjectType: statement.target.subjectType,
+        subjectId: statement.target.subjectId,
+        fieldOrBehavior: statement.target.fieldOrBehavior,
+      },
+    },
+  };
+
+  return { extraction, candidate, candidateSet };
+}
+
 // ---------------------------------------------------------------------------
 // SurveyInput projection
 // ---------------------------------------------------------------------------
@@ -173,72 +261,23 @@ export function utteranceToSurveyInput(
   for (let idx = 0; idx < extracted.length; idx++) {
     const statement = extracted[idx]!;
     const statementId = `${sourceId}.statement.${idx}`;
-    const extractionId = `${statementId}.extraction`;
-    const candidateId = `${statementId}.candidate`;
-    const candidateSetId = `${statementId}.candidate-set`;
     const claimId = `${statementId}.claim`;
 
-    // Compute locator — required for non-manual-entry sources
-    // (assertProducerDiscipline throws without it)
-    const locator = spanToLocator(statement.span) ?? excerptLocator(utterance, statement.excerpt);
-
-    const extraction: Extraction = {
-      id: extractionId,
+    const { extraction, candidate, candidateSet } = buildUtteranceStatementRecords({
       sourceId,
-      target: canonicalTargetKey(statement.target),
-      value: statement.value ?? null,
-      confidence: statement.confidence,
-      locator,
-      excerpt: statement.excerpt,
-      extractor: extractorName,
-      extractedAt: observedAt,
-      metadata: {
-        agentUtterance: {
-          span: statement.span,
-          excerpt: statement.excerpt,
-          extractorName,
-          confidence: statement.confidence,
-        },
-      },
-    };
-
-    const candidate: Candidate = {
-      id: candidateId,
-      extractionId,
-      value: statement.value ?? null,
-      confidence: statement.confidence,
-      metadata: {
-        agentUtterance: {
-          span: statement.span,
-          excerpt: statement.excerpt,
-          extractorName,
-          confidence: statement.confidence,
-        },
-      },
-    };
-
-    // needs-review status → statusFor returns "proposed" (no review outcome)
-    const candidateSet: CandidateSet = {
-      id: candidateSetId,
-      target: canonicalTargetKey(statement.target),
-      candidates: [candidate],
-      selectedCandidateId: candidateId,
-      status: "needs-review",
-      metadata: {
-        agentUtterance: {
-          subjectType: statement.target.subjectType,
-          subjectId: statement.target.subjectId,
-          fieldOrBehavior: statement.target.fieldOrBehavior,
-        },
-      },
-    };
+      idx,
+      statement,
+      utterance,
+      extractorName,
+      observedAt,
+    });
 
     // Unreviewed: status is omitted so statusFor() computes "proposed"
     // assertProducerDiscipline: no verified/assumed without review → compliant
     const claimTarget: ClaimTarget = {
       id: claimId,
-      candidateSetId,
-      candidateId,
+      candidateSetId: candidateSet.id,
+      candidateId: candidate.id,
       subjectType: statement.target.subjectType,
       subjectId: statement.target.subjectId,
       facet: "agent-utterance.profile",
@@ -256,7 +295,7 @@ export function utteranceToSurveyInput(
             excerpt: statement.excerpt,
             span: statement.span,
             confidence: statement.confidence,
-            locator,
+            locator: extraction.locator,
           },
         },
       },
@@ -329,29 +368,22 @@ export async function surveyAgentUtterance(
   const statements: UtteranceStatement[] = [];
 
   for (const statement of extracted) {
-    const statementId = `${sourceId}.statement.${statements.length}`;
+    const idx = statements.length;
 
-    // Build Survey records for provenance
-    const extractionId = `${statementId}.extraction`;
-    const extraction: Extraction = {
-      id: extractionId,
+    // Build Survey records for provenance via the shared builder — this keeps
+    // locator/id derivation on the same single path as utteranceToSurveyInput
+    // (see buildUtteranceStatementRecords above). The records are constructed
+    // in full here for provenance/doc-comment fidelity, but this slice does
+    // not surface them on UtteranceStatement/UtteranceTrustReport; wiring
+    // them into the report is left for a later slice.
+    buildUtteranceStatementRecords({
       sourceId,
-      target: canonicalTargetKey(statement.target),
-      value: statement.value ?? null,
-      confidence: statement.confidence,
-      locator: statement.span ? `text-span:${statement.span.start}-${statement.span.end}` : undefined,
-      excerpt: statement.excerpt,
-      extractor: extractor.name,
-      extractedAt: observedAt,
-      metadata: {
-        agentUtterance: {
-          span: statement.span,
-          excerpt: statement.excerpt,
-          extractorName: extractor.name,
-          confidence: statement.confidence,
-        },
-      },
-    };
+      idx,
+      statement,
+      utterance,
+      extractorName: extractor.name,
+      observedAt,
+    });
 
     // Resolve the claim
     let inquiryRecord: InquiryRecord;
@@ -386,9 +418,6 @@ export async function surveyAgentUtterance(
       inquiryRecord,
       badge,
     });
-
-    // Suppress unused-variable warning for extraction
-    void extraction;
   }
 
   return { source, statements };
