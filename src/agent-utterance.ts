@@ -23,6 +23,8 @@ import type { CanonicalClaimTarget } from "@kontourai/surface";
 import type { Candidate, CandidateSet, ClaimTarget, Extraction, RawSource, SurveyInput } from "./types.js";
 import type { InquiryMapping } from "./inquiry-mapping.js";
 import { lookupMapping, resolveQuestion } from "./inquiry-mapping.js";
+import { projectProposalsToCandidateSet } from "./producer-profile.js";
+import type { CandidateSetProposal } from "./producer-profile.js";
 
 // ---------------------------------------------------------------------------
 // Extractor interface
@@ -113,11 +115,46 @@ export interface UtteranceStatementRecords {
 }
 
 /**
- * Parameters for buildUtteranceStatementRecords — narrow and explicit rather
- * than either caller's own context object, so the builder has no implicit
- * dependency on either call site's context shape.
+ * The Candidate Conflict comparison key for an utterance-proposed value.
+ *
+ * Neither extractor (the reference extractor below, nor the Anthropic-backed
+ * one in `./anthropic.js`) normalizes `value` before it reaches
+ * `ExtractedStatement` — case and internal formatting are preserved
+ * verbatim. String values are the only case where "representation noise"
+ * (leading/trailing whitespace from excerpt boundaries, incidental case
+ * differences like "Healthy" vs "healthy") is plausible given the two
+ * extractors' actual output, so this key trims + lowercases STRING values
+ * in the COMPARISON KEY ONLY — the stored `Candidate.value`/`Extraction.value`
+ * stay byte-for-byte verbatim; this function only feeds `equivalenceKey`,
+ * never `value`. Non-string values (number, boolean, null — the other types
+ * the Anthropic tool schema permits) compare via exact canonical
+ * `JSON.stringify`, so there is no cross-type coercion that could silently
+ * equate e.g. "5" and 5, or lose a genuine numeric disagreement (5 vs 6 is
+ * never noise). This mirrors the Producer Profile core's established
+ * pattern: each profile decides its own narrow equivalence definition
+ * (see `./producer-profile.js`); the core itself does not own this decision.
  */
-interface BuildUtteranceStatementRecordsParams {
+function utteranceEquivalenceKey(value: unknown): string {
+  const normalized = value ?? null;
+  if (typeof normalized === "string") {
+    return `str:${normalized.trim().toLowerCase()}`;
+  }
+  return `json:${JSON.stringify(normalized)}`;
+}
+
+/**
+ * The profile-specific payload every utterance-sourced Candidate carries
+ * under the Producer Profile core's canonical `producerProposal` metadata
+ * key (`PRODUCER_PROPOSAL_METADATA_KEY`), read back via `getProducerProposal`.
+ */
+interface UtteranceProposalMetadata {
+  span?: { start: number; end: number };
+  excerpt: string;
+  extractorName: string;
+  confidence: number;
+}
+
+interface BuildUtteranceExtractionParams {
   sourceId: string;
   idx: number;
   statement: ExtractedStatement;
@@ -126,24 +163,27 @@ interface BuildUtteranceStatementRecordsParams {
   observedAt: string;
 }
 
+interface UtteranceExtractionAndProposal {
+  extraction: Extraction;
+  proposal: CandidateSetProposal<unknown, UtteranceProposalMetadata>;
+}
+
 /**
- * Build the {extraction, candidate, candidateSet} record set for a single
- * extracted statement. This centralizes the Source Locator rule (span-first,
- * excerpt-fallback) and the id/status/metadata construction shared by
- * utteranceToSurveyInput and surveyAgentUtterance, so both callers derive
- * these records identically.
+ * Build the Extraction and CandidateSetProposal for a single extracted
+ * statement. This centralizes the Source Locator rule (span-first,
+ * excerpt-fallback — the single locator rule this module guarantees) and
+ * hands the resulting proposal off to `groupUtteranceExtractionsByTarget`
+ * for per-target projection through the Producer Profile core.
  */
-export function buildUtteranceStatementRecords(
-  params: BuildUtteranceStatementRecordsParams,
-): UtteranceStatementRecords {
+function buildUtteranceExtraction(params: BuildUtteranceExtractionParams): UtteranceExtractionAndProposal {
   const { sourceId, idx, statement, utterance, extractorName, observedAt } = params;
   const statementId = `${sourceId}.statement.${idx}`;
   const extractionId = `${statementId}.extraction`;
   const candidateId = `${statementId}.candidate`;
-  const candidateSetId = `${statementId}.candidate-set`;
 
   // Compute locator — required for non-manual-entry sources
-  // (assertProducerDiscipline throws without it)
+  // (assertProducerDiscipline throws without it). Source Locator rule:
+  // span-first, excerpt-fallback — UNCHANGED from Slice 1.
   const locator = spanToLocator(statement.span) ?? excerptLocator(utterance, statement.excerpt);
 
   const extraction: Extraction = {
@@ -166,38 +206,153 @@ export function buildUtteranceStatementRecords(
     },
   };
 
-  const candidate: Candidate = {
-    id: candidateId,
+  const proposal: CandidateSetProposal<unknown, UtteranceProposalMetadata> = {
+    candidateId,
     extractionId,
     value: statement.value ?? null,
     confidence: statement.confidence,
+    equivalenceKey: utteranceEquivalenceKey(statement.value),
     metadata: {
-      agentUtterance: {
-        span: statement.span,
-        excerpt: statement.excerpt,
-        extractorName,
-        confidence: statement.confidence,
-      },
+      span: statement.span,
+      excerpt: statement.excerpt,
+      extractorName,
+      confidence: statement.confidence,
     },
   };
 
-  // needs-review status → statusFor returns "proposed" (no review outcome)
-  const candidateSet: CandidateSet = {
-    id: candidateSetId,
-    target: canonicalTargetKey(statement.target),
-    candidates: [candidate],
-    selectedCandidateId: candidateId,
-    status: "needs-review",
-    metadata: {
-      agentUtterance: {
-        subjectType: statement.target.subjectType,
-        subjectId: statement.target.subjectId,
-        fieldOrBehavior: statement.target.fieldOrBehavior,
-      },
-    },
-  };
+  return { extraction, proposal };
+}
 
-  return { extraction, candidate, candidateSet };
+/** One target group's projected Candidate Set plus its own Candidates. */
+interface UtteranceCandidateSetGroup {
+  targetKey: string;
+  candidateSet: CandidateSet;
+  candidates: Candidate[];
+}
+
+/**
+ * Group extraction/proposal pairs by canonical target and project each
+ * group through the Producer Profile core's `projectProposalsToCandidateSet`
+ * — one Candidate Set per target, carrying every statement's Candidate for
+ * that target. Status is `"conflict"` when the group's statements disagree
+ * under `utteranceEquivalenceKey`, `"needs-review"` otherwise (including the
+ * common single-statement case, which reproduces Slice 1's exact prior
+ * per-statement behavior).
+ *
+ * `Map` preserves insertion order, so the returned groups (and therefore the
+ * `candidateSets` array `buildUtteranceRecords` derives from them) are in
+ * deterministic first-occurrence-of-target order across the utterance's
+ * statements.
+ */
+function groupUtteranceExtractionsByTarget(
+  sourceId: string,
+  items: Array<{
+    statement: ExtractedStatement;
+    extraction: Extraction;
+    proposal: CandidateSetProposal<unknown, UtteranceProposalMetadata>;
+  }>,
+): Map<string, UtteranceCandidateSetGroup> {
+  const order: string[] = [];
+  const byTarget = new Map<string, typeof items>();
+  for (const item of items) {
+    const key = canonicalTargetKey(item.statement.target);
+    if (!byTarget.has(key)) {
+      byTarget.set(key, []);
+      order.push(key);
+    }
+    byTarget.get(key)!.push(item);
+  }
+
+  const groups = new Map<string, UtteranceCandidateSetGroup>();
+  for (const targetKey of order) {
+    const groupItems = byTarget.get(targetKey)!;
+    const first = groupItems[0]!.statement.target;
+    const proposals = groupItems.map((i) => i.proposal);
+
+    const { candidateSet, candidates } = projectProposalsToCandidateSet(targetKey, proposals, {
+      candidateSetId: `${sourceId}.target.${targetKey}.candidate-set`,
+      candidateSetMetadata: {
+        agentUtterance: {
+          target: {
+            subjectType: first.subjectType,
+            subjectId: first.subjectId,
+            fieldOrBehavior: first.fieldOrBehavior,
+          },
+          statementCount: proposals.length,
+        },
+      },
+      candidateSetRationale: (status, groupProposals) =>
+        status === "conflict"
+          ? `${groupProposals.length} statement(s) disagree for ${targetKey}: ${[...new Set(groupProposals.map((p) => p.equivalenceKey))].join(", ")}`
+          : `${groupProposals.length} statement(s) agree for ${targetKey}.`,
+    });
+    // Mirrors schema-mapping's post-core convention: a winner only exists
+    // when the group agrees; a conflicting group has no selected candidate
+    // yet (nothing to select — that's the point of a Candidate Conflict,
+    // CONTEXT.md's "Candidate Conflict" entry). For a single-statement group
+    // this reproduces Slice 1's exact old behavior (selectedCandidateId ===
+    // the one candidate's id).
+    candidateSet.selectedCandidateId = candidateSet.status !== "conflict" ? candidates[0]?.id : undefined;
+
+    groups.set(targetKey, { targetKey, candidateSet, candidates });
+  }
+
+  return groups;
+}
+
+interface BuildUtteranceRecordsParams {
+  sourceId: string;
+  utterance: string;
+  extracted: ExtractedStatement[];
+  extractorName: string;
+  observedAt: string;
+}
+
+interface UtteranceRecordsResult {
+  records: UtteranceStatementRecords[];
+  extractions: Extraction[];
+  candidateSets: CandidateSet[];
+}
+
+/**
+ * Build the full set of Survey records for every extracted statement in one
+ * utterance: per-statement Extractions/Candidates plus per-target grouped
+ * Candidate Sets. This is the shared orchestrator both `utteranceToSurveyInput`
+ * and `surveyAgentUtterance` call, so both callers derive these records
+ * identically — Slice 1's "single derivation path" invariant, preserved.
+ *
+ * `records[idx]` corresponds to `extracted[idx]` for every idx — `items` and
+ * `records` are both built via `.map` over the same `extracted[]` array in
+ * the same order; only `candidateSets` is deduped/grouped by target.
+ */
+export function buildUtteranceRecords(params: BuildUtteranceRecordsParams): UtteranceRecordsResult {
+  const { sourceId, utterance, extracted, extractorName, observedAt } = params;
+
+  const items = extracted.map((statement, idx) => {
+    const { extraction, proposal } = buildUtteranceExtraction({
+      sourceId,
+      idx,
+      statement,
+      utterance,
+      extractorName,
+      observedAt,
+    });
+    return { statement, extraction, proposal };
+  });
+
+  const groups = groupUtteranceExtractionsByTarget(sourceId, items);
+
+  const records: UtteranceStatementRecords[] = items.map((item) => {
+    const group = groups.get(canonicalTargetKey(item.statement.target))!;
+    const candidate = group.candidates.find((c) => c.id === item.proposal.candidateId)!;
+    return { extraction: item.extraction, candidate, candidateSet: group.candidateSet };
+  });
+
+  return {
+    records,
+    extractions: items.map((i) => i.extraction),
+    candidateSets: [...groups.values()].map((g) => g.candidateSet),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -254,37 +409,37 @@ export function utteranceToSurveyInput(
     metadata: { agentId },
   };
 
-  const extractions: Extraction[] = [];
-  const candidateSets: CandidateSet[] = [];
-  const claims: ClaimTarget[] = [];
+  // Batched, per-target-grouped provenance construction (Producer Profile
+  // core) — replaces the old per-statement builder call. Claims below stay
+  // one-per-statement; `record.candidateSet.id`/`record.candidate.id` may be
+  // shared across several claims when statements share a target (legal).
+  const { records, extractions, candidateSets } = buildUtteranceRecords({
+    sourceId,
+    utterance,
+    extracted,
+    extractorName,
+    observedAt,
+  });
 
-  for (let idx = 0; idx < extracted.length; idx++) {
-    const statement = extracted[idx]!;
+  const claims: ClaimTarget[] = extracted.map((statement, idx) => {
     const statementId = `${sourceId}.statement.${idx}`;
     const claimId = `${statementId}.claim`;
+    const record = records[idx]!;
 
-    const { extraction, candidate, candidateSet } = buildUtteranceStatementRecords({
-      sourceId,
-      idx,
-      statement,
-      utterance,
-      extractorName,
-      observedAt,
-    });
-
-    // Unreviewed: status is omitted so statusFor() computes "proposed"
-    // assertProducerDiscipline: no verified/assumed without review → compliant
-    const claimTarget: ClaimTarget = {
+    // Unreviewed: status is omitted so statusFor() computes "proposed" (or
+    // "disputed" for a claim whose shared candidateSet.status is "conflict").
+    // assertProducerDiscipline: no verified/assumed without review → compliant.
+    return {
       id: claimId,
-      candidateSetId: candidateSet.id,
-      candidateId: candidate.id,
+      candidateSetId: record.candidateSet.id,
+      candidateId: record.candidate.id,
       subjectType: statement.target.subjectType,
       subjectId: statement.target.subjectId,
       facet: "agent-utterance.profile",
       claimType: "agent-extraction",
       fieldOrBehavior: statement.target.fieldOrBehavior,
       value: statement.value,
-      // status intentionally omitted → computed as "proposed" by statusFor
+      // status intentionally omitted → computed by statusFor
       impactLevel: "low",
       collectedBy: extractorName,
       metadata: {
@@ -295,16 +450,12 @@ export function utteranceToSurveyInput(
             excerpt: statement.excerpt,
             span: statement.span,
             confidence: statement.confidence,
-            locator: extraction.locator,
+            locator: record.extraction.locator,
           },
         },
       },
     };
-
-    extractions.push(extraction);
-    candidateSets.push(candidateSet);
-    claims.push(claimTarget);
-  }
+  });
 
   return {
     source,
@@ -364,27 +515,24 @@ export async function surveyAgentUtterance(
   // Step 2: Extract statements
   const extracted = await Promise.resolve(extractor.extract(utterance));
 
+  // Batched, grouped provenance construction — kept for provenance/doc-comment
+  // fidelity across the whole utterance (grouping needs every statement of a
+  // target's group present at once; a per-statement call cannot compute it).
+  // Still not surfaced on UtteranceStatement/UtteranceTrustReport this slice
+  // (unchanged from Slice 1's own scoping note) — wiring is left for a future
+  // slice, same as before.
+  buildUtteranceRecords({
+    sourceId,
+    utterance,
+    extracted,
+    extractorName: extractor.name,
+    observedAt,
+  });
+
   // Step 3 & 4: Resolve each statement and build the report
   const statements: UtteranceStatement[] = [];
 
   for (const statement of extracted) {
-    const idx = statements.length;
-
-    // Build Survey records for provenance via the shared builder — this keeps
-    // locator/id derivation on the same single path as utteranceToSurveyInput
-    // (see buildUtteranceStatementRecords above). The records are constructed
-    // in full here for provenance/doc-comment fidelity, but this slice does
-    // not surface them on UtteranceStatement/UtteranceTrustReport; wiring
-    // them into the report is left for a later slice.
-    buildUtteranceStatementRecords({
-      sourceId,
-      idx,
-      statement,
-      utterance,
-      extractorName: extractor.name,
-      observedAt,
-    });
-
     // Resolve the claim
     let inquiryRecord: InquiryRecord;
 

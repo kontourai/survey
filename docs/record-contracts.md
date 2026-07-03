@@ -792,6 +792,12 @@ for (const stmt of report.statements) {
 }
 ```
 
+Underneath the report, `utteranceToSurveyInput`/`surveyAgentUtterance` project
+extracted statements onto the same Producer Profile core
+(`projectProposalsToCandidateSet`) that `inquiry-mapping` and `schema-mapping`
+already use — Candidate Set grouping and Candidate Conflict detection are not
+bespoke to this profile.
+
 Key contracts:
 
 - The `RawSource` for the utterance uses `kind: "agent-utterance"` and
@@ -801,10 +807,46 @@ Key contracts:
   domain-aware extractor that emits the correct `subjectType` for canonical
   key matching.  The reference extractor always emits `subjectType: "unknown"`
   and is only suitable for tests.
+- Each extracted statement gets its own `Extraction` and `Candidate`
+  (`${sourceId}.statement.<idx>.extraction` / `.candidate`, statement-index
+  keyed) — Extraction/Candidate cardinality is always one-per-statement.
+- Statements are grouped **by canonical target**
+  (`subjectType/subjectId/fieldOrBehavior`) into one Candidate Set per target:
+  `CandidateSet.id` is `${sourceId}.target.<canonicalTargetKey>.candidate-set`
+  (target-keyed, not statement-index-keyed).  Two statements about the same
+  target in one utterance become ONE Candidate Set carrying both Candidates
+  instead of two independent one-candidate sets; a target mentioned once still
+  gets its own single-candidate Candidate Set, so grouping is a no-op for the
+  common case.
+- `CandidateSet.status` is `"conflict"` when a target's statements disagree on
+  the claimed value, `"needs-review"` otherwise (including the single-statement
+  case).  Agreement/disagreement is judged after normalizing string values by
+  trimming and lowercasing (so incidental case/whitespace differences are not
+  treated as disagreement); non-string values are compared by exact
+  `JSON.stringify` equality, so a genuine value difference (e.g. `5` vs `6`)
+  always fires.  This is a **Candidate Conflict**: when it fires, every Claim
+  built from that Candidate Set's Candidates projects Surface status
+  `"disputed"` once run through `buildSurveyTrustBundle`, instead of each
+  statement's disagreement being hidden behind separate `"needs-review"` sets —
+  the gap an **Adversarial Pass** or a second extractor run is meant to expose.
+  Claims stay one-per-statement regardless of grouping; only the shared
+  `candidateSetId` (and, for conflicting statements, the absent
+  `selectedCandidateId`) reflect the group.
+- Each Candidate's `metadata.producerProposal` (the Producer Profile core's
+  `PRODUCER_PROPOSAL_METADATA_KEY`, readable via the typed `getProducerProposal`
+  accessor) carries `{span, excerpt, extractorName, confidence}` for that
+  statement — the same accessor contract `inquiry-mapping`/`schema-mapping`
+  candidates use.  `Extraction.metadata.agentUtterance` and
+  `ClaimTarget.metadata.survey.agentUtterance` are unaffected by this and keep
+  their own separate, pre-existing shapes; only `Candidate.metadata` moved to
+  the shared `producerProposal` key.
 - Badges derive directly from the InquiryRecord outcome and answer status.
   `"unsupported"` means either the outcome is unsupported or the answer status
   is absent — the gap is honest and recordable rather than silently treated as
-  passing.
+  passing.  `report.statements` still has exactly one entry per extracted
+  statement, in original order, regardless of Candidate Set grouping — the
+  per-statement badge report is unaffected by how statements are grouped
+  internally.
 - `surveyAgentUtterance` is `async` to support async extractors, but it works
   equally well with synchronous extractors.
 

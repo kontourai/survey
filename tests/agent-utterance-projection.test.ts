@@ -15,6 +15,7 @@ import { describe, it } from "node:test";
 import { buildSurveyTrustBundle } from "../src/to-surface.js";
 import { utteranceToSurveyInput, referenceUtteranceExtractor } from "../src/agent-utterance.js";
 import type { ExtractedStatement } from "../src/agent-utterance.js";
+import { getProducerProposal } from "../src/producer-profile.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -74,7 +75,7 @@ describe("utteranceToSurveyInput — structure", () => {
     assert.equal(input.extractions[0]?.excerpt, "api-gateway uptime is 99.9%");
   });
 
-  it("produces one CandidateSet per statement with needs-review status", () => {
+  it("produces one CandidateSet per target with needs-review status", () => {
     const input = utteranceToSurveyInput(UTTERANCE, makeStatements(), {
       agentId: "test-agent",
       extractorName: "test-extractor",
@@ -282,5 +283,190 @@ describe("utteranceToSurveyInput — integration with referenceUtteranceExtracto
     const bundle = buildSurveyTrustBundle(input);
     assert.ok(bundle.claims.length >= 2);
     assert.ok(bundle.claims.every((c) => c.status === "proposed"));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Per-target grouping (Slice 4) — AC1 (equivalence-key pinning via the
+// conflict/agreement tests below), AC3, AC4, AC5.
+// ---------------------------------------------------------------------------
+
+/**
+ * Two statements about the SAME canonical target within one utterance.
+ * `firstValue`/`secondValue` let each test control agreement vs. conflict
+ * under `utteranceEquivalenceKey`.
+ */
+function makeSameTargetStatements(firstValue: unknown, secondValue: unknown): ExtractedStatement[] {
+  const target = { subjectType: "service", subjectId: "api-gateway", fieldOrBehavior: "status" };
+  return [
+    {
+      target,
+      value: firstValue,
+      excerpt: "api-gateway status is healthy",
+      span: { start: 0, end: 30 },
+      confidence: 0.8,
+    },
+    {
+      target,
+      value: secondValue,
+      excerpt: "api-gateway status is degraded",
+      span: { start: 32, end: 63 },
+      confidence: 0.75,
+    },
+  ];
+}
+
+const SAME_TARGET_UTTERANCE = "api-gateway status is healthy. api-gateway status is degraded.";
+
+describe("utteranceToSurveyInput — per-target grouping", () => {
+  it("repeat target -> one CandidateSet with two Candidates (AC3)", () => {
+    const input = utteranceToSurveyInput(SAME_TARGET_UTTERANCE, makeSameTargetStatements("healthy", "healthy"), {
+      agentId: "test-agent",
+      extractorName: "test-extractor",
+      now: new Date("2026-06-10T00:00:00.000Z"),
+    });
+
+    assert.equal(input.candidateSets.length, 1);
+    assert.equal(input.candidateSets[0]!.candidates.length, 2);
+
+    // Claims stay one-per-statement even though they share a CandidateSet.
+    assert.equal(input.claims.length, 2);
+    assert.equal(input.claims[0]!.candidateSetId, input.claims[1]!.candidateSetId);
+    assert.notEqual(input.claims[0]!.candidateId, input.claims[1]!.candidateId);
+
+    // to-surface.ts must tolerate the shared-candidateSetId, distinct-candidateId shape.
+    const bundle = buildSurveyTrustBundle(input);
+    assert.equal(bundle.claims.length, 2);
+  });
+
+  it("conflict fires on genuinely different values, and both claims project disputed (AC1, AC4)", () => {
+    const input = utteranceToSurveyInput(SAME_TARGET_UTTERANCE, makeSameTargetStatements("healthy", "degraded"), {
+      agentId: "test-agent",
+      extractorName: "test-extractor",
+      now: new Date("2026-06-10T00:00:00.000Z"),
+    });
+
+    assert.equal(input.candidateSets.length, 1);
+    assert.equal(input.candidateSets[0]!.status, "conflict");
+    assert.equal(input.candidateSets[0]!.selectedCandidateId, undefined);
+
+    const bundle = buildSurveyTrustBundle(input);
+    assert.equal(bundle.claims.length, 2);
+    for (const claim of bundle.claims) {
+      assert.equal(claim.status, "disputed", `claim ${claim.id} should be disputed`);
+    }
+  });
+
+  it("agreement (including a representation-noise case/whitespace difference) stays needs-review, both claims proposed (AC1, AC5)", () => {
+    const input = utteranceToSurveyInput(SAME_TARGET_UTTERANCE, makeSameTargetStatements("Healthy", "  healthy  "), {
+      agentId: "test-agent",
+      extractorName: "test-extractor",
+      now: new Date("2026-06-10T00:00:00.000Z"),
+    });
+
+    assert.equal(input.candidateSets.length, 1);
+    assert.equal(input.candidateSets[0]!.status, "needs-review");
+    assert.equal(input.candidateSets[0]!.candidates.length, 2);
+
+    const bundle = buildSurveyTrustBundle(input);
+    assert.equal(bundle.claims.length, 2);
+    for (const claim of bundle.claims) {
+      assert.equal(claim.status, "proposed", `claim ${claim.id} should be proposed`);
+    }
+  });
+
+  it("distinct targets still produce separate CandidateSets (structural no-op control)", () => {
+    const input = utteranceToSurveyInput(UTTERANCE, makeStatements(), {
+      agentId: "test-agent",
+      extractorName: "test-extractor",
+      now: new Date("2026-06-10T00:00:00.000Z"),
+    });
+
+    assert.equal(input.candidateSets.length, 2);
+    assert.notEqual(input.candidateSets[0]!.id, input.candidateSets[1]!.id);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Single-statement parity (black-box confirmation of AC6)
+// ---------------------------------------------------------------------------
+
+describe("utteranceToSurveyInput — single-statement parity (black-box)", () => {
+  it("a lone statement for a target produces the pre-slice-observable behavior, plus the new per-target candidateSet.id format (AC2, AC6)", () => {
+    const statements: ExtractedStatement[] = [
+      {
+        target: { subjectType: "service", subjectId: "api-gateway", fieldOrBehavior: "uptime" },
+        value: "99.9%",
+        excerpt: "api-gateway uptime is 99.9%",
+        span: { start: 0, end: 26 },
+        confidence: 0.85,
+      },
+    ];
+
+    const agentId = "test-agent";
+    const observedAt = "2026-06-10T00:00:00.000Z";
+    const input = utteranceToSurveyInput(UTTERANCE, statements, {
+      agentId,
+      extractorName: "test-extractor",
+      now: new Date(observedAt),
+    });
+
+    assert.equal(input.candidateSets.length, 1);
+    const candidateSet = input.candidateSets[0]!;
+    assert.equal(candidateSet.status, "needs-review");
+    assert.equal(candidateSet.candidates.length, 1);
+    assert.equal(candidateSet.selectedCandidateId, candidateSet.candidates[0]!.id);
+
+    // Only the id FORMAT changed (per-target instead of per-statement) — AC2.
+    const sourceId = `agent-utterance:${agentId}:${observedAt}`;
+    const targetKey = `${statements[0]!.target.subjectType}/${statements[0]!.target.subjectId}/${statements[0]!.target.fieldOrBehavior}`;
+    assert.equal(candidateSet.id, `${sourceId}.target.${targetKey}.candidate-set`);
+
+    const bundle = buildSurveyTrustBundle(input);
+    assert.equal(bundle.claims.length, 1);
+    assert.equal(bundle.claims[0]!.status, "proposed");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Typed accessor round-trip (AC8)
+// ---------------------------------------------------------------------------
+
+describe("utteranceToSurveyInput — typed accessor round-trip", () => {
+  it("getProducerProposal reads back exactly the utterance provenance payload from a projected Candidate", () => {
+    const statement: ExtractedStatement = {
+      target: { subjectType: "service", subjectId: "api-gateway", fieldOrBehavior: "uptime" },
+      value: "99.9%",
+      excerpt: "api-gateway uptime is 99.9%",
+      span: { start: 0, end: 26 },
+      confidence: 0.85,
+    };
+
+    const input = utteranceToSurveyInput(UTTERANCE, [statement], {
+      agentId: "test-agent",
+      extractorName: "test-extractor",
+      now: new Date("2026-06-10T00:00:00.000Z"),
+    });
+
+    const candidate = input.candidateSets[0]!.candidates[0]!;
+
+    interface UtteranceProposalMetadata {
+      span?: { start: number; end: number };
+      excerpt: string;
+      extractorName: string;
+      confidence: number;
+    }
+
+    const proposal = getProducerProposal<UtteranceProposalMetadata>(candidate);
+    assert.deepEqual(proposal, {
+      span: statement.span,
+      excerpt: statement.excerpt,
+      extractorName: "test-extractor",
+      confidence: statement.confidence,
+    });
+
+    // Exactly one key — the canonical `producerProposal` key, no leftover
+    // profile-specific `agentUtterance` key on Candidate.metadata.
+    assert.deepEqual(Object.keys(candidate.metadata!), ["producerProposal"]);
   });
 });
