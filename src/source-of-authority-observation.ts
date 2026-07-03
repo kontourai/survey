@@ -1,5 +1,6 @@
 import type { SurveyObservationInput } from "./builder.js";
 import { buildObservation } from "./observation-helper.js";
+import { assertReviewOutcomeDiscipline } from "./producer-discipline.js";
 import type { ClaimTarget, ReviewStatus } from "./types.js";
 
 export type SourceAuthorityClass =
@@ -196,15 +197,11 @@ function assertVerifiedPosture<TValue>(input: SourceOfAuthorityObservationInput<
   if (!input.extraction.locator) {
     throw new Error(`Source-of-authority observation ${input.id} cannot be ${status} without a source locator`);
   }
-  if (!input.reviewOutcome) {
-    throw new Error(`Source-of-authority observation ${input.id} cannot be ${status} without a review outcome`);
-  }
-  if (!input.reviewOutcome.actor) {
-    throw new Error(`Source-of-authority observation ${input.id} cannot be ${status} without review actor authority`);
-  }
-  if (!input.reviewOutcome.reviewedAt) {
-    throw new Error(`Source-of-authority observation ${input.id} cannot be ${status} without reviewedAt`);
-  }
+  assertReviewOutcomeDiscipline({
+    subject: `Source-of-authority observation ${input.id}`,
+    status,
+    review: input.reviewOutcome,
+  });
 }
 
 function claimStatus(
