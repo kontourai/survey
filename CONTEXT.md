@@ -102,6 +102,10 @@ _Avoid_: Rejection reason, claim dependency, nested interpretation graph, treati
 A second producer run that challenges a first-pass producer by adding conflicting candidates, raising escalation records, or both. An **Adversarial Pass** is a producer convention, not a Survey concept: Survey sees two producers disagreeing on the same target, which is what **Candidate Conflict** and **Escalation Record** are designed to carry. The adversary is identified by a distinct `extractor` id; Survey does not need to know it is an LLM, a rules engine, or a human. Use **Candidate Conflict** when the adversary disagrees on the extracted value. Use **Escalation Record** when the adversary identifies a target that was not addressed at all.
 _Avoid_: Wiring LLM-specific logic into Survey, treating the adversary as a special Survey actor, conflating the adversary with the human reviewer
 
+**Producer Profile**:
+A pluggable Survey module that carries a non-web-crawl input — a natural-language inquiry, an agent utterance, a schema record — through the same source -> extraction -> candidate -> review -> claim chain as any other **Producer**. A **Producer Profile** contributes proposers or extractors and a durable reviewed artifact, never a way to skip review (ADR 0003); the shared scaffolding — proposal-to-**Candidate Set** projection grouped by target, the **Candidate Conflict** rule, and the auto-accept policy — lives in one Producer Profile core module so each profile carries only its profile-specific record shaping.
+_Avoid_: Plugin, producer adapter, per-profile copies of the projection scaffolding, treating a producer profile as a review bypass
+
 **Claim**:
 A Surface claim prepared from Survey records. Survey uses Surface's **Claim** semantics; Survey-specific language should only explain how producer-side **Raw Sources**, **Extractions**, **Candidates**, and **Review Outcomes** project into claims.
 _Avoid_: Extraction, candidate, fact
