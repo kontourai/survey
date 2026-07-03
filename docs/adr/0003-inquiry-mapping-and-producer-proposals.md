@@ -1,3 +1,5 @@
+> **FROZEN — immutable history.** Superseding/current decisions live in [`docs/decisions/`](../decisions/index.md). Do not edit.
+
 # Inquiry Mapping and Producer Proposals
 
 > **Reconstructed after the fact** from citation sites across `src/` and
