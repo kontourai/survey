@@ -20,7 +20,7 @@ import {
   type ReviewSessionReplayIssue,
 } from "./review-session-replay.js";
 import type { ReviewDecision, ReviewSessionEvent } from "../review-resource.js";
-import type { ReviewQueueSessionState } from "./review-queue-session.js";
+import { replayReviewSessionEvents, type ReviewQueueSessionState } from "./review-queue-session.js";
 import { canonicalJson } from "./canonical.js";
 
 export interface ServerReviewSessionRecord {
@@ -115,6 +115,25 @@ export function createServerReviewSessionRecord(
 
 export function hashReviewSessionSnapshot(snapshot: ReviewQueueSessionState): string {
   return sha256(canonicalJson(snapshot));
+}
+
+/**
+ * Project the current review session state from a snapshot plus its
+ * append-only event log: replay events over the snapshot when any exist,
+ * otherwise return the snapshot itself unchanged (same object reference —
+ * no eager replay, no copy). Collapses the
+ * `events.length > 0 ? replayReviewSessionEvents(snapshot, events) : snapshot`
+ * conditional that was duplicated across the MCP and console review
+ * adapters (src/mcp/review-mcp.ts, src/console/review-console-server.ts) —
+ * same shape of fix as canonicalJson in ./canonical.ts, which was
+ * extracted after two near-identical copies of a derivation desynced
+ * (audit 2026-06-28, ops#24).
+ */
+export function currentSessionState(
+  snapshot: ReviewQueueSessionState,
+  events: readonly ReviewSessionEvent[],
+): ReviewQueueSessionState {
+  return events.length > 0 ? replayReviewSessionEvents(snapshot, events) : snapshot;
 }
 
 export function compareServerReviewSessionFreshness(

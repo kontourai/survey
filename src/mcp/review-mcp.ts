@@ -8,7 +8,6 @@ import {
   deriveQueueRowStatus,
   initialReviewQueueSessionState,
   nextUnresolvedItemName,
-  replayReviewSessionEvents,
   reviewSessionSummary,
   workbenchDecisionDefinitions,
   type ReviewQueueSessionState,
@@ -16,6 +15,7 @@ import {
 } from "../review-workbench/review-workbench.js";
 import {
   createServerReviewSessionRecord,
+  currentSessionState,
   deriveServerReviewSessionApplyResult,
 } from "../review-workbench/server-review-session.js";
 import type { ReviewItem, ReviewSession, ReviewSessionEvent } from "../review-resource.js";
@@ -86,7 +86,7 @@ async function writeSessionFileAtomic(path: string, content: SessionFileContent)
 // ---- Queue helpers -------------------------------------------------------
 
 function queueSummaryText(snapshot: ReviewQueueSessionState, events: readonly ReviewSessionEvent[]): string {
-  const current = events.length > 0 ? replayReviewSessionEvents(snapshot, events) : snapshot;
+  const current = currentSessionState(snapshot, events);
   const summary = reviewSessionSummary(current);
   const total = current.items.length;
   const resolved = total - summary.unresolved;
@@ -113,7 +113,7 @@ function queueSummaryText(snapshot: ReviewQueueSessionState, events: readonly Re
 }
 
 function itemDetailText(item: ReviewItem, snapshot: ReviewQueueSessionState, events: readonly ReviewSessionEvent[]): string {
-  const current = events.length > 0 ? replayReviewSessionEvents(snapshot, events) : snapshot;
+  const current = currentSessionState(snapshot, events);
   const status = deriveQueueRowStatus(item, current);
   const decision = current.decisionsByItemName[item.metadata.name];
   const note = current.notesByItemName[item.metadata.name];
@@ -175,7 +175,7 @@ function buildReviewCardHtml(
   snapshot: ReviewQueueSessionState,
   events: readonly ReviewSessionEvent[],
 ): string {
-  const current = events.length > 0 ? replayReviewSessionEvents(snapshot, events) : snapshot;
+  const current = currentSessionState(snapshot, events);
   const summary = reviewSessionSummary(current);
   const total = current.items.length;
   const resolved = total - summary.unresolved;
@@ -368,7 +368,7 @@ async function toolQueue(options: ReviewMcpOptions): Promise<ContentItem[]> {
   const text = queueSummaryText(snapshot, events);
   const queueData = {
     items: snapshot.items.map((item) => {
-      const current = events.length > 0 ? replayReviewSessionEvents(snapshot, events) : snapshot;
+      const current = currentSessionState(snapshot, events);
       return {
         name: item.metadata.name,
         target: item.spec.target,
@@ -377,10 +377,8 @@ async function toolQueue(options: ReviewMcpOptions): Promise<ContentItem[]> {
         candidateSetStatus: item.spec.candidateSetStatus,
       };
     }),
-    summary: reviewSessionSummary(
-      events.length > 0 ? replayReviewSessionEvents(snapshot, events) : snapshot,
-    ),
-    activeItemName: (events.length > 0 ? replayReviewSessionEvents(snapshot, events) : snapshot).activeItemName,
+    summary: reviewSessionSummary(currentSessionState(snapshot, events)),
+    activeItemName: currentSessionState(snapshot, events).activeItemName,
   };
 
   const content: ContentItem[] = [
@@ -388,9 +386,7 @@ async function toolQueue(options: ReviewMcpOptions): Promise<ContentItem[]> {
   ];
 
   if (!options.noUi) {
-    const activeItem = currentReviewItem(
-      events.length > 0 ? replayReviewSessionEvents(snapshot, events) : snapshot,
-    );
+    const activeItem = currentReviewItem(currentSessionState(snapshot, events));
     content.push(buildUiResource(activeItem, snapshot, events, "queue"));
   }
 
@@ -400,7 +396,7 @@ async function toolQueue(options: ReviewMcpOptions): Promise<ContentItem[]> {
 async function toolItem(itemName: string, options: ReviewMcpOptions): Promise<ContentItem[]> {
   const file = await readSessionFile(options.sessionPath);
   const { snapshot, events } = file;
-  const current = events.length > 0 ? replayReviewSessionEvents(snapshot, events) : snapshot;
+  const current = currentSessionState(snapshot, events);
 
   const item = current.items.find((i) => i.metadata.name === itemName);
   if (!item) {
@@ -449,7 +445,7 @@ async function toolDecide(
 
   const file = await readSessionFile(options.sessionPath);
   const { snapshot, events } = file;
-  const current = events.length > 0 ? replayReviewSessionEvents(snapshot, events) : snapshot;
+  const current = currentSessionState(snapshot, events);
 
   const item = current.items.find((i) => i.metadata.name === itemName);
   if (!item) {
@@ -569,7 +565,7 @@ function buildUiResource(
 // embedded `queue` resource carries — here served via resources/read).
 async function readQueuePanelHtml(options: ReviewMcpOptions): Promise<string> {
   const { snapshot, events } = await readSessionFile(options.sessionPath);
-  const current = events.length > 0 ? replayReviewSessionEvents(snapshot, events) : snapshot;
+  const current = currentSessionState(snapshot, events);
   const activeItem = currentReviewItem(current);
   return buildReviewCardHtml(activeItem, snapshot, events);
 }

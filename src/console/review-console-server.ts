@@ -18,11 +18,11 @@ import { resolve, join, dirname, extname, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  replayReviewSessionEvents,
   defaultReviewSessionName,
 } from "../review-workbench/review-workbench.js";
 import {
   createServerReviewSessionRecord,
+  currentSessionState,
   deriveServerReviewSessionApplyResult,
 } from "../review-workbench/server-review-session.js";
 import type { ReviewQueueSessionState } from "../review-workbench/review-queue-session.js";
@@ -106,11 +106,6 @@ async function writeSessionAtomic(path: string, content: SessionFileContent): Pr
   const tmp = `${path}.tmp`;
   await writeFileAsync(tmp, JSON.stringify(content, null, 2), "utf8");
   await renameAsync(tmp, path);
-}
-
-function currentState(content: SessionFileContent): ReviewQueueSessionState {
-  const { snapshot, events } = content;
-  return events.length > 0 ? replayReviewSessionEvents(snapshot, events) : snapshot;
 }
 
 // ---------------------------------------------------------------------------
@@ -571,7 +566,7 @@ export async function startReviewConsoleServer(
           session: content.session,
           snapshot: content.snapshot,
           events: content.events,
-          state: currentState(content),
+          state: currentSessionState(content.snapshot, content.events),
         });
         return;
       }
