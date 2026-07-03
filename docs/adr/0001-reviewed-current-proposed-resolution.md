@@ -1,3 +1,5 @@
+> **FROZEN — immutable history.** Superseding/current decisions live in [`docs/decisions/`](../decisions/index.md). Do not edit.
+
 # Reviewed Current/Proposed Resolution
 
 Survey will treat a reviewed current/proposed decision as a generic producer-side candidate-resolution pattern and provide a `reviewedCurrentProposedResolution(...)` helper as a specialization of `reviewedCandidateResolution(...)`. The helper belongs in Survey because it shapes a producer's current candidate, proposed candidate, selected candidate, and Review Outcome before the Surface boundary; producers still own review workflow, selected role, statuses, rationale, and domain-specific metadata.
