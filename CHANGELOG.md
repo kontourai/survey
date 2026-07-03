@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.5.0](https://github.com/kontourai/survey/compare/v1.4.0...v1.5.0) (2026-07-03)
+
+
+### Features
+
+* **agent-utterance:** per-target candidate sets via producer-profile core ([#106](https://github.com/kontourai/survey/issues/106)) ([b164209](https://github.com/kontourai/survey/commit/b1642093d7999e490b79e4d780e166e79c91867e))
+
+
+### Refactoring
+
+* **agent-utterance:** extract single utterance statement-record builder ([#102](https://github.com/kontourai/survey/issues/102)) ([10a25da](https://github.com/kontourai/survey/commit/10a25dabf194a6be8a97c00d2c621cee96133707))
+* **observation:** deepen Observation authoring beneath the public skins ([#110](https://github.com/kontourai/survey/issues/110)) ([89a8e00](https://github.com/kontourai/survey/commit/89a8e00dca4c2e52eb8d6b476213787338c10532))
+* **producer-discipline:** single authority for the review-outcome triad ([#109](https://github.com/kontourai/survey/issues/109)) ([3ec864f](https://github.com/kontourai/survey/commit/3ec864ff84d6879865a5794eca1886bb2240ed48))
+* **producer-profile:** extract shared proposal-to-candidate-set core ([#104](https://github.com/kontourai/survey/issues/104)) ([5161d2b](https://github.com/kontourai/survey/commit/5161d2bee436dcb31fa8bdd6a86bda13f1e61f1d))
+* **producer-profile:** share auto-accept primitives, adopt canonical ReviewItem ([#105](https://github.com/kontourai/survey/issues/105)) ([2a2e4f5](https://github.com/kontourai/survey/commit/2a2e4f5b9a38066dd35ef09b59c4e7e685bf710b))
+* **review-workbench:** add currentSessionState helper for replay-or-snapshot rule ([#107](https://github.com/kontourai/survey/issues/107)) ([06aac51](https://github.com/kontourai/survey/commit/06aac51caab0952c1fc51efafff9a335abd4db9b))
+
 ## [1.4.0](https://github.com/kontourai/survey/compare/v1.3.0...v1.4.0) (2026-07-02)
 
 
