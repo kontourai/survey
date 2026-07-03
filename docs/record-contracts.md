@@ -931,7 +931,7 @@ The function runs the extractor and projects proposals into the standard Survey 
 - One `CandidateSet` per field pair:
   - `status: "conflict"` when proposals for the same pair disagree on `relation`.
   - `status: "needs-review"` otherwise.
-- One `ReviewOutcome` (`status: "assumed"`, `actor: "auto-accept-policy"`) per non-conflicting candidate set whose top confidence is at or above `autoAcceptMinConfidence`.  Conflicting sets are never auto-accepted.
+- One `ReviewOutcome` (`status: "assumed"`, `actor: "auto-accept-policy"`) per non-conflicting candidate set whose *selected* candidate (`candidates[0]`, first-proposal-wins within the group) has its own confidence at or above `autoAcceptMinConfidence`.  Conflicting sets are never auto-accepted.
 
 ### mappingReviewToSurface
 
@@ -985,7 +985,7 @@ const record = resolveInquiry(bundle, {
 - `IdentityLink.subjects` use `subjectType: "system-field"` and `subjectId` in the form `"<system>::<entity>::<field>"`.
 - `IdentityLink.mappingClaimId` must point at a claim present in the same bundle; `resolveInquiry` uses it to compute the weakest-link ceiling.
 - The `SchemaMappingExtractor` interface is synchronous or async; `surveySchemaMapping` always awaits it.
-- Auto-accept mirrors `applyAutoAcceptPolicy` in `inquiry-mapping`: non-conflicting proposals above the threshold are accepted as `"assumed"`, never as `"verified"`.  Conflicts require explicit human review.
+- Auto-accept shares its gate/rationale/`reviewedAt` decision with `applyAutoAcceptPolicy` in `inquiry-mapping` via the core `evaluateAutoAccept` function (`src/producer-profile.ts`, see `docs/decisions/producer-profile.md`): the non-conflicting selected candidate is accepted as `"assumed"` when its own confidence is above the threshold, never as `"verified"`.  Conflicts require explicit human review.
 - `referenceSchemaExtractor` is deterministic and test-only.  Its matching strategy (exact field-name, optional type-token match) is intentionally simple and transparent.
 
 

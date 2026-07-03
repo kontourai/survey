@@ -179,20 +179,119 @@ export const AUTO_ACCEPT_WITHIN_COMFORT_ZONE = true as const;
 /**
  * The one auto-accept threshold rule every Producer Profile applies: a
  * confidence value clears an auto-accept policy iff it is at or above
- * (inclusive) the policy's minimum confidence. This is the only piece of
- * auto-accept *mechanics* that is identical across profiles today — each
- * profile decides its own iteration granularity (per-proposal filter vs.
- * per-group max-confidence gate) and output record shape around this call;
- * the core does not decide that.
+ * (inclusive) the policy's minimum confidence.
  *
- * These three exports are the ONLY auto-accept semantics the two profiles
- * genuinely share today (see the Slice 3 plan's Part (a) field-by-field
- * diff table). Everything else about auto-accept — iteration granularity
- * (per-proposal vs. per-group), output record type and cardinality, id
- * templates, timestamp source, and rationale string format — diverges
- * between profiles and stays entirely per-profile; this module does not
- * decide any of it.
+ * This is a low-level primitive used by {@link evaluateAutoAccept} below,
+ * which is now the single place that decides the gate/rationale/`reviewedAt`
+ * auto-accept policy for both profiles (see
+ * `docs/decisions/producer-profile.md`, "Auto-accept policy unification").
+ * What still stays entirely per-profile: output record shapes (e.g.
+ * `InquiryMapping` vs. schema-mapping's inline `ReviewOutcome`), id
+ * templates, and each profile's own selection/iteration algorithm for which
+ * candidate's evidence gets passed into that decision.
  */
 export function meetsAutoAcceptThreshold(confidence: number, minConfidence: number): boolean {
   return confidence >= minConfidence;
+}
+
+// ---------------------------------------------------------------------------
+// Unified auto-accept decision
+// ---------------------------------------------------------------------------
+
+/**
+ * The accepted-candidate-shaped evidence `evaluateAutoAccept` decides over.
+ * Deliberately narrow: only the fields the auto-accept policy itself reads,
+ * not a whole proposal/candidate shape, so any profile can adapt its own
+ * proposal type into this without a dependency the other direction.
+ */
+export interface AutoAcceptEvidence {
+  /**
+   * The accepted evidence's OWN confidence — this is what gates AND what the
+   * composed rationale cites (owner-accepted decisions 1 and 2 in
+   * `docs/decisions/producer-profile.md`; fixes schema-mapping's pre-Slice-3
+   * group-max-gate / selected-candidate-confidence-rationale mismatch).
+   */
+  confidence: number;
+  /**
+   * The evidence's own rationale, appended to the composed rationale when
+   * present (decision 2; mirrors inquiry-mapping's pre-existing behavior).
+   * Presence is decided with `!== undefined`, not truthiness, so an
+   * empty-string rationale is still appended.
+   */
+  rationale?: string;
+  /**
+   * ISO 8601 timestamp of when this specific evidence was proposed (decision
+   * 3). When absent, `evaluateAutoAccept` falls back to `fallbackTimestamp`
+   * and reports that in `reviewedAtSource`.
+   */
+  proposedAt?: string;
+}
+
+/** The auto-accept policy `evaluateAutoAccept` gates against. */
+export interface AutoAcceptPolicy {
+  /** Minimum confidence (inclusive) a proposal must clear to auto-accept. */
+  minConfidence: number;
+}
+
+/** The unified auto-accept decision `evaluateAutoAccept` returns. */
+export interface AutoAcceptDecision {
+  /** `true` iff there is no conflict and `evidence.confidence` clears `policy.minConfidence`. */
+  accepted: boolean;
+  /** The confidence value that was gated on (== `evidence.confidence`). */
+  confidence: number;
+  /** Composed rationale — always computed; callers only use it when `accepted`. */
+  rationale: string;
+  /** The resolved review timestamp — `evidence.proposedAt` when present, `fallbackTimestamp` otherwise. */
+  reviewedAt: string;
+  /** Which source `reviewedAt` came from. */
+  reviewedAtSource: "proposedAt" | "fallback";
+  /** Always `AUTO_ACCEPT_ACTOR`. */
+  actor: typeof AUTO_ACCEPT_ACTOR;
+  /** Always `AUTO_ACCEPT_WITHIN_COMFORT_ZONE`. */
+  withinComfortZone: typeof AUTO_ACCEPT_WITHIN_COMFORT_ZONE;
+}
+
+/**
+ * The one core auto-accept policy decision every Producer Profile delegates
+ * to, per the owner-accepted semantics recorded in
+ * `docs/decisions/producer-profile.md` ("Auto-accept policy unification"):
+ *
+ * 1. Gate on the accepted evidence's OWN confidence (not a group's), via
+ *    {@link meetsAutoAcceptThreshold} — and never accept when `hasConflict`.
+ * 2. Compose a rationale citing that same gate-clearing confidence, and
+ *    append `evidence.rationale` when present (`!== undefined`).
+ * 3. Stamp `reviewedAt` from `evidence.proposedAt` when present, falling
+ *    back to `fallbackTimestamp` (and reporting which source was used via
+ *    `reviewedAtSource`) when a profile's evidence carries no timestamp of
+ *    its own.
+ * 4. Always report `actor: AUTO_ACCEPT_ACTOR` and
+ *    `withinComfortZone: AUTO_ACCEPT_WITHIN_COMFORT_ZONE` (ADR 0003 §4:
+ *    auto-accept only ever yields "assumed" with the comfort-zone posture).
+ *
+ * This function decides the policy only — it never renders a review outcome
+ * or claim-status record itself (ADR 0003 §4). Each profile still renders
+ * its own distinct record shape (`InquiryMapping` vs. schema-mapping's
+ * inline `ReviewOutcome`) from this decision's fields.
+ */
+export function evaluateAutoAccept(
+  evidence: AutoAcceptEvidence,
+  hasConflict: boolean,
+  policy: AutoAcceptPolicy,
+  fallbackTimestamp: string,
+): AutoAcceptDecision {
+  const accepted = !hasConflict && meetsAutoAcceptThreshold(evidence.confidence, policy.minConfidence);
+  const rationale =
+    `Auto-accepted: confidence ${evidence.confidence} >= threshold ${policy.minConfidence}.` +
+    (evidence.rationale !== undefined ? ` ${evidence.rationale}` : "");
+  const reviewedAt = evidence.proposedAt ?? fallbackTimestamp;
+
+  return {
+    accepted,
+    confidence: evidence.confidence,
+    rationale,
+    reviewedAt,
+    reviewedAtSource: evidence.proposedAt !== undefined ? "proposedAt" : "fallback",
+    actor: AUTO_ACCEPT_ACTOR,
+    withinComfortZone: AUTO_ACCEPT_WITHIN_COMFORT_ZONE,
+  };
 }

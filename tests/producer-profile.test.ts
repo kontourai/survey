@@ -235,3 +235,138 @@ describe("auto-accept shared literals", () => {
     assert.equal(AUTO_ACCEPT_WITHIN_COMFORT_ZONE, true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// evaluateAutoAccept
+// ---------------------------------------------------------------------------
+
+import { evaluateAutoAccept } from "../src/producer-profile.js";
+import type { AutoAcceptEvidence, AutoAcceptPolicy } from "../src/producer-profile.js";
+
+describe("evaluateAutoAccept", () => {
+  const policy: AutoAcceptPolicy = { minConfidence: 0.85 };
+  const fallbackTimestamp = "2026-01-01T00:00:00.000Z";
+
+  it("gates on the passed-in evidence's OWN confidence: exactly at the boundary accepts", () => {
+    const evidence: AutoAcceptEvidence = { confidence: 0.85 };
+
+    const decision = evaluateAutoAccept(evidence, false, policy, fallbackTimestamp);
+
+    assert.equal(decision.accepted, true);
+    assert.equal(decision.confidence, 0.85);
+  });
+
+  it("gates on the passed-in evidence's OWN confidence: just below the boundary rejects, regardless of any hypothetical other-group confidence", () => {
+    // evaluateAutoAccept only ever sees the accepted evidence's own confidence
+    // (0.84999 here) — it has no notion of "other proposals in the group"
+    // (e.g. a sibling proposal at 0.95 that the caller did not pass in) and so
+    // cannot ride a higher sibling confidence past the threshold. This is the
+    // fixed behavior schema-mapping's old group-max gate did not have (see
+    // AC3 in the plan / docs/decisions/producer-profile.md).
+    const evidence: AutoAcceptEvidence = { confidence: 0.84999 };
+
+    const decision = evaluateAutoAccept(evidence, false, policy, fallbackTimestamp);
+
+    assert.equal(decision.accepted, false);
+    assert.equal(decision.confidence, 0.84999);
+  });
+
+  it("comfortably above the boundary accepts", () => {
+    const evidence: AutoAcceptEvidence = { confidence: 0.95 };
+
+    const decision = evaluateAutoAccept(evidence, false, policy, fallbackTimestamp);
+
+    assert.equal(decision.accepted, true);
+  });
+
+  it("hasConflict: true always blocks acceptance, regardless of confidence", () => {
+    const evidence: AutoAcceptEvidence = { confidence: 0.99 };
+
+    const decision = evaluateAutoAccept(evidence, true, policy, fallbackTimestamp);
+
+    assert.equal(decision.accepted, false);
+  });
+
+  it("composes the rationale citing the gate-clearing confidence and threshold, with no trailing sentence when evidence.rationale is absent", () => {
+    const evidence: AutoAcceptEvidence = { confidence: 0.9 };
+
+    const decision = evaluateAutoAccept(evidence, false, { minConfidence: 0.8 }, fallbackTimestamp);
+
+    assert.equal(decision.rationale, "Auto-accepted: confidence 0.9 >= threshold 0.8.");
+  });
+
+  it("appends evidence.rationale verbatim when present (!== undefined, not truthiness)", () => {
+    const evidence: AutoAcceptEvidence = {
+      confidence: 0.9,
+      rationale: "Reference extractor: exact field-name match \"email\" with matching type \"string\" across crm and erp.",
+    };
+
+    const decision = evaluateAutoAccept(evidence, false, { minConfidence: 0.8 }, fallbackTimestamp);
+
+    assert.equal(
+      decision.rationale,
+      "Auto-accepted: confidence 0.9 >= threshold 0.8. Reference extractor: exact field-name match \"email\" with matching type \"string\" across crm and erp.",
+    );
+  });
+
+  it("appends an empty-string evidence.rationale (present via !== undefined check, not dropped by truthiness)", () => {
+    const evidence: AutoAcceptEvidence = { confidence: 0.9, rationale: "" };
+
+    const decision = evaluateAutoAccept(evidence, false, { minConfidence: 0.8 }, fallbackTimestamp);
+
+    assert.equal(decision.rationale, "Auto-accepted: confidence 0.9 >= threshold 0.8. ");
+  });
+
+  it("rationale is always computed, even when the decision is not accepted", () => {
+    const evidence: AutoAcceptEvidence = { confidence: 0.5, rationale: "low confidence proposal" };
+
+    const decision = evaluateAutoAccept(evidence, false, { minConfidence: 0.8 }, fallbackTimestamp);
+
+    assert.equal(decision.accepted, false);
+    assert.equal(decision.rationale, "Auto-accepted: confidence 0.5 >= threshold 0.8. low confidence proposal");
+  });
+
+  it("reviewedAt uses evidence.proposedAt when present, with reviewedAtSource \"proposedAt\"", () => {
+    const evidence: AutoAcceptEvidence = { confidence: 0.9, proposedAt: "2026-02-15T10:30:00.000Z" };
+
+    const decision = evaluateAutoAccept(evidence, false, { minConfidence: 0.8 }, fallbackTimestamp);
+
+    assert.equal(decision.reviewedAt, "2026-02-15T10:30:00.000Z");
+    assert.equal(decision.reviewedAtSource, "proposedAt");
+  });
+
+  it("reviewedAt falls back to fallbackTimestamp when evidence.proposedAt is absent, with reviewedAtSource \"fallback\"", () => {
+    const evidence: AutoAcceptEvidence = { confidence: 0.9 };
+
+    const decision = evaluateAutoAccept(evidence, false, { minConfidence: 0.8 }, fallbackTimestamp);
+
+    assert.equal(decision.reviewedAt, fallbackTimestamp);
+    assert.equal(decision.reviewedAtSource, "fallback");
+  });
+
+  it("actor is always the literal \"auto-accept-policy\"", () => {
+    const evidence: AutoAcceptEvidence = { confidence: 0.9 };
+
+    const decision = evaluateAutoAccept(evidence, false, { minConfidence: 0.8 }, fallbackTimestamp);
+
+    assert.equal(decision.actor, "auto-accept-policy");
+  });
+
+  it("withinComfortZone is always true on an accepted decision", () => {
+    const evidence: AutoAcceptEvidence = { confidence: 0.9 };
+
+    const decision = evaluateAutoAccept(evidence, false, { minConfidence: 0.8 }, fallbackTimestamp);
+
+    assert.equal(decision.accepted, true);
+    assert.equal(decision.withinComfortZone, true);
+  });
+
+  it("withinComfortZone is still the literal true even on a not-accepted decision (the literal is unconditional)", () => {
+    const evidence: AutoAcceptEvidence = { confidence: 0.1 };
+
+    const decision = evaluateAutoAccept(evidence, false, { minConfidence: 0.8 }, fallbackTimestamp);
+
+    assert.equal(decision.accepted, false);
+    assert.equal(decision.withinComfortZone, true);
+  });
+});

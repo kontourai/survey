@@ -10,5 +10,5 @@ Numbered ADRs under `docs/adr/` are frozen history and are not listed here.
 
 | Topic | Status | Decision |
 | --- | --- | --- |
-| [producer-profile](./producer-profile.md) | needs-decision | Producer Profile |
+| [producer-profile](./producer-profile.md) | current | Producer Profile |
 | [reviewed-current-proposed-resolution](./reviewed-current-proposed-resolution.md) | needs-decision | Reviewed Current/Proposed Resolution |

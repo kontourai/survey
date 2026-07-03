@@ -23,11 +23,9 @@ import { resolveInquiry } from "@kontourai/surface";
 import type { CanonicalClaimTarget } from "@kontourai/surface";
 import type { Candidate, CandidateSet, ReviewOutcome } from "./types.js";
 import {
-  AUTO_ACCEPT_ACTOR,
-  AUTO_ACCEPT_WITHIN_COMFORT_ZONE,
+  evaluateAutoAccept,
   getProducerProposal,
   hasCandidateConflict,
-  meetsAutoAcceptThreshold,
   projectProposalsToCandidateSet,
 } from "./producer-profile.js";
 import type { CandidateSetProposal } from "./producer-profile.js";
@@ -303,20 +301,29 @@ export function applyAutoAcceptPolicy(
   // If proposals disagree, none can be auto-accepted
   if (hasCandidateConflict(proposals.map((p) => ({ equivalenceKey: mappingEquivalenceKey(p) })))) return [];
 
-  return proposals
-    .filter((p) => meetsAutoAcceptThreshold(p.confidence, policy.minConfidence))
-    .map((proposal) => ({
-      id: `inquiry-mapping.auto.${normalizeQuestion(proposal.question)}`,
-      normalizedQuestion: normalizeQuestion(proposal.question),
-      target: proposal.proposedTarget,
-      ruleId: proposal.proposedRuleId,
-      status: "assumed" as const,
-      reviewedBy: AUTO_ACCEPT_ACTOR,
-      reviewedAt: proposal.proposedAt,
-      rationale: `Auto-accepted: confidence ${proposal.confidence} >= threshold ${policy.minConfidence}. ${proposal.rationale}`,
-      withinComfortZone: AUTO_ACCEPT_WITHIN_COMFORT_ZONE,
-      proposalId: proposal.id,
-    }));
+  return proposals.flatMap((proposal) => {
+    const decision = evaluateAutoAccept(
+      { confidence: proposal.confidence, rationale: proposal.rationale, proposedAt: proposal.proposedAt },
+      false,
+      policy,
+      proposal.proposedAt,
+    );
+    if (!decision.accepted) return [];
+    return [
+      {
+        id: `inquiry-mapping.auto.${normalizeQuestion(proposal.question)}`,
+        normalizedQuestion: normalizeQuestion(proposal.question),
+        target: proposal.proposedTarget,
+        ruleId: proposal.proposedRuleId,
+        status: "assumed" as const,
+        reviewedBy: decision.actor,
+        reviewedAt: decision.reviewedAt,
+        rationale: decision.rationale,
+        withinComfortZone: decision.withinComfortZone,
+        proposalId: proposal.id,
+      },
+    ];
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -246,6 +246,22 @@ describe("applyAutoAcceptPolicy", () => {
   it("returns empty array for empty proposals", () => {
     assert.equal(applyAutoAcceptPolicy([], { minConfidence: 0.8 }).length, 0);
   });
+
+  it("composes the exact rationale string and reviewedAt (pins byte-identical output post-core-delegation)", () => {
+    const proposal = makeProposal({
+      id: "p1",
+      question: "is entity-1 active",
+      proposedTarget: target,
+      confidence: 0.85,
+      rationale: "test proposal",
+      proposedAt: "2026-06-10T00:00:00.000Z",
+    });
+    const mappings = applyAutoAcceptPolicy([proposal], { minConfidence: 0.85 });
+
+    assert.equal(mappings.length, 1);
+    assert.equal(mappings[0]?.rationale, "Auto-accepted: confidence 0.85 >= threshold 0.85. test proposal");
+    assert.equal(mappings[0]?.reviewedAt, "2026-06-10T00:00:00.000Z");
+  });
 });
 
 // ---------------------------------------------------------------------------

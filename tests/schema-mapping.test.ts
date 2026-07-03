@@ -282,6 +282,160 @@ describe("surveySchemaMapping", () => {
 });
 
 // ---------------------------------------------------------------------------
+// 2b. surveySchemaMapping — evaluateAutoAccept delegation (AC3/AC4/AC5)
+//
+// Pins the observable deltas from the auto-accept-unification slice: the
+// inline auto-accept block now delegates to the Producer Profile core's
+// `evaluateAutoAccept`, gating on the SELECTED candidate's own confidence
+// (not the group's max), composing a rationale that appends the selected
+// proposal's own rationale text, and stamping `reviewedAt` from the accepted
+// proposal's own `proposedAt` (not the batch-level `generatedAt`).
+// ---------------------------------------------------------------------------
+
+describe("surveySchemaMapping — evaluateAutoAccept delegation", () => {
+  it("AC3: does not auto-accept when the SELECTED candidate's own confidence is below threshold, even though a sibling proposal's confidence clears it", async () => {
+    // Two non-conflicting (same-relation) proposals for one field pair:
+    // the first/selected proposal has confidence 0.60 (below the 0.80
+    // threshold); the second, non-selected proposal has confidence 0.95
+    // (which would have cleared the OLD group-max gate). The new gate must
+    // reject on the selected candidate's own confidence.
+    const gatingEdgeExtractor = {
+      name: "gating-edge-extractor",
+      extract(): MappingProposalRecord[] {
+        const base = {
+          sourceField: { system: "crm", entity: "Contact", field: "score" },
+          targetField: { system: "erp", entity: "Customer", field: "score" },
+          relation: "equivalent" as const,
+          evidence: [
+            { system: "crm", excerpt: "Contact.score:number" },
+            { system: "erp", excerpt: "Customer.score:number" },
+          ],
+          rationale: "test",
+          proposedBy: "gating-edge-extractor",
+          proposedAt: "2026-06-10T00:00:00.000Z",
+        };
+        return [
+          { ...base, id: "p1-selected", confidence: 0.6 },
+          { ...base, id: "p2-sibling", confidence: 0.95 },
+        ];
+      },
+    };
+
+    const result = await surveySchemaMapping(
+      { systems: [{ system: "crm", schemaText: "" }, { system: "erp", schemaText: "" }] },
+      gatingEdgeExtractor,
+      { autoAcceptMinConfidence: 0.8 },
+    );
+
+    assert.equal(result.candidateSets.length, 1);
+    // OLD behavior: group max(0.60, 0.95) = 0.95 >= 0.80 → auto-accepted with
+    // a mathematically false rationale ("confidence 0.6 >= threshold 0.8").
+    // NEW behavior: gates on the selected (first) candidate's own confidence
+    // (0.60), which does not clear the 0.80 threshold → no ReviewOutcome.
+    assert.equal(result.surveyInput.reviewOutcomes.length, 0, "selected candidate's own confidence (0.60) should not clear the 0.80 threshold");
+    assert.equal(result.candidateSets[0]?.status, "needs-review");
+  });
+
+  it("AC4: composed rationale cites the gate-clearing confidence and appends the selected proposal's own rationale", async () => {
+    const result = await surveySchemaMapping(
+      { systems: [{ system: "crm", schemaText: "Contact.email:string" }, { system: "erp", schemaText: "Customer.email:string" }] },
+      referenceSchemaExtractor,
+      { autoAcceptMinConfidence: 0.8 },
+    );
+
+    const autoReview = result.surveyInput.reviewOutcomes.find((r) => r.actor === "auto-accept-policy");
+    assert.ok(autoReview, "should have an auto-accept review outcome");
+    // referenceSchemaExtractor's email/email match: confidence 0.9, and its
+    // own rationale text (src/schema-mapping.ts referenceSchemaExtractor).
+    assert.equal(
+      autoReview?.rationale,
+      'Auto-accepted: confidence 0.9 >= threshold 0.8. Reference extractor: exact field-name match "email" with matching type "string" across crm and erp.',
+    );
+  });
+
+  it("AC5: reviewedAt is stamped from the accepted proposal's own proposedAt, not options.generatedAt", async () => {
+    const proposalProposedAt = "2020-01-01T00:00:00.000Z";
+    const batchGeneratedAt = "2026-07-03T00:00:00.000Z";
+
+    const distinctTimestampExtractor = {
+      name: "distinct-timestamp-extractor",
+      extract(): MappingProposalRecord[] {
+        return [
+          {
+            id: "p1",
+            sourceField: { system: "crm", entity: "Contact", field: "email" },
+            targetField: { system: "erp", entity: "Customer", field: "email" },
+            relation: "equivalent" as const,
+            evidence: [
+              { system: "crm", excerpt: "Contact.email:string" },
+              { system: "erp", excerpt: "Customer.email:string" },
+            ],
+            confidence: 0.9,
+            rationale: "test",
+            proposedBy: "distinct-timestamp-extractor",
+            proposedAt: proposalProposedAt,
+          },
+        ];
+      },
+    };
+
+    const result = await surveySchemaMapping(
+      { systems: [{ system: "crm", schemaText: "" }, { system: "erp", schemaText: "" }] },
+      distinctTimestampExtractor,
+      { autoAcceptMinConfidence: 0.8, generatedAt: batchGeneratedAt },
+    );
+
+    const autoReview = result.surveyInput.reviewOutcomes.find((r) => r.actor === "auto-accept-policy");
+    assert.ok(autoReview, "should have an auto-accept review outcome");
+    assert.equal(autoReview?.reviewedAt, proposalProposedAt, "reviewedAt should be the accepted proposal's own proposedAt");
+    assert.notEqual(autoReview?.reviewedAt, batchGeneratedAt, "reviewedAt should NOT be the batch-level generatedAt");
+  });
+
+  it("fails closed: does not auto-accept when the selected candidate's confidence is missing, even at threshold 0", async () => {
+    // Candidate.confidence is `number | undefined` (src/types.ts), but
+    // MappingProposalRecord.confidence is a required `number` (src/schema-mapping.ts)
+    // that is always copied straight through to Candidate.confidence at
+    // construction — so no conforming SchemaMappingExtractor can produce a
+    // candidate with a missing confidence through the typed contract today.
+    // This fixture uses an `as`-cast to deliberately bypass that contract,
+    // purely to pin the defensive fail-closed fallback in
+    // surveySchemaMapping (src/schema-mapping.ts): at threshold 0, a naive
+    // `?? 0` fallback would incorrectly auto-accept (0 >= 0); the actual
+    // `?? Number.NEGATIVE_INFINITY` fallback must not.
+    const missingConfidenceExtractor = {
+      name: "missing-confidence-extractor",
+      extract(): MappingProposalRecord[] {
+        return [
+          {
+            id: "p1",
+            sourceField: { system: "crm", entity: "Contact", field: "email" },
+            targetField: { system: "erp", entity: "Customer", field: "email" },
+            relation: "equivalent" as const,
+            evidence: [
+              { system: "crm", excerpt: "Contact.email:string" },
+              { system: "erp", excerpt: "Customer.email:string" },
+            ],
+            // confidence intentionally omitted to simulate the
+            // typed-contract-unreachable "missing confidence" case.
+            rationale: "test",
+            proposedBy: "missing-confidence-extractor",
+            proposedAt: "2026-06-10T00:00:00.000Z",
+          } as unknown as MappingProposalRecord,
+        ];
+      },
+    };
+
+    const result = await surveySchemaMapping(
+      { systems: [{ system: "crm", schemaText: "" }, { system: "erp", schemaText: "" }] },
+      missingConfidenceExtractor,
+      { autoAcceptMinConfidence: 0 },
+    );
+
+    assert.equal(result.surveyInput.reviewOutcomes.length, 0, "missing confidence must fail closed even at threshold 0");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 3. Review → claim + identity-link pairing
 // ---------------------------------------------------------------------------
 

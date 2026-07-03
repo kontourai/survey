@@ -23,10 +23,8 @@
 
 import type { IdentityLink, IdentityLinkConversion, TrustBundle } from "@kontourai/surface";
 import {
-  AUTO_ACCEPT_ACTOR,
-  AUTO_ACCEPT_WITHIN_COMFORT_ZONE,
+  evaluateAutoAccept,
   getProducerProposal,
-  meetsAutoAcceptThreshold,
   projectProposalsToCandidateSet,
 } from "./producer-profile.js";
 import type { CandidateSetProposal } from "./producer-profile.js";
@@ -339,31 +337,49 @@ export async function surveySchemaMapping(
     candidateSet.selectedCandidateId = candidateSet.status !== "conflict" ? candidates[0]?.id : undefined;
     candidateSets.push(candidateSet);
 
-    // Auto-accept policy: non-conflicting proposals above threshold → assumed
-    let autoReviewStatus: "assumed" | undefined;
-    if (candidateSet.status !== "conflict" && options.autoAcceptMinConfidence !== undefined) {
-      const topConfidence = Math.max(...pairProposals.map((p) => p.confidence));
-      if (meetsAutoAcceptThreshold(topConfidence, options.autoAcceptMinConfidence)) {
-        autoReviewStatus = "assumed";
-      }
-    }
-
+    // Auto-accept policy: delegate the gate/rationale/reviewedAt decision to
+    // the core (docs/decisions/producer-profile.md — gates on the SELECTED
+    // candidate's own confidence, not the group's; keeps the existing
+    // candidates[0]-based selection algorithm unchanged, out of scope here).
     const selectedCandidate = candidateSet.selectedCandidateId
       ? candidates.find((c) => c.id === candidateSet.selectedCandidateId)
       : candidates[0];
 
-    if (autoReviewStatus && selectedCandidate) {
-      const reviewId = `schema-mapping.review.${pairKey}`;
-      reviewOutcomes.push({
-        id: reviewId,
-        candidateSetId,
-        candidateId: selectedCandidate.id,
-        status: autoReviewStatus,
-        actor: AUTO_ACCEPT_ACTOR,
-        reviewedAt: generatedAt,
-        rationale: `Auto-accepted: confidence ${selectedCandidate.confidence} >= threshold ${options.autoAcceptMinConfidence}`,
-        withinComfortZone: AUTO_ACCEPT_WITHIN_COMFORT_ZONE,
-      });
+    const hasConflict = candidateSet.status === "conflict";
+    if (!hasConflict && options.autoAcceptMinConfidence !== undefined && selectedCandidate) {
+      const selectedProposal = getProducerProposal<SchemaMappingProposalMetadata>(selectedCandidate);
+      const decision = evaluateAutoAccept(
+        {
+          // Fail-closed fallback: Candidate.confidence is `number | undefined`
+          // (src/types.ts), but no conforming SchemaMappingExtractor can
+          // produce an undefined confidence today (MappingProposalRecord.confidence
+          // is required and is copied straight through to Candidate.confidence
+          // at construction), so this is unreachable through the typed contract.
+          // NEGATIVE_INFINITY (not 0) guarantees rejection regardless of
+          // autoAcceptMinConfidence's sign, matching old code's NaN-poisoning
+          // behavior of never auto-accepting on a missing confidence.
+          confidence: selectedCandidate.confidence ?? Number.NEGATIVE_INFINITY,
+          rationale: selectedProposal?.rationale,
+          proposedAt: selectedProposal?.proposedAt,
+        },
+        hasConflict,
+        { minConfidence: options.autoAcceptMinConfidence },
+        generatedAt,
+      );
+
+      if (decision.accepted) {
+        const reviewId = `schema-mapping.review.${pairKey}`;
+        reviewOutcomes.push({
+          id: reviewId,
+          candidateSetId,
+          candidateId: selectedCandidate.id,
+          status: "assumed",
+          actor: decision.actor,
+          reviewedAt: decision.reviewedAt,
+          rationale: decision.rationale,
+          withinComfortZone: decision.withinComfortZone,
+        });
+      }
     }
 
     // Project to ClaimTarget (subjectType "system-field", fieldOrBehavior "maps-to")
