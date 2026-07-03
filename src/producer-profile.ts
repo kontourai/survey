@@ -154,3 +154,45 @@ export function projectProposalsToCandidateSet<TValue = unknown, TMetadata = unk
 export function getProducerProposal<TMetadata>(candidate: Candidate | undefined): TMetadata | undefined {
   return candidate?.metadata?.[PRODUCER_PROPOSAL_METADATA_KEY] as TMetadata | undefined;
 }
+
+// ---------------------------------------------------------------------------
+// Shared auto-accept primitives
+// ---------------------------------------------------------------------------
+
+/**
+ * Actor identity every Producer Profile's auto-accept policy uses when it
+ * accepts a proposal without human review. Shared literal — see ADR 0003
+ * §4 (the core never decides "verified"; auto-accept only ever produces
+ * "assumed" + comfort-zone true).
+ */
+export const AUTO_ACCEPT_ACTOR = "auto-accept-policy" as const;
+
+/**
+ * The comfort-zone posture every Producer Profile's auto-accept policy
+ * sets when it accepts a proposal: `withinComfortZone: true` always — an
+ * auto-accepted proposal is, by definition, one the policy's declared
+ * threshold covers, so there is nothing "outside comfort zone" about an
+ * auto-accept decision (ADR 0003 §4).
+ */
+export const AUTO_ACCEPT_WITHIN_COMFORT_ZONE = true as const;
+
+/**
+ * The one auto-accept threshold rule every Producer Profile applies: a
+ * confidence value clears an auto-accept policy iff it is at or above
+ * (inclusive) the policy's minimum confidence. This is the only piece of
+ * auto-accept *mechanics* that is identical across profiles today — each
+ * profile decides its own iteration granularity (per-proposal filter vs.
+ * per-group max-confidence gate) and output record shape around this call;
+ * the core does not decide that.
+ *
+ * These three exports are the ONLY auto-accept semantics the two profiles
+ * genuinely share today (see the Slice 3 plan's Part (a) field-by-field
+ * diff table). Everything else about auto-accept — iteration granularity
+ * (per-proposal vs. per-group), output record type and cardinality, id
+ * templates, timestamp source, and rationale string format — diverges
+ * between profiles and stays entirely per-profile; this module does not
+ * decide any of it.
+ */
+export function meetsAutoAcceptThreshold(confidence: number, minConfidence: number): boolean {
+  return confidence >= minConfidence;
+}

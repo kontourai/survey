@@ -658,3 +658,95 @@ describe("referenceUtteranceExtractor", () => {
     assert.ok(results.length >= 2);
   });
 });
+
+// ---------------------------------------------------------------------------
+// buildMappingReviewItems
+// ---------------------------------------------------------------------------
+
+import { buildMappingReviewItems } from "../src/index.js";
+import type { ReviewItem } from "../src/index.js";
+
+describe("buildMappingReviewItems", () => {
+  it("pins the emitted ReviewItem envelope shape/values for a single non-conflicting proposal", () => {
+    const question = "is entity-1 active";
+    const proposal = makeProposal({ id: "p1", question });
+    const { candidateSet, candidates } = proposalsToCandidateSet(question, [proposal]);
+
+    const result: ReviewItem[] = buildMappingReviewItems([{ candidateSet, candidates }]);
+
+    assert.equal(result.length, 1);
+    const item = result[0]!;
+
+    // Envelope
+    assert.equal(item.apiVersion, "survey.kontourai.io/v1alpha1");
+    assert.equal(item.kind, "ReviewItem");
+    assert.equal(item.metadata.name, candidateSet.id);
+    assert.equal(item.metadata.labels?.["survey.kontourai.io/kind"], "inquiry-mapping");
+
+    // Spec
+    assert.equal(item.spec.target, candidateSet.target);
+    assert.equal(item.spec.candidates.length, 1);
+    assert.equal(item.spec.candidateSetStatus, candidateSet.status);
+    assert.equal(item.spec.rationale, candidateSet.rationale);
+
+    // One candidate, all fields
+    const candidate = item.spec.candidates[0]!;
+    const expectedCandidate = candidates[0]!;
+    assert.equal(candidate.id, expectedCandidate.id);
+    assert.equal(candidate.role, "proposed");
+    assert.deepEqual(candidate.value, proposal.proposedTarget);
+    assert.equal(candidate.confidence, proposal.confidence);
+    assert.equal(candidate.source.sourceRef, `inquiry-question:${candidateSet.target}`);
+    assert.equal(candidate.source.kind, "inquiry-question");
+    assert.equal(candidate.source.observedAt, proposal.proposedAt);
+    assert.equal(candidate.source.locatorScheme, "text");
+    assert.equal(
+      candidate.extraction.target,
+      `${proposal.proposedTarget!.subjectType}/${proposal.proposedTarget!.subjectId}/${proposal.proposedTarget!.fieldOrBehavior}`,
+    );
+    assert.equal(candidate.extraction.confidence, proposal.confidence);
+    assert.equal(candidate.extraction.extractor, proposal.proposedBy);
+    assert.equal(candidate.extraction.extractedAt, proposal.proposedAt);
+    assert.equal(candidate.claimTarget.subjectType, proposal.proposedTarget!.subjectType);
+    assert.equal(candidate.claimTarget.subjectId, proposal.proposedTarget!.subjectId);
+    assert.equal(candidate.claimTarget.facet, "inquiry.mapping");
+    assert.equal(candidate.claimTarget.claimType, "inquiry-mapping");
+    assert.equal(candidate.claimTarget.fieldOrBehavior, proposal.proposedTarget!.fieldOrBehavior);
+    assert.equal(candidate.claimTarget.impactLevel, "low");
+    assert.equal(candidate.projection?.candidateSetId, candidateSet.id);
+    assert.equal(candidate.projection?.candidateId, expectedCandidate.id);
+
+    // Status
+    assert.equal(item.status?.observedCandidateCount, 1);
+  });
+
+  it("produces one ReviewItem per unresolved mapping question, all candidates carried", () => {
+    const target = { subjectType: "entity", subjectId: "entity-1", fieldOrBehavior: "registration-status" };
+    const p1 = makeProposal({ id: "p1", question: "entity status", proposedTarget: target, confidence: 0.7 });
+    const p2 = makeProposal({ id: "p2", question: "entity status", proposedTarget: target, confidence: 0.9 });
+    const { candidateSet: cs1, candidates: cands1 } = proposalsToCandidateSet("entity status", [p1, p2]);
+
+    const q2 = "what is entity-2's coverage";
+    const p3 = makeProposal({
+      id: "p3",
+      question: q2,
+      proposedTarget: { subjectType: "entity", subjectId: "entity-2", fieldOrBehavior: "coverage-score" },
+      confidence: 0.6,
+    });
+    const { candidateSet: cs2, candidates: cands2 } = proposalsToCandidateSet(q2, [p3]);
+
+    const result = buildMappingReviewItems([
+      { candidateSet: cs1, candidates: cands1 },
+      { candidateSet: cs2, candidates: cands2 },
+    ]);
+
+    assert.equal(result.length, 2);
+    assert.equal(result[0]?.spec.candidates.length, 2);
+    assert.deepEqual(
+      result[0]?.spec.candidates.map((c) => c.id),
+      cands1.map((c) => c.id),
+    );
+    assert.equal(result[1]?.spec.candidates.length, 1);
+    assert.equal(result[1]?.spec.candidates[0]?.id, cands2[0]?.id);
+  });
+});
