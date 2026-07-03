@@ -22,6 +22,8 @@ import type { DerivationRule, InquiryRecord, TrustBundle } from "@kontourai/surf
 import { resolveInquiry } from "@kontourai/surface";
 import type { CanonicalClaimTarget } from "@kontourai/surface";
 import type { Candidate, CandidateSet, ReviewOutcome } from "./types.js";
+import { getProducerProposal, hasCandidateConflict, projectProposalsToCandidateSet } from "./producer-profile.js";
+import type { CandidateSetProposal } from "./producer-profile.js";
 
 // ---------------------------------------------------------------------------
 // Core proposal and mapping types
@@ -141,6 +143,34 @@ export function normalizeQuestion(question: string): string {
 // ---------------------------------------------------------------------------
 
 /**
+ * The full payload carried under `Candidate.metadata[PRODUCER_PROPOSAL_METADATA_KEY]`
+ * for inquiry-mapping candidates. Read back via getProducerProposal.
+ */
+interface MappingProposalMetadata {
+  proposalId: string;
+  proposedTarget?: CanonicalClaimTarget;
+  proposedRuleId?: string;
+  confidence?: number;
+  rationale?: string;
+  excerpt?: string;
+  proposedBy?: string;
+  proposedAt?: string;
+}
+
+/**
+ * The Candidate Conflict comparison key for a single mapping proposal: keys
+ * by canonical claim target (subjectType/subjectId/fieldOrBehavior) or by
+ * derivation rule id. Two proposals with the same key "agree"; more than one
+ * distinct key across a group of proposals is a conflict (see
+ * hasCandidateConflict).
+ */
+function mappingEquivalenceKey(proposal: MappingProposal): string {
+  return proposal.proposedTarget
+    ? `target:${proposal.proposedTarget.subjectType}/${proposal.proposedTarget.subjectId}/${proposal.proposedTarget.fieldOrBehavior}`
+    : `rule:${proposal.proposedRuleId}`;
+}
+
+/**
  * Project an array of proposals for a single question into Survey's existing
  * Candidate / CandidateSet shapes so they flow through the existing review
  * machinery rather than a parallel system.
@@ -159,13 +189,14 @@ export function proposalsToCandidateSet(
 ): { candidateSet: CandidateSet; candidates: Candidate[] } {
   const normalized = normalizeQuestion(question);
 
-  const candidates: Candidate[] = proposals.map((proposal) => ({
-    id: `mapping-candidate.${proposal.id}`,
-    extractionId: proposal.id,
-    value: proposal.proposedTarget ?? proposal.proposedRuleId ?? null,
-    confidence: proposal.confidence,
-    metadata: {
-      mappingProposal: {
+  const candidateSetProposals: CandidateSetProposal<unknown, MappingProposalMetadata>[] = proposals.map(
+    (proposal) => ({
+      candidateId: `mapping-candidate.${proposal.id}`,
+      extractionId: proposal.id,
+      value: proposal.proposedTarget ?? proposal.proposedRuleId ?? null,
+      confidence: proposal.confidence,
+      equivalenceKey: mappingEquivalenceKey(proposal),
+      metadata: {
         proposalId: proposal.id,
         proposedTarget: proposal.proposedTarget,
         proposedRuleId: proposal.proposedRuleId,
@@ -175,38 +206,19 @@ export function proposalsToCandidateSet(
         proposedBy: proposal.proposedBy,
         proposedAt: proposal.proposedAt,
       },
-    },
-  }));
+    }),
+  );
 
-  // Determine status: conflict if proposals disagree on target/rule
-  const status = proposals.length > 1 && proposalsDisagree(proposals) ? "conflict" : "needs-review";
-
-  const candidateSet: CandidateSet = {
-    id: `mapping-candidate-set.${normalized}`,
-    target: normalized,
-    candidates,
-    status,
-    metadata: {
+  return projectProposalsToCandidateSet(normalized, candidateSetProposals, {
+    candidateSetId: `mapping-candidate-set.${normalized}`,
+    candidateSetMetadata: {
       inquiryMapping: {
         question,
         normalizedQuestion: normalized,
         kind: "inquiry-question",
       },
     },
-  };
-
-  return { candidateSet, candidates };
-}
-
-function proposalsDisagree(proposals: MappingProposal[]): boolean {
-  const keys = new Set(
-    proposals.map((p) =>
-      p.proposedTarget
-        ? `target:${p.proposedTarget.subjectType}/${p.proposedTarget.subjectId}/${p.proposedTarget.fieldOrBehavior}`
-        : `rule:${p.proposedRuleId}`,
-    ),
-  );
-  return keys.size > 1;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -233,11 +245,7 @@ export function applyMappingReview(
     throw new Error(`applyMappingReview: no candidate found for id ${candidateId ?? "<none>"}`);
   }
 
-  const meta = candidate.metadata?.mappingProposal as {
-    proposalId?: string;
-    proposedTarget?: CanonicalClaimTarget;
-    proposedRuleId?: string;
-  } | undefined;
+  const meta = getProducerProposal<MappingProposalMetadata>(candidate);
 
   const proposalId = meta?.proposalId ?? candidate.extractionId;
   const status = reviewOutcome.status === "verified" || reviewOutcome.status === "assumed" || reviewOutcome.status === "rejected"
@@ -284,7 +292,7 @@ export function applyAutoAcceptPolicy(
   if (proposals.length === 0) return [];
 
   // If proposals disagree, none can be auto-accepted
-  if (proposals.length > 1 && proposalsDisagree(proposals)) return [];
+  if (hasCandidateConflict(proposals.map((p) => ({ equivalenceKey: mappingEquivalenceKey(p) })))) return [];
 
   return proposals
     .filter((p) => p.confidence >= policy.minConfidence)
@@ -453,13 +461,7 @@ export function buildMappingReviewItems(
     spec: {
       target: candidateSet.target,
       candidates: candidates.map((candidate) => {
-        const meta = candidate.metadata?.mappingProposal as {
-          proposedTarget?: CanonicalClaimTarget;
-          proposedRuleId?: string;
-          confidence?: number;
-          proposedBy?: string;
-          proposedAt?: string;
-        } | undefined;
+        const meta = getProducerProposal<MappingProposalMetadata>(candidate);
 
         const targetOrRule = meta?.proposedTarget
           ? `${meta.proposedTarget.subjectType}/${meta.proposedTarget.subjectId}/${meta.proposedTarget.fieldOrBehavior}`

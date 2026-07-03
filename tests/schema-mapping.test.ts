@@ -82,7 +82,7 @@ function makeReviewedMapping(
     value: { relation: proposal.relation, targetField: proposal.targetField, conversion: proposal.conversion },
     confidence: proposal.confidence,
     metadata: {
-      schemaMappingProposal: {
+      producerProposal: {
         proposalId: proposal.id,
         sourceField: proposal.sourceField,
         targetField: proposal.targetField,

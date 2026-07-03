@@ -172,7 +172,7 @@ describe("proposalsToCandidateSet", () => {
   it("preserves proposal metadata on candidates", () => {
     const proposal = makeProposal({ id: "p1", question: "is entity-1 active", excerpt: "entity-1 active" });
     const { candidates } = proposalsToCandidateSet("is entity-1 active", [proposal]);
-    const meta = candidates[0]?.metadata?.mappingProposal as { excerpt?: string; proposedBy?: string } | undefined;
+    const meta = candidates[0]?.metadata?.producerProposal as { excerpt?: string; proposedBy?: string } | undefined;
 
     assert.equal(meta?.excerpt, "entity-1 active");
     assert.equal(meta?.proposedBy, "test-proposer");

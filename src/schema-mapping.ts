@@ -22,6 +22,8 @@
  */
 
 import type { IdentityLink, IdentityLinkConversion, TrustBundle } from "@kontourai/surface";
+import { getProducerProposal, projectProposalsToCandidateSet } from "./producer-profile.js";
+import type { CandidateSetProposal } from "./producer-profile.js";
 import { buildSurveyTrustBundle } from "./to-surface.js";
 import type {
   Candidate,
@@ -157,6 +159,29 @@ export interface SchemaMappingOptions {
 }
 
 // ---------------------------------------------------------------------------
+// Producer Profile proposal-metadata payload
+// ---------------------------------------------------------------------------
+
+/**
+ * The schema-mapping profile's own payload, carried verbatim under the core's
+ * canonical `Candidate.metadata` key (see `./producer-profile.js`). Covers
+ * every field read across `mappingReviewToSurface`'s read-back sites and
+ * written at Candidate-projection time below.
+ */
+interface SchemaMappingProposalMetadata {
+  proposalId?: string;
+  sourceField?: SystemFieldRef;
+  targetField?: SystemFieldRef;
+  relation?: "equivalent" | "subsumes" | "converts";
+  conversion?: { factor?: number; offset?: number; note?: string };
+  evidence?: Array<{ system: string; excerpt: string }>;
+  confidence?: number;
+  rationale?: string;
+  proposedBy?: string;
+  proposedAt?: string;
+}
+
+// ---------------------------------------------------------------------------
 // surveySchemaMapping
 // ---------------------------------------------------------------------------
 
@@ -224,11 +249,10 @@ export async function surveySchemaMapping(
     const candidateSetId = `schema-mapping.candidate-set.${pairKey}`;
     const claimId = `schema-mapping.claim.${pairKey}`;
 
-    // Detect conflict: proposals disagree on relation
-    const relations = new Set(pairProposals.map((p) => p.relation));
-    const status = relations.size > 1 ? "conflict" : "needs-review";
-
-    const candidates: Candidate[] = pairProposals.map((proposal) => {
+    const candidateSetProposals: CandidateSetProposal<
+      { relation: "equivalent" | "subsumes" | "converts"; targetField: SystemFieldRef; conversion?: { factor?: number; offset?: number; note?: string } },
+      SchemaMappingProposalMetadata
+    >[] = pairProposals.map((proposal) => {
       // Use the source system's RawSource for this extraction
       const rawSource = sourceById.get(proposal.sourceField.system) ?? rawSources[0]!;
       const extractionId = `schema-mapping.extraction.${proposal.id}`;
@@ -264,7 +288,7 @@ export async function surveySchemaMapping(
       extractions.push(extraction);
 
       return {
-        id: `schema-mapping.candidate.${proposal.id}`,
+        candidateId: `schema-mapping.candidate.${proposal.id}`,
         extractionId,
         value: {
           relation: proposal.relation,
@@ -272,45 +296,46 @@ export async function surveySchemaMapping(
           conversion: proposal.conversion,
         },
         confidence: proposal.confidence,
+        equivalenceKey: proposal.relation,
         metadata: {
-          schemaMappingProposal: {
-            proposalId: proposal.id,
-            sourceField: proposal.sourceField,
-            targetField: proposal.targetField,
-            relation: proposal.relation,
-            conversion: proposal.conversion,
-            evidence: proposal.evidence,
-            confidence: proposal.confidence,
-            rationale: proposal.rationale,
-            proposedBy: proposal.proposedBy,
-            proposedAt: proposal.proposedAt,
-          },
+          proposalId: proposal.id,
+          sourceField: proposal.sourceField,
+          targetField: proposal.targetField,
+          relation: proposal.relation,
+          conversion: proposal.conversion,
+          evidence: proposal.evidence,
+          confidence: proposal.confidence,
+          rationale: proposal.rationale,
+          proposedBy: proposal.proposedBy,
+          proposedAt: proposal.proposedAt,
         },
       };
     });
 
-    const candidateSet: CandidateSet = {
-      id: candidateSetId,
-      target: `schema-mapping:${pairKey}`,
-      candidates,
-      selectedCandidateId: status !== "conflict" ? candidates[0]?.id : undefined,
-      status,
-      rationale: status === "conflict"
-        ? `Proposals disagree on relation for pair ${pairKey}: ${[...relations].join(", ")}`
-        : `${candidates.length} proposal(s) agree on relation "${first.relation}" for pair ${pairKey}.`,
-      metadata: {
-        schemaMapping: {
-          pairKey,
-          sourceField: first.sourceField,
-          targetField: first.targetField,
+    const { candidateSet, candidates } = projectProposalsToCandidateSet(
+      `schema-mapping:${pairKey}`,
+      candidateSetProposals,
+      {
+        candidateSetId,
+        candidateSetMetadata: {
+          schemaMapping: {
+            pairKey,
+            sourceField: first.sourceField,
+            targetField: first.targetField,
+          },
         },
+        candidateSetRationale: (status, proposals) =>
+          status === "conflict"
+            ? `Proposals disagree on relation for pair ${pairKey}: ${[...new Set(proposals.map((p) => p.equivalenceKey))].join(", ")}`
+            : `${proposals.length} proposal(s) agree on relation "${first.relation}" for pair ${pairKey}.`,
       },
-    };
+    );
+    candidateSet.selectedCandidateId = candidateSet.status !== "conflict" ? candidates[0]?.id : undefined;
     candidateSets.push(candidateSet);
 
     // Auto-accept policy: non-conflicting proposals above threshold → assumed
     let autoReviewStatus: "assumed" | undefined;
-    if (status !== "conflict" && options.autoAcceptMinConfidence !== undefined) {
+    if (candidateSet.status !== "conflict" && options.autoAcceptMinConfidence !== undefined) {
       const topConfidence = Math.max(...pairProposals.map((p) => p.confidence));
       if (topConfidence >= options.autoAcceptMinConfidence) {
         autoReviewStatus = "assumed";
@@ -340,7 +365,7 @@ export async function surveySchemaMapping(
       const review = reviewOutcomes.find((r) => r.candidateSetId === candidateSetId);
       const claimStatus = review
         ? review.status
-        : (status === "conflict" ? "disputed" : undefined);
+        : (candidateSet.status === "conflict" ? "disputed" : undefined);
 
       const claimTarget: ClaimTarget = {
         id: claimId,
@@ -449,10 +474,7 @@ export function mappingReviewToSurface(
   const rawSources: RawSource[] = [];
   const seenSources = new Set<string>();
   for (const rm of accepted) {
-    const meta = rm.selectedCandidate.metadata?.schemaMappingProposal as {
-      sourceField?: SystemFieldRef;
-      evidence?: Array<{ system: string; excerpt: string }>;
-    } | undefined;
+    const meta = getProducerProposal<SchemaMappingProposalMetadata>(rm.selectedCandidate);
     const sourceField = meta?.sourceField ?? rm.proposal.sourceField;
     const sourceId = `schema-mapping.source.${sourceField.system}`;
     if (!seenSources.has(sourceId)) {
@@ -478,18 +500,7 @@ export function mappingReviewToSurface(
   const claims: ClaimTarget[] = [];
 
   for (const rm of accepted) {
-    const meta = rm.selectedCandidate.metadata?.schemaMappingProposal as {
-      proposalId?: string;
-      sourceField?: SystemFieldRef;
-      targetField?: SystemFieldRef;
-      relation?: string;
-      conversion?: { factor?: number; offset?: number; note?: string };
-      evidence?: Array<{ system: string; excerpt: string }>;
-      confidence?: number;
-      rationale?: string;
-      proposedBy?: string;
-      proposedAt?: string;
-    } | undefined;
+    const meta = getProducerProposal<SchemaMappingProposalMetadata>(rm.selectedCandidate);
 
     const sourceField = meta?.sourceField ?? rm.proposal.sourceField;
     const targetField = meta?.targetField ?? rm.proposal.targetField;
@@ -588,12 +599,7 @@ export function mappingReviewToSurface(
   const identityLinks: IdentityLink[] = [];
 
   for (const rm of accepted) {
-    const meta = rm.selectedCandidate.metadata?.schemaMappingProposal as {
-      sourceField?: SystemFieldRef;
-      targetField?: SystemFieldRef;
-      relation?: string;
-      conversion?: IdentityLinkConversion;
-    } | undefined;
+    const meta = getProducerProposal<SchemaMappingProposalMetadata>(rm.selectedCandidate);
 
     const sourceField = meta?.sourceField ?? rm.proposal.sourceField;
     const targetField = meta?.targetField ?? rm.proposal.targetField;
