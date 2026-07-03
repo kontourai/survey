@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   buildReviewSessionEvents,
   initialReviewQueueSessionState,
+  replayReviewSessionEvents,
 } from "../src/review-workbench/review-workbench.js";
 import {
   applyReviewSession,
@@ -10,6 +11,7 @@ import {
   assertServerReviewSessionFreshness,
   compareServerReviewSessionFreshness,
   createServerReviewSessionRecord,
+  currentSessionState,
   deriveServerReviewSessionApplyResult,
   hashReviewSessionSnapshot,
   ServerReviewSessionEventValidationError,
@@ -418,3 +420,26 @@ function withSpec(
     },
   };
 }
+
+describe("currentSessionState", () => {
+  const itemName = publicDirectoryReviewItemExample.metadata.name;
+
+  it("returns the exact same snapshot reference when events is empty", () => {
+    const snapshot = initialReviewQueueSessionState([publicDirectoryReviewItemExample]);
+
+    assert.strictEqual(currentSessionState(snapshot, []), snapshot);
+  });
+
+  it("returns the replayed state when events is non-empty, matching replayReviewSessionEvents directly", () => {
+    const snapshot = initialReviewQueueSessionState([publicDirectoryReviewItemExample]);
+    const events = buildReviewSessionEvents(
+      { ...snapshot, decisionsByItemName: { [itemName]: "accept-proposed" as const } },
+      "server-review-1",
+    );
+
+    assert.deepStrictEqual(
+      currentSessionState(snapshot, events),
+      replayReviewSessionEvents(snapshot, events),
+    );
+  });
+});
