@@ -8,7 +8,7 @@ evidence:
   - kind: doc
     ref: docs/record-contracts.md
   - kind: pr
-    ref: "<PR number for this slice, filled in at merge>"
+    ref: "https://github.com/kontourai/survey/pull/111"
 ---
 # Producer Profile
 
