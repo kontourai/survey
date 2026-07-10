@@ -8,6 +8,7 @@ export type {
   Extraction,
   Interpretation,
   LocatorScheme,
+  ProvenanceResolution,
   RawSource,
   RawSourceKind,
   ReviewAuthorizing,
