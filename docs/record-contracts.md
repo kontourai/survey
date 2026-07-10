@@ -569,6 +569,7 @@ import {
   buildReviewProofAnchor,
   canonicalReviewProofJson,
   hashCanonicalReviewProofPayload,
+  verifyCanonicalReviewProofPayload,
 } from "@kontourai/survey";
 
 const proofInput = {
@@ -583,6 +584,7 @@ const proofInput = {
 const payload = buildCanonicalReviewProofPayload(proofInput);
 const canonicalJson = canonicalReviewProofJson(payload);
 const hash = hashCanonicalReviewProofPayload(payload);
+const verified = verifyCanonicalReviewProofPayload(payload, hash);
 const anchor = buildReviewProofAnchor(proofInput);
 ```
 
@@ -605,8 +607,24 @@ The canonical payload is the portable review proof contract. It contains:
 | `proof.sourcePayload` / `rawSource.checksum` | Source payload identity, ref, and producer-supplied checksum when present. |
 | `extraction` | Extracted target, value, locator, excerpt, extractor, confidence, and extraction time. |
 | `candidate` / `candidateSet` | Candidate identity/value plus the ordered candidate set, selected candidate, status, and rationale. |
-| `reviewOutcome` | Review decision/status, actor, review time, rationale, and evidence ids. |
+| `reviewOutcome` | Review decision/status, actor, review time, rationale, evidence ids, and in v2 optional authorizing testimony provenance. |
 | `claim` | Projected claim identity, status/value, impact, evidence method, derivation links, collector, actor, and event method. |
+
+New proofs use the v2 envelope: outer `schemaVersion: 2`, inner
+`proof.schemaVersion: 2`, and `proof.packageVersion: "2"`. When present,
+`reviewOutcome.authorizing` is validated and committed to the canonical bytes.
+The portable variants are:
+
+- `explicit-statement`: `statement` and optional non-empty string `source`;
+- `exchange`: `prompt`, `response`, and optional non-empty string `source`;
+- `authorized-action`: `promptRef`, `renderedPrompt`, `action`, and
+  `authorityRef`.
+
+These fields are copied explicitly rather than treating the whole review
+outcome as canonical. Producer metadata and future non-canonical fields remain
+outside the proof. Evidence ids remain a separately sorted sibling field;
+optional testimony `source` and authorized-action `authorityRef` are preserved
+without changing their text.
 
 To recompute the anchor value, rebuild the same canonical payload from the
 reviewed Survey records, call `canonicalReviewProofJson(payload)`, and compute
@@ -616,6 +634,21 @@ SHA-256 over that JSON. The result should equal
 Survey-specific anchor metadata, and a source/time pointer for display. Claims
 without a selected review outcome are not anchored by `{ reviewProofs: true }`.
 
+For persisted material, call
+`verifyCanonicalReviewProofPayload(payload, expectedHash)`. The verifier accepts
+consistent v1 and v2 envelopes, validates v2 authorizing when present, and only
+then compares the canonical SHA-256 value. It rejects outer/inner schema
+mismatches, schema/package-version hybrids, unsupported versions, and v1
+payloads carrying the v2-only authorizing field, even when the supplied hash
+matches those malformed bytes.
+
+Persisted v1 payloads remain verifiable against their original hashes without
+rebuilding them through the v2 builder. V1 did not contain or attest
+authorizing testimony. Re-projecting an authorizing-bearing review with the v2
+builder intentionally produces a new hash because the committed canonical
+material has changed. Recursive canonicalization keeps object insertion order
+hash-insensitive; array order retains its existing contract semantics.
+
 When the Surface projection proof option is enabled, `buildSurveyTrustBundle`
 will attach the same kind of anchor to the projected reviewed claim:
 
@@ -624,9 +657,11 @@ const trustBundle = buildSurveyTrustBundle(surveyInput, { reviewProofs: true });
 ```
 
 The proof provides hash-only tamper evidence for the Survey review/provenance
-trail in the canonical payload. It does not authenticate an actor, sign the
-payload, or prove the real-world truth of the claim. Non-goals include JWT/JWS
-signing, key management, a transparency log, and any veracity guarantee.
+trail in the canonical payload. Authorizing is portable provenance, not review
+policy or an authorization decision made by Survey. Neither the proof nor its
+verifier authenticates an actor, signs the payload, or proves the real-world
+truth of the claim. Non-goals include JWT/JWS signing, key management, a
+transparency log, and any veracity guarantee.
 
 JWT-adjacent words in the payload are process-envelope vocabulary, not a v0 JWT
 implementation. `issuer` identifies the Survey producer for recomputation,
