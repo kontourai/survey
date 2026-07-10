@@ -75,6 +75,15 @@ export type {
   LearningProjectionSeverity,
   LearningProjectionSignal,
 } from "./learning-projections.js";
+export { buildReviewedLearningUpdateProposal } from "./learning-update-proposal.js";
+export type {
+  LearningUpdateEvidenceReference,
+  LearningUpdateProposal,
+  OpaqueEvidenceReference,
+  ProvenanceReference,
+  ReviewedLearningUpdateProposalInput,
+  ReviewProofReference,
+} from "./learning-update-proposal.js";
 export {
   buildCanonicalReviewProofPayload,
   buildReviewProofAnchor,
