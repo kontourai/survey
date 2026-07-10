@@ -12,8 +12,10 @@ import {
   REVIEW_PROOF_PACKAGE_NAME,
   REVIEW_PROOF_SCHEMA,
   REVIEW_PROOF_SCHEMA_VERSION,
+  validateAuthorizing,
+  verifyCanonicalReviewProofPayload,
 } from "../src/index.js";
-import type { ReviewProofInput } from "../src/index.js";
+import type { CanonicalReviewProofPayload, ReviewAuthorizing, ReviewProofInput } from "../src/index.js";
 
 describe("review proof helper", () => {
   it("builds a deterministic hash anchor from portable review fields", () => {
@@ -278,6 +280,345 @@ describe("review proof helper", () => {
     assert.notEqual(mutated.id, original.id);
   });
 
+  it("preserves all ReviewAuthorizing variants through canonical JSON verification and readback", () => {
+    const cases: Array<{ name: string; authorizing: ReviewAuthorizing }> = [
+      {
+        name: "explicit statement with source",
+        authorizing: {
+          kind: "explicit-statement",
+          statement: "I confirm this reviewed value for downstream use.",
+          source: "operator-attestation",
+        },
+      },
+      {
+        name: "exchange with source",
+        authorizing: {
+          kind: "exchange",
+          prompt: "Should this reviewed value be accepted?",
+          response: "Yes, accept this reviewed value.",
+          source: "review-exchange",
+        },
+      },
+      {
+        name: "authorized action with authority reference",
+        authorizing: {
+          kind: "authorized-action",
+          promptRef: "review-prompt://registration-status/approve",
+          renderedPrompt: "Approve the reviewed registration status?",
+          action: "affirmed-control",
+          authorityRef: "authority-trace://review-session/registration-status",
+        },
+      },
+    ];
+
+    for (const { name, authorizing } of cases) {
+      assert.deepEqual(validateAuthorizing(authorizing), [], `${name} fixture must be admissible`);
+      const input = reviewProofInput();
+      input.reviewOutcome = {
+        ...input.reviewOutcome!,
+        evidenceIds: ["evidence.registration-status.secondary", "evidence.registration-status.registry"],
+        authorizing,
+      };
+
+      const payload = buildCanonicalReviewProofPayload(input);
+      assert.equal(payload.schemaVersion, 2, `${name} must use the v2 envelope`);
+      if (payload.schemaVersion !== 2) throw new Error(`${name} unexpectedly produced a non-v2 payload`);
+      const hash = hashCanonicalReviewProofPayload(payload);
+      const parsed = JSON.parse(canonicalReviewProofJson(payload)) as CanonicalReviewProofPayload;
+
+      assert.equal(parsed.schemaVersion, 2);
+      if (parsed.schemaVersion !== 2) throw new Error(`${name} read back as a non-v2 payload`);
+      assert.equal(verifyCanonicalReviewProofPayload(parsed, hash), true, `${name} must verify after JSON readback`);
+      assert.deepEqual(parsed.reviewOutcome?.authorizing, authorizing, `${name} must survive readback losslessly`);
+      assert.deepEqual(parsed.reviewOutcome?.evidenceIds, [
+        "evidence.registration-status.registry",
+        "evidence.registration-status.secondary",
+      ]);
+      if (authorizing.kind === "explicit-statement" || authorizing.kind === "exchange") {
+        assert.equal(parsed.reviewOutcome?.authorizing?.source, authorizing.source);
+      } else {
+        assert.equal(parsed.reviewOutcome?.authorizing?.authorityRef, authorizing.authorityRef);
+      }
+    }
+  });
+
+  it("rejects invalid ReviewAuthorizing at canonical projection", () => {
+    const input = reviewProofInput();
+    input.reviewOutcome = {
+      ...input.reviewOutcome!,
+      authorizing: {
+        kind: "exchange",
+        prompt: "Should this reviewed value be accepted?",
+      } as ReviewAuthorizing,
+    };
+
+    assert.throws(
+      () => buildCanonicalReviewProofPayload(input),
+      /canonical review proof.*invalid authorizing|invalid authorizing.*canonical review proof/i,
+    );
+  });
+
+  it("snapshots state-changing builder authorizing before validation and projection", () => {
+    let statementReads = 0;
+    const authorizing = new Proxy(
+      { kind: "explicit-statement", statement: "unused" },
+      {
+        get(target, property, receiver) {
+          if (property === "statement") {
+            statementReads += 1;
+            return statementReads === 1 ? "ok" : "";
+          }
+          return Reflect.get(target, property, receiver);
+        },
+      },
+    ) as ReviewAuthorizing;
+    const input = reviewProofInput();
+    input.reviewOutcome = { ...input.reviewOutcome!, authorizing };
+
+    const payload = buildCanonicalReviewProofPayload(input);
+
+    assert.equal(payload.reviewOutcome?.authorizing?.kind, "explicit-statement");
+    assert.equal(payload.reviewOutcome?.authorizing?.statement, "ok");
+    assert.equal(statementReads, 1);
+  });
+
+  it("rejects malformed optional source values at canonical projection", () => {
+    const authorizingCases: unknown[] = [
+      { kind: "explicit-statement", statement: "Confirmed.", source: 42 },
+      { kind: "explicit-statement", statement: "Confirmed.", source: {} },
+      { kind: "explicit-statement", statement: "Confirmed.", source: "" },
+      { kind: "explicit-statement", statement: "Confirmed.", source: "   " },
+      { kind: "exchange", prompt: "Is this correct?", response: "Yes.", source: 42 },
+      { kind: "exchange", prompt: "Is this correct?", response: "Yes.", source: {} },
+      { kind: "exchange", prompt: "Is this correct?", response: "Yes.", source: "" },
+      { kind: "exchange", prompt: "Is this correct?", response: "Yes.", source: "   " },
+    ];
+
+    for (const authorizing of authorizingCases) {
+      const input = reviewProofInput();
+      input.reviewOutcome = {
+        ...input.reviewOutcome!,
+        authorizing: authorizing as ReviewAuthorizing,
+      };
+      assert.throws(
+        () => buildCanonicalReviewProofPayload(input),
+        /canonical review proof.*invalid authorizing|invalid authorizing.*canonical review proof/i,
+      );
+    }
+  });
+
+  it("verifies a persisted v1 payload without authorizing", () => {
+    assert.equal(verifyCanonicalReviewProofPayload(LEGACY_V1_PAYLOAD, LEGACY_V1_HASH), true);
+    assert.equal("authorizing" in LEGACY_V1_PAYLOAD.reviewOutcome!, false);
+    assert.equal(buildCanonicalReviewProofPayload(reviewProofInput()).schemaVersion, 2);
+  });
+
+  it("rejects hybrid review proof version envelopes and v1 authorizing", () => {
+    const malformedPayloads: unknown[] = [
+      withLegacyEnvelope({ proofSchemaVersion: 2 }),
+      withLegacyEnvelope({ outerSchemaVersion: 2 }),
+      withLegacyEnvelope({ packageVersion: "2" }),
+      withLegacyEnvelope({ outerSchemaVersion: 2, proofSchemaVersion: 2, packageVersion: "1" }),
+      withLegacyEnvelope({ outerSchemaVersion: 3, proofSchemaVersion: 3, packageVersion: "3" }),
+      withLegacyEnvelope({
+        authorizing: {
+          kind: "explicit-statement",
+          statement: "This field was never part of the v1 contract.",
+        },
+      }),
+    ];
+
+    for (const malformed of malformedPayloads) {
+      const matchingMalformedHash = hashUnknownCanonicalPayload(malformed);
+      assert.equal(
+        verifyCanonicalReviewProofPayload(malformed as CanonicalReviewProofPayload, matchingMalformedHash),
+        false,
+        "invalid envelopes must be rejected even when their malformed bytes match the supplied hash",
+      );
+    }
+  });
+
+  it("rejects persisted authorizing with numeric or object source despite a matching hash", () => {
+    const validAuthorizing: ReviewAuthorizing[] = [
+      { kind: "explicit-statement", statement: "Confirmed." },
+      { kind: "exchange", prompt: "Is this correct?", response: "Yes." },
+    ];
+    const malformedSources: unknown[] = [42, { channel: "review" }];
+
+    for (const authorizing of validAuthorizing) {
+      for (const source of malformedSources) {
+        const input = reviewProofInput();
+        input.reviewOutcome = { ...input.reviewOutcome!, authorizing };
+        const payload = buildCanonicalReviewProofPayload(input);
+        assert.equal(payload.schemaVersion, 2);
+        if (payload.schemaVersion !== 2 || !payload.reviewOutcome?.authorizing) {
+          throw new Error("expected a canonical v2 authorizing payload");
+        }
+        (payload.reviewOutcome.authorizing as unknown as Record<string, unknown>).source = source;
+        const matchingMalformedHash = hashUnknownCanonicalPayload(payload);
+
+        assert.equal(verifyCanonicalReviewProofPayload(payload, matchingMalformedHash), false);
+      }
+    }
+  });
+
+  it("fails verification for the state-changing authorizing proxy reproduction", () => {
+    const input = reviewProofInput();
+    input.reviewOutcome = {
+      ...input.reviewOutcome!,
+      authorizing: { kind: "explicit-statement", statement: "ok" },
+    };
+    const payload = buildCanonicalReviewProofPayload(input);
+    assert.equal(payload.schemaVersion, 2);
+    if (payload.schemaVersion !== 2 || !payload.reviewOutcome) {
+      throw new Error("expected a canonical v2 review outcome");
+    }
+
+    const invalidPayload = structuredClone(payload);
+    assert.equal(invalidPayload.schemaVersion, 2);
+    if (invalidPayload.schemaVersion !== 2 || invalidPayload.reviewOutcome?.authorizing?.kind !== "explicit-statement") {
+      throw new Error("expected an explicit-statement fixture");
+    }
+    invalidPayload.reviewOutcome.authorizing.statement = "";
+    const invalidHash = hashUnknownCanonicalPayload(invalidPayload);
+
+    let statementReads = 0;
+    payload.reviewOutcome.authorizing = new Proxy(
+      { kind: "explicit-statement", statement: "unused" },
+      {
+        get(target, property, receiver) {
+          if (property === "statement") {
+            statementReads += 1;
+            return statementReads <= 3 ? "ok" : "";
+          }
+          return Reflect.get(target, property, receiver);
+        },
+      },
+    ) as ReviewAuthorizing;
+
+    assert.equal(verifyCanonicalReviewProofPayload(payload, invalidHash), false);
+    assert.equal(statementReads, 1);
+  });
+
+  it("fails verification when canonical authorizing is tampered after hashing", () => {
+    const mutations: Array<{
+      authorizing: ReviewAuthorizing;
+      mutate: (authorizing: ReviewAuthorizing) => void;
+    }> = [
+      {
+        authorizing: { kind: "explicit-statement", statement: "I approve this reviewed value." },
+        mutate: (authorizing) => {
+          if (authorizing.kind === "explicit-statement") authorizing.statement = "I reject this reviewed value.";
+        },
+      },
+      {
+        authorizing: {
+          kind: "exchange",
+          prompt: "Accept this reviewed value?",
+          response: "Accept it.",
+        },
+        mutate: (authorizing) => {
+          if (authorizing.kind === "exchange") authorizing.response = "Do not accept it.";
+        },
+      },
+      {
+        authorizing: {
+          kind: "authorized-action",
+          promptRef: "review-prompt://registration-status/approve",
+          renderedPrompt: "Approve this reviewed value?",
+          action: "typed",
+          authorityRef: "authority-trace://review-session/original",
+        },
+        mutate: (authorizing) => {
+          if (authorizing.kind === "authorized-action") {
+            authorizing.authorityRef = "authority-trace://review-session/substituted";
+          }
+        },
+      },
+    ];
+
+    for (const { authorizing, mutate } of mutations) {
+      const input = reviewProofInput();
+      input.reviewOutcome = { ...input.reviewOutcome!, authorizing };
+      const payload = buildCanonicalReviewProofPayload(input);
+      assert.equal(payload.schemaVersion, 2);
+      if (payload.schemaVersion !== 2) throw new Error("expected a canonical v2 review proof payload");
+      const capturedHash = hashCanonicalReviewProofPayload(payload);
+      const tampered = structuredClone(payload);
+      assert.ok(tampered.reviewOutcome?.authorizing);
+      mutate(tampered.reviewOutcome.authorizing);
+
+      assert.equal(verifyCanonicalReviewProofPayload(tampered, capturedHash), false);
+    }
+  });
+
+  it("canonical authorizing object insertion order does not affect verification", () => {
+    const input = reviewProofInput();
+    input.reviewOutcome = {
+      ...input.reviewOutcome!,
+      authorizing: {
+        kind: "exchange",
+        prompt: "  Preserve this prompt exactly?  ",
+        response: "Yes — preserve spacing and punctuation exactly.",
+        source: "review-exchange",
+      },
+    };
+    const payload = buildCanonicalReviewProofPayload(input);
+    assert.equal(payload.schemaVersion, 2);
+    if (payload.schemaVersion !== 2) throw new Error("expected a canonical v2 review proof payload");
+    const hash = hashCanonicalReviewProofPayload(payload);
+    const reordered = structuredClone(payload);
+    assert.ok(reordered.reviewOutcome?.authorizing?.kind === "exchange");
+    reordered.reviewOutcome.authorizing = {
+      source: reordered.reviewOutcome.authorizing.source,
+      response: reordered.reviewOutcome.authorizing.response,
+      prompt: reordered.reviewOutcome.authorizing.prompt,
+      kind: "exchange",
+    };
+
+    assert.equal(verifyCanonicalReviewProofPayload(reordered, hash), true);
+    assert.equal(reordered.reviewOutcome.authorizing.prompt, "  Preserve this prompt exactly?  ");
+  });
+
+  it("returns false for supported review proof envelopes that cannot be canonicalized", () => {
+    const cyclicPayload = buildCanonicalReviewProofPayload(reviewProofInput());
+    const cyclicValue: Record<string, unknown> = {};
+    cyclicValue.self = cyclicValue;
+    cyclicPayload.claim.value = cyclicValue;
+
+    const bigIntPayload = buildCanonicalReviewProofPayload(reviewProofInput());
+    bigIntPayload.claim.value = 1n;
+
+    const throwingGetterPayload = buildCanonicalReviewProofPayload(reviewProofInput());
+    Object.defineProperty(throwingGetterPayload.claim, "value", {
+      enumerable: true,
+      configurable: true,
+      get() {
+        throw new Error("fixture getter must not escape boolean verification");
+      },
+    });
+
+    const throwingEnvelopePayload = new Proxy(
+      buildCanonicalReviewProofPayload(reviewProofInput()),
+      {
+        get(target, property, receiver) {
+          if (property === "proof") {
+            throw new Error("fixture envelope getter must not escape boolean verification");
+          }
+          return Reflect.get(target, property, receiver);
+        },
+      },
+    );
+
+    for (const payload of [cyclicPayload, bigIntPayload, throwingGetterPayload, throwingEnvelopePayload]) {
+      let result: boolean | undefined;
+      assert.doesNotThrow(() => {
+        result = verifyCanonicalReviewProofPayload(payload, "not-a-matching-hash");
+      });
+      assert.equal(result, false);
+    }
+  });
+
   it("preserves hostile keys as canonical data without prototype mutation", () => {
     const payload = buildCanonicalReviewProofPayload(reviewProofInput());
     const hostileValue: Record<string, unknown> = { constructor: "constructor-data" };
@@ -308,6 +649,53 @@ describe("review proof helper", () => {
     assert.equal((Object.prototype as Record<string, unknown>).polluted, undefined);
   });
 });
+
+const LEGACY_V1_CANONICAL_JSON = '{"candidate":{"extractionId":"extraction.fixture.status","id":"candidate.fixture.status","value":"ACTIVE"},"candidateSet":{"candidateIds":["candidate.fixture.status"],"id":"candidate-set.fixture.status","selectedCandidateId":"candidate.fixture.status","status":"resolved","target":"status"},"claim":{"candidateId":"candidate.fixture.status","candidateSetId":"candidate-set.fixture.status","claimType":"fixture.field","collectedBy":"fixture-producer","facet":"fixture.profile","fieldOrBehavior":"status","id":"claim.fixture.status","impactLevel":"medium","status":"verified","subjectId":"fixture-1","subjectType":"fixture-record","value":"ACTIVE"},"extraction":{"extractedAt":"2026-01-02T03:01:00.000Z","extractor":"fixture-extractor","id":"extraction.fixture.status","locator":"json:$.status","sourceId":"source.fixture.status","target":"status","value":"ACTIVE"},"proof":{"issuedAt":"2026-01-02T03:04:05.000Z","issuer":"fixture-producer","packageName":"@kontourai/survey","packageVersion":"1","producer":"fixture-extractor","schema":"survey.review-proof","schemaVersion":1,"sourcePayload":{"checksum":"sha256:legacy-fixture","id":"source.fixture.status","sourceRef":"fixture://record/status"},"subject":{"candidateId":"candidate.fixture.status","candidateSetId":"candidate-set.fixture.status","claimId":"claim.fixture.status","claimType":"fixture.field","facet":"fixture.profile","fieldOrBehavior":"status","subjectId":"fixture-1","subjectType":"fixture-record"}},"rawSource":{"checksum":"sha256:legacy-fixture","id":"source.fixture.status","kind":"api-record","locatorScheme":"structured-field","observedAt":"2026-01-02T03:00:00.000Z","sourceRef":"fixture://record/status"},"reviewOutcome":{"actor":"fixture-reviewer","candidateId":"candidate.fixture.status","candidateSetId":"candidate-set.fixture.status","evidenceIds":["evidence.fixture.status"],"id":"review.fixture.status","reviewedAt":"2026-01-02T03:04:05.000Z","status":"verified"},"schemaVersion":1}';
+const LEGACY_V1_HASH = "7d52f65d7d1c72f1ce8d5a9412f46a42a277a13247ca951d028b2d1db1a4fe78";
+const LEGACY_V1_PAYLOAD = deepFreeze(
+  JSON.parse(LEGACY_V1_CANONICAL_JSON) as CanonicalReviewProofPayload,
+);
+
+function withLegacyEnvelope(options: {
+  outerSchemaVersion?: number;
+  proofSchemaVersion?: number;
+  packageVersion?: string;
+  authorizing?: ReviewAuthorizing;
+}): unknown {
+  const payload = structuredClone(LEGACY_V1_PAYLOAD) as unknown as {
+    schemaVersion: number;
+    proof: { schemaVersion: number; packageVersion: string };
+    reviewOutcome: Record<string, unknown>;
+  };
+  payload.schemaVersion = options.outerSchemaVersion ?? 1;
+  payload.proof.schemaVersion = options.proofSchemaVersion ?? 1;
+  payload.proof.packageVersion = options.packageVersion ?? "1";
+  if (options.authorizing) payload.reviewOutcome.authorizing = options.authorizing;
+  return payload;
+}
+
+function hashUnknownCanonicalPayload(payload: unknown): string {
+  return createHash("sha256").update(JSON.stringify(canonicalizeUnknown(payload))).digest("hex");
+}
+
+function canonicalizeUnknown(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalizeUnknown);
+  if (value === null || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .filter((key) => (value as Record<string, unknown>)[key] !== undefined)
+      .map((key) => [key, canonicalizeUnknown((value as Record<string, unknown>)[key])]),
+  );
+}
+
+function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === "object") {
+    for (const nested of Object.values(value as Record<string, unknown>)) deepFreeze(nested);
+    Object.freeze(value);
+  }
+  return value;
+}
 
 function reviewProofInput(): ReviewProofInput {
   const records = candidateReviewRecord({

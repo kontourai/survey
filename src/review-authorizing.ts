@@ -10,6 +10,7 @@ export type ReviewAuthorizingIssueCode =
   | "missing-kind"
   | "unknown-kind"
   | "missing-statement"
+  | "invalid-source"
   | "missing-prompt"
   | "missing-response"
   | "missing-prompt-ref"
@@ -79,6 +80,7 @@ function validateExplicitStatement(
       message: "explicit-statement authorizing block requires a non-empty 'statement' string.",
     });
   }
+  validateOptionalSource(block.source, issues);
   return issues;
 }
 
@@ -96,7 +98,20 @@ function validateExchange(block: Partial<ReviewAuthorizingExchange>): ReviewAuth
       message: "exchange authorizing block requires a non-empty 'response' string (both halves required for self-contained testimony).",
     });
   }
+  validateOptionalSource(block.source, issues);
   return issues;
+}
+
+function validateOptionalSource(
+  source: unknown,
+  issues: ReviewAuthorizingIssue[],
+): void {
+  if (source !== undefined && (typeof source !== "string" || source.trim() === "")) {
+    issues.push({
+      code: "invalid-source",
+      message: "authorizing 'source', when present, must be a non-empty string.",
+    });
+  }
 }
 
 function validateAuthorizedAction(

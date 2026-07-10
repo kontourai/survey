@@ -6,15 +6,20 @@ import type {
   ClaimTarget,
   Extraction,
   RawSource,
+  ReviewAuthorizing,
   ReviewOutcome,
 } from "./types.js";
+import { validateAuthorizing } from "./review-authorizing.js";
 
 export const REVIEW_PROOF_SCHEMA = "survey.review-proof";
-export const REVIEW_PROOF_SCHEMA_VERSION = 1;
+export const REVIEW_PROOF_SCHEMA_VERSION = 2;
 export const REVIEW_PROOF_PACKAGE_NAME = "@kontourai/survey";
 // Version of the review proof contract emitted by this helper. This is intentionally
 // independent from the npm package release version because it participates in hashes.
-export const REVIEW_PROOF_CONTRACT_VERSION = "1";
+export const REVIEW_PROOF_CONTRACT_VERSION = "2";
+
+const LEGACY_REVIEW_PROOF_SCHEMA_VERSION = 1;
+const LEGACY_REVIEW_PROOF_CONTRACT_VERSION = "1";
 
 export interface ReviewProofInput {
   rawSource: RawSource;
@@ -28,13 +33,13 @@ export interface ReviewProofInput {
   metadata?: Record<string, unknown>;
 }
 
-export interface CanonicalReviewProofPayload {
+export interface CanonicalReviewProofPayloadV1 {
   schemaVersion: 1;
   proof: {
     schema: typeof REVIEW_PROOF_SCHEMA;
-    schemaVersion: typeof REVIEW_PROOF_SCHEMA_VERSION;
+    schemaVersion: typeof LEGACY_REVIEW_PROOF_SCHEMA_VERSION;
     packageName: typeof REVIEW_PROOF_PACKAGE_NAME;
-    packageVersion: typeof REVIEW_PROOF_CONTRACT_VERSION;
+    packageVersion: typeof LEGACY_REVIEW_PROOF_CONTRACT_VERSION;
     issuer: string;
     producer: string;
     issuedAt: string;
@@ -124,7 +129,30 @@ export interface CanonicalReviewProofPayload {
   };
 }
 
-export function buildCanonicalReviewProofPayload(input: ReviewProofInput): CanonicalReviewProofPayload {
+type CanonicalReviewAuthorizing =
+  | (Extract<ReviewAuthorizing, { kind: "explicit-statement" }> & { authorityRef?: never })
+  | (Extract<ReviewAuthorizing, { kind: "exchange" }> & { authorityRef?: never })
+  | (Extract<ReviewAuthorizing, { kind: "authorized-action" }> & { source?: never });
+
+export type CanonicalReviewProofPayloadV2 = Omit<
+  CanonicalReviewProofPayloadV1,
+  "schemaVersion" | "proof" | "reviewOutcome"
+> & {
+  schemaVersion: 2;
+  proof: Omit<CanonicalReviewProofPayloadV1["proof"], "schemaVersion" | "packageVersion"> & {
+    schemaVersion: typeof REVIEW_PROOF_SCHEMA_VERSION;
+    packageVersion: typeof REVIEW_PROOF_CONTRACT_VERSION;
+  };
+  reviewOutcome?: NonNullable<CanonicalReviewProofPayloadV1["reviewOutcome"]> & {
+    authorizing?: CanonicalReviewAuthorizing;
+  };
+};
+
+export type CanonicalReviewProofPayload =
+  | CanonicalReviewProofPayloadV1
+  | CanonicalReviewProofPayloadV2;
+
+export function buildCanonicalReviewProofPayload(input: ReviewProofInput): CanonicalReviewProofPayloadV2 {
   assertCandidateConsistency(input);
 
   return {
@@ -198,6 +226,7 @@ export function buildCanonicalReviewProofPayload(input: ReviewProofInput): Canon
           reviewedAt: input.reviewOutcome.reviewedAt,
           rationale: input.reviewOutcome.rationale,
           evidenceIds: input.reviewOutcome.evidenceIds ? [...input.reviewOutcome.evidenceIds].sort() : undefined,
+          authorizing: copyCanonicalAuthorizing(input.reviewOutcome.authorizing),
         }
       : undefined,
     claim: {
@@ -230,6 +259,50 @@ export function buildCanonicalReviewProofPayload(input: ReviewProofInput): Canon
       eventMethod: input.claim.eventMethod,
     },
   };
+}
+
+function copyCanonicalAuthorizing(authorizing: ReviewAuthorizing | undefined): CanonicalReviewAuthorizing | undefined {
+  if (authorizing === undefined) return undefined;
+
+  const kind = authorizing.kind;
+  let snapshot: CanonicalReviewAuthorizing;
+
+  switch (kind) {
+    case "explicit-statement":
+      snapshot = {
+        kind,
+        statement: authorizing.statement,
+        source: authorizing.source,
+      };
+      break;
+    case "exchange":
+      snapshot = {
+        kind,
+        prompt: authorizing.prompt,
+        response: authorizing.response,
+        source: authorizing.source,
+      };
+      break;
+    case "authorized-action":
+      snapshot = {
+        kind,
+        promptRef: authorizing.promptRef,
+        renderedPrompt: authorizing.renderedPrompt,
+        action: authorizing.action,
+        authorityRef: authorizing.authorityRef,
+      };
+      break;
+    default:
+      snapshot = { kind } as unknown as CanonicalReviewAuthorizing;
+  }
+
+  const issues = validateAuthorizing(snapshot);
+  if (issues.length > 0) {
+    throw new Error(
+      `Canonical review proof has invalid authorizing: ${issues.map((issue) => issue.message).join(" ")}`,
+    );
+  }
+  return snapshot;
 }
 
 function assertCandidateConsistency(input: ReviewProofInput): void {
@@ -281,6 +354,57 @@ export function canonicalReviewProofJson(payload: CanonicalReviewProofPayload): 
 
 export function hashCanonicalReviewProofPayload(payload: CanonicalReviewProofPayload): string {
   return createHash("sha256").update(canonicalReviewProofJson(payload)).digest("hex");
+}
+
+/**
+ * Verifies the integrity hash of a persisted v1 or v2 canonical review proof.
+ * Envelope compatibility and v2 authorizing admissibility are checked before
+ * the expected hash is compared.
+ */
+export function verifyCanonicalReviewProofPayload(payload: unknown, expectedHash: string): boolean {
+  try {
+    const snapshot = canonicalize(payload);
+    const canonicalJson = JSON.stringify(snapshot);
+    if (typeof canonicalJson !== "string" || !isRecord(snapshot) || !isRecord(snapshot.proof)) return false;
+    if (snapshot.proof.schema !== REVIEW_PROOF_SCHEMA) return false;
+    if (snapshot.proof.packageName !== REVIEW_PROOF_PACKAGE_NAME) return false;
+
+    const schemaVersion = snapshot.schemaVersion;
+    const proofSchemaVersion = snapshot.proof.schemaVersion;
+    const packageVersion = snapshot.proof.packageVersion;
+    const reviewOutcome = snapshot.reviewOutcome;
+
+    if (schemaVersion === LEGACY_REVIEW_PROOF_SCHEMA_VERSION) {
+      if (
+        proofSchemaVersion !== LEGACY_REVIEW_PROOF_SCHEMA_VERSION
+        || packageVersion !== LEGACY_REVIEW_PROOF_CONTRACT_VERSION
+      ) {
+        return false;
+      }
+      if (isRecord(reviewOutcome) && Object.prototype.hasOwnProperty.call(reviewOutcome, "authorizing")) {
+        return false;
+      }
+    } else if (schemaVersion === REVIEW_PROOF_SCHEMA_VERSION) {
+      if (proofSchemaVersion !== REVIEW_PROOF_SCHEMA_VERSION || packageVersion !== REVIEW_PROOF_CONTRACT_VERSION) {
+        return false;
+      }
+      if (reviewOutcome !== undefined && !isRecord(reviewOutcome)) return false;
+      if (
+        isRecord(reviewOutcome)
+        && Object.prototype.hasOwnProperty.call(reviewOutcome, "authorizing")
+        && reviewOutcome.authorizing !== undefined
+        && validateAuthorizing(reviewOutcome.authorizing).length > 0
+      ) {
+        return false;
+      }
+    } else {
+      return false;
+    }
+
+    return createHash("sha256").update(canonicalJson).digest("hex") === expectedHash;
+  } catch {
+    return false;
+  }
 }
 
 export function buildReviewProofAnchor(input: ReviewProofInput): IntegrityAnchor {
