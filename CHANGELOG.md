@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1](https://github.com/kontourai/survey/compare/v1.6.0...v1.6.1) (2026-07-10)
+
+
+### Fixes
+
+* preserve ReviewAuthorizing in canonical review proof ([#121](https://github.com/kontourai/survey/issues/121)) ([#123](https://github.com/kontourai/survey/issues/123)) ([30565f1](https://github.com/kontourai/survey/commit/30565f15ac3b999c592ca0c50f4a024ad2914239))
+
 ## [1.6.0](https://github.com/kontourai/survey/compare/v1.5.0...v1.6.0) (2026-07-03)
 
 
