@@ -417,6 +417,65 @@ Survey does not decide producer policy: callers still own review status,
 selected and unselected claim statuses, source details, claim vocabulary, and
 domain metadata.
 
+## Reviewed learning/update proposals
+
+`buildReviewedLearningUpdateProposal` is an opt-in, data-only projection for a
+reviewed current-to-proposed correction. It leaves the default learning
+projections and TrustBundle unchanged. The input must identify one resolved
+candidate set with exactly one `current` and one `proposed` role, the proposed
+candidate selected by an accepted review, its selected claim, and a review
+timestamp. Additional unselected candidates may omit those roles; all of their
+ids are retained in sorted review lineage. The selected claim status must match
+the accepted review and every unselected claim must be `superseded`. Both
+role-bearing candidate source lineages must carry
+`resolution: "supersession"`.
+
+The result contains a generic subject, `applicability.target`, the previous and
+proposed values, opaque review evidence ids, candidate/claim/review lineage,
+and two complementary provenance anchors. A narrow
+`{ kind: "review-proof", algorithm: "sha256", proofSchemaVersion: 2, value }`
+reference identifies the canonical v2 proof without copying its payload. The
+separate provenance references retain each raw source's origin and resolution
+axis because the canonical proof intentionally does not commit that axis.
+`authorizationRef` links the review outcome id to the same proof hash; it does
+not duplicate the proof's authorizing content. An unidentified hash or another
+proof version is rejected.
+
+```ts
+const proposal = buildReviewedLearningUpdateProposal({
+  survey,
+  candidateSetId: "threshold-review",
+  reviewOutcomeId: "threshold-review.outcome",
+  selectedClaimId: "threshold.proposed.claim",
+  proof: {
+    kind: "review-proof",
+    algorithm: "sha256",
+    proofSchemaVersion: 2,
+    value: canonicalProofHash,
+  },
+});
+```
+
+Proposal ids are SHA-256 hashes of a versioned canonical semantic payload.
+Subject, applicability, value delta, canonically deduplicated and sorted
+evidence/provenance references,
+authorization, review lineage, source, and reviewed time participate; object
+key order and set-like input order do not. Identity never depends on ambient
+time, record order, slugs, or mutable metadata.
+
+Values are accepted only from a collision-free canonical JSON domain: null,
+booleans, strings, finite numbers other than negative zero, arrays, and plain
+string-keyed objects composed recursively from the same values. Undefined,
+functions, symbols, big integers, non-finite numbers, cycles, and class or
+built-in object instances are rejected before output or hashing. Arrays must
+contain only dense enumerable index properties and `length`; symbol, hidden,
+accessor, sparse, or extra own properties are rejected. Extraction values are
+checked under the same rules before lineage comparison.
+
+Survey does not interpret `applicability.target` as a domain path and does not
+change external state. Consumers own target checks, evidence materialization,
+supersede-never-rewrite policy, and storage in their own systems.
+
 
 ## Repeated observations
 
