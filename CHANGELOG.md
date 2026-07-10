@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/kontourai/survey/compare/v1.7.0...v1.8.0) (2026-07-10)
+
+
+### Features
+
+* reviewed learning-update proposal — flywheel output contract ([#115](https://github.com/kontourai/survey/issues/115)) ([#129](https://github.com/kontourai/survey/issues/129)) ([4db0881](https://github.com/kontourai/survey/commit/4db08816daa90d656a8d13e9e3d8edc133eb2c2d))
+
 ## [1.7.0](https://github.com/kontourai/survey/compare/v1.6.1...v1.7.0) (2026-07-10)
 
 
