@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.0](https://github.com/kontourai/survey/compare/v1.6.1...v1.7.0) (2026-07-10)
+
+
+### Features
+
+* provenance resolution axis — orthogonal (origin, resolution, authorization) ([#120](https://github.com/kontourai/survey/issues/120)) ([#126](https://github.com/kontourai/survey/issues/126)) ([757a3cb](https://github.com/kontourai/survey/commit/757a3cb7ecd1fa3513e85151dd880d889456c62c))
+
 ## [1.6.1](https://github.com/kontourai/survey/compare/v1.6.0...v1.6.1) (2026-07-10)
 
 
