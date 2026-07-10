@@ -1,4 +1,4 @@
-import type { LocatorScheme, RawSource, RawSourceKind } from "./types.js";
+import type { LocatorScheme, ProvenanceResolution, RawSource, RawSourceKind } from "./types.js";
 
 export type ChecksumInput = string | {
   algorithm?: string;
@@ -9,6 +9,7 @@ export interface RawSourceInput {
   id?: string;
   sourceRef: string;
   observedAt: string;
+  resolution?: ProvenanceResolution;
   fetchedAt?: string;
   checksum?: ChecksumInput;
   locatorScheme: LocatorScheme;
@@ -129,6 +130,7 @@ function rawSource(kind: RawSourceKind, input: RawSourceInput): RawSource {
   return {
     id: input.id ?? sourceId(kind, input.sourceRef),
     kind,
+    resolution: input.resolution,
     sourceRef: input.sourceRef,
     observedAt: input.observedAt,
     fetchedAt: input.fetchedAt,

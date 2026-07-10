@@ -79,6 +79,46 @@ are preserved; otherwise Survey derives a stable id from source kind and
 already-prefixed checksum values are preserved. Producer metadata is copied
 through to Surface evidence.
 
+### Orthogonal provenance axes
+
+Provenance has three independent axes. Origin (`RawSource.kind`) identifies
+what kind of source was observed. Resolution (`RawSource.resolution`) records
+how a value entered or became current in a producer's resolution path.
+Authorization (`ReviewOutcome.authorizing`) records how a review or statement
+was authorized. Approval status, confidence, actor type, and proof validity are
+not resolution modes.
+
+Resolution is optional and has six values:
+
+- `extraction` — a value was extracted from the source;
+- `testimony` — a statement supplied the value;
+- `supersession` — a statement replaced an earlier value;
+- `precedence-selection` — one source or candidate was selected from several;
+- `carry-forward` — a value was carried from an earlier period;
+- `observation` — source material was observed without implying approval.
+
+For example, a producer may represent a confirmed operator statement as
+`(manual-entry, testimony, explicit-statement)`. Source locators, supporting
+references, confidence, rationale, and prior-period links remain independent
+record fields or producer metadata; they are not folded into the triple.
+
+When projecting to Surface, an explicit claim `evidenceType` override wins.
+Otherwise `testimony` and `supersession` map to `attestation`.
+`observation` maps to `crawl_observation` for a web page and `source_excerpt`
+for other origins. `extraction`, `precedence-selection`, and `carry-forward`
+use the source origin: uploaded documents map to `document_citation`, web pages
+to `crawl_observation`, policy standards to `policy_rule`, manual entries to
+`attestation`, and other origins to `source_excerpt`. Survey never infers
+`test_output` from resolution.
+
+Axis-bearing evidence includes `metadata.provenanceResolution` beside
+`rawSourceKind` and `locatorScheme`. If resolution is omitted, Survey preserves
+the legacy mapping exactly: policy standards map to `policy_rule`, uploaded
+documents to `document_citation`, web pages to `crawl_observation`, and all
+other origins to `attestation`. The optional field is additive and does not
+change the input contract version. Canonical review proofs do not commit this
+axis; changing canonical proof bytes requires a separately versioned contract.
+
 Use `policyStandardSource` when the observed material is the applied standard
 itself. It records `inlineText`, `standardVersion`, and optional `paragraphRef`
 on the `RawSource` and projects to Surface `policy_rule` evidence by default.

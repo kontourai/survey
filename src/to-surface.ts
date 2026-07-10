@@ -96,7 +96,7 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
     evidence.push({
       id: evidenceId,
       claimId: projection.id,
-      evidenceType: projection.evidenceType ?? evidenceTypeFor(rawSource),
+      evidenceType: projection.evidenceType ?? (rawSource.resolution ? evidenceTypeForResolution(rawSource, rawSource.resolution) : evidenceTypeFor(rawSource)),
       method: projection.evidenceMethod ?? "extraction",
       sourceRef: rawSource.sourceRef,
       sourceLocator: extraction.locator,
@@ -111,6 +111,7 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
         ...(policyStandard ? { policyStandard } : {}),
         rawSourceKind: rawSource.kind,
         locatorScheme: rawSource.locatorScheme,
+        ...(rawSource.resolution ? { provenanceResolution: rawSource.resolution } : {}),
         confidence: candidate.confidence ?? extraction.confidence,
       },
     });
@@ -467,6 +468,35 @@ function evidenceTypeFor(rawSource: RawSource): "document_citation" | "crawl_obs
   if (rawSource.kind === "uploaded-document") return "document_citation";
   if (rawSource.kind === "web-page") return "crawl_observation";
   return "attestation";
+}
+
+function evidenceTypeForResolution(rawSource: RawSource, resolution: NonNullable<RawSource["resolution"]>): "source_excerpt" | "document_citation" | "crawl_observation" | "attestation" | "policy_rule" {
+  switch (resolution) {
+    case "testimony":
+    case "supersession":
+      return "attestation";
+    case "observation":
+      return rawSource.kind === "web-page" ? "crawl_observation" : "source_excerpt";
+    case "extraction":
+      return evidenceTypeForOrigin(rawSource.kind);
+    case "precedence-selection":
+    case "carry-forward":
+      return evidenceTypeForOrigin(rawSource.kind);
+    default:
+      return assertNever(resolution);
+  }
+}
+
+function evidenceTypeForOrigin(kind: RawSource["kind"]): "source_excerpt" | "document_citation" | "crawl_observation" | "attestation" | "policy_rule" {
+  if (kind === "policy-standard") return "policy_rule";
+  if (kind === "uploaded-document") return "document_citation";
+  if (kind === "web-page") return "crawl_observation";
+  if (kind === "manual-entry") return "attestation";
+  return "source_excerpt";
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unsupported provenance resolution: ${String(value)}`);
 }
 
 function policyStandardFields(rawSource: RawSource): PolicyStandardFields | undefined {
