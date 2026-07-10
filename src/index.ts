@@ -79,6 +79,7 @@ export {
   buildReviewProofAnchor,
   canonicalReviewProofJson,
   hashCanonicalReviewProofPayload,
+  verifyCanonicalReviewProofPayload,
   REVIEW_PROOF_CONTRACT_VERSION,
   REVIEW_PROOF_PACKAGE_NAME,
   REVIEW_PROOF_SCHEMA,
@@ -86,6 +87,8 @@ export {
 } from "./review-proof.js";
 export type {
   CanonicalReviewProofPayload,
+  CanonicalReviewProofPayloadV1,
+  CanonicalReviewProofPayloadV2,
   ReviewProofInput,
 } from "./review-proof.js";
 export { fieldObservation } from "./field-observation.js";

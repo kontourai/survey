@@ -53,6 +53,13 @@ describe("validateAuthorizing: explicit-statement kind", () => {
     valid(block);
   });
 
+  it("rejects explicit-statement with a non-string or empty source", () => {
+    invalid({ kind: "explicit-statement", statement: "Confirmed.", source: 42 }, ["invalid-source"]);
+    invalid({ kind: "explicit-statement", statement: "Confirmed.", source: {} }, ["invalid-source"]);
+    invalid({ kind: "explicit-statement", statement: "Confirmed.", source: "" }, ["invalid-source"]);
+    invalid({ kind: "explicit-statement", statement: "Confirmed.", source: "   " }, ["invalid-source"]);
+  });
+
   it("rejects explicit-statement with missing statement", () => {
     invalid({ kind: "explicit-statement" }, ["missing-statement"]);
   });
@@ -99,6 +106,14 @@ describe("validateAuthorizing: exchange kind", () => {
       source: "delegated",
     };
     valid(block);
+  });
+
+  it("rejects exchange with a non-string or empty source", () => {
+    const base = { kind: "exchange", prompt: "Is this correct?", response: "Yes." };
+    invalid({ ...base, source: 42 }, ["invalid-source"]);
+    invalid({ ...base, source: {} }, ["invalid-source"]);
+    invalid({ ...base, source: "" }, ["invalid-source"]);
+    invalid({ ...base, source: "   " }, ["invalid-source"]);
   });
 
   it("rejects exchange with missing prompt", () => {

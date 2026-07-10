@@ -77,6 +77,65 @@ describe("Survey Surface projection", () => {
     assert.notEqual(hashCanonicalReviewProofPayload(mutatedPayload), claim?.currentIntegrityAnchor?.value);
   });
 
+  it("commits ReviewAuthorizing through buildSurveyTrustBundle without adding projected record ids", () => {
+    const baselineInput = structuredClone(publicFieldReviewExample);
+    const authoredInput = structuredClone(publicFieldReviewExample);
+    const authorizing = {
+      kind: "exchange" as const,
+      prompt: "Should this reviewed value be accepted for downstream use?",
+      response: "Yes, accept this reviewed value.",
+      source: "operator-review-exchange",
+    };
+    authoredInput.reviewOutcomes[0] = {
+      ...authoredInput.reviewOutcomes[0]!,
+      evidenceIds: ["evidence.review.secondary", "evidence.review.primary"],
+      authorizing,
+    };
+
+    const baseline = buildSurveyTrustBundle(baselineInput, { reviewProofs: true });
+    const authored = buildSurveyTrustBundle(authoredInput, { reviewProofs: true });
+    const authoredClaim = authored.claims.find(
+      (claim) => claim.id === "public-field.entity-123.availability-status.current",
+    );
+    const rawSource = authoredInput.rawSources[0]!;
+    const extraction = authoredInput.extractions[0]!;
+    const candidateSet = authoredInput.candidateSets[0]!;
+    const candidate = candidateSet.candidates[0]!;
+    const reviewOutcome = authoredInput.reviewOutcomes[0]!;
+    const projection = authoredInput.claims[0]!;
+    const canonicalPayload = buildCanonicalReviewProofPayload({
+      rawSource,
+      extraction,
+      candidate,
+      candidateSet,
+      reviewOutcome,
+      claim: {
+        ...projection,
+        value: candidate.value,
+        status: reviewOutcome.status,
+      },
+    });
+
+    assert.equal(canonicalPayload.schemaVersion, 2);
+    if (canonicalPayload.schemaVersion !== 2) throw new Error("expected a canonical v2 review proof payload");
+    assert.deepEqual(canonicalPayload.reviewOutcome?.authorizing, authorizing);
+    assert.deepEqual(canonicalPayload.reviewOutcome?.evidenceIds, [
+      "evidence.review.primary",
+      "evidence.review.secondary",
+    ]);
+    assert.equal(
+      authoredClaim?.currentIntegrityAnchor?.value,
+      hashCanonicalReviewProofPayload(canonicalPayload),
+    );
+    assert.notEqual(
+      authoredClaim?.currentIntegrityAnchor?.value,
+      baseline.claims.find((claim) => claim.id === authoredClaim?.id)?.currentIntegrityAnchor?.value,
+    );
+    assert.deepEqual(authored.claims.map((claim) => claim.id), baseline.claims.map((claim) => claim.id));
+    assert.deepEqual(authored.evidence.map((evidence) => evidence.id), baseline.evidence.map((evidence) => evidence.id));
+    assert.deepEqual(authored.events.map((event) => event.id), baseline.events.map((event) => event.id));
+  });
+
   it("projects corrected document candidates and preserves Claim Dependency recompute pressure", () => {
     const input = buildSurveyTrustBundle(correctedDocumentCandidatesExample);
     const valid = validateTrustBundle(input);
