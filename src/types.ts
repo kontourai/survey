@@ -1,11 +1,13 @@
 import type { ConfidenceBasis, DerivationEdge, EvidenceMethod, EvidenceType, ImpactLevel, TrustStatus } from "@kontourai/surface";
 
 export type RawSourceKind = "uploaded-document" | "web-page" | "api-record" | "manual-entry" | "policy-standard" | "inquiry-question" | "agent-utterance" | "system-schema";
+export type ProvenanceResolution = "extraction" | "testimony" | "supersession" | "precedence-selection" | "carry-forward" | "observation";
 export type LocatorScheme = "pdf" | "text" | "html" | "structured-field" | "text-span";
 
 export interface RawSource {
   id: string;
   kind: RawSourceKind;
+  resolution?: ProvenanceResolution;
   sourceRef: string;
   observedAt: string;
   fetchedAt?: string;
