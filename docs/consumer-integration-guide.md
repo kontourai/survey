@@ -905,7 +905,9 @@ buildSurveyTrustBundle(surveyInput, { calibration: { metrics: history, minSample
 Calibration is advisory only — it enriches `conclusionConfidence`, never a claim's
 `status`. See [record-contracts.md](record-contracts.md#confidence-calibration) for
 `deriveCalibration`, the advisory `suggestedThreshold` for auto-accept policies, and
-the honest limits.
+the honest limits. A runnable end-to-end walkthrough — history → grounded threshold
+→ produced value — is in
+[`examples/calibrated-auto-accept.ts`](https://github.com/kontourai/survey/blob/main/examples/calibrated-auto-accept.ts).
 
 ## Boundary Checklist
 
