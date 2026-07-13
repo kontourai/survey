@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.0](https://github.com/kontourai/survey/compare/v1.9.0...v1.10.0) (2026-07-13)
+
+
+### Features
+
+* produce conclusionConfidence.value from empirical calibration ([#137](https://github.com/kontourai/survey/issues/137)) ([#138](https://github.com/kontourai/survey/issues/138)) ([6ce4b30](https://github.com/kontourai/survey/commit/6ce4b30d63050c1d0650e3945ee0e0b18019a57f))
+
 ## [1.9.0](https://github.com/kontourai/survey/compare/v1.8.0...v1.9.0) (2026-07-13)
 
 
