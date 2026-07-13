@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.9.0](https://github.com/kontourai/survey/compare/v1.8.0...v1.9.0) (2026-07-13)
+
+
+### Features
+
+* derive confidence calibration from review outcomes ([#114](https://github.com/kontourai/survey/issues/114)) ([#136](https://github.com/kontourai/survey/issues/136)) ([f467765](https://github.com/kontourai/survey/commit/f467765c343a589c48990eac30e0bb286e050e29))
+* **surface:** modernize dep to 2.9 + emit conclusionConfidence.comfortZone ([#132](https://github.com/kontourai/survey/issues/132), [#133](https://github.com/kontourai/survey/issues/133)) ([#134](https://github.com/kontourai/survey/issues/134)) ([74024ba](https://github.com/kontourai/survey/commit/74024ba00fcd47230e3d9a33ae0232080401526c))
+
 ## [1.8.0](https://github.com/kontourai/survey/compare/v1.7.0...v1.8.0) (2026-07-10)
 
 
