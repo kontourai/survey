@@ -125,15 +125,21 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
     // comfortZone is CARRIED from the review. `value` is PRODUCED from empirical
     // review calibration (#114/#137): the affirmation rate of this extractor's
     // proposals at this confidence — a calibrated conclusion probability, distinct
-    // from the extraction-confidence ingredient in confidenceBasis. Only reviewed
-    // claims get a value, and only when the group clears the sample floor.
+    // from the extraction-confidence ingredient in confidenceBasis.
+    //
+    // A value is produced only for an AFFIRMED conclusion (status verified/assumed)
+    // that clears the sample floor. conclusionConfidence.value is "probability the
+    // conclusion is correct"; attaching an affirmation rate to a REJECTED (or
+    // not-yet-reviewed) conclusion would assert the opposite of what the human
+    // decided, so those claims get no value.
     const comfortZone = review?.withinComfortZone !== undefined
       ? {
           within: review.withinComfortZone,
           ...(review.comfortZoneNote ? { reason: review.comfortZoneNote } : {}),
         }
       : undefined;
-    const calibrated = calibrationMetrics && review
+    const affirmedConclusion = status === "verified" || status === "assumed";
+    const calibrated = calibrationMetrics && review && affirmedConclusion
       ? lookupCalibratedValue(calibrationMetrics, extraction.extractor, extraction.target, calibrationMinSamples)
       : undefined;
     if (comfortZone || calibrated) {

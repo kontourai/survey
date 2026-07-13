@@ -67,12 +67,17 @@ The derivation:
 
 The derivation's empirical accuracy is the natural calibrated conclusion
 probability, so `buildSurveyTrustBundle` now *produces* it. With the
-`calibration` option enabled, a reviewed claim's `conclusionConfidence.value` is
-set to the affirmation rate of its extractor's proposals — the finer
+`calibration` option enabled, an **affirmed** claim's `conclusionConfidence.value`
+is set to the affirmation rate of its extractor's proposals — the finer
 (extractor, field) group when it clears a sample floor, else the extractor-level
 group, else left unset (an ungrounded claim gets no number). `method` records
 which granularity produced the value. This is the "produce" side of the confidence
 loop: Survey previously only *carried* `comfortZone` and left `value` unset.
+
+`conclusionConfidence.value` is "probability the conclusion is correct", so it is
+produced **only for affirmed conclusions** (status `verified`/`assumed`).
+Attaching an affirmation rate to a `rejected` (or not-yet-reviewed) conclusion
+would assert the opposite of what the human decided, so those claims get no value.
 
 Two honesty constraints hold here too:
 

@@ -96,8 +96,8 @@ describe("buildSurveyTrustBundle — conclusionConfidence.value (produce side, #
     assert.deepEqual(ccs, [undefined, undefined]);
   });
 
-  it("produces value = empirical affirmation rate when calibration is enabled", () => {
-    // 4 samples for one (extractor, field): 3 affirmed, 1 rejected → 0.75.
+  it("produces value = empirical affirmation rate on affirmed claims, none on the rejected one", () => {
+    // 4 samples for one (extractor, field): 3 affirmed, 1 rejected → group rate 0.75.
     const input = fixture([
       { status: "verified" },
       { status: "verified" },
@@ -105,10 +105,14 @@ describe("buildSurveyTrustBundle — conclusionConfidence.value (produce side, #
       { status: "rejected" },
     ]);
     const ccs = ccOf(input, { calibration: { minSamples: 4 } });
-    for (const cc of ccs) {
+    // The three affirmed conclusions carry the calibrated rate...
+    for (const cc of ccs.slice(0, 3)) {
       assert.equal(cc?.value, 0.75);
       assert.equal(cc?.method, "empirical-review-calibration:extractor-field");
     }
+    // ...but the REJECTED conclusion gets no value — value is "probability the
+    // conclusion is correct", which must not contradict the human rejection.
+    assert.equal(ccs[3], undefined);
   });
 
   it("treats an override as not-affirmed in the produced rate", () => {
@@ -135,10 +139,11 @@ describe("buildSurveyTrustBundle — conclusionConfidence.value (produce side, #
       { extractor: "shared", field: "f2", status: "rejected" },
     ]);
     const ccs = ccOf(input, { calibration: { minSamples: 2 } });
-    for (const cc of ccs) {
-      assert.equal(cc?.value, 0.5); // extractor-level accuracy: 1 of 2 affirmed
-      assert.equal(cc?.method, "empirical-review-calibration:extractor");
-    }
+    // The affirmed f1 claim falls back to the extractor-level rate (1 of 2 = 0.5).
+    assert.equal(ccs[0]?.value, 0.5);
+    assert.equal(ccs[0]?.method, "empirical-review-calibration:extractor");
+    // The rejected f2 claim gets no value.
+    assert.equal(ccs[1], undefined);
   });
 
   it("accepts precomputed metrics from a longer history", () => {
