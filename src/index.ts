@@ -224,3 +224,18 @@ export type {
   OversightQualityClaim,
   ReviewerOversightMetrics,
 } from "./oversight-metrics.js";
+export {
+  calibrationToClaims,
+  deriveCalibration,
+  mergeTrustBundleWithCalibration,
+} from "./calibration.js";
+export type {
+  CalibrationBin,
+  CalibrationClaim,
+  CalibrationClaimsSubject,
+  CalibrationGroup,
+  CalibrationInput,
+  CalibrationMetrics,
+  CalibrationSample,
+  DeriveCalibrationOptions,
+} from "./calibration.js";
