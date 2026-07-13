@@ -53,8 +53,9 @@ export interface DeriveCalibrationOptions {
   readonly now?: Date;
   /**
    * Optional rolling window in days. Review outcomes whose `reviewedAt` is older
-   * than `now - windowDays` are excluded. Requires `now`. When omitted, all
-   * supplied outcomes are considered.
+   * than `now - windowDays` are excluded. Requires `now` — setting `windowDays`
+   * without `now` throws (rather than silently disabling windowing). When
+   * omitted, all supplied outcomes are considered.
    */
   readonly windowDays?: number;
   /** Number of equal-width confidence bins over [0,1]. Default 10 (deciles). */
@@ -203,6 +204,9 @@ export function deriveCalibration(
   }
   const extractionById = new Map(input.extractions.map((e) => [e.id, e]));
 
+  if (options.windowDays !== undefined && options.now === undefined) {
+    throw new RangeError("deriveCalibration: `now` is required when `windowDays` is set (windowing is by reviewedAt).");
+  }
   const cutoff = options.windowDays !== undefined && options.now !== undefined
     ? options.now.getTime() - options.windowDays * 24 * 60 * 60 * 1000
     : undefined;
@@ -239,24 +243,26 @@ export function deriveCalibration(
 
   // Extractor-level rollups.
   const byExtractorMap = new Map<string, CalibrationSample[]>();
-  // (extractor, field) rollups.
-  const byFieldMap = new Map<string, CalibrationSample[]>();
+  // (extractor, field) rollups. The key is a JSON-encoded [extractor, field]
+  // pair so no in-band delimiter can collide with an extractor/field that
+  // contains that delimiter; the extractor and field are carried in the value,
+  // never parsed back out of the key.
+  const byFieldMap = new Map<string, { extractor: string; field: string; samples: CalibrationSample[] }>();
   for (const s of samples) {
     pushTo(byExtractorMap, s.extractor, s);
-    pushTo(byFieldMap, `${s.extractor} ${s.field}`, s);
+    const fieldKey = JSON.stringify([s.extractor, s.field]);
+    const existing = byFieldMap.get(fieldKey);
+    if (existing) existing.samples.push(s);
+    else byFieldMap.set(fieldKey, { extractor: s.extractor, field: s.field, samples: [s] });
   }
 
   const byExtractor = [...byExtractorMap.entries()]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([extractor, groupSamples]) => buildGroup(extractor, undefined, groupSamples));
 
-  const byExtractorField = [...byFieldMap.entries()]
-    .map(([key, groupSamples]) => {
-      const sep = key.indexOf(" ");
-      return { extractor: key.slice(0, sep), field: key.slice(sep + 1), groupSamples };
-    })
+  const byExtractorField = [...byFieldMap.values()]
     .sort((a, b) => (a.extractor < b.extractor ? -1 : a.extractor > b.extractor ? 1 : a.field < b.field ? -1 : a.field > b.field ? 1 : 0))
-    .map(({ extractor, field, groupSamples }) => buildGroup(extractor, field, groupSamples));
+    .map(({ extractor, field, samples: groupSamples }) => buildGroup(extractor, field, groupSamples));
 
   const overall = buildGroup("*", undefined, samples);
 

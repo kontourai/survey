@@ -173,6 +173,21 @@ describe("deriveCalibration — grouping and calibration gap", () => {
     assert.equal(af2.empiricalAccuracy, 0); // the one rejected sample
   });
 
+  it("keeps (extractor, field) groups distinct even when names contain spaces/quotes", () => {
+    // Would collide under any naive in-band delimiter (space, etc.).
+    const m = deriveCalibration(inputFrom([
+      chain("1", { extractor: "ext a", target: "f b", status: "verified" }),
+      chain("2", { extractor: "ext", target: 'a"f b', status: "rejected" }),
+    ]));
+    assert.equal(m.byExtractorField.length, 2);
+    const g1 = m.byExtractorField.find((g) => g.extractor === "ext a" && g.field === "f b")!;
+    const g2 = m.byExtractorField.find((g) => g.extractor === "ext" && g.field === 'a"f b')!;
+    assert.equal(g1.sampleCount, 1);
+    assert.equal(g1.correctCount, 1);
+    assert.equal(g2.sampleCount, 1);
+    assert.equal(g2.correctCount, 0);
+  });
+
   it("reports a positive gap for overconfidence, negative for underconfidence", () => {
     // High stated confidence, all rejected → overconfident (gap > 0).
     const over = deriveCalibration(inputFrom([
@@ -254,6 +269,13 @@ describe("deriveCalibration — windowing and empty input", () => {
     assert.equal(m.overall.sampleCount, 1);
     assert.equal(m.windowStart, "2026-07-10T00:00:00.000Z");
     assert.equal(m.windowDays, 30);
+  });
+
+  it("throws when windowDays is set without now", () => {
+    assert.throws(
+      () => deriveCalibration(inputFrom([chain("1", { status: "verified" })]), { windowDays: 30 }),
+      /now.* is required when .windowDays/,
+    );
   });
 
   it("returns an empty overall group for empty input", () => {
