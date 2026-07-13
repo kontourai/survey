@@ -5,6 +5,8 @@ decided: 2026-07-12
 evidence:
   - kind: issue
     ref: "https://github.com/kontourai/survey/issues/114"
+  - kind: issue
+    ref: "https://github.com/kontourai/survey/issues/137"
   - kind: adr
     ref: docs/adr/0003-inquiry-mapping-and-producer-proposals.md
   - kind: doc
@@ -61,15 +63,33 @@ The derivation:
    its own guess, so counting it as a "correct" label would let the policy
    validate itself. `includeAutoAccepted` overrides this for offline analysis.
 
-## Scope and deferred work
+## Producing `conclusionConfidence.value` (#137)
 
-This record covers the derivation and its claims projection only. Deliberately
-deferred to follow-ups:
+The derivation's empirical accuracy is the natural calibrated conclusion
+probability, so `buildSurveyTrustBundle` now *produces* it. With the
+`calibration` option enabled, an **affirmed** claim's `conclusionConfidence.value`
+is set to the affirmation rate of its extractor's proposals — the finer
+(extractor, field) group when it clears a sample floor, else the extractor-level
+group, else left unset (an ungrounded claim gets no number). `method` records
+which granularity produced the value. This is the "produce" side of the confidence
+loop: Survey previously only *carried* `comfortZone` and left `value` unset.
+
+`conclusionConfidence.value` is "probability the conclusion is correct", so it is
+produced **only for affirmed conclusions** (status `verified`/`assumed`).
+Attaching an affirmation rate to a `rejected` (or not-yet-reviewed) conclusion
+would assert the opposite of what the human decided, so those claims get no value.
+
+Two honesty constraints hold here too:
+
+- **Sample floor** (default 20) — below it, `value` stays unset rather than
+  emitting a poorly-grounded number.
+- **Prefer a longer history** — callers SHOULD pass precomputed `metrics` derived
+  over more than the current batch; the batch-derived fallback is a convenience
+  and carries a mild self-reference (a claim's own outcome is one sample in the
+  group that sets its value). Either way this only enriches the emitted
+  confidence; it never changes claim `status` (ADR 0003 §4).
+
+## Deferred work
 
 - **Consumer wiring** — a downstream consumer reading `suggestedThreshold` into
   its `autoAcceptMinConfidence` policy (still an operator decision, never automatic).
-- **Populating `conclusionConfidence.value`** — Survey emits
-  `conclusionConfidence.comfortZone` today but leaves `value` unset (it carries,
-  it does not produce). A group's empirical accuracy is the natural calibrated
-  `value`; wiring it into `to-surface.ts` is the "produce" side and a separate
-  change so the derivation lands and is reviewed on its own.

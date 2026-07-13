@@ -1,6 +1,7 @@
 import type { Claim, Evidence, TrustBundle, TrustStatus, VerificationEvent } from "@kontourai/surface";
 import { buildReviewProofAnchor } from "./review-proof.js";
 import { assertReviewOutcomeDiscipline } from "./producer-discipline.js";
+import { deriveCalibration, type CalibrationMetrics } from "./calibration.js";
 import type {
   Candidate,
   CandidateSet,
@@ -19,8 +20,40 @@ type PolicyStandardFields = {
   reference?: string;
 };
 
+/** Minimum labeled samples a calibration group needs before its empirical
+ *  accuracy is emitted as a `conclusionConfidence.value`. */
+const DEFAULT_CALIBRATION_MIN_SAMPLES = 20;
+
+export interface SurveyCalibrationOptions {
+  /**
+   * Precomputed calibration to source the value from — typically derived over a
+   * LONGER history than the current batch (a better-grounded curve, and it avoids
+   * the mild self-reference of a claim's own review outcome feeding its value).
+   * When omitted, calibration is derived from THIS batch's review outcomes.
+   */
+  metrics?: CalibrationMetrics;
+  /**
+   * Minimum labeled samples a group needs before its accuracy is emitted as a
+   * value. Groups below the floor leave `value` unset rather than emitting a
+   * poorly-grounded number. Default {@link DEFAULT_CALIBRATION_MIN_SAMPLES}.
+   */
+  minSamples?: number;
+}
+
 export interface BuildSurveyTrustBundleOptions {
   reviewProofs?: boolean;
+  /**
+   * Populate `conclusionConfidence.value` from empirical review calibration —
+   * "how often this extractor's proposals at this confidence were affirmed by a
+   * human reviewer" (the produce side of the confidence loop; see #114/#137).
+   * `true` derives calibration from this batch; an object supplies precomputed
+   * metrics and/or a `minSamples` floor. Absent → `value` stays unset and only
+   * the comfort-zone signal is carried (unchanged behavior).
+   *
+   * ADVISORY (ADR 0003 §4): this only enriches the emitted conclusion confidence;
+   * it never changes a claim's `status`.
+   */
+  calibration?: boolean | SurveyCalibrationOptions;
 }
 
 export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyTrustBundleOptions = {}): TrustBundle {
@@ -28,6 +61,16 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
   const extractions = indexById(input.extractions, "extraction");
   const candidateSets = indexById(input.candidateSets, "candidate set");
   const reviewsByCandidateSet = groupBy(input.reviewOutcomes, (review) => review.candidateSetId);
+
+  const calibrationOptions = normalizeCalibrationOptions(options.calibration);
+  const calibrationMetrics = calibrationOptions
+    ? (calibrationOptions.metrics ?? deriveCalibration({
+        reviewOutcomes: input.reviewOutcomes,
+        candidateSets: input.candidateSets,
+        extractions: input.extractions,
+      }))
+    : undefined;
+  const calibrationMinSamples = calibrationOptions?.minSamples ?? DEFAULT_CALIBRATION_MIN_SAMPLES;
 
   const claims: Claim[] = [];
   const evidence: Evidence[] = [];
@@ -74,18 +117,35 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
       },
     };
 
-    // Promote the review's comfort-zone signal into the first-class
-    // conclusionConfidence field (Surface 2.9 / Hachure 0.14) so the calibration
+    // Promote the review's comfort-zone signal — and, when calibration is
+    // enabled, an empirically-calibrated conclusion probability — into the
+    // first-class conclusionConfidence field (Surface 2.9 / Hachure 0.14) so the
     // signal is portable and comparable, not buried in producer metadata.
-    // We carry only comfortZone: `value` is a *calibrated conclusion probability*
-    // that Survey does not yet produce (extraction confidence is an ingredient in
-    // confidenceBasis, not a calibrated conclusion value) — carry, not produce.
-    if (review?.withinComfortZone !== undefined) {
-      claim.conclusionConfidence = {
-        comfortZone: {
+    //
+    // comfortZone is CARRIED from the review. `value` is PRODUCED from empirical
+    // review calibration (#114/#137): the affirmation rate of this extractor's
+    // proposals at this confidence — a calibrated conclusion probability, distinct
+    // from the extraction-confidence ingredient in confidenceBasis.
+    //
+    // A value is produced only for an AFFIRMED conclusion (status verified/assumed)
+    // that clears the sample floor. conclusionConfidence.value is "probability the
+    // conclusion is correct"; attaching an affirmation rate to a REJECTED (or
+    // not-yet-reviewed) conclusion would assert the opposite of what the human
+    // decided, so those claims get no value.
+    const comfortZone = review?.withinComfortZone !== undefined
+      ? {
           within: review.withinComfortZone,
           ...(review.comfortZoneNote ? { reason: review.comfortZoneNote } : {}),
-        },
+        }
+      : undefined;
+    const affirmedConclusion = status === "verified" || status === "assumed";
+    const calibrated = calibrationMetrics && review && affirmedConclusion
+      ? lookupCalibratedValue(calibrationMetrics, extraction.extractor, extraction.target, calibrationMinSamples)
+      : undefined;
+    if (comfortZone || calibrated) {
+      claim.conclusionConfidence = {
+        ...(calibrated ? { value: calibrated.value, method: calibrated.method } : {}),
+        ...(comfortZone ? { comfortZone } : {}),
       };
     }
 
@@ -476,6 +536,38 @@ function selectCandidate(candidateSet: CandidateSet, candidateId?: string): Cand
 
 function selectReview(reviews: ReviewOutcome[], candidateId: string): ReviewOutcome | undefined {
   return reviews.find((review) => review.candidateId === candidateId) ?? reviews.find((review) => !review.candidateId);
+}
+
+function normalizeCalibrationOptions(
+  calibration: BuildSurveyTrustBundleOptions["calibration"],
+): SurveyCalibrationOptions | undefined {
+  if (calibration === undefined || calibration === false) return undefined;
+  if (calibration === true) return {};
+  return calibration;
+}
+
+/**
+ * Looks up the empirical affirmation rate for an extractor/field, preferring the
+ * finer (extractor, field) group and falling back to the extractor-level group
+ * when the field group is below the sample floor. Returns undefined when neither
+ * group clears the floor, so an ungrounded claim leaves `value` unset. The
+ * `method` records which granularity produced the value.
+ */
+function lookupCalibratedValue(
+  metrics: CalibrationMetrics,
+  extractor: string,
+  field: string,
+  minSamples: number,
+): { value: number; method: string } | undefined {
+  const fieldGroup = metrics.byExtractorField.find((g) => g.extractor === extractor && g.field === field);
+  if (fieldGroup && fieldGroup.sampleCount >= minSamples && fieldGroup.empiricalAccuracy !== undefined) {
+    return { value: fieldGroup.empiricalAccuracy, method: "empirical-review-calibration:extractor-field" };
+  }
+  const extractorGroup = metrics.byExtractor.find((g) => g.extractor === extractor);
+  if (extractorGroup && extractorGroup.sampleCount >= minSamples && extractorGroup.empiricalAccuracy !== undefined) {
+    return { value: extractorGroup.empiricalAccuracy, method: "empirical-review-calibration:extractor" };
+  }
+  return undefined;
 }
 
 function evidenceTypeFor(rawSource: RawSource): "document_citation" | "crawl_observation" | "attestation" | "policy_rule" {
