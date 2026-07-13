@@ -74,6 +74,21 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
       },
     };
 
+    // Promote the review's comfort-zone signal into the first-class
+    // conclusionConfidence field (Surface 2.9 / Hachure 0.14) so the calibration
+    // signal is portable and comparable, not buried in producer metadata.
+    // We carry only comfortZone: `value` is a *calibrated conclusion probability*
+    // that Survey does not yet produce (extraction confidence is an ingredient in
+    // confidenceBasis, not a calibrated conclusion value) — carry, not produce.
+    if (review?.withinComfortZone !== undefined) {
+      claim.conclusionConfidence = {
+        comfortZone: {
+          within: review.withinComfortZone,
+          ...(review.comfortZoneNote ? { reason: review.comfortZoneNote } : {}),
+        },
+      };
+    }
+
     if (options.reviewProofs && review) {
       claim.currentIntegrityAnchor = buildReviewProofAnchor({
         rawSource,

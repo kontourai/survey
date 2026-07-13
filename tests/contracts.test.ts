@@ -2604,6 +2604,14 @@ describe("Survey Surface projection", () => {
       withinComfortZone: false,
       note: "Renewal clause interpretation requires specialist counsel.",
     });
+    // The comfort-zone signal is also promoted to the first-class
+    // conclusionConfidence field (#133) — portable, not buried in metadata.
+    assert.deepEqual(report.claims[0]?.conclusionConfidence, {
+      comfortZone: {
+        within: false,
+        reason: "Renewal clause interpretation requires specialist counsel.",
+      },
+    });
   });
 
   it("projects an unresolved attached escalation record as a disputed event on the target claim", () => {
