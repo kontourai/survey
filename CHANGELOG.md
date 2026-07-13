@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.11.0](https://github.com/kontourai/survey/compare/v1.10.0...v1.11.0) (2026-07-13)
+
+
+### Features
+
+* **examples:** worked calibration→auto-accept consumer wiring ([#114](https://github.com/kontourai/survey/issues/114)/[#137](https://github.com/kontourai/survey/issues/137)) ([#142](https://github.com/kontourai/survey/issues/142)) ([02f75c3](https://github.com/kontourai/survey/commit/02f75c34ef549745a65c81bff18de1e6679c67ae))
+
+
+### Documentation
+
+* document confidence calibration and the produce-side value ([#114](https://github.com/kontourai/survey/issues/114)/[#137](https://github.com/kontourai/survey/issues/137)) ([#140](https://github.com/kontourai/survey/issues/140)) ([0e91cf6](https://github.com/kontourai/survey/commit/0e91cf603f829dd7f81a85ef1ec8184ea9c108d6))
+
 ## [1.10.0](https://github.com/kontourai/survey/compare/v1.9.0...v1.10.0) (2026-07-13)
 
 
