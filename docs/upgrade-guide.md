@@ -61,6 +61,7 @@ decision, not just the outcome:
 | `stableId` | Yes | Matches our existing slugification exactly (see `docs/consumer-integration-guide.md`'s reference algorithm parity test). |
 | `defineProductVocabulary` | Yes | Discoverable, frozen vocabulary beats scattered top-level constants; no runtime behavior change to reconcile. |
 | `confidenceBasisForReview` | **No — kept our own mapping** | See worked example below. |
+| `deriveCalibration` / `buildSurveyTrustBundle({ calibration })` (1.10.0) | Optional | Opt-in. Turns your review outcomes into an empirical calibration curve and, when enabled, produces `conclusionConfidence.value` on affirmed claims. Backward-compatible: omit it and behavior is unchanged. Adopt it to ground auto-accept thresholds and emit calibrated confidence; the `suggestedThreshold` it computes is advisory input to your policy's `minConfidence`, never a decision. See [record-contracts.md](record-contracts.md#confidence-calibration). |
 
 ### Worked example: when *not* to adopt `confidenceBasisForReview`
 

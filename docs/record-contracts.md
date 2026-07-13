@@ -1188,3 +1188,94 @@ These metrics are **indicators, not proof of reviewer cognition**:
 - **Status is `"proposed"` for all oversight claims.** Oversight-quality claims are
   derived computations, not externally verified facts.  Downstream consumers should
   treat them as decision-support signals, not authoritative verdicts.
+
+
+## Confidence calibration
+
+Every reviewed candidate is a labeled sample: the system-proposed candidate carried
+a stated confidence (the prediction), and the human review affirmed or overturned
+that value (the label). `deriveCalibration` turns those samples into an empirical
+calibration curve — per extractor and per `(extractor, field)` — so you can answer
+"how often are this extractor's proposals at this confidence actually affirmed?".
+See the [calibration decision record](https://github.com/kontourai/survey/blob/main/docs/decisions/calibration.md)
+for the design rationale.
+
+```ts
+import {
+  deriveCalibration,
+  calibrationToClaims,
+  mergeTrustBundleWithCalibration,
+} from "@kontourai/survey";
+
+const calibration = deriveCalibration(
+  { reviewOutcomes, candidateSets, extractions },   // a batch's records
+  {
+    // now + windowDays are optional; windowDays requires now (else it throws).
+    now: new Date(),
+    windowDays: 90,
+    targetAccuracy: 0.95,   // the accuracy suggestedThreshold must clear
+    minBinSamples: 20,      // a decile needs this many samples to ground a threshold
+    // includeAutoAccepted defaults false — see Honest limits.
+  },
+);
+
+// calibration.overall / byExtractor / byExtractorField: each a group with
+//   sampleCount, correctCount, empiricalAccuracy?, meanPredictedConfidence?,
+//   calibrationGap? (mean confidence − empirical accuracy; >0 = overconfident),
+//   bins (per-decile empirical accuracy), and suggestedThreshold?.
+
+// Surface the curve as advisory claims (claimType "calibration", status "proposed"):
+const subject = {
+  subjectType: "extractor",
+  subjectId: "run-xyz",
+  facet: "review.calibration",
+  actor: "survey-calibration",
+  observedAt: new Date().toISOString(),
+  collectedBy: "survey",
+};
+const bundle = mergeTrustBundleWithCalibration(existingBundle, calibrationToClaims(calibration, subject));
+```
+
+### Producing `conclusionConfidence.value`
+
+The calibrated accuracy is the natural conclusion probability, so
+`buildSurveyTrustBundle` can *produce* it on the emitted claims. Opt in with the
+`calibration` option; without it, behavior is unchanged (`value` stays unset and
+only the review's `comfortZone` is carried):
+
+```ts
+// Derive the curve from this batch...
+buildSurveyTrustBundle(input, { calibration: true });
+
+// ...or pass a curve computed over a LONGER history (recommended: better grounded,
+// and avoids the mild self-reference of a claim's own outcome feeding its value).
+buildSurveyTrustBundle(input, { calibration: { metrics: history, minSamples: 20 } });
+```
+
+For each **affirmed** claim (status `verified`/`assumed`) whose extractor clears the
+sample floor, `conclusionConfidence.value` is set to the group's empirical
+affirmation rate and `conclusionConfidence.method` records the granularity used
+(`empirical-review-calibration:extractor-field`, falling back to `:extractor`). This
+is the produce side of the confidence loop — Survey previously only *carried*
+`comfortZone` (see [Hachure's AI-evaluation profile](https://github.com/hachure-org/spec/blob/main/ai-evaluation.md), "Mapping to conclusionConfidence").
+
+### Honest limits
+
+Calibration is **advisory**, and honest about what it does not know:
+
+- **It never decides (ADR 0003 §4).** `suggestedThreshold` is a number an operator
+  *may* wire into an auto-accept policy's `minConfidence`; calibration itself sets
+  nothing, and calibration claims are always status `"proposed"`.
+- **Human labels only.** Machine auto-accepts are excluded by default — an
+  auto-accepted outcome is the threshold accepting its own guess, so counting it as
+  "correct" would let the policy validate itself. `includeAutoAccepted` overrides
+  this for offline analysis.
+- **Affirmed conclusions only get a value.** `conclusionConfidence.value` is
+  "probability the conclusion is correct"; attaching an affirmation rate to a
+  `rejected` conclusion would assert the opposite of the human decision, so those
+  claims get no value.
+- **Below the sample floor, no number.** A group with too few samples leaves
+  `value`/`suggestedThreshold` unset rather than emitting a poorly-grounded estimate.
+- **Prefer a longer history.** Deriving from the current batch folds a claim's own
+  outcome into the group that sets its value; pass precomputed `metrics` over more
+  than the batch when you can.
