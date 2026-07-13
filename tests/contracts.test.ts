@@ -2604,6 +2604,76 @@ describe("Survey Surface projection", () => {
       withinComfortZone: false,
       note: "Renewal clause interpretation requires specialist counsel.",
     });
+    // The comfort-zone signal is also promoted to the first-class
+    // conclusionConfidence field (#133) — portable, not buried in metadata.
+    assert.deepEqual(report.claims[0]?.conclusionConfidence, {
+      comfortZone: {
+        within: false,
+        reason: "Renewal clause interpretation requires specialist counsel.",
+      },
+    });
+  });
+
+  it("promotes withinComfortZone:true to conclusionConfidence, omitting reason when there is no note (#133)", () => {
+    const input = buildSurveyTrustBundle({
+      source: "survey.comfort-zone-true.fixture",
+      generatedAt: "2026-05-31T16:00:00.000Z",
+      rawSources: [{
+        id: "source.registry",
+        kind: "api-record",
+        sourceRef: "records://entity-1/registry",
+        observedAt: "2026-05-31T15:00:00.000Z",
+        locatorScheme: "structured-field",
+      }],
+      extractions: [{
+        id: "extraction.registry.status",
+        sourceId: "source.registry",
+        target: "registrationStatus",
+        value: "ACTIVE",
+        confidence: 0.9,
+        locator: "json:$.registrationStatus",
+        extractor: "records-importer",
+        extractedAt: "2026-05-31T15:00:00.000Z",
+      }],
+      candidateSets: [{
+        id: "candidate-set.entity-1.registration-status",
+        target: "registrationStatus",
+        status: "resolved",
+        selectedCandidateId: "candidate.registry.status",
+        candidates: [{
+          id: "candidate.registry.status",
+          extractionId: "extraction.registry.status",
+          value: "ACTIVE",
+          confidence: 0.9,
+        }],
+      }],
+      reviewOutcomes: [{
+        id: "review.registry.status",
+        candidateSetId: "candidate-set.entity-1.registration-status",
+        candidateId: "candidate.registry.status",
+        status: "assumed",
+        actor: "records-operator",
+        reviewedAt: "2026-05-31T15:05:00.000Z",
+        rationale: "Auto-accepted within comfort zone.",
+        withinComfortZone: true,
+      }],
+      claims: [{
+        id: "claim.entity-1.registration-status",
+        candidateSetId: "candidate-set.entity-1.registration-status",
+        candidateId: "candidate.registry.status",
+        subjectType: "public-record.entity",
+        subjectId: "entity-1",
+        facet: "public-record.profile",
+        claimType: "public-data.field",
+        fieldOrBehavior: "registrationStatus",
+        impactLevel: "medium",
+        collectedBy: "records-importer",
+      }],
+    });
+    const report = buildTrustReport(validateTrustBundle(input));
+    // within:true is the branch the metadata path never emits (it is false-only);
+    // reason is omitted because no comfortZoneNote was supplied.
+    assert.deepEqual(report.claims[0]?.conclusionConfidence, { comfortZone: { within: true } });
   });
 
   it("projects an unresolved attached escalation record as a disputed event on the target claim", () => {

@@ -71,7 +71,7 @@
     "check:generated-css": "node scripts/copy-review-workbench-package-assets.cjs --check"
   },
   "dependencies": {
-    "@kontourai/surface": "^2.0.0"
+    "@kontourai/surface": "^2.9.0"
   },
   "peerDependencies": {
     "@anthropic-ai/sdk": ">=0.20.0",
