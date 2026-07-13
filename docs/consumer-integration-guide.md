@@ -886,6 +886,27 @@ For source-authority claims, prefer
 multi-candidate cases, prefer `candidateReviewRecord` or the lower-level record
 contract when current/proposed semantics do not fit.
 
+To emit an empirically-calibrated conclusion probability on affirmed claims, pass
+the opt-in `calibration` option (added in 1.10.0). It sets
+`conclusionConfidence.value` from the affirmation rate of each extractor's proposals
+— the produce side of the confidence loop. It is backward-compatible: omit it and
+`value` stays unset, exactly as before.
+
+```ts
+// Recommended: pass a curve derived over a longer history than this batch.
+const history = deriveCalibration({
+  reviewOutcomes,   // prior review outcomes, candidate sets, and extractions
+  candidateSets,    // from more than the current batch
+  extractions,
+});
+buildSurveyTrustBundle(surveyInput, { calibration: { metrics: history, minSamples: 20 } });
+```
+
+Calibration is advisory only — it enriches `conclusionConfidence`, never a claim's
+`status`. See [record-contracts.md](record-contracts.md#confidence-calibration) for
+`deriveCalibration`, the advisory `suggestedThreshold` for auto-accept policies, and
+the honest limits.
+
 ## Boundary Checklist
 
 Use this checklist before adding Survey to a producer:
