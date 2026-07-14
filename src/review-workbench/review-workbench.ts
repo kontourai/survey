@@ -8,6 +8,7 @@ import {
   currentReviewWorkbenchState,
   defaultReviewSessionName,
   deriveQueueRowStatus,
+  effectiveValueForDecision,
   initialReviewQueueSessionState,
   initialReviewWorkbenchState,
   nextUnresolvedItemName,
@@ -141,6 +142,7 @@ export function buildReviewDecision(state: ReviewWorkbenchState): ReviewDecision
       rationale: state.note,
       authorizing: buildDecisionCardAuthorizing(state),
       projection,
+      editedValue: state.decision === "accept-proposed" ? state.editedValue : undefined,
     },
     status: {
       appliedToClaimIds: candidate.projection?.claimId ? [candidate.projection.claimId] : undefined,
@@ -322,8 +324,18 @@ export interface ReviewWorkbenchResult {
   readonly selectedCandidate: ReviewCandidate;
   readonly selectedCandidateId: string;
   readonly selectedCandidateRole?: ReviewCandidate["role"];
+  /** The selected candidate's original value, unaffected by any reviewer edit. Used
+   *  for candidate-identity matching (see `matchingSelectedCandidate`); consumers who
+   *  want the reviewer's edited value should read `effectiveValue` instead. */
   readonly selectedValue: unknown;
   readonly selectedDisplayValue: string;
+  /** Reviewer-edited override captured for an accept-proposed decision, if the
+   *  reviewer changed the proposed value before applying it. Additive/optional. */
+  readonly editedValue?: unknown;
+  /** The value that should actually be applied: `editedValue` when present (and the
+   *  decision selects the proposed candidate), otherwise `selectedValue`. */
+  readonly effectiveValue: unknown;
+  readonly effectiveDisplayValue: string;
   readonly unselectedCandidates: readonly ReviewCandidate[];
   readonly reviewDecision: ReviewDecision;
   readonly status: ReviewDecision["spec"]["status"];
@@ -576,6 +588,10 @@ export function buildReviewWorkbenchResultsFromSession(session: ReviewQueueSessi
     }
 
     const selectedCandidate = candidateForDecision(item, decision);
+    const editedValue = decision === "accept-proposed"
+      ? session.editedValuesByItemName?.[item.metadata.name]
+      : undefined;
+    const effectiveValue = effectiveValueForDecision(item, decision, editedValue);
 
     return [{
       reviewItemName: item.metadata.name,
@@ -585,6 +601,9 @@ export function buildReviewWorkbenchResultsFromSession(session: ReviewQueueSessi
       selectedCandidateRole: selectedCandidate.role,
       selectedValue: selectedCandidate.value,
       selectedDisplayValue: formatValue(selectedCandidate.value),
+      editedValue,
+      effectiveValue,
+      effectiveDisplayValue: formatValue(effectiveValue),
       unselectedCandidates: item.spec.candidates.filter((candidate) => candidate.id !== selectedCandidate.id),
       reviewDecision,
       status: reviewDecision.spec.status,
@@ -789,401 +808,345 @@ export function createPersistentReviewSessionEventStore(
 
 export function renderReviewWorkbenchHtml(
   state: ReviewWorkbenchState | ReviewQueueSessionState,
-  events?: readonly ReviewSessionEvent[],
+  _events?: readonly ReviewSessionEvent[],
   options: { readonly presentationAdapter?: ReviewPresentationAdapter } = {},
 ): string {
-  if ("items" in state) {
-    return renderReviewQueueSessionHtml(state, events, options.presentationAdapter);
-  }
-
-  return `
-    <section class="workbench-shell" aria-label="Survey review workbench">
-      ${renderWorkbenchHeader(state, options.presentationAdapter)}
-      <div class="content-grid">
-        ${renderReviewFocus(state, options.presentationAdapter)}
-        ${renderDecisionColumn(state, options.presentationAdapter)}
-        ${renderCandidateComparison(state, options.presentationAdapter)}
-      </div>
-    </section>
-  `;
+  const session = queueSessionFromStartState(state);
+  return renderReviewQueueSessionHtml(session, options.presentationAdapter);
 }
+
+type FieldCardState = "review" | "accepted" | "kept" | "rejected";
+
+/**
+ * The visual/decision state of a field card, derived from the reviewer's local
+ * decision for that ReviewItem, falling back to a producer-declared "resolved"
+ * candidate set (e.g. a pre-decided item seeded by the host) as already-kept.
+ */
+function fieldCardState(item: ReviewItem, decision: ReviewWorkbenchDecision | undefined): FieldCardState {
+  if (decision === "accept-proposed") return "accepted";
+  if (decision === "keep-current") return "kept";
+  if (decision === "reject-proposed") return "rejected";
+  if (item.spec.candidateSetStatus === "resolved") return "kept";
+  return "review";
+}
+
+function chipLabel(state: FieldCardState): string {
+  switch (state) {
+    case "accepted": return "Accepted";
+    case "kept": return "Kept current";
+    case "rejected": return "Kept — flagged wrong";
+    default: return "Needs review";
+  }
+}
+
+function isEmptyValue(value: unknown): boolean {
+  return value === undefined || value === null || value === "";
+}
+
+const ARROW_SVG = "<svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M5 12h14M13 6l6 6-6 6\"/></svg>";
+const WARNING_SVG = "<svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M12 9v4M12 17h.01\"/><path d=\"M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z\"/></svg>";
 
 function renderReviewQueueSessionHtml(
   session: ReviewQueueSessionState,
-  events: readonly ReviewSessionEvent[] | undefined,
   presentationAdapter: ReviewPresentationAdapter | undefined,
 ): string {
-  const state = currentReviewWorkbenchState(session);
-  const sessionExport = buildReviewWorkbenchSessionExport(session, events);
+  const totalCount = session.items.length;
+  const decidedCount = session.items.filter((item) => session.decisionsByItemName[item.metadata.name] !== undefined
+    || item.spec.candidateSetStatus === "resolved").length;
+  const progressPct = totalCount === 0 ? 0 : Math.round((decidedCount / totalCount) * 100);
+  const headerItem = session.items[0];
+  const producerName = headerItem?.metadata.producer?.displayName;
+  const headerTitle = typeof producerName === "string" && producerName.length > 0 ? producerName : "Review queue";
 
   return `
-    <section class="workbench-shell" aria-label="Survey review workbench">
-      ${renderWorkbenchHeader(state, presentationAdapter)}
-      ${renderMobileQueueBar(session, state, presentationAdapter)}
-      ${renderActiveReviewStrip(session, state, presentationAdapter)}
-      <div class="queue-layout">
-        <div class="queue-drawer-backdrop" data-testid="queue-drawer-backdrop" aria-hidden="true"></div>
-        <aside class="queue-panel" aria-label="Review queue" role="dialog" aria-modal="false" id="queue-panel">
-          <button class="queue-drawer-close" type="button" data-testid="queue-drawer-close" aria-label="Close queue panel">&#x2715;</button>
-          ${renderQueueRows(session, presentationAdapter)}
-          ${renderSessionSummary(session)}
-          ${renderSessionAudit(session, sessionExport)}
-        </aside>
-        <div class="content-grid">
-          ${renderReviewFocus(state, presentationAdapter)}
-          ${renderDecisionColumn(state, presentationAdapter)}
-          ${renderCandidateComparison(state, presentationAdapter)}
+    <section class="workbench-shell review" data-testid="review-workbench-shell" aria-label="Survey review workbench">
+      <header class="rhead">
+        <div class="top">
+          <div class="subj">
+            <p class="eyebrow">Proposed changes</p>
+            <h1>${escapeHtml(headerTitle)}</h1>
+          </div>
         </div>
-      </div>
-    </section>
-  `;
-}
-
-function renderMobileQueueBar(
-  session: ReviewQueueSessionState,
-  state: ReviewWorkbenchState,
-  presentationAdapter?: ReviewPresentationAdapter,
-): string {
-  const activeIndex = session.items.findIndex((item) => item.metadata.name === session.activeItemName);
-  const position = activeIndex >= 0 ? activeIndex + 1 : 1;
-  const resolved = Object.keys(session.decisionsByItemName).length;
-  const presentation = buildReviewItemPresentation(state.item, presentationAdapter);
-
-  return `
-    <div class="mobile-queue-bar" data-testid="mobile-queue-bar" aria-label="Queue progress">
-      <div class="mobile-queue-progress">
-        <span class="field-label">Queue · ${resolved} of ${session.items.length} resolved</span>
-        <span class="mobile-queue-item-label">${escapeHtml(presentation.targetLabel)}</span>
-      </div>
-      <button
-        class="mobile-queue-open"
-        type="button"
-        data-testid="mobile-queue-open"
-        aria-controls="queue-panel"
-        aria-expanded="false"
-        aria-label="Open review queue"
-      >Queue</button>
-    </div>
-  `;
-}
-
-function renderSessionAudit(session: ReviewQueueSessionState, sessionExport: ReviewWorkbenchSessionExport): string {
-  const lastEvents = sessionExport.events.slice(-6);
-  const replayed = replayReviewSessionEvents({
-    ...session,
-    activeItemName: session.items[0]?.metadata.name ?? session.activeItemName,
-    notesByItemName: {},
-    decisionsByItemName: {},
-  }, sessionExport.events);
-  const replayMatchesSession = sameStringRecord(replayed.decisionsByItemName, session.decisionsByItemName)
-    && sameStringRecord(replayed.notesByItemName, session.notesByItemName);
-
-  return `
-    <section class="session-audit" data-testid="session-audit" aria-label="Review session audit trail">
-      <div class="session-audit-head">
-        <div>
-          <span class="field-label">ReviewSession</span>
-          <h2>${escapeHtml(sessionExport.session.metadata.name)}</h2>
+        <div class="meta">
+          <span><b data-testid="fields-changed-count">${totalCount}</b> field${totalCount === 1 ? "" : "s"} to review</span>
         </div>
-        <span class="state-label">${escapeHtml(replayMatchesSession ? "replay ok" : "replay drift")}</span>
+        <div class="progress">
+          <div class="bar"><i style="width:${progressPct}%"></i></div>
+          <span class="ptext"><b data-testid="decided-count">${decidedCount}</b> of <b>${totalCount}</b> decided</span>
+          <button class="apply" type="button" data-testid="apply-button"${decidedCount === 0 ? " disabled" : ""}>Apply ${decidedCount} decision${decidedCount === 1 ? "" : "s"}</button>
+        </div>
+      </header>
+      <div class="fields" data-testid="review-fields">
+        ${session.items.map((item) => renderFieldCard(item, session, presentationAdapter)).join("")}
       </div>
-      <dl class="summary-grid audit-grid">
-        ${metaItem("Events", String(sessionExport.events.length))}
-        ${metaItem("Decisions", String(sessionExport.decisions.length))}
-        ${metaItem("Active item", sessionExport.session.status?.activeItemName ?? "none")}
-        ${metaItem("Actor", sessionExport.session.spec.actor?.id ?? "unknown")}
-      </dl>
-      <ol class="session-event-list" data-testid="session-event-list">
-        ${lastEvents.length === 0
-          ? "<li><span class=\"field-label\">No events</span><span>No persisted review activity yet.</span></li>"
-          : lastEvents.map(renderSessionEventRow).join("")}
-      </ol>
-      <details class="session-export" data-testid="session-export">
-        <summary>Session export</summary>
-        <pre>${escapeHtml(JSON.stringify(sessionExport, null, 2))}</pre>
-      </details>
+      ${renderFooterTally(session)}
     </section>
   `;
 }
 
-function sameStringRecord(left: Readonly<Record<string, string>>, right: Readonly<Record<string, string>>): boolean {
-  const leftKeys = Object.keys(left).sort();
-  const rightKeys = Object.keys(right).sort();
-  return leftKeys.length === rightKeys.length
-    && leftKeys.every((key, index) => key === rightKeys[index] && left[key] === right[key]);
-}
-
-function renderSessionEventRow(event: ReviewSessionEvent): string {
-  const target = event.spec.reviewItemName ?? event.spec.activeItemName ?? event.spec.sessionName;
-  const detail = [
-    event.spec.status,
-    event.spec.candidateId,
-    event.spec.rationale,
-  ].filter(Boolean).join(" - ");
-
-  return `
-    <li>
-      <span class="event-sequence">${escapeHtml(String(event.spec.sequence).padStart(2, "0"))}</span>
-      <span>
-        <strong>${escapeHtml(event.spec.eventType)}</strong>
-        <small>${escapeHtml(target)}${detail ? ` - ${escapeHtml(detail)}` : ""}</small>
-      </span>
-    </li>
-  `;
-}
-
-function renderQueueRows(session: ReviewQueueSessionState, presentationAdapter?: ReviewPresentationAdapter): string {
-  return `
-    <section class="queue-list" data-testid="review-queue">
-      <div class="queue-head">
-        <h2>Review queue</h2>
-        <button class="next-button" type="button" data-testid="next-unresolved">Next unresolved</button>
-      </div>
-      ${session.items.map((item) => renderQueueRow(item, session, presentationAdapter)).join("")}
-    </section>
-  `;
-}
-
-function renderQueueRow(
+function renderFieldCard(
   item: ReviewItem,
   session: ReviewQueueSessionState,
-  presentationAdapter?: ReviewPresentationAdapter,
+  presentationAdapter: ReviewPresentationAdapter | undefined,
 ): string {
-  const status = deriveQueueRowStatus(item, session);
-  const isActive = item.metadata.name === session.activeItemName;
+  const decision = session.decisionsByItemName[item.metadata.name];
+  const state = fieldCardState(item, decision);
+  const decided = decision !== undefined;
+  const current = item.spec.candidates.find((candidate) => candidate.role === "current");
+  const proposed = item.spec.candidates.find((candidate) => candidate.role === "proposed");
   const presentation = buildReviewItemPresentation(item, presentationAdapter);
+  const hasCurrentValue = current !== undefined && !isEmptyValue(current.value);
+  const kind = hasCurrentValue ? "Update" : "New";
+  const keepLabel = hasCurrentValue ? "Keep current" : "Leave unset";
+  const editedValue = session.editedValuesByItemName?.[item.metadata.name];
+  const proposedPresentationText = proposed
+    ? buildReviewCandidatePresentation(item, proposed, presentationAdapter, presentation.targetLabel).valueText
+    : "";
+  const effectiveProposedText = decision === "accept-proposed" && editedValue !== undefined
+    ? String(editedValue)
+    : proposedPresentationText;
+  const currentPresentationText = current && !isEmptyValue(current.value)
+    ? buildReviewCandidatePresentation(item, current, presentationAdapter, presentation.targetLabel).valueText
+    : undefined;
 
   return `
-    <button class="queue-row${isActive ? " is-active" : ""}" type="button" data-item-name="${escapeHtml(item.metadata.name)}" data-testid="queue-row" data-queue-status="${status}">
-      <span class="queue-row-main">
-        <span class="queue-row-title">${escapeHtml(presentation.targetLabel)}</span>
-        <span class="queue-row-target">${escapeHtml(item.metadata.name)}</span>
-      </span>
-      <span class="state-label">${escapeHtml(status)}</span>
-    </button>
-  `;
-}
-
-function renderSessionSummary(session: ReviewQueueSessionState): string {
-  const summary = reviewSessionSummary(session);
-
-  return `
-    <section class="session-summary" data-testid="session-summary">
-      <h2>Session summary</h2>
-      <dl class="summary-grid">
-        ${metaItem("Accepted", String(summary.accepted))}
-        ${metaItem("Kept current", String(summary.keptCurrent))}
-        ${metaItem("Rejected", String(summary.rejected))}
-        ${metaItem("Escalated", String(summary.escalated))}
-        ${metaItem("Unresolved", String(summary.unresolved))}
-      </dl>
+    <section
+      class="field"
+      data-testid="review-field"
+      data-item-name="${escapeHtml(item.metadata.name)}"
+      data-field="${escapeHtml(item.spec.target)}"
+      data-state="${state}"
+      data-decided="${decided ? "1" : "0"}"
+      ${decision ? `data-decision="${escapeHtml(decision)}"` : ""}
+    >
+      <div class="stripe"></div>
+      <div class="fbody">
+        <div class="frow1">
+          <span class="fname">${escapeHtml(presentation.targetLabel)}</span>
+          <span class="fkind">${kind}</span>
+          <span class="chip ${state} push" data-testid="field-chip">${chipLabel(state)}</span>
+        </div>
+        ${proposed
+          ? renderDiffRow(item, current, proposed, presentation.targetLabel, decided, effectiveProposedText, currentPresentationText)
+          : "<p class=\"field-value\">No proposed value is available for this field.</p>"}
+        ${proposed ? renderProvenanceRow(item, proposed, presentationAdapter) : ""}
+        <div class="decide">
+          <button class="btn use" type="button" data-testid="use-proposed" data-item-name="${escapeHtml(item.metadata.name)}">Use proposed</button>
+          <button class="btn keep" type="button" data-testid="keep-current" data-item-name="${escapeHtml(item.metadata.name)}">${keepLabel}</button>
+          <label class="wrong">
+            <input type="checkbox" class="wrongbox" data-testid="wrong-toggle" data-item-name="${escapeHtml(item.metadata.name)}">
+            Suggestion was wrong
+          </label>
+        </div>
+        <div class="decided">
+          <span class="chip ${state}" data-testid="decided-chip">${chipLabel(state)}</span>
+          <button class="undo" type="button" data-testid="undo-decision" data-item-name="${escapeHtml(item.metadata.name)}">Change</button>
+        </div>
+        ${renderAuditDetails(item, current, proposed, session, presentationAdapter)}
+      </div>
     </section>
   `;
 }
 
-function renderActiveReviewStrip(
-  session: ReviewQueueSessionState,
-  state: ReviewWorkbenchState,
-  presentationAdapter?: ReviewPresentationAdapter,
-): string {
-  const activeIndex = session.items.findIndex((item) => item.metadata.name === session.activeItemName);
-  const position = activeIndex >= 0 ? activeIndex + 1 : 1;
-  const status = deriveQueueRowStatus(state.item, session);
-  const presentation = buildReviewItemPresentation(state.item, presentationAdapter);
-
-  return `
-    <section class="active-review-strip" data-testid="active-review-strip" aria-label="Active review item">
-      <div class="active-review-copy">
-        <span class="field-label">Review ${position} of ${session.items.length}</span>
-        <strong>${escapeHtml(presentation.targetLabel)}</strong>
-        <span>${escapeHtml(state.item.metadata.name)}</span>
-      </div>
-      <div class="active-review-actions">
-        <span class="state-label">${escapeHtml(status)}</span>
-        <button class="next-button" type="button" data-testid="active-next-unresolved">Next unresolved</button>
-      </div>
-    </section>
-  `;
-}
-
-function renderWorkbenchHeader(state: ReviewWorkbenchState, presentationAdapter?: ReviewPresentationAdapter): string {
-  const presentation = buildReviewItemPresentation(state.item, presentationAdapter);
-
-  return `
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">${escapeHtml(String(state.item.metadata.producer?.displayName ?? "Survey"))}</p>
-        <h1>Review candidate update</h1>
-        <p class="review-target-label" data-testid="review-target-label"><strong>${escapeHtml(presentation.targetLabel)}</strong></p>
-      </div>
-      <dl class="meta-grid">
-        ${metaItem("Item", state.item.metadata.name)}
-        ${metaItem("Status", presentation.statusLabel)}
-        ${metaItem("Selected", state.item.spec.selectedCandidateId ?? "none")}
-        ${metaItem("Candidate count", String(state.item.status?.observedCandidateCount ?? state.item.spec.candidates.length))}
-      </dl>
-    </header>
-  `;
-}
-
-function renderReviewMain(state: ReviewWorkbenchState): string {
-  return `
-    <div class="review-main">
-      ${renderReviewFocus(state)}
-      ${renderCandidateComparison(state)}
-    </div>
-  `;
-}
-
-function renderReviewFocus(state: ReviewWorkbenchState, presentationAdapter?: ReviewPresentationAdapter): string {
-  const current = candidateByRole(state.item, "current");
-  const proposed = candidateByRole(state.item, "proposed");
-  const proposedConfidence = proposed.extraction.confidence ?? proposed.confidence;
-  const currentConfidence = current.extraction.confidence ?? current.confidence;
-  const presentation = buildReviewItemPresentation(state.item, presentationAdapter);
-
-  return `
-    <section class="review-focus" data-testid="review-focus" aria-label="Active review focus">
-      <div class="focus-head">
-        <span class="field-label">Active review</span>
-        <span class="state-label">${escapeHtml(presentation.statusLabel)}</span>
-      </div>
-      <div class="focus-values">
-        ${focusValue(state.item, current, currentConfidence, "current", presentationAdapter, presentation.targetLabel)}
-        ${focusValue(state.item, proposed, proposedConfidence, "proposed", presentationAdapter, presentation.targetLabel)}
-      </div>
-      <dl class="focus-evidence">
-        ${fieldItem("Target", presentation.targetLabel)}
-        ${fieldItem("Proposed Source Reference", proposed.source.sourceRef)}
-        ${fieldItemClamped("Proposed excerpt", proposed.locator?.excerpt ?? "none", "excerpt")}
-      </dl>
-    </section>
-  `;
-}
-
-function focusValue(
+/**
+ * Renders the Current → Proposed diff row. The proposed side is editable
+ * (via {@link renderProposedValueEditor}) until the field has a decision.
+ */
+function renderDiffRow(
   item: ReviewItem,
-  candidate: ReviewCandidate,
-  confidence: number | undefined,
-  tone: "current" | "proposed",
-  presentationAdapter: ReviewPresentationAdapter | undefined,
+  current: ReviewCandidate | undefined,
+  proposed: ReviewCandidate,
   targetLabel: string,
+  decided: boolean,
+  effectiveProposedText: string,
+  currentPresentationText: string | undefined,
 ): string {
-  const presentation = buildReviewCandidatePresentation(item, candidate, presentationAdapter, targetLabel);
+  const isEmpty = currentPresentationText === undefined;
+  const currentText = isEmpty ? "Not set" : currentPresentationText;
+
   return `
-    <div class="focus-value is-${tone}">
-      <span class="field-label">${escapeHtml(presentation.roleLabel)}</span>
-      <strong>${escapeHtml(presentation.valueText)}</strong>
-      <span>${escapeHtml(confidence === undefined ? "confidence unknown" : formatConfidence(confidence))}</span>
+    <div class="diff">
+      <div class="val current${isEmpty ? " empty" : ""}">
+        <div class="vlbl">Current</div>
+        <div class="vtext" data-testid="current-value">${escapeHtml(currentText)}</div>
+      </div>
+      <div class="arrow">${ARROW_SVG}</div>
+      <div class="val proposed">
+        <div class="vlbl">Proposed</div>
+        <div class="vtext" data-value data-testid="proposed-value">${escapeHtml(effectiveProposedText)}</div>
+        ${decided ? "" : renderProposedValueEditor(item, proposed, targetLabel)}
+      </div>
     </div>
   `;
 }
 
-function renderCandidateComparison(state: ReviewWorkbenchState, presentationAdapter?: ReviewPresentationAdapter): string {
-  const current = candidateByRole(state.item, "current");
-  const proposed = candidateByRole(state.item, "proposed");
-
+/**
+ * Renders the inline editor for a proposed value.
+ *
+ * This is intentionally the ONLY place that knows how to edit a proposed value —
+ * a single seam so a later cross-repo change (spanning the upstream field-schema
+ * owner and downstream consumers) can swap in typed editors — a `<select>` built
+ * from an enum's allowed values, or date/number/boolean inputs — driven by an
+ * optional neutral value-type descriptor, without touching the rest of the
+ * field-card renderer. Survey deliberately has no value-type/enum system of its
+ * own (that belongs to the upstream field-schema owner), so today this always
+ * renders a plain text input, matching the approved mockup.
+ */
+function renderProposedValueEditor(item: ReviewItem, proposed: ReviewCandidate, targetLabel: string): string {
+  const valueText = formatValue(proposed.value);
   return `
-    <section class="candidate-grid" aria-label="Candidate comparison">
-      ${renderCandidateCard(current, state, presentationAdapter)}
-      ${renderCandidateCard(proposed, state, presentationAdapter)}
-    </section>
+    <div class="editrow">
+      <input
+        type="text"
+        class="proposed-value-input"
+        data-testid="edit-proposed-value"
+        data-item-name="${escapeHtml(item.metadata.name)}"
+        value="${escapeHtml(valueText)}"
+        aria-label="Edit proposed ${escapeHtml(targetLabel)}"
+      >
+      <span class="ehint">editable</span>
+    </div>
   `;
 }
 
-function renderDecisionColumn(state: ReviewWorkbenchState, presentationAdapter?: ReviewPresentationAdapter): string {
-  return `
-    <aside class="decision-column" aria-label="Review decision">
-      ${renderDecisionControls(state)}
-      ${renderSurfacePreview(state, presentationAdapter)}
-      ${renderDecisionPayload(state)}
-    </aside>
-  `;
-}
-
-function renderDecisionControls(state: ReviewWorkbenchState): string {
-  const activeDefinition = state.decision ? workbenchDecisionDefinitions[state.decision] : undefined;
-
-  return `
-    <section class="decision-row">
-      <div class="decision-buttons">
-        ${renderDecisionButtons(state)}
+function renderProvenanceRow(
+  item: ReviewItem,
+  proposed: ReviewCandidate,
+  presentationAdapter: ReviewPresentationAdapter | undefined,
+): string {
+  const excerpt = proposed.locator?.excerpt;
+  if (!excerpt) {
+    return `
+      <div class="prov">
+        <div class="noprov" data-testid="no-source-flag">
+          ${WARNING_SVG}
+          <span class="tag">No source</span>
+          <span>This value has no supporting excerpt — verify before accepting.</span>
+        </div>
       </div>
-      <div class="effect" data-testid="decision-effect">
-        <span class="field-label">Decision effect</span>
-        <span class="field-value">${escapeHtml(activeDefinition?.effect ?? "No decision selected.")}</span>
+    `;
+  }
+
+  const confidence = proposed.extraction.confidence ?? proposed.confidence;
+  const presentation = buildReviewCandidatePresentation(item, proposed, presentationAdapter);
+  const sourceLinkHtml = presentation.sourceLink
+    ? `<a href="${escapeHtml(presentation.sourceLink.href)}">${escapeHtml(presentation.sourceLink.label ?? presentation.sourceText)}</a>`
+    : escapeHtml(presentation.sourceText);
+
+  return `
+    <div class="prov">
+      ${confidence === undefined ? "" : renderConfidenceMeter(confidence)}
+      <div class="excerpt" data-testid="proposed-excerpt">
+        <q>${escapeHtml(excerpt)}</q>
+        <span class="from">from ${sourceLinkHtml}</span>
       </div>
-      <label class="field">
-        <span class="field-label">Reviewer note</span>
-        <textarea id="reviewer-note" data-testid="reviewer-note">${escapeHtml(state.note)}</textarea>
-      </label>
-      ${renderFeedbackTags(state)}
-    </section>
+    </div>
   `;
 }
 
-function renderFeedbackTags(state: ReviewWorkbenchState): string {
-  const tags = producerFeedbackTags(state.item);
+function renderConfidenceMeter(confidence: number): string {
+  const clamped = Math.max(0, Math.min(1, confidence));
+  const pct = Math.round(clamped * 100);
+  const isMid = clamped < 0.85;
 
   return `
-    <div class="feedback-tags" data-testid="producer-feedback-tags">
+    <div class="conf" data-testid="confidence-meter">
+      <span>Confidence</span>
+      <span class="meter${isMid ? " mid" : ""}"><i style="width:${pct}%"></i></span>
+      <span class="pct">${clamped.toFixed(2)}</span>
+    </div>
+  `;
+}
+
+/**
+ * The single collapsed power-user/audit surface per field card: reviewer note,
+ * decision effect, candidate/claim/source ids, and (once a decision has been made)
+ * the Surface projection preview and the raw ReviewDecision payload. Everything
+ * here is secondary detail tucked behind one `<details>` toggle, kept off the
+ * primary review surface.
+ */
+function renderAuditDetails(
+  item: ReviewItem,
+  current: ReviewCandidate | undefined,
+  proposed: ReviewCandidate | undefined,
+  session: ReviewQueueSessionState,
+  presentationAdapter: ReviewPresentationAdapter | undefined,
+): string {
+  const decision = session.decisionsByItemName[item.metadata.name];
+  const note = session.notesByItemName[item.metadata.name] ?? "";
+  const definition = decision ? workbenchDecisionDefinitions[decision] : undefined;
+  const state: ReviewWorkbenchState = {
+    item,
+    note,
+    decision,
+    editedValue: session.editedValuesByItemName?.[item.metadata.name],
+    reviewedAt: session.reviewedAt,
+    actorId: session.actorId,
+  };
+  const reviewDecisionPayload = buildReviewDecision(state);
+  const preview = buildSurfaceProjectionPreview(item, reviewDecisionPayload, presentationAdapter);
+
+  return `
+    <details class="audit-details" data-testid="audit-details">
+      <summary>Audit details</summary>
+      <div class="audit-body">
+        <label class="note-field">
+          <span class="field-label">Reviewer note</span>
+          <textarea data-testid="reviewer-note" data-item-name="${escapeHtml(item.metadata.name)}">${escapeHtml(note)}</textarea>
+        </label>
+        ${definition ? `<p class="field-value"><span class="field-label">Decision effect</span> ${escapeHtml(definition.effect)}</p>` : ""}
+        ${renderProducerFeedbackTags(item)}
+        <dl class="field-stack compact">
+          ${current ? fieldItem("Current candidate ID", current.id) : ""}
+          ${proposed ? fieldItem("Proposed candidate ID", proposed.id) : ""}
+          ${proposed ? fieldItem("Claim ID", proposed.claimTarget.claimId ?? proposed.claimTarget.fieldOrBehavior) : ""}
+          ${proposed ? fieldItem("Raw Source ID", proposed.source.sourceId ?? proposed.source.sourceRef) : ""}
+          ${proposed?.locator ? fieldItem("Locator", proposed.locator.locator ?? proposed.locator.scheme) : ""}
+          ${proposed ? fieldItem("Extractor", proposed.extraction.extractor ?? "unknown") : ""}
+          ${proposed ? fieldItem("Extracted at", proposed.extraction.extractedAt ?? "unknown") : ""}
+        </dl>
+        ${preview
+          ? `<div class="preview-section-grid">${renderSurfacePreviewSections(preview)}</div><p class="preview-disclaimer preview-disclaimer-footer">${escapeHtml(preview.postureDisclaimer)}</p>`
+          : "<p class=\"preview-disclaimer\">Choose \"Use proposed\" or \"Keep current\" to preview the Surface projection.</p>"}
+        <details class="reference-details">
+          <summary>ReviewDecision payload</summary>
+          <pre data-testid="decision-payload">${escapeHtml(JSON.stringify(reviewDecisionPayload ?? null, null, 2))}</pre>
+        </details>
+      </div>
+    </details>
+  `;
+}
+
+function renderProducerFeedbackTags(item: ReviewItem): string {
+  const tags = item.spec.producerPolicy?.feedbackTags;
+  if (!Array.isArray(tags) || tags.length === 0) {
+    return "";
+  }
+
+  return `
+    <div class="note-field">
       <span class="field-label">Producer feedback tags</span>
-      <div class="tag-row">
-        ${tags.length === 0 ? "<span class=\"tag is-empty\">none</span>" : tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}
-      </div>
+      <p class="field-value">${tags.map((tag) => escapeHtml(tag)).join(", ")}</p>
     </div>
   `;
 }
 
-function renderDecisionButtons(state: ReviewWorkbenchState): string {
-  return Object.entries(workbenchDecisionDefinitions).map(([key, definition]) => `
-    <button class="decision-button${state.decision === key ? " is-active" : ""}" type="button" data-decision="${key}">
-      ${escapeHtml(definition.label)}
-    </button>
-  `).join("");
-}
-
-function renderDecisionPayload(state: ReviewWorkbenchState): string {
-  const decision = buildReviewDecision(state);
+function renderFooterTally(session: ReviewQueueSessionState): string {
+  const counts: Record<FieldCardState, number> = { review: 0, accepted: 0, kept: 0, rejected: 0 };
+  for (const item of session.items) {
+    const state = fieldCardState(item, session.decisionsByItemName[item.metadata.name]);
+    counts[state] += 1;
+  }
 
   return `
-    <details class="payload-panel">
-      <summary class="field-label">ReviewDecision payload</summary>
-      <pre data-testid="decision-payload">${escapeHtml(JSON.stringify(decision ?? null, null, 2))}</pre>
-    </details>
-  `;
-}
-
-function renderSurfacePreview(state: ReviewWorkbenchState, presentationAdapter?: ReviewPresentationAdapter): string {
-  const preview = buildSurfaceProjectionPreview(state.item, buildReviewDecision(state), presentationAdapter);
-
-  return preview ? renderPopulatedSurfacePreview(preview) : renderPendingSurfacePreview();
-}
-
-function renderPendingSurfacePreview(): string {
-  return `
-    <details class="surface-preview" data-testid="surface-preview" aria-label="Surface preview">
-      <summary class="surface-summary">
-        <span class="surface-summary-label">Surface preview</span>
-        <span class="state-label">pending</span>
-      </summary>
-      <p class="preview-disclaimer">Choose a review decision to preview the Raw Source, Source Reference, and review posture that would project toward Surface.</p>
-    </details>
-  `;
-}
-
-function renderPopulatedSurfacePreview(preview: SurfaceProjectionPreview): string {
-  return `
-    <details class="surface-preview" data-testid="surface-preview" aria-label="Surface preview">
-      <summary class="surface-summary">
-        <span class="surface-summary-label">Surface preview</span>
-        <span class="state-label">local preview</span>
-      </summary>
-      <div class="preview-section-grid">
-        ${renderSurfacePreviewSections(preview)}
+    <footer class="foot" data-testid="review-tally">
+      <div class="tally">
+        <span>Accepted <b data-testid="tally-accepted">${counts.accepted}</b></span>
+        <span>Kept <b data-testid="tally-kept">${counts.kept}</b></span>
+        <span>Flagged <b data-testid="tally-rejected">${counts.rejected}</b></span>
+        <span>Remaining <b data-testid="tally-review">${counts.review}</b></span>
       </div>
-      <p class="preview-disclaimer preview-disclaimer-footer" data-testid="surface-preview-disclaimer">${escapeHtml(preview.postureDisclaimer)}</p>
-    </details>
+    </footer>
   `;
 }
 
@@ -1195,16 +1158,6 @@ function renderSurfacePreviewSections(preview: SurfaceProjectionPreview): string
     renderIntegrityPosture(preview),
     renderAuthorityTrace(preview),
   ].join("");
-}
-
-function renderCanonicalClaim(preview: SurfaceProjectionPreview): string {
-  return renderPreviewSection("Selected claim", "surface-canonical-claim", [
-    ["Value", preview.canonicalClaim.value],
-    ["Review status", preview.canonicalClaim.status],
-  ], undefined, [
-    ["Candidate ID", preview.canonicalClaim.candidateId],
-    ["Claim ID", preview.canonicalClaim.claimId],
-  ]);
 }
 
 function renderReviewEvent(preview: SurfaceProjectionPreview): string {
@@ -1273,7 +1226,7 @@ function renderCandidateHistory(preview: SurfaceProjectionPreview): string {
   return `
     <section class="preview-section" data-testid="surface-candidate-history">
       <h3>${escapeHtml("Unselected candidate history")}</h3>
-      <div class="history-expander${overflowCandidates.length > 0 ? "" : ""}" data-history-expander>
+      <div class="history-expander" data-history-expander>
         <dl class="field-stack compact">
           ${renderHistoryRows(visibleCandidates)}
           ${overflowHtml}
@@ -1289,10 +1242,8 @@ function renderCandidateHistory(preview: SurfaceProjectionPreview): string {
 }
 
 function renderSourceEvidence(preview: SurfaceProjectionPreview): string {
-  // Excerpt uses a 3-line clamp wrapper with a toggle button.
   const clampedExcerptHtml = fieldItemClamped("Excerpt", preview.sourceEvidence.excerpt, "excerpt");
 
-  // Build Raw Source section with clamped excerpt inline.
   return `
     <section class="preview-section" data-testid="surface-source-evidence">
       <h3>${escapeHtml("Raw Source")}</h3>
@@ -1358,6 +1309,14 @@ interface ReviewWorkbenchController {
   renderCurrentState(): void;
 }
 
+interface ReviewWorkbenchControllerBindings extends ReviewWorkbenchController {
+  currentSession(): ReviewQueueSessionState;
+  currentSessionExport(): ReviewWorkbenchSessionExport;
+  setDecision(itemName: string, decision: ReviewWorkbenchDecision, rawEditedValue?: string): void;
+  clearDecision(itemName: string): void;
+  updateReviewerNote(itemName: string, note: string): void;
+}
+
 function createReviewWorkbenchController(
   root: HTMLElement,
   startState: ReviewQueueSessionState | ReviewWorkbenchState,
@@ -1372,11 +1331,16 @@ function createReviewWorkbenchController(
     eventStore?.save(session, events);
   };
 
-  const appendEvent = (eventType: ReviewSessionEvent["spec"]["eventType"]): void => {
-    const state = currentReviewWorkbenchState(session);
-    const decision = state.decision;
-    const candidate = decision ? candidateForDecision(state.item, decision) : undefined;
+  const appendEvent = (
+    eventType: ReviewSessionEvent["spec"]["eventType"],
+    itemName: string | undefined,
+    dataOverride?: Record<string, unknown>,
+  ): void => {
+    const item = itemName ? session.items.find((entry) => entry.metadata.name === itemName) : undefined;
+    const decision = itemName ? session.decisionsByItemName[itemName] : undefined;
+    const candidate = item && decision ? candidateForDecision(item, decision) : undefined;
     const definition = decision ? workbenchDecisionDefinitions[decision] : undefined;
+    const note = itemName ? session.notesByItemName[itemName] : undefined;
 
     events = [
       ...events,
@@ -1385,13 +1349,12 @@ function createReviewWorkbenchController(
         sequence: events.length + 1,
         eventType,
         occurredAt: session.reviewedAt,
-        reviewItemName: state.item.metadata.name,
-        activeItemName: eventType === "item-selected" ? session.activeItemName : undefined,
-        reviewDecisionName: decision ? `${state.item.metadata.name}-${decision}` : undefined,
+        reviewItemName: itemName,
+        reviewDecisionName: item && decision ? `${item.metadata.name}-${decision}` : undefined,
         candidateId: candidate?.id,
         status: definition?.status,
-        rationale: state.note,
-        data: decision ? { workbenchDecision: decision } : undefined,
+        rationale: note,
+        data: dataOverride ?? (decision ? { workbenchDecision: decision } : undefined),
       }),
     ];
   };
@@ -1400,77 +1363,67 @@ function createReviewWorkbenchController(
     session = update(session);
   };
 
-  const selectDecision = (decision: ReviewWorkbenchDecision): void => {
-    applySessionUpdate((current) => ({
-      ...current,
-      decisionsByItemName: {
-        ...current.decisionsByItemName,
-        [currentReviewItem(current).metadata.name]: decision,
-      },
-    }));
-    appendEvent("decision-changed");
+  const setDecision = (itemName: string, decision: ReviewWorkbenchDecision, rawEditedValue?: string): void => {
+    applySessionUpdate((current) => {
+      const item = current.items.find((entry) => entry.metadata.name === itemName);
+      const proposed = item?.spec.candidates.find((candidate) => candidate.role === "proposed");
+      const originalText = proposed ? formatValue(proposed.value) : undefined;
+      const nextEditedValuesByItemName: Record<string, unknown> = { ...current.editedValuesByItemName };
+
+      if (decision === "accept-proposed" && rawEditedValue !== undefined && rawEditedValue !== originalText) {
+        nextEditedValuesByItemName[itemName] = rawEditedValue;
+      } else {
+        delete nextEditedValuesByItemName[itemName];
+      }
+
+      return {
+        ...current,
+        activeItemName: itemName,
+        decisionsByItemName: { ...current.decisionsByItemName, [itemName]: decision },
+        editedValuesByItemName: nextEditedValuesByItemName,
+      };
+    });
+    appendEvent("decision-changed", itemName);
     persistEvents();
   };
 
-  const controller = {
-    currentState: (): ReviewWorkbenchState => currentReviewWorkbenchState(session),
-    currentSession: (): ReviewQueueSessionState => session,
-    currentSessionExport: (): ReviewWorkbenchSessionExport => buildReviewWorkbenchSessionExport(session, events),
-    goToNextUnresolved: (): void => {
-      applyNextUnresolvedSessionUpdate(applySessionUpdate, session);
-      appendEvent("item-selected");
-      persistEvents();
-    },
-    renderCurrentState: (): void => renderCurrentState(root, session, controller, options.presentationAdapter),
-    selectDecision,
-    selectQueueItem: (itemName: string): void => {
-      applySessionUpdate((current) => ({ ...current, activeItemName: itemName }));
-      appendEvent("item-selected");
-      persistEvents();
-    },
-    updateReviewerNote: (note: string): void => {
-      applyReviewerNoteSessionUpdate(applySessionUpdate, session, note);
-      appendEvent("note-changed");
-      persistEvents();
-    },
+  const clearDecision = (itemName: string): void => {
+    applySessionUpdate((current) => {
+      const remainingDecisions = { ...current.decisionsByItemName };
+      delete remainingDecisions[itemName];
+      const remainingEdits: Record<string, unknown> = { ...current.editedValuesByItemName };
+      delete remainingEdits[itemName];
+
+      return {
+        ...current,
+        activeItemName: itemName,
+        decisionsByItemName: remainingDecisions,
+        editedValuesByItemName: remainingEdits,
+      };
+    });
+    appendEvent("decision-changed", itemName, { workbenchDecision: null });
+    persistEvents();
+  };
+
+  const updateReviewerNote = (itemName: string, note: string): void => {
+    applySessionUpdate((current) => ({
+      ...current,
+      notesByItemName: { ...current.notesByItemName, [itemName]: note },
+    }));
+    appendEvent("note-changed", itemName);
+    persistEvents();
+  };
+
+  const controller: ReviewWorkbenchControllerBindings = {
+    currentSession: () => session,
+    currentSessionExport: () => buildReviewWorkbenchSessionExport(session, events),
+    renderCurrentState: () => renderCurrentState(root, session, controller, options.presentationAdapter),
+    setDecision,
+    clearDecision,
+    updateReviewerNote,
   };
 
   return controller;
-}
-
-interface ReviewWorkbenchControllerBindings extends ReviewWorkbenchController {
-  currentState(): ReviewWorkbenchState;
-  currentSession(): ReviewQueueSessionState;
-  currentSessionExport(): ReviewWorkbenchSessionExport;
-  goToNextUnresolved(): void;
-  selectDecision(decision: ReviewWorkbenchDecision): void;
-  selectQueueItem(itemName: string): void;
-  updateReviewerNote(note: string): void;
-}
-
-function applyReviewerNoteSessionUpdate(
-  applySessionUpdate: (update: (current: ReviewQueueSessionState) => ReviewQueueSessionState) => void,
-  session: ReviewQueueSessionState,
-  note: string,
-): void {
-  const itemName = currentReviewItem(session).metadata.name;
-  applySessionUpdate((current) => ({
-    ...current,
-    notesByItemName: {
-      ...current.notesByItemName,
-      [itemName]: note,
-    },
-  }));
-}
-
-function applyNextUnresolvedSessionUpdate(
-  applySessionUpdate: (update: (current: ReviewQueueSessionState) => ReviewQueueSessionState) => void,
-  session: ReviewQueueSessionState,
-): void {
-  const next = nextUnresolvedItemName(session);
-  if (next) {
-    applySessionUpdate((current) => ({ ...current, activeItemName: next }));
-  }
 }
 
 function browserReviewSessionEventStore(): ReviewSessionEventStore | undefined {
@@ -1492,30 +1445,9 @@ function renderCurrentState(
   controller: ReviewWorkbenchControllerBindings,
   presentationAdapter?: ReviewPresentationAdapter,
 ): void {
-  root.innerHTML = renderReviewWorkbenchHtml(session, controller.currentSessionExport().events, { presentationAdapter });
-  bindReviewerNote(
-    root,
-    controller.updateReviewerNote,
-    controller.currentState,
-    controller.currentSession,
-    controller.currentSessionExport,
-    controller.renderCurrentState,
-    presentationAdapter,
-  );
-  bindDecisionButtons(root, (decision) => {
-    controller.selectDecision(decision);
-    controller.renderCurrentState();
-  });
-  bindQueueRows(root, (itemName) => {
-    controller.selectQueueItem(itemName);
-    controller.renderCurrentState();
-    closeQueueDrawer(root);
-  });
-  bindNextUnresolved(root, () => {
-    controller.goToNextUnresolved();
-    controller.renderCurrentState();
-  });
-  bindQueueDrawer(root);
+  root.innerHTML = renderReviewWorkbenchHtml(session, undefined, { presentationAdapter });
+  bindFieldCardInteractions(root, controller);
+  bindApplyButton(root, controller);
   bindClampToggles(root);
   bindHistoryExpanders(root);
 }
@@ -1532,53 +1464,101 @@ function queueSessionFromStartState(
     activeItemName: startState.item.metadata.name,
     notesByItemName: startState.note ? { [startState.item.metadata.name]: startState.note } : {},
     decisionsByItemName: startState.decision ? { [startState.item.metadata.name]: startState.decision } : {},
+    editedValuesByItemName: startState.editedValue !== undefined
+      ? { [startState.item.metadata.name]: startState.editedValue }
+      : {},
     reviewedAt: startState.reviewedAt,
     actorId: startState.actorId,
   };
 }
 
-function bindReviewerNote(
-  root: HTMLElement,
-  updateReviewerNote: (note: string) => void,
-  currentState: () => ReviewWorkbenchState,
-  currentSession: () => ReviewQueueSessionState,
-  currentSessionExport: () => ReviewWorkbenchSessionExport,
-  renderCurrentState: () => void,
-  presentationAdapter?: ReviewPresentationAdapter,
+function bindFieldCardInteractions(root: HTMLElement, controller: ReviewWorkbenchControllerBindings): void {
+  root.querySelectorAll<HTMLButtonElement>("[data-testid='use-proposed']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const itemName = button.dataset.itemName ?? "";
+      const field = button.closest<HTMLElement>("[data-testid='review-field']");
+      const input = field?.querySelector<HTMLInputElement>("[data-testid='edit-proposed-value']");
+      controller.setDecision(itemName, "accept-proposed", input?.value);
+      controller.renderCurrentState();
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-testid='keep-current']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const itemName = button.dataset.itemName ?? "";
+      const field = button.closest<HTMLElement>("[data-testid='review-field']");
+      const wrong = field?.querySelector<HTMLInputElement>("[data-testid='wrong-toggle']");
+      const decision: ReviewWorkbenchDecision = wrong?.checked ? "reject-proposed" : "keep-current";
+      controller.setDecision(itemName, decision);
+      controller.renderCurrentState();
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-testid='undo-decision']").forEach((button) => {
+    button.addEventListener("click", () => {
+      controller.clearDecision(button.dataset.itemName ?? "");
+      controller.renderCurrentState();
+    });
+  });
+
+  root.querySelectorAll<HTMLTextAreaElement>("[data-testid='reviewer-note']").forEach((textarea) => {
+    textarea.addEventListener("input", () => {
+      const itemName = textarea.dataset.itemName ?? "";
+      controller.updateReviewerNote(itemName, textarea.value);
+      refreshAuditPayloadForItem(textarea, controller, itemName);
+    });
+  });
+}
+
+function bindApplyButton(root: HTMLElement, controller: ReviewWorkbenchControllerBindings): void {
+  const button = root.querySelector<HTMLButtonElement>("[data-testid='apply-button']");
+  button?.addEventListener("click", () => {
+    if (typeof CustomEvent !== "function" || typeof root.dispatchEvent !== "function") {
+      return;
+    }
+
+    root.dispatchEvent(new CustomEvent("survey:review-workbench-apply", {
+      bubbles: true,
+      composed: true,
+      detail: {
+        session: controller.currentSession(),
+        sessionExport: controller.currentSessionExport(),
+      },
+    }));
+  });
+}
+
+/**
+ * After a reviewer-note keystroke, patch just that field's decision-payload `<pre>`
+ * in place instead of a full re-render — a full re-render would close the audit
+ * `<details>` and drop focus/caret position on every keystroke.
+ */
+function refreshAuditPayloadForItem(
+  textarea: HTMLTextAreaElement,
+  controller: ReviewWorkbenchControllerBindings,
+  itemName: string,
 ): void {
-  root.querySelector<HTMLTextAreaElement>("[data-testid='reviewer-note']")?.addEventListener("input", (event) => {
-    updateReviewerNote((event.target as HTMLTextAreaElement).value);
-    refreshDecisionOutputs(root, currentState(), renderCurrentState, presentationAdapter);
-    refreshSessionAudit(root, currentSession(), currentSessionExport(), renderCurrentState);
-  });
-}
+  const field = textarea.closest<HTMLElement>("[data-testid='review-field']");
+  const payload = field?.querySelector<HTMLElement>("[data-testid='decision-payload']");
+  if (!payload) {
+    return;
+  }
 
-function bindDecisionButtons(root: HTMLElement, selectDecision: (decision: ReviewWorkbenchDecision) => void): void {
-  root.querySelectorAll<HTMLButtonElement>("[data-decision]").forEach((button) => {
-    button.addEventListener("click", () => {
-      selectDecision(button.dataset.decision as ReviewWorkbenchDecision);
-    });
-  });
-}
+  const session = controller.currentSession();
+  const item = session.items.find((entry) => entry.metadata.name === itemName);
+  if (!item) {
+    return;
+  }
 
-function bindQueueRows(root: HTMLElement, selectQueueItem: (itemName: string) => void): void {
-  root.querySelectorAll<HTMLButtonElement>("[data-item-name]").forEach((button) => {
-    button.addEventListener("click", () => {
-      selectQueueItem(button.dataset.itemName ?? "");
-      scrollActiveReviewIntoView(root);
-    });
-  });
-}
-
-function bindNextUnresolved(root: HTMLElement, goToNextUnresolved: () => void): void {
-  root
-    .querySelectorAll<HTMLButtonElement>("[data-testid='next-unresolved'], [data-testid='active-next-unresolved']")
-    .forEach((button) => {
-      button.addEventListener("click", () => {
-        goToNextUnresolved();
-        scrollActiveReviewIntoView(root);
-      });
-    });
+  const state: ReviewWorkbenchState = {
+    item,
+    note: textarea.value,
+    decision: session.decisionsByItemName[itemName],
+    editedValue: session.editedValuesByItemName?.[itemName],
+    reviewedAt: session.reviewedAt,
+    actorId: session.actorId,
+  };
+  payload.textContent = JSON.stringify(buildReviewDecision(state) ?? null, null, 2);
 }
 
 function bindClampToggles(root: HTMLElement): void {
@@ -1604,190 +1584,9 @@ function bindHistoryExpanders(root: HTMLElement): void {
   });
 }
 
-function bindQueueDrawer(root: HTMLElement): void {
-  const openButton = root.querySelector<HTMLButtonElement>("[data-testid='mobile-queue-open']");
-  const closeButton = root.querySelector<HTMLButtonElement>("[data-testid='queue-drawer-close']");
-  const backdrop = root.querySelector<HTMLElement>("[data-testid='queue-drawer-backdrop']");
-  const panel = root.querySelector<HTMLElement>("#queue-panel");
-
-  openButton?.addEventListener("click", () => openQueueDrawer(root));
-  closeButton?.addEventListener("click", () => closeQueueDrawer(root));
-  backdrop?.addEventListener("click", () => closeQueueDrawer(root));
-
-  if (typeof root.addEventListener === "function") {
-    root.addEventListener("keydown", (event) => {
-      if ((event as KeyboardEvent).key === "Escape" && panel?.classList.contains("is-open")) {
-        closeQueueDrawer(root);
-      }
-    });
-  }
-}
-
-function openQueueDrawer(root: HTMLElement): void {
-  const panel = root.querySelector<HTMLElement>("#queue-panel");
-  const backdrop = root.querySelector<HTMLElement>("[data-testid='queue-drawer-backdrop']");
-  const openButton = root.querySelector<HTMLButtonElement>("[data-testid='mobile-queue-open']");
-
-  if (!panel) {
-    return;
-  }
-
-  panel.classList.add("is-open");
-  panel.setAttribute("aria-modal", "true");
-  backdrop?.classList.add("is-visible");
-  openButton?.setAttribute("aria-expanded", "true");
-  panel.querySelector<HTMLElement>("button, [tabindex]")?.focus();
-}
-
-function closeQueueDrawer(root: HTMLElement): void {
-  const panel = root.querySelector<HTMLElement>("#queue-panel");
-  const backdrop = root.querySelector<HTMLElement>("[data-testid='queue-drawer-backdrop']");
-  const openButton = root.querySelector<HTMLButtonElement>("[data-testid='mobile-queue-open']");
-
-  if (!panel) {
-    return;
-  }
-
-  panel.classList.remove("is-open");
-  panel.setAttribute("aria-modal", "false");
-  backdrop?.classList.remove("is-visible");
-  openButton?.setAttribute("aria-expanded", "false");
-  openButton?.focus();
-}
-
-function scrollActiveReviewIntoView(root: HTMLElement): void {
-  if (typeof window === "undefined" || !window.matchMedia("(max-width: 980px)").matches) {
-    return;
-  }
-
-  root.querySelector<HTMLElement>("[data-testid='active-review-strip']")?.scrollIntoView({
-    block: "start",
-    behavior: "smooth",
-  });
-}
-
-function refreshDecisionOutputs(
-  root: HTMLElement,
-  state: ReviewWorkbenchState,
-  renderCurrentState: () => void,
-  presentationAdapter?: ReviewPresentationAdapter,
-): void {
-  const payload = root.querySelector<HTMLElement>("[data-testid='decision-payload']");
-  if (payload) {
-    payload.textContent = JSON.stringify(buildReviewDecision(state) ?? null, null, 2);
-  }
-
-  const preview = root.querySelector<HTMLElement>("[data-testid='surface-preview']");
-  if (!preview) {
-    return;
-  }
-
-  if (typeof document === "undefined") {
-    renderCurrentState();
-    return;
-  }
-
-  const wrapper = document.createElement("div");
-  wrapper.innerHTML = renderSurfacePreview(state, presentationAdapter);
-  const newPreview = wrapper.firstElementChild as HTMLElement;
-  preview.replaceWith(newPreview);
-  if (newPreview && typeof newPreview.querySelectorAll === "function") {
-    bindClampToggles(newPreview);
-    bindHistoryExpanders(newPreview);
-  }
-}
-
-function refreshSessionAudit(
-  root: HTMLElement,
-  session: ReviewQueueSessionState,
-  sessionExport: ReviewWorkbenchSessionExport,
-  renderCurrentState: () => void,
-): void {
-  const audit = root.querySelector<HTMLElement>("[data-testid='session-audit']");
-  if (!audit) {
-    return;
-  }
-
-  if (typeof document === "undefined") {
-    renderCurrentState();
-    return;
-  }
-
-  const wrapper = document.createElement("div");
-  wrapper.innerHTML = renderSessionAudit(session, sessionExport);
-  audit.replaceWith(wrapper.firstElementChild as HTMLElement);
-}
-
-function producerFeedbackTags(item: ReviewItem): string[] {
-  const tags = item.spec.producerPolicy?.feedbackTags;
-  return Array.isArray(tags) ? tags.map(formatValue) : [];
-}
-
-function renderCandidateCard(
-  candidate: ReviewCandidate,
-  state: ReviewWorkbenchState,
-  presentationAdapter?: ReviewPresentationAdapter,
-): string {
-  const selectedRole = selectedCandidateRole(state);
-  const candidateState = state.decision
-    ? candidate.role === selectedRole ? "selected" : "unselected"
-    : "pending";
-  const cssState = candidateState === "selected" ? " is-selected" : candidateState === "unselected" ? " is-unselected" : "";
-  const confidence = candidate.extraction.confidence ?? candidate.confidence;
-  const itemPresentation = buildReviewItemPresentation(state.item, presentationAdapter);
-  const presentation = buildReviewCandidatePresentation(state.item, candidate, presentationAdapter, itemPresentation.targetLabel);
-
-  return `
-    <article class="candidate-card${cssState}" data-testid="candidate-${escapeHtml(candidate.role ?? candidate.id)}" data-outcome="${candidateState}">
-      <div class="card-head">
-        <div>
-          <p class="eyebrow">${escapeHtml(candidate.role === "proposed" ? "incoming value" : candidate.role === "current" ? "existing value" : "candidate")}</p>
-          <h2 class="role">${escapeHtml(presentation.roleLabel)}</h2>
-        </div>
-        <span class="state-label">${escapeHtml(candidateState)}</span>
-      </div>
-      <div class="candidate-value">
-        <span class="field-label">${escapeHtml(presentation.valueLabel)}</span>
-        <p class="field-value">${escapeHtml(presentation.valueText)}</p>
-      </div>
-      <dl class="field-stack">
-        ${fieldItem(presentation.sourceLabel, presentation.sourceText)}
-        ${fieldItem("Locator", candidate.locator?.locator ?? candidate.locator?.scheme ?? "none")}
-        ${fieldItemClamped("Excerpt", candidate.locator?.excerpt ?? "none", "excerpt")}
-        ${fieldItem("Extraction confidence", confidence === undefined ? "unknown" : formatConfidence(confidence))}
-        ${fieldItem("Extractor", candidate.extraction.extractor ?? "unknown")}
-      </dl>
-      <details class="reference-details">
-        <summary>IDs and trace links</summary>
-        <dl class="field-stack compact">
-          ${presentation.traceRefs.map((ref) => fieldItem(ref.label, ref.value)).join("")}
-        </dl>
-      </details>
-    </article>
-  `;
-}
-
-function candidateByRole(item: ReviewItem, role: "current" | "proposed"): ReviewCandidate {
-  const candidate = item.spec.candidates.find((entry) => entry.role === role);
-  if (!candidate) {
-    throw new Error(`ReviewItem ${item.metadata.name} has no ${role} candidate.`);
-  }
-
-  return candidate;
-}
-
-function metaItem(label: string, value: unknown): string {
-  return `
-    <div class="meta-item">
-      <dt class="field-label">${escapeHtml(label)}</dt>
-      <dd class="meta-value">${escapeHtml(value)}</dd>
-    </div>
-  `;
-}
-
 function fieldItemClamped(label: string, value: unknown, extraClass = ""): string {
   return `
-    <div class="field ${extraClass}">
+    <div class="kv ${extraClass}">
       <dt class="field-label">${escapeHtml(label)}</dt>
       <div class="excerpt-clamp" data-clamp>
         <dd class="field-value">${escapeHtml(value)}</dd>
@@ -1799,15 +1598,11 @@ function fieldItemClamped(label: string, value: unknown, extraClass = ""): strin
 
 function fieldItem(label: string, value: unknown, extraClass = ""): string {
   return `
-    <div class="field ${extraClass}">
+    <div class="kv ${extraClass}">
       <dt class="field-label">${escapeHtml(label)}</dt>
       <dd class="field-value">${escapeHtml(value)}</dd>
     </div>
   `;
-}
-
-function formatConfidence(value: number): string {
-  return `${Math.round(value * 100)}% (${value.toFixed(2)})`;
 }
 
 function escapeHtml(value: unknown): string {
@@ -1818,6 +1613,7 @@ function escapeHtml(value: unknown): string {
     .replaceAll("\"", "&quot;")
     .replaceAll("'", "&#39;");
 }
+
 
 export function browserReviewWorkbenchStartState(): ReviewQueueSessionState | ReviewWorkbenchState | undefined {
   if (typeof window === "undefined") {

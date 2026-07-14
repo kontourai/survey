@@ -152,81 +152,66 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 }
 
 
-/* Survey Review Workbench — "forensic review console" aesthetic.
-   Reviewers judge whether a proposed value should overwrite a verified one;
-   the visual language is built to highlight the value diff, the decision, the
-   confidence, and the provenance — in that order. */
+/* Survey Review Workbench — field-diff review UI.
+   Reviewers judge, field by field, whether a proposed value should replace a
+   current one. The visual language leads with the value diff, then confidence,
+   then provenance, then the decision — plain language on the primary surface,
+   audit/trace detail tucked behind one collapsed <details> per field.
 
+   Token contract: every color/radius/shadow/font below resolves through --k-*
+   custom properties so a host app can re-skin the whole surface by overriding
+   tokens alone (see the "Theming" section of docs/consumer-integration-guide.md).
+   The aliases declared here (--k-muted, --k-raised, --k-sunken, --k-brand-ink,
+   --k-brand-wash, --k-positive-wash, --k-caution-wash, --k-negative-wash,
+   --k-radius) derive from Survey's existing --k-text-muted / --k-panel-raised /
+   --k-brand-contrast / --k-*-soft / --k-radius-md tokens so overriding the base
+   token a host already knows about re-skins these too — a host can also override
+   any alias directly for finer control. */
 
 .survey-workbench-embed{
   color-scheme: dark;
 
-  /* Local aliases preserve the existing workbench selectors while the values
-     come from the shared Console Kit token contract. */
-  --ink-1000: var(--k-bg);
-  --ink-900: color-mix(in srgb, var(--k-bg) 60%, var(--k-panel));
-  --ink-850: color-mix(in srgb, var(--k-bg) 40%, var(--k-panel));
-  --ink-800: var(--k-panel);
-  --ink-750: var(--k-panel-raised);
-  --ink-700: color-mix(in srgb, var(--k-panel-raised) 80%, var(--k-line-strong));
-  --paper: var(--k-text);
-  --paper-dim: var(--k-text-muted);
-  --paper-faint: var(--k-text-faint);
-  --line: var(--k-line);
-  --line-strong: var(--k-line-strong);
-  --accent: var(--k-brand);
-  --accent-deep: color-mix(in srgb, var(--k-brand) 34%, var(--k-bg));
-  --proposed: var(--k-active);
-  --verify: var(--k-positive);
-  --hold: var(--k-caution);
-  --reject: var(--k-negative);
-  --radius: var(--k-radius-md);
-  --radius-sm: var(--k-radius-sm);
-
-  /* Panel surface alpha — stronger contrast in light mode, subtle in dark */
-  --surface-alpha: 0.55;
-  /* Overlay tint alpha for brand-coloured gradient overlays */
-  --overlay-alpha: 0.10;
-  /* Grain overlay: visible dark only, 0 in light */
-  --grain-opacity: 0.04;
-  /* VS marker bg */
-  --vs-bg: var(--ink-750);
+  --k-muted: var(--k-text-muted);
+  --k-faint: var(--k-text-faint);
+  --k-raised: var(--k-panel-raised);
+  --k-sunken: color-mix(in srgb, var(--k-bg) 55%, var(--k-panel) 45%);
+  --k-brand-ink: var(--k-brand-contrast);
+  --k-brand-wash: color-mix(in srgb, var(--k-brand) 14%, transparent);
+  --k-positive-wash: var(--k-positive-soft, color-mix(in srgb, var(--k-positive) 14%, transparent));
+  --k-caution-wash: var(--k-caution-soft, color-mix(in srgb, var(--k-caution) 14%, transparent));
+  --k-negative-wash: var(--k-negative-soft, color-mix(in srgb, var(--k-negative) 14%, transparent));
+  --k-radius: var(--k-radius-md);
 
   font-family: var(--k-font-ui);
-  background: var(--ink-1000);
-  color: var(--paper);
+  background: var(--k-bg);
+  color: var(--k-text);
 }
 
-/* ---- Light mode token overrides --------------------------------------- */
-/* The token sheet already flips --k-bg/panel/text etc. for [data-theme="light"].
-   Here we tune the workbench-specific overlay and surface alphas so the
-   grain/gradient overlays are invisible in light mode, and panel surfaces
-   have enough contrast without the dark alpha tricks. */
+/* Re-assert the base structural tokens for light mode. themes.css's \`.theme-*\`
+   preset classes hardcode a dark --k-bg/--k-panel/etc (so the preset "just
+   works" without requiring [data-theme] to be set), and a bare class selector
+   ties with the \`[data-theme="light"]\` selector in tokens.css on specificity —
+   so source order decides, and themes.css loads after tokens.css. Re-declaring
+   the light values here (loaded after themes.css) wins that tie-break. Presets
+   still control --k-brand (and theme-console's fuller palette) via their own,
+   more specific \`[data-theme="light"].theme-*\` rules in themes.css. */
 .survey-workbench-embed[data-theme="light"]{
   color-scheme: light;
-  /* Structural tokens: override .theme-survey which hardcodes dark values.
-     These match the [data-theme="light"] block in tokens.css. */
   --k-bg: #f5f4ef;
   --k-panel: #ffffff;
   --k-panel-raised: #fbfaf7;
   --k-line: rgba(36, 40, 46, 0.12);
   --k-line-strong: rgba(36, 40, 46, 0.20);
+  --k-shadow: 0 18px 50px -30px rgba(0, 0, 0, 0.25);
   --k-text: #202124;
   --k-text-muted: #5b626b;
   --k-text-faint: #707782;
+  --k-brand-contrast: #ffffff;
   --k-positive: #168257;
   --k-caution: #8a5a00;
   --k-negative: #c83b3b;
+  --k-neutral: #5f6975;
   --k-active: #3f6fd6;
-  /* Workbench-specific overlay and surface alphas */
-  --grain-opacity: 0;
-  --overlay-alpha: 0.06;
-  --surface-alpha: 0.70;
-  --vs-bg: var(--ink-750);
-  /* In light mode the brand accent is remapped by themes.css — ensure the
-     ink aliases derive cleanly from the token bg/panel values. */
-  --ink-900: color-mix(in srgb, var(--k-bg) 60%, var(--k-panel));
-  --ink-850: color-mix(in srgb, var(--k-bg) 40%, var(--k-panel));
 }
 
 .survey-workbench-embed *{
@@ -236,30 +221,21 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 .survey-workbench-embed{
   margin: 0;
   min-width: 320px;
-  position: relative;
-  background:
-    radial-gradient(1100px 620px at 12% -8%, color-mix(in srgb, var(--k-brand) 10%, transparent), transparent 60%),
-    radial-gradient(900px 560px at 100% 0%, color-mix(in srgb, var(--k-active) 10%, transparent), transparent 55%),
-    radial-gradient(800px 800px at 88% 110%, color-mix(in srgb, var(--k-caution) 7%, transparent), transparent 60%),
-    linear-gradient(180deg, var(--ink-1000), var(--ink-900) 55%, var(--ink-1000));
-  background-attachment: fixed;
 }
 
-/* Grain + faint engineering grid for control-room atmosphere.
-   Grain opacity is 0 in light mode via --grain-opacity. */
-.survey-workbench-embed::before{
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
-  opacity: var(--grain-opacity);
-  mix-blend-mode: screen;
+.survey-workbench-embed button,
+.survey-workbench-embed textarea,
+.survey-workbench-embed input{
+  font: inherit;
+  color: inherit;
 }
 
-/* ---- Demo page chrome -------------------------------------------------- */
-/* Light/dark toggle button on the demo wrapper around the workbench */
+.survey-workbench-embed h1, .survey-workbench-embed h2, .survey-workbench-embed h3, .survey-workbench-embed p{
+  margin: 0;
+}
+
+/* ---------- demo page chrome (host page only, not part of the component) ---------- */
+
 .survey-workbench-embed .demo-toolbar{
   position: absolute;
   top: 12px;
@@ -276,23 +252,20 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   gap: 6px;
   height: 32px;
   padding: 0 12px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--k-line-strong);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--k-panel) 90%, transparent);
-  color: var(--paper-dim);
+  background: var(--k-panel);
+  color: var(--k-muted);
   cursor: pointer;
-  font-family: var(--k-font-mono, "IBM Plex Mono", monospace);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  backdrop-filter: blur(6px);
+  letter-spacing: 0.02em;
   transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
 }
 
 .survey-workbench-embed.theme-toggle:hover{
-  background: color-mix(in srgb, var(--k-panel) 100%, transparent);
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--k-brand);
+  color: var(--k-brand);
 }
 
 .survey-workbench-embed.theme-toggle-icon{
@@ -300,775 +273,643 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   line-height: 1;
 }
 
-.survey-workbench-embed button,
-.survey-workbench-embed textarea{
-  font: inherit;
-}
-
-.survey-workbench-embed h1,
-.survey-workbench-embed h2,
-.survey-workbench-embed h3,
-.survey-workbench-embed p{
-  margin: 0;
-}
+/* ---------- outer containers ---------- */
 
 .survey-workbench-embed .workbench{
   position: relative;
-  z-index: 1;
   container-type: inline-size;
   min-height: 100vh;
-  padding: 22px 22px 50px;
+  padding: 28px 20px 80px;
 }
 
 .survey-workbench-embed .workbench-shell{
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 16px;
-  max-width: 1360px;
+  max-width: 940px;
   margin: 0 auto;
 }
 
-/* ---- Shared label vocabulary ------------------------------------------ */
+/* ---------- review panel + header ---------- */
 
-.survey-workbench-embed .eyebrow,
-.survey-workbench-embed .field-label,
-.survey-workbench-embed .state-label{
-  color: var(--accent);
-  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.18em;
+.survey-workbench-embed .review{
+  background: var(--k-panel);
+  border: 1px solid var(--k-line);
+  border-radius: var(--k-radius);
+  box-shadow: var(--k-shadow);
+  overflow: hidden;
+}
+
+.survey-workbench-embed .rhead{
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--k-line);
+  display: grid;
+  gap: 14px;
+}
+
+.survey-workbench-embed .rhead .top{
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.survey-workbench-embed .rhead .eyebrow{
+  font-size: 12px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+  color: var(--k-faint);
+}
+
+.survey-workbench-embed .rhead h1{
+  margin: 2px 0 0;
+  font-size: 21px;
+  line-height: 1.2;
+  text-wrap: balance;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.survey-workbench-embed .rhead .subj{
+  flex: 1;
+  min-width: 240px;
+}
+
+.survey-workbench-embed .meta{
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--k-muted);
+}
+
+.survey-workbench-embed .meta b{
+  color: var(--k-text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* progress + apply */
+
+.survey-workbench-embed .progress{
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.survey-workbench-embed .bar{
+  flex: 1;
+  min-width: 80px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--k-sunken);
+  overflow: hidden;
+  border: 1px solid var(--k-line);
+}
+
+.survey-workbench-embed .bar > i{
+  display: block;
+  height: 100%;
+  background: var(--k-brand);
+  border-radius: 999px;
+  transition: width 0.35s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.survey-workbench-embed .ptext{
+  font-size: 13px;
+  color: var(--k-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.survey-workbench-embed .ptext b{
+  color: var(--k-text);
+}
+
+.survey-workbench-embed .apply{
+  border: 0;
+  background: var(--k-brand);
+  color: var(--k-brand-ink);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 9px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.08s, filter 0.15s;
+}
+
+.survey-workbench-embed .apply:hover{
+  filter: brightness(1.06);
+}
+
+.survey-workbench-embed .apply:active{
+  transform: translateY(1px);
+}
+
+.survey-workbench-embed .apply:disabled{
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: none;
+}
+
+/* ---------- field cards ---------- */
+
+.survey-workbench-embed .fields{
+  display: flex;
+  flex-direction: column;
+}
+
+.survey-workbench-embed .field{
+  display: grid;
+  grid-template-columns: 4px 1fr;
+  gap: 0;
+  border-top: 1px solid var(--k-line);
+}
+
+.survey-workbench-embed .field:first-child{
+  border-top: 0;
+}
+
+.survey-workbench-embed .stripe{
+  background: var(--k-line);
+  transition: background 0.25s;
+}
+
+.survey-workbench-embed .field[data-state="accepted"] .stripe{ background: var(--k-positive); }
+.survey-workbench-embed .field[data-state="kept"] .stripe{ background: var(--k-faint); }
+.survey-workbench-embed .field[data-state="rejected"] .stripe{ background: var(--k-negative); }
+.survey-workbench-embed .field[data-state="review"] .stripe{ background: var(--k-brand); }
+
+.survey-workbench-embed .fbody{
+  padding: 18px 22px 20px;
+  display: grid;
+  gap: 13px;
+  min-width: 0;
+}
+
+.survey-workbench-embed .frow1{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.survey-workbench-embed .fname{
+  font-size: 15.5px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+}
+
+.survey-workbench-embed .fkind{
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--k-faint);
+  border: 1px solid var(--k-line-strong);
+  padding: 1px 7px;
+  border-radius: 999px;
+}
+
+.survey-workbench-embed .chip{
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.survey-workbench-embed .chip::before{
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.survey-workbench-embed .chip.review{ color: var(--k-brand); background: var(--k-brand-wash); }
+.survey-workbench-embed .chip.accepted{ color: var(--k-positive); background: var(--k-positive-wash); }
+.survey-workbench-embed .chip.kept{ color: var(--k-muted); background: var(--k-sunken); }
+.survey-workbench-embed .chip.rejected{ color: var(--k-negative); background: var(--k-negative-wash); }
+
+.survey-workbench-embed .frow1 .push{
+  margin-left: auto;
+}
+
+/* the diff */
+
+.survey-workbench-embed .diff{
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 12px;
+  align-items: stretch;
+}
+
+@media (max-width: 620px) {
+  .survey-workbench-embed .diff{
+    grid-template-columns: 1fr;
+  }
+  .survey-workbench-embed .diff .arrow{
+    transform: rotate(90deg);
+    justify-self: start;
+  }
+}
+
+.survey-workbench-embed .val{
+  border: 1px solid var(--k-line);
+  border-radius: var(--k-radius-sm);
+  padding: 10px 12px;
+  background: var(--k-raised);
+  min-width: 0;
+}
+
+.survey-workbench-embed .val .vlbl{
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--k-faint);
+  margin-bottom: 4px;
+}
+
+.survey-workbench-embed .val .vtext{
+  font-size: 14.5px;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.survey-workbench-embed .val.current{
+  background: var(--k-sunken);
+}
+
+.survey-workbench-embed .val.current .vtext{
+  color: var(--k-muted);
+}
+
+.survey-workbench-embed .val.proposed{
+  border-color: color-mix(in srgb, var(--k-brand) 45%, var(--k-line));
+}
+
+.survey-workbench-embed .val.empty .vtext{
+  color: var(--k-faint);
+  font-style: italic;
+}
+
+.survey-workbench-embed .arrow{
+  align-self: center;
+  color: var(--k-faint);
+}
+
+.survey-workbench-embed .editrow{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.survey-workbench-embed .editrow input{
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  color: var(--k-text);
+  background: var(--k-panel);
+  border: 1px solid var(--k-line-strong);
+  border-radius: 6px;
+  padding: 6px 9px;
+}
+
+.survey-workbench-embed .editrow input:focus-visible{
+  outline: 2px solid var(--k-brand);
+  outline-offset: 1px;
+  border-color: var(--k-brand);
+}
+
+.survey-workbench-embed .editrow .ehint{
+  font-size: 11.5px;
+  color: var(--k-faint);
+  white-space: nowrap;
+}
+
+/* confidence + provenance */
+
+.survey-workbench-embed .prov{
+  display: grid;
+  gap: 9px;
+  padding: 11px 13px;
+  border-radius: var(--k-radius-sm);
+  background: var(--k-sunken);
+  border: 1px solid var(--k-line);
+}
+
+.survey-workbench-embed .conf{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--k-muted);
+  flex-wrap: wrap;
+}
+
+.survey-workbench-embed .conf .meter{
+  width: 84px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--k-line-strong);
+  overflow: hidden;
+}
+
+.survey-workbench-embed .conf .meter > i{
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--k-positive);
+}
+
+.survey-workbench-embed .conf .meter.mid > i{
+  background: var(--k-caution);
+}
+
+.survey-workbench-embed .conf .pct{
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--k-text);
+  font-family: var(--k-font-mono);
+  font-size: 12px;
+}
+
+.survey-workbench-embed .excerpt{
+  font-size: 13px;
+  color: var(--k-text);
+}
+
+.survey-workbench-embed .excerpt q{
+  color: var(--k-text);
+}
+
+.survey-workbench-embed .excerpt q::before{ content: "\\201C"; }
+.survey-workbench-embed .excerpt q::after{ content: "\\201D"; }
+
+.survey-workbench-embed .excerpt .from{
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--k-muted);
+  flex-wrap: wrap;
+}
+
+.survey-workbench-embed .excerpt .from a{
+  color: var(--k-brand);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.survey-workbench-embed .noprov{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--k-caution);
+  flex-wrap: wrap;
+}
+
+.survey-workbench-embed .noprov svg{
+  flex: none;
+}
+
+.survey-workbench-embed .noprov .tag{
+  background: var(--k-caution-wash);
+  color: var(--k-caution);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+/* decisions */
+
+.survey-workbench-embed .decide{
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.survey-workbench-embed .btn{
+  border: 1px solid var(--k-line-strong);
+  background: var(--k-panel);
+  color: var(--k-text);
+  font-size: 13.5px;
+  font-weight: 550;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.survey-workbench-embed .btn:hover{
+  background: var(--k-sunken);
+}
+
+.survey-workbench-embed .btn:focus-visible{
+  outline: 2px solid var(--k-brand);
+  outline-offset: 1px;
+}
+
+.survey-workbench-embed .btn.use{
+  border-color: color-mix(in srgb, var(--k-positive) 40%, var(--k-line-strong));
+}
+
+.survey-workbench-embed .btn.use:hover{
+  background: var(--k-positive-wash);
+  color: var(--k-positive);
+  border-color: var(--k-positive);
+}
+
+/* "Suggestion was wrong" — optional quiet calibration toggle on Keep current.
+   Ticking it turns a keep-current decision into the reject signal. Not a third action. */
+.survey-workbench-embed .wrong{
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--k-faint);
+  cursor: pointer;
+  user-select: none;
+  padding: 6px 4px;
+}
+
+.survey-workbench-embed .wrong:hover{
+  color: var(--k-negative);
+}
+
+.survey-workbench-embed .wrong input{
+  width: 15px;
+  height: 15px;
+  accent-color: var(--k-negative);
+  cursor: pointer;
+  margin: 0;
+}
+
+.survey-workbench-embed .decided{
+  display: none;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--k-muted);
+}
+
+.survey-workbench-embed .field[data-decided="1"] .decide{
+  display: none;
+}
+
+.survey-workbench-embed .field[data-decided="1"] .decided{
+  display: flex;
+}
+
+.survey-workbench-embed .undo{
+  border: 0;
+  background: none;
+  color: var(--k-brand);
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0;
+}
+
+/* footer tally */
+
+.survey-workbench-embed .foot{
+  padding: 16px 22px;
+  border-top: 1px solid var(--k-line);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: var(--k-raised);
+}
+
+.survey-workbench-embed .tally{
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--k-muted);
+  flex-wrap: wrap;
+}
+
+.survey-workbench-embed .tally b{
+  color: var(--k-text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- audit details: the single collapsed power-user surface per field ---------- */
+
+.survey-workbench-embed .audit-details{
+  border-top: 1px dashed var(--k-line);
+  padding-top: 4px;
+}
+
+.survey-workbench-embed .audit-details summary{
+  cursor: pointer;
+  padding: 6px 0;
+  color: var(--k-faint);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.survey-workbench-embed .audit-details summary:hover{
+  color: var(--k-muted);
+}
+
+.survey-workbench-embed .audit-details[open] summary{
+  color: var(--k-brand);
+}
+
+.survey-workbench-embed .audit-body{
+  display: grid;
+  gap: 14px;
+  padding: 4px 0 6px;
+}
+
+.survey-workbench-embed .note-field{
+  display: grid;
+  gap: 6px;
 }
 
 .survey-workbench-embed .field-label{
-  color: var(--paper-faint);
-  letter-spacing: 0.14em;
-}
-
-.survey-workbench-embed .field-value,
-.survey-workbench-embed .meta-value{
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  line-height: 1.4;
-  color: var(--paper);
-}
-
-/* ---- Top command bar -------------------------------------------------- */
-
-.survey-workbench-embed .topbar{
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
-  align-items: center;
-  padding: 15px 17px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--k-brand) 8%, transparent), transparent 42%),
-    linear-gradient(180deg, var(--ink-800), var(--ink-850));
-  box-shadow: var(--k-shadow, 0 24px 60px -34px rgba(0, 0, 0, 0.9)), inset 0 1px 0 var(--line);
-  animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.survey-workbench-embed .topbar > div{
-  min-width: 0;
-}
-
-.survey-workbench-embed .topbar .eyebrow::before{
-  content: "● ";
-  color: var(--verify);
-}
-
-.survey-workbench-embed h1{
-  margin-top: 6px;
-  font-family: "Fraunces", Georgia, "Times New Roman", serif;
-  font-optical-sizing: auto;
-  font-weight: 600;
-  font-size: clamp(21px, 2vw, 27px);
-  line-height: 1.08;
-  letter-spacing: -0.01em;
-  overflow-wrap: anywhere;
-  color: var(--paper);
-}
-
-.survey-workbench-embed .review-question{
-  max-width: 720px;
-  margin-top: 7px;
-  color: var(--paper-dim);
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.survey-workbench-embed .review-question strong{
-  color: var(--paper);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.95em;
-}
-
-.survey-workbench-embed .review-target-label{
-  margin-top: 4px;
-}
-
-.survey-workbench-embed .review-target-label strong{
-  color: var(--paper);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.survey-workbench-embed .meta-grid{
-  display: none;
-  grid-template-columns: repeat(4, minmax(110px, 1fr));
-  gap: 10px;
-  width: 100%;
-}
-
-.survey-workbench-embed .meta-item,
-.survey-workbench-embed .field{
-  min-width: 0;
-}
-
-.survey-workbench-embed .meta-item{
-  padding: 11px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--k-bg) 55%, var(--k-panel));
-}
-
-.survey-workbench-embed[data-theme="light"] .meta-item{
-  background: color-mix(in srgb, var(--k-bg) 70%, var(--k-panel));
-}
-
-.survey-workbench-embed .meta-value{
-  margin-top: 6px;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.45;
-  color: var(--paper);
-}
-
-/* Status reads as a signal in the command bar. */
-.survey-workbench-embed .meta-item:nth-child(2) .meta-value{
-  color: var(--accent);
-  font-weight: 600;
-}
-
-/* ---- Layout scaffold -------------------------------------------------- */
-
-.survey-workbench-embed .queue-layout{
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
-}
-
-.survey-workbench-embed .queue-panel{
-  display: grid;
-  gap: 14px;
-  position: sticky;
-  top: 18px;
-}
-
-.survey-workbench-embed .active-review-strip{
-  display: none;
-}
-
-/* ---- Mobile queue progress bar (mobile only) -------------------------- */
-
-.survey-workbench-embed .mobile-queue-bar{
-  display: none;
-}
-
-/* ---- Queue drawer backdrop -------------------------------------------- */
-
-.survey-workbench-embed .queue-drawer-backdrop{
-  display: none;
-  position: absolute;
-  inset: 0;
-  z-index: 40;
-  background: color-mix(in srgb, var(--k-bg) 55%, transparent);
-  backdrop-filter: blur(2px);
-  opacity: 0;
-  transition: opacity 0.22s ease;
-  pointer-events: none;
-}
-
-.survey-workbench-embed .queue-drawer-backdrop.is-visible{
-  opacity: 1;
-  pointer-events: auto;
-}
-
-/* ---- Queue drawer close button (mobile only) -------------------------- */
-
-.survey-workbench-embed .queue-drawer-close{
-  display: none;
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--k-bg) 80%, transparent);
-  color: var(--paper-faint);
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
-  align-items: center;
-  justify-content: center;
-  z-index: 2;
-}
-
-.survey-workbench-embed .queue-list,
-.survey-workbench-embed .session-summary,
-.survey-workbench-embed .session-audit{
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: linear-gradient(180deg, var(--ink-800), var(--ink-850));
-  padding: 14px;
-  box-shadow: var(--k-shadow, 0 22px 50px -38px rgba(0, 0, 0, 0.9));
-  animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
-  animation-delay: 0.05s;
-}
-
-.survey-workbench-embed .queue-head{
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 14px;
-}
-
-.survey-workbench-embed .queue-head h2,
-.survey-workbench-embed .session-summary h2,
-.survey-workbench-embed .session-audit h2{
-  font-family: "Fraunces", Georgia, serif;
-  font-weight: 600;
-  font-size: 16px;
-  line-height: 1.1;
-  letter-spacing: -0.01em;
-}
-
-/* ---- Queue rows: status carried on data-queue-status ------------------ */
-
-.survey-workbench-embed .queue-row{
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
-  width: 100%;
-  min-height: 54px;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--paper-faint);
-  border-radius: var(--radius-sm);
-  margin-top: 8px;
-  padding: 9px 10px;
-  background: color-mix(in srgb, var(--k-bg) 50%, var(--k-panel));
-  color: var(--paper);
-  cursor: pointer;
-  text-align: left;
-  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
-}
-
-.survey-workbench-embed .queue-row:hover{
-  transform: translateX(2px);
-  border-color: var(--line-strong);
-  background: color-mix(in srgb, var(--k-bg) 20%, var(--k-panel));
-}
-
-.survey-workbench-embed .queue-row.is-active{
-  border-left-width: 3px;
-  background: color-mix(in srgb, var(--k-brand) 8%, var(--k-panel));
-  box-shadow: inset 0 0 0 1px var(--line-strong);
-}
-
-.survey-workbench-embed .queue-row[data-queue-status="resolved"]{ border-left-color: var(--verify); }
-.survey-workbench-embed .queue-row[data-queue-status="rejected"]{ border-left-color: var(--reject); }
-.survey-workbench-embed .queue-row[data-queue-status="escalated"]{ border-left-color: var(--hold); }
-.survey-workbench-embed .queue-row[data-queue-status="in-review"]{ border-left-color: var(--accent); }
-.survey-workbench-embed .queue-row[data-queue-status="pending"]{ border-left-color: var(--paper-faint); }
-
-.survey-workbench-embed .queue-row-main{
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.survey-workbench-embed .queue-row-title,
-.survey-workbench-embed .queue-row-target{
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.survey-workbench-embed .queue-row-title{
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 12.5px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--paper);
-}
-
-.survey-workbench-embed .queue-row-target{
-  color: var(--paper-dim);
-  font-size: 12px;
-}
-
-/* ---- Status pills ----------------------------------------------------- */
-
-.survey-workbench-embed .state-label{
-  min-width: 78px;
-  padding: 4px 9px;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  text-align: center;
-  color: var(--paper-dim);
-  background: color-mix(in srgb, var(--k-bg) 60%, var(--k-panel));
-  letter-spacing: 0.08em;
-  font-size: 9.5px;
-}
-
-.survey-workbench-embed .queue-row[data-queue-status="resolved"] .state-label{ color: var(--verify); border-color: color-mix(in srgb, var(--verify) 40%, transparent); }
-.survey-workbench-embed .queue-row[data-queue-status="rejected"] .state-label{ color: var(--reject); border-color: color-mix(in srgb, var(--reject) 40%, transparent); }
-.survey-workbench-embed .queue-row[data-queue-status="escalated"] .state-label{ color: var(--hold); border-color: color-mix(in srgb, var(--hold) 40%, transparent); }
-.survey-workbench-embed .queue-row[data-queue-status="in-review"] .state-label{ color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
-
-.survey-workbench-embed .next-button{
-  min-height: 34px;
-  padding: 0 14px;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--k-brand) 8%, transparent);
-  color: var(--accent);
-  cursor: pointer;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  color: var(--k-faint);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
-  transition: background 0.16s ease, border-color 0.16s ease;
-}
-
-.survey-workbench-embed .next-button:hover{
-  background: color-mix(in srgb, var(--k-brand) 16%, transparent);
-  border-color: var(--accent);
-}
-
-/* ---- Session summary: scoreboard tiles -------------------------------- */
-
-.survey-workbench-embed .summary-grid{
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.survey-workbench-embed .summary-grid .meta-item{
-  display: grid;
-  gap: 2px;
-  padding: 10px;
-  background: color-mix(in srgb, var(--k-bg) 60%, var(--k-panel));
-}
-
-.survey-workbench-embed .summary-grid .meta-value{
-  font-family: "Fraunces", Georgia, serif;
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--paper);
-}
-
-/* ---- Session audit: replayable resource trail ------------------------- */
-
-.survey-workbench-embed .session-audit{
-  display: grid;
-  gap: 14px;
-  animation-delay: 0.08s;
-}
-
-.survey-workbench-embed .session-audit-head{
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: start;
-}
-
-.survey-workbench-embed .session-audit-head h2{
-  margin-top: 5px;
-  overflow-wrap: anywhere;
-}
-
-.survey-workbench-embed .audit-grid{
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.survey-workbench-embed .audit-grid .meta-value{
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 11px;
-  line-height: 1.3;
-}
-
-.survey-workbench-embed .session-event-list{
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.survey-workbench-embed .session-event-list li{
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
-  gap: 8px;
-  min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 8px;
-  background: color-mix(in srgb, var(--k-bg) 45%, transparent);
-}
-
-.survey-workbench-embed .event-sequence{
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  color: var(--accent);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.survey-workbench-embed .session-event-list strong,
-.survey-workbench-embed .session-event-list small{
-  display: block;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.survey-workbench-embed .session-event-list strong{
-  color: var(--paper);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 11px;
-}
-
-.survey-workbench-embed .session-event-list small{
-  margin-top: 3px;
-  color: var(--paper-faint);
-  font-size: 10.5px;
-  line-height: 1.35;
-}
-
-.survey-workbench-embed .session-export{
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
-}
-
-.survey-workbench-embed .session-export summary{
-  cursor: pointer;
-  color: var(--accent);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-}
-
-.survey-workbench-embed .session-export pre{
-  max-height: 300px;
-}
-
-/* ---- Content grid ----------------------------------------------------- */
-
-.survey-workbench-embed .content-grid{
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-areas:
-    "focus"
-    "decision"
-    "candidates";
-  gap: 14px;
-  align-items: start;
-}
-
-.survey-workbench-embed .review-main{
-  display: grid;
-  gap: 14px;
-  min-width: 0;
-}
-
-/* ---- Active review focus ---------------------------------------------- */
-
-.survey-workbench-embed .review-focus{
-  grid-area: focus;
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--k-brand) 28%, transparent);
-  border-radius: var(--radius);
-  padding: 14px;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--k-brand) 12%, transparent), transparent 34%),
-    linear-gradient(180deg, var(--ink-800), var(--ink-850));
-  box-shadow: var(--k-shadow, 0 26px 60px -42px rgba(0, 0, 0, 0.95)), inset 0 1px 0 var(--line);
-}
-
-.survey-workbench-embed .focus-head,
-.survey-workbench-embed .focus-values{
-  display: grid;
-  gap: 10px;
-}
-
-.survey-workbench-embed .focus-head{
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-}
-
-.survey-workbench-embed .focus-values{
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.survey-workbench-embed .focus-value{
-  min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  background: color-mix(in srgb, var(--k-bg) 56%, var(--k-panel));
-}
-
-.survey-workbench-embed .focus-value strong{
-  display: block;
-  margin-top: 6px;
-  color: var(--paper);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: clamp(18px, 1.8vw, 25px);
-  line-height: 1.14;
-  overflow-wrap: anywhere;
-}
-
-.survey-workbench-embed .focus-value span:last-child{
-  display: block;
-  margin-top: 6px;
-  color: var(--paper-faint);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 11px;
-}
-
-.survey-workbench-embed .focus-value.is-proposed{
-  border-color: color-mix(in srgb, var(--k-active) 34%, transparent);
-  background: color-mix(in srgb, var(--k-active) 10%, color-mix(in srgb, var(--k-bg) 56%, var(--k-panel)));
-}
-
-.survey-workbench-embed .focus-value.is-proposed strong{
-  color: var(--proposed);
-}
-
-.survey-workbench-embed .focus-evidence{
-  display: grid;
-  grid-template-columns: minmax(110px, 0.65fr) minmax(0, 1.2fr) minmax(0, 1.4fr);
-  gap: 10px;
-  margin: 0;
-}
-
-.survey-workbench-embed .focus-evidence .field{
-  border-top: 1px solid var(--line);
-  padding-top: 10px;
-}
-
-/* ---- Candidate comparison: the hero of the console -------------------- */
-
-.survey-workbench-embed .candidate-grid{
-  grid-area: candidates;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  position: relative;
-}
-
-/* "VS" diff marker between the two candidates. */
-.survey-workbench-embed .candidate-grid::before{
-  content: "vs";
-  position: absolute;
-  top: 18px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 3;
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  border: 1px solid var(--line-strong);
-  background: var(--vs-bg);
-  color: var(--paper-faint);
-  font-family: "Fraunces", Georgia, serif;
-  font-style: italic;
-  font-size: 13px;
-  box-shadow: var(--k-shadow, 0 10px 26px -12px rgba(0, 0, 0, 0.9));
-}
-
-.survey-workbench-embed .candidate-card,
-.survey-workbench-embed .payload-panel,
-.survey-workbench-embed .surface-preview,
-.survey-workbench-embed .decision-row{
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: linear-gradient(180deg, var(--ink-800), var(--ink-850));
-  box-shadow: var(--k-shadow, 0 26px 60px -42px rgba(0, 0, 0, 0.95));
-}
-
-.survey-workbench-embed .candidate-card{
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
-  gap: 11px;
-  min-height: auto;
-  padding: 14px;
-  position: relative;
-  overflow: hidden;
-  animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
-  animation-delay: 0.1s;
-}
-
-/* The proposed candidate (2nd card) is the incoming change — flag it. */
-.survey-workbench-embed .candidate-card:nth-child(2){
-  border-color: color-mix(in srgb, var(--k-active) 32%, transparent);
-}
-
-.survey-workbench-embed .candidate-card:nth-child(2)::after{
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: radial-gradient(420px 200px at 80% -10%, color-mix(in srgb, var(--k-active) 12%, transparent), transparent 70%);
-}
-
-.survey-workbench-embed .candidate-card.is-selected{
-  border-color: color-mix(in srgb, var(--k-positive) 55%, transparent);
-  box-shadow: 0 26px 60px -36px rgba(0, 0, 0, 0.95), inset 0 0 0 1px color-mix(in srgb, var(--k-positive) 35%, transparent), inset 0 0 60px -30px color-mix(in srgb, var(--k-positive) 60%, transparent);
-}
-
-.survey-workbench-embed .candidate-card.is-unselected{
-  opacity: 0.5;
-  filter: saturate(0.7);
-}
-
-.survey-workbench-embed .card-head{
-  display: flex;
-  gap: 10px;
-  justify-content: space-between;
-  align-items: flex-start;
-  position: relative;
-  z-index: 1;
-}
-
-.survey-workbench-embed .card-head .eyebrow{
-  color: var(--paper-faint);
-  font-size: 10px;
-  letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+
+.survey-workbench-embed .field-value{
   overflow-wrap: anywhere;
   word-break: break-word;
+  line-height: 1.4;
+  color: var(--k-text);
+  font-size: 12.5px;
 }
 
-.survey-workbench-embed .role{
-  margin-top: 3px;
-  font-family: "Fraunces", Georgia, serif;
-  font-weight: 600;
-  font-size: 18px;
-  letter-spacing: -0.01em;
-  color: var(--paper);
+.survey-workbench-embed .note-field textarea{
+  display: block;
+  width: 100%;
+  min-height: 60px;
+  resize: vertical;
+  border: 1px solid var(--k-line-strong);
+  border-radius: var(--k-radius-sm);
+  padding: 8px 10px;
+  color: var(--k-text);
+  background: var(--k-sunken);
+  font-family: var(--k-font-mono);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
-.survey-workbench-embed .candidate-card:nth-child(2) .role{
-  color: var(--proposed);
-}
-
-.survey-workbench-embed .is-selected .state-label{
-  color: var(--verify);
-  border-color: color-mix(in srgb, var(--verify) 50%, transparent);
-  background: color-mix(in srgb, var(--verify) 12%, transparent);
-}
-
-/* The value — the single most important datapoint on the screen. */
-.survey-workbench-embed .candidate-value{
-  position: relative;
-  z-index: 1;
-  border-block: 1px solid var(--line);
-  padding: 10px 0;
-}
-
-.survey-workbench-embed .candidate-value .field-value{
-  margin-top: 7px;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: clamp(16px, 1.35vw, 20px);
-  font-weight: 600;
-  line-height: 1.22;
-  letter-spacing: 0;
-  color: var(--paper);
-}
-
-.survey-workbench-embed .candidate-card:nth-child(2) .candidate-value .field-value{
-  color: var(--proposed);
-}
-
-.survey-workbench-embed .is-selected .candidate-value .field-value{
-  color: var(--verify);
+.survey-workbench-embed .note-field textarea:focus-visible{
+  outline: none;
+  border-color: var(--k-brand);
+  box-shadow: 0 0 0 3px var(--k-brand-wash);
 }
 
 .survey-workbench-embed .field-stack{
   display: grid;
   gap: 9px;
-  position: relative;
-  z-index: 1;
-  align-content: start;
 }
 
-.survey-workbench-embed .field-value{
-  margin-top: 4px;
-  font-size: 12.5px;
+.survey-workbench-embed .field-stack.compact{
+  gap: 6px;
 }
 
-/* Source refs / locators / ids read as data. */
-.survey-workbench-embed .candidate-card .field-stack .field-value{
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+.survey-workbench-embed .kv{
+  min-width: 0;
+}
+
+.survey-workbench-embed .kv .field-value{
+  margin-top: 3px;
+  font-family: var(--k-font-mono);
   font-size: 11.5px;
-  color: var(--paper-dim);
+  color: var(--k-muted);
 }
 
-/* Highlight extraction confidence (5th field in the stack) as a chip. */
-.survey-workbench-embed .candidate-card .field-stack > .field:nth-child(5) .field-value{
-  display: inline-block;
-  margin-top: 5px;
-  padding: 4px 9px;
-  border: 1px solid color-mix(in srgb, var(--k-brand) 35%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--k-brand) 10%, transparent);
-  color: var(--accent);
-  font-size: 11.5px;
-  font-weight: 600;
-}
-
-.survey-workbench-embed .excerpt{
-  border-left: 2px solid var(--accent-deep);
-  padding-left: 12px;
-}
-
-.survey-workbench-embed .excerpt .field-value{
-  font-style: italic;
-  color: var(--paper-dim) !important;
-}
-
-/* ---- Excerpt / rationale 3-line clamp with inline expander ----------- */
-/* Applied to .field-value inside .excerpt or .excerpt-clamp containers,
-   and to .rationale-clamp for reviewer rationale fields.
-   The "more / less" toggle is a <button class="clamp-toggle"> sibling. */
-
-.survey-workbench-embed .excerpt-clamp .field-value,
-.survey-workbench-embed .rationale-clamp .field-value{
+/* Excerpt / rationale 3-line clamp with inline "more / less" expander. */
+.survey-workbench-embed .kv.excerpt .field-value,
+.survey-workbench-embed .kv.rationale-clamp .field-value{
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   overflow: hidden;
+  font-family: var(--k-font-ui);
+  font-style: italic;
+  color: var(--k-muted);
 }
 
 .survey-workbench-embed .excerpt-clamp.is-expanded .field-value,
@@ -1084,9 +925,9 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   padding: 0;
   border: none;
   background: none;
-  color: var(--accent);
+  color: var(--k-brand);
   cursor: pointer;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-family: var(--k-font-mono);
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -1096,13 +937,10 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 }
 
 .survey-workbench-embed .clamp-toggle:hover{
-  color: var(--paper);
+  color: var(--k-text);
 }
 
-/* ---- Candidate history expander -------------------------------------- */
-/* When there are >3 unselected candidates the UI renders the first 3 and
-   hides the rest behind a "view all (N)" expander. */
-
+/* Candidate history expander: >3 unselected candidates hide behind "view all (N)". */
 .survey-workbench-embed .history-overflow{
   display: none;
 }
@@ -1117,21 +955,19 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   gap: 4px;
   margin-top: 6px;
   padding: 3px 10px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--k-line-strong);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--k-brand) 6%, transparent);
-  color: var(--accent);
+  background: var(--k-brand-wash);
+  color: var(--k-brand);
   cursor: pointer;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   transition: background 0.14s ease, border-color 0.14s ease;
 }
 
 .survey-workbench-embed .history-expand-btn:hover{
-  background: color-mix(in srgb, var(--k-brand) 14%, transparent);
-  border-color: var(--accent);
+  border-color: var(--k-brand);
 }
 
 .survey-workbench-embed .history-expander.is-expanded .history-expand-btn .expand-label{
@@ -1146,273 +982,46 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   display: none;
 }
 
-/* ---- Decision column -------------------------------------------------- */
-
-.survey-workbench-embed .decision-column{
-  grid-area: decision;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
-  animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
-  animation-delay: 0.15s;
-}
-
-.survey-workbench-embed .decision-row,
-.survey-workbench-embed .payload-panel,
-.survey-workbench-embed .surface-preview{
-  padding: 14px;
-}
-
-.survey-workbench-embed textarea{
-  display: block;
-  width: 100%;
-  min-height: 74px;
-  margin-top: 8px;
-  resize: vertical;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  padding: 10px;
-  color: var(--paper);
-  background: color-mix(in srgb, var(--k-bg) 70%, var(--k-panel));
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.survey-workbench-embed textarea::placeholder{
-  color: var(--paper-faint);
-}
-
-.survey-workbench-embed textarea:focus{
-  border-color: var(--accent);
-  outline: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--k-brand) 18%, transparent);
-}
-
-/* Decision actions — color-coded to outcome (accept / keep / reject). */
-.survey-workbench-embed .decision-buttons{
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 0;
-}
-
-.survey-workbench-embed .decision-button{
-  min-height: 42px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--k-bg) 60%, var(--k-panel));
-  color: var(--paper);
-  cursor: pointer;
-  font-weight: 700;
-  font-size: 12px;
-  letter-spacing: 0.01em;
-  transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease, box-shadow 0.14s ease;
-}
-
-.survey-workbench-embed .decision-button:hover,
-.survey-workbench-embed .decision-button:focus{
-  transform: translateY(-2px);
-  outline: none;
-}
-
-.survey-workbench-embed .decision-button:nth-child(1):hover{ border-color: var(--verify); box-shadow: 0 10px 24px -14px color-mix(in srgb, var(--verify) 80%, transparent); }
-.survey-workbench-embed .decision-button:nth-child(2):hover{ border-color: var(--hold); box-shadow: 0 10px 24px -14px color-mix(in srgb, var(--hold) 80%, transparent); }
-.survey-workbench-embed .decision-button:nth-child(3):hover{ border-color: var(--reject); box-shadow: 0 10px 24px -14px color-mix(in srgb, var(--reject) 80%, transparent); }
-
-.survey-workbench-embed .decision-button.is-active{
-  color: var(--k-bg);
-  border-color: transparent;
-}
-
-.survey-workbench-embed .decision-button:nth-child(1).is-active{ background: var(--verify); box-shadow: 0 14px 30px -14px color-mix(in srgb, var(--verify) 90%, transparent); }
-.survey-workbench-embed .decision-button:nth-child(2).is-active{ background: var(--hold); box-shadow: 0 14px 30px -14px color-mix(in srgb, var(--hold) 90%, transparent); }
-.survey-workbench-embed .decision-button:nth-child(3).is-active{ background: var(--reject); box-shadow: 0 14px 30px -14px color-mix(in srgb, var(--reject) 90%, transparent); }
-
-.survey-workbench-embed .effect{
-  display: grid;
-  gap: 7px;
-  margin-top: 12px;
-  border-top: 1px solid var(--line);
-  padding-top: 11px;
-}
-
-.survey-workbench-embed .effect .field-value{
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: var(--paper-dim);
-}
-
-.survey-workbench-embed .feedback-tags{
-  display: grid;
-  gap: 8px;
-  margin-top: 12px;
-  border-top: 1px solid var(--line);
-  padding-top: 11px;
-}
-
-.survey-workbench-embed .tag-row{
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.survey-workbench-embed .tag{
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  padding: 5px 11px;
-  background: color-mix(in srgb, var(--k-active) 8%, transparent);
-  color: var(--proposed);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.survey-workbench-embed .tag.is-empty{
-  background: color-mix(in srgb, var(--k-bg) 60%, var(--k-panel));
-  color: var(--paper-faint);
-}
-
-/* ---- Surface preview dossier ------------------------------------------ */
-
-.survey-workbench-embed .surface-preview{
-  display: grid;
-  gap: 11px;
-}
-
-/* When surface-preview is a <details> element */
-.survey-workbench-embed details.surface-preview{
-  display: block;
-}
-
-.survey-workbench-embed details.surface-preview[open]{
-  display: grid;
-  gap: 11px;
-}
-
-.survey-workbench-embed .surface-summary{
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-  list-style: none;
-  padding: 0;
-}
-
-.survey-workbench-embed .surface-summary::-webkit-details-marker{
-  display: none;
-}
-
-.survey-workbench-embed .surface-summary::before{
-  content: none;
-}
-
-.survey-workbench-embed .surface-summary-label{
-  font-family: "Fraunces", Georgia, serif;
-  font-weight: 600;
-  font-size: 16px;
-  letter-spacing: -0.01em;
-  color: var(--paper);
-}
-
-.survey-workbench-embed .surface-summary-label::before{
-  content: "› ";
-  color: var(--accent);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 13px;
-}
-
-.survey-workbench-embed details.surface-preview[open] .surface-summary-label::before{
-  content: "⌄ ";
-}
-
-.survey-workbench-embed .surface-head{
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-
-.survey-workbench-embed .surface-head h2{
-  font-family: "Fraunces", Georgia, serif;
-  font-weight: 600;
-  font-size: 16px;
-  letter-spacing: -0.01em;
-}
-
-.survey-workbench-embed .preview-disclaimer{
-  border-left: 2px solid var(--hold);
-  padding: 2px 0 2px 12px;
-  color: var(--paper-dim);
-  font-size: 12.5px;
-  line-height: 1.5;
-}
-
-.survey-workbench-embed .preview-disclaimer-footer{
-  margin-top: 4px;
-  border-left-color: var(--line);
-  font-size: 11.5px;
-  color: var(--paper-faint);
-}
-
 .survey-workbench-embed .preview-section-grid{
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 10px;
 }
 
 .survey-workbench-embed .preview-section{
-  min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 10px 11px;
-  background: color-mix(in srgb, var(--k-bg) 55%, var(--k-panel));
+  border: 1px solid var(--k-line);
+  border-radius: var(--k-radius-sm);
+  padding: 10px 12px;
+  background: var(--k-sunken);
 }
 
 .survey-workbench-embed .preview-section h3{
-  margin-bottom: 7px;
-  color: var(--accent);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 10px;
+  margin-bottom: 6px;
+  color: var(--k-faint);
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
-.survey-workbench-embed .field-stack.compact{
-  gap: 9px;
-}
-
-.survey-workbench-embed .compact .field-value{
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 12px;
-  color: var(--paper-dim);
-}
-
 .survey-workbench-embed .preview-section.is-neutral{
-  border-style: dashed;
-  border-color: var(--line);
-  background: color-mix(in srgb, var(--k-bg) 35%, var(--k-panel));
+  background: var(--k-raised);
 }
 
 .survey-workbench-embed .preview-section.is-neutral h3{
-  color: var(--paper-faint);
+  color: var(--k-faint);
 }
 
 .survey-workbench-embed .reference-details{
-  margin-top: 10px;
-  border-top: 1px solid var(--line);
-  padding-top: 8px;
+  margin-top: 8px;
 }
 
 .survey-workbench-embed .reference-details summary{
   cursor: pointer;
-  color: var(--paper-faint);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 10px;
+  list-style: none;
+  color: var(--k-faint);
+  font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
@@ -1421,581 +1030,82 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 }
 
 .survey-workbench-embed .reference-details summary::before{
-  content: "› ";
-  color: var(--paper-faint);
-}
-
-.survey-workbench-embed .reference-details[open] summary{
-  color: var(--accent);
+  content: "▸ ";
 }
 
 .survey-workbench-embed .reference-details[open] summary::before{
-  content: "⌄ ";
-  color: var(--accent);
+  content: "▾ ";
 }
 
 .survey-workbench-embed .reference-details .field-stack{
   margin-top: 8px;
 }
 
-/* ---- Decision payload: terminal readout, intentionally demoted -------- */
-
-.survey-workbench-embed .payload-panel{
-  background: linear-gradient(180deg, var(--ink-850), var(--ink-900));
+.survey-workbench-embed .preview-disclaimer{
+  font-size: 11.5px;
+  color: var(--k-faint);
+  line-height: 1.5;
 }
 
-.survey-workbench-embed .payload-panel summary.field-label{
-  cursor: pointer;
-  list-style: none;
+.survey-workbench-embed .preview-disclaimer-footer{
+  border-top: 1px solid var(--k-line);
+  padding-top: 10px;
 }
 
-.survey-workbench-embed .payload-panel summary.field-label::-webkit-details-marker{
-  display: none;
-}
-
-.survey-workbench-embed .payload-panel summary.field-label::before{
-  content: "› ";
-  color: var(--verify);
-}
-
-.survey-workbench-embed pre{
-  max-height: 280px;
-  margin: 12px 0 0;
+/* ReviewDecision payload — deliberately the deepest, last thing in the audit details. */
+.survey-workbench-embed .reference-details pre,
+.survey-workbench-embed pre[data-testid="decision-payload"]{
+  margin: 8px 0 0;
+  max-height: 260px;
   overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--ink-1000);
-  padding: 11px;
-  color: color-mix(in srgb, var(--k-positive) 80%, var(--k-text));
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  padding: 10px;
+  border: 1px solid var(--k-line);
+  border-radius: var(--k-radius-sm);
+  background: var(--k-bg);
+  color: var(--k-muted);
+  font-family: var(--k-font-mono);
   font-size: 11px;
-  line-height: 1.55;
+  line-height: 1.5;
   white-space: pre-wrap;
-  word-break: break-word;
 }
 
-/* ---- Motion ----------------------------------------------------------- */
+.survey-workbench-embed .caption{
+  text-align: center;
+  margin-top: 24px;
+  font-size: 12.5px;
+  color: var(--k-faint);
+}
 
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
+/* ---------- responsive ---------- */
+
+@media (max-width: 620px) {
+  .survey-workbench-embed .fbody{
+    padding: 16px 16px 18px;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+
+  .survey-workbench-embed .rhead{
+    padding: 16px;
+  }
+
+  .survey-workbench-embed .foot{
+    padding: 14px 16px;
+  }
+}
+
+@container (max-width: 420px) {
+  .survey-workbench-embed .decide{
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .survey-workbench-embed .wrong{
+    margin-left: 0;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .survey-workbench-embed *{
-    animation: none !important;
     transition: none !important;
-  }
-}
-
-/* ---- Responsive ------------------------------------------------------- */
-
-@media (max-width: 980px) {
-  .survey-workbench-embed .topbar,
-  .survey-workbench-embed .focus-evidence,
-  .survey-workbench-embed .candidate-grid{
-    grid-template-columns: 1fr;
-  }
-
-  .survey-workbench-embed .content-grid{
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      "focus"
-      "decision"
-      "candidates";
-  }
-
-  .survey-workbench-embed .queue-layout{
-    display: block;
-    position: relative;
-  }
-
-  .survey-workbench-embed .active-review-strip{
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 12px;
-    align-items: center;
-    border: 1px solid var(--line-strong);
-    border-left: 3px solid var(--accent);
-    border-radius: var(--radius);
-    padding: 13px 14px;
-    background:
-      linear-gradient(90deg, color-mix(in srgb, var(--k-brand) 12%, transparent), transparent 46%),
-      linear-gradient(180deg, var(--ink-800), var(--ink-850));
-    box-shadow: var(--k-shadow, 0 18px 44px -36px rgba(0, 0, 0, 0.9));
-  }
-
-  .survey-workbench-embed .active-review-copy,
-  .survey-workbench-embed .active-review-actions,
-  .survey-workbench-embed .active-review-decisions{
-    min-width: 0;
-  }
-
-  .survey-workbench-embed .active-review-copy{
-    display: grid;
-    gap: 4px;
-  }
-
-  .survey-workbench-embed .active-review-copy strong{
-    overflow-wrap: anywhere;
-    color: var(--paper);
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
-    font-size: 13px;
-  }
-
-  .survey-workbench-embed .active-review-copy span:last-child{
-    overflow-wrap: anywhere;
-    color: var(--paper-dim);
-    font-size: 13px;
-  }
-
-  .survey-workbench-embed .active-review-actions{
-    display: grid;
-    gap: 8px;
-    justify-items: end;
-  }
-
-  .survey-workbench-embed .active-review-decisions{
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-  }
-
-  .survey-workbench-embed .active-review-decisions .decision-button{
-    min-height: 38px;
-    padding: 7px 8px;
-    font-size: 11px;
-  }
-
-  .survey-workbench-embed .queue-drawer-backdrop{
-    display: block;
-  }
-
-  .survey-workbench-embed .queue-drawer-close{
-    display: flex;
-  }
-
-  .survey-workbench-embed .mobile-queue-bar{
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 12px;
-    align-items: center;
-    border: 1px solid var(--line-strong);
-    border-left: 3px solid var(--accent);
-    border-radius: var(--radius);
-    padding: 11px 14px;
-    margin-bottom: 14px;
-    background:
-      linear-gradient(90deg, color-mix(in srgb, var(--k-brand) 8%, transparent), transparent 46%),
-      linear-gradient(180deg, var(--ink-800), var(--ink-850));
-    animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
-  }
-
-  .survey-workbench-embed .mobile-queue-progress{
-    display: grid;
-    gap: 3px;
-    min-width: 0;
-  }
-
-  .survey-workbench-embed .mobile-queue-item-label{
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--paper);
-    overflow-wrap: anywhere;
-    word-break: break-word;
-  }
-
-  .survey-workbench-embed .mobile-queue-open{
-    flex-shrink: 0;
-    min-height: 34px;
-    padding: 0 14px;
-    border: 1px solid var(--line-strong);
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--k-brand) 8%, transparent);
-    color: var(--accent);
-    cursor: pointer;
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    transition: background 0.16s ease, border-color 0.16s ease;
-  }
-
-  .survey-workbench-embed .mobile-queue-open:hover{
-    background: color-mix(in srgb, var(--k-brand) 16%, transparent);
-    border-color: var(--accent);
-  }
-
-  /* Higher specificity than the @container stacked-layout fallback below:
-     on a narrow viewport the drawer must win even inside a narrow container. */
-  .survey-workbench-embed .queue-layout .queue-panel{
-    position: absolute;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: min(320px, 90vw);
-    z-index: 50;
-    overflow-y: auto;
-    overflow-x: hidden;
-    transform: translateX(-105%);
-    transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
-    border-radius: 0 var(--radius) var(--radius) 0;
-    padding-top: 50px;
-  }
-
-  .survey-workbench-embed .queue-layout .queue-panel.is-open{
-    transform: translateX(0);
-  }
-
-  .survey-workbench-embed .content-grid{
-    grid-area: content;
-  }
-
-  .survey-workbench-embed .candidate-grid::before{
-    display: none;
-  }
-
-  .survey-workbench-embed .content-grid,
-  .survey-workbench-embed .review-main,
-  .survey-workbench-embed .candidate-grid,
-  .survey-workbench-embed .decision-column{
-    min-width: 0;
-  }
-
-  .survey-workbench-embed .meta-grid{
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .survey-workbench-embed .candidate-card{
-    min-height: auto;
-  }
-}
-
-@container (max-width: 1100px) {
-  .survey-workbench-embed .topbar,
-  .survey-workbench-embed .queue-layout,
-  .survey-workbench-embed .focus-evidence{
-    grid-template-columns: 1fr;
-  }
-
-  .survey-workbench-embed .queue-layout{
-    grid-template-areas:
-      "content"
-      "queue";
-  }
-
-  .survey-workbench-embed .queue-panel{
-    grid-area: queue;
-    position: static;
-  }
-
-  .survey-workbench-embed .content-grid{
-    grid-area: content;
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      "focus"
-      "decision"
-      "candidates";
-  }
-
-  .survey-workbench-embed .content-grid,
-  .survey-workbench-embed .review-main,
-  .survey-workbench-embed .candidate-grid,
-  .survey-workbench-embed .decision-column{
-    min-width: 0;
-  }
-}
-
-@container (max-width: 860px) {
-  .survey-workbench-embed .candidate-grid,
-  .survey-workbench-embed .focus-values,
-  .survey-workbench-embed .preview-section-grid{
-    grid-template-columns: 1fr;
-  }
-
-  .survey-workbench-embed .candidate-grid::before{
-    display: none;
-  }
-
-  .survey-workbench-embed .candidate-card{
-    min-height: auto;
-  }
-}
-
-@container (max-width: 620px) {
-  .survey-workbench-embed .topbar .meta-grid{
-    display: none;
-  }
-
-  .survey-workbench-embed .decision-buttons,
-  .survey-workbench-embed .summary-grid,
-  .survey-workbench-embed .audit-grid{
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 560px) {
-  .survey-workbench-embed .workbench{
-    padding: 14px 10px 36px;
-  }
-
-  .survey-workbench-embed .workbench-shell{
-    gap: 14px;
-  }
-
-  .survey-workbench-embed .topbar,
-  .survey-workbench-embed .active-review-strip,
-  .survey-workbench-embed .queue-list,
-  .survey-workbench-embed .session-summary,
-  .survey-workbench-embed .session-audit,
-  .survey-workbench-embed .candidate-card,
-  .survey-workbench-embed .decision-row,
-  .survey-workbench-embed .payload-panel,
-  .survey-workbench-embed .surface-preview{
-    border-radius: 10px;
-    padding: 14px;
-  }
-
-  .survey-workbench-embed .topbar{
-    gap: 14px;
-  }
-
-  .survey-workbench-embed .topbar .meta-grid{
-    display: none;
-  }
-
-  .survey-workbench-embed .active-review-strip{
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  .survey-workbench-embed .active-review-actions{
-    grid-template-columns: minmax(0, 1fr);
-    justify-items: stretch;
-  }
-
-  .survey-workbench-embed .active-review-actions .state-label{
-    justify-self: start;
-  }
-
-  .survey-workbench-embed .review-question{
-    font-size: 13px;
-  }
-
-  .survey-workbench-embed h1{
-    font-size: 25px;
-    line-height: 1.08;
-  }
-
-  .survey-workbench-embed .summary-grid,
-  .survey-workbench-embed .focus-values,
-  .survey-workbench-embed .decision-buttons{
-    grid-template-columns: 1fr;
-  }
-
-  .survey-workbench-embed .queue-head,
-  .survey-workbench-embed .queue-row,
-  .survey-workbench-embed .surface-head,
-  .survey-workbench-embed .card-head{
-    display: grid;
-    grid-template-columns: 1fr;
-  }
-
-  .survey-workbench-embed .queue-head{
-    align-items: stretch;
-  }
-
-  .survey-workbench-embed .next-button{
-    width: 100%;
-  }
-
-  .survey-workbench-embed .queue-row{
-    justify-items: start;
-  }
-
-  .survey-workbench-embed .state-label{
-    min-width: 0;
-    max-width: 100%;
-    justify-self: start;
-    white-space: normal;
-  }
-
-  .survey-workbench-embed .role{
-    font-size: 19px;
-  }
-
-  .survey-workbench-embed .review-focus{
-    border-radius: 10px;
-    padding: 14px;
-  }
-
-  .survey-workbench-embed .focus-head{
-    grid-template-columns: 1fr;
-  }
-
-  .survey-workbench-embed .focus-value strong{
-    font-size: clamp(16px, 5cqi, 22px);
-  }
-
-  .survey-workbench-embed .candidate-value .field-value{
-    font-size: clamp(15px, 4.5cqi, 20px);
-    line-height: 1.12;
-  }
-
-  .survey-workbench-embed .candidate-card .field-stack .field-value,
-  .survey-workbench-embed .compact .field-value,
-  .survey-workbench-embed pre{
-    font-size: 11.5px;
-  }
-
-  .survey-workbench-embed .field-label,
-  .survey-workbench-embed .eyebrow{
-    letter-spacing: 0.09em;
-  }
-
-  .survey-workbench-embed .decision-button{
-    min-height: 44px;
-  }
-
-  .survey-workbench-embed pre{
-    max-height: 360px;
-    padding: 11px;
-  }
-}
-
-/* ---- Type legibility: serif → UI sans below 480px -------------------- */
-/* At small container sizes the Fraunces display font reads poorly; fall back
-   to the UI sans-serif stack for headings while keeping serif on desktop. */
-@media (max-width: 480px) {
-  .survey-workbench-embed h1,
-  .survey-workbench-embed h2,
-  .survey-workbench-embed h3,
-  .survey-workbench-embed .role,
-  .survey-workbench-embed .surface-summary-label,
-  .survey-workbench-embed .queue-head h2,
-  .survey-workbench-embed .session-summary h2,
-  .survey-workbench-embed .session-audit h2,
-  .survey-workbench-embed .surface-head h2,
-  .survey-workbench-embed .summary-grid .meta-value{
-    font-family: var(--k-font-ui, "Hanken Grotesk", system-ui, sans-serif);
-    letter-spacing: -0.01em;
-  }
-}
-
-@container (max-width: 480px) {
-  .survey-workbench-embed h1,
-  .survey-workbench-embed h2,
-  .survey-workbench-embed h3,
-  .survey-workbench-embed .role,
-  .survey-workbench-embed .surface-summary-label,
-  .survey-workbench-embed .queue-head h2,
-  .survey-workbench-embed .session-summary h2,
-  .survey-workbench-embed .session-audit h2,
-  .survey-workbench-embed .surface-head h2,
-  .survey-workbench-embed .summary-grid .meta-value{
-    font-family: var(--k-font-ui, "Hanken Grotesk", system-ui, sans-serif);
-    letter-spacing: -0.01em;
-  }
-}
-
-@media (max-width: 420px) {
-  .survey-workbench-embed h1{
-    font-size: 23px;
-    line-height: 1.1;
-  }
-
-  .survey-workbench-embed .topbar{
-    padding: 12px;
-  }
-
-  .survey-workbench-embed .topbar .meta-grid{
-    gap: 8px;
-  }
-
-  .survey-workbench-embed .topbar .meta-item{
-    padding: 9px 10px;
-  }
-
-  .survey-workbench-embed .candidate-card .field-stack .field-value,
-  .survey-workbench-embed .compact .field-value{
-    display: block;
-    text-align: left;
-  }
-
-  .survey-workbench-embed .decision-buttons{
-    gap: 8px;
-  }
-
-  .survey-workbench-embed .decision-button{
-    min-height: 40px;
-    padding: 8px 10px;
-    font-size: 12px;
-  }
-
-  .survey-workbench-embed .candidate-card .field-stack > .field:nth-child(5) .field-value{
-    display: inline-block;
-  }
-}
-
-@media (max-width: 360px) {
-  .survey-workbench-embed .workbench{
-    padding-inline: 8px;
-  }
-
-  .survey-workbench-embed .topbar,
-  .survey-workbench-embed .active-review-strip,
-  .survey-workbench-embed .queue-list,
-  .survey-workbench-embed .session-summary,
-  .survey-workbench-embed .session-audit,
-  .survey-workbench-embed .review-focus,
-  .survey-workbench-embed .candidate-card,
-  .survey-workbench-embed .decision-row,
-  .survey-workbench-embed .payload-panel,
-  .survey-workbench-embed .surface-preview{
-    padding: 12px;
-  }
-
-  .survey-workbench-embed h1{
-    font-size: 20px;
-  }
-
-  .survey-workbench-embed .review-question{
-    font-size: 12px;
-    line-height: 1.35;
-  }
-
-  .survey-workbench-embed .topbar .meta-grid{
-    display: none;
-  }
-
-  .survey-workbench-embed .review-focus{
-    gap: 10px;
-  }
-
-  .survey-workbench-embed .focus-value{
-    padding: 10px;
-  }
-
-  .survey-workbench-embed .focus-value strong{
-    margin-top: 6px;
-    font-size: 18px;
-    line-height: 1.05;
-  }
-
-  .survey-workbench-embed .focus-value span:last-child{
-    margin-top: 6px;
-  }
-
-  .survey-workbench-embed .candidate-value .field-value{
-    font-size: 17px;
   }
 }
 
