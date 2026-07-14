@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.0](https://github.com/kontourai/survey/compare/v1.11.0...v1.12.0) (2026-07-14)
+
+
+### Features
+
+* **review-workbench:** field-diff review UI, two-decision model, host theming ([#143](https://github.com/kontourai/survey/issues/143)) ([7602d63](https://github.com/kontourai/survey/commit/7602d63066c6e8dc295c2a8e37319912dd3103b4))
+
 ## [1.11.0](https://github.com/kontourai/survey/compare/v1.10.0...v1.11.0) (2026-07-13)
 
 
