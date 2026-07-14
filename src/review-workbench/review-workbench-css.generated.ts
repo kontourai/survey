@@ -505,15 +505,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   align-items: stretch;
 }
 
-@media (max-width: 620px) {
-  .survey-workbench-embed .diff{
-    grid-template-columns: 1fr;
-  }
-  .survey-workbench-embed .diff .arrow{
-    transform: rotate(90deg);
-    justify-self: start;
-  }
-}
+/* narrow-width collapse for .diff lives in the responsive section at the foot. */
 
 .survey-workbench-embed .val{
   border: 1px solid var(--k-line);
@@ -688,51 +680,70 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 
 /* decisions */
 
+/* The decision row is the point of the card, so it sits on its own line,
+   right-aligned and prominent. The quiet calibration toggle is pushed to the
+   far left so the two primary actions read as the clear call to action. */
 .survey-workbench-embed .decide{
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
+  margin-top: 2px;
 }
 
 .survey-workbench-embed .btn{
   border: 1px solid var(--k-line-strong);
-  background: var(--k-panel);
+  background: var(--k-raised);
   color: var(--k-text);
-  font-size: 13.5px;
-  font-weight: 550;
-  padding: 8px 14px;
-  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 0 18px;
+  min-height: 42px;
+  border-radius: 9px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  transition: background 0.12s, border-color 0.12s, color 0.12s, filter 0.12s;
 }
 
 .survey-workbench-embed .btn:hover{
   background: var(--k-sunken);
+  border-color: var(--k-line-strong);
 }
 
 .survey-workbench-embed .btn:focus-visible{
   outline: 2px solid var(--k-brand);
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
 
+/* Use proposed — the filled positive primary, the loudest thing on the card. */
 .survey-workbench-embed .btn.use{
-  border-color: color-mix(in srgb, var(--k-positive) 40%, var(--k-line-strong));
+  background: var(--k-positive);
+  border-color: var(--k-positive);
+  color: #ffffff;
 }
 
 .survey-workbench-embed .btn.use:hover{
-  background: var(--k-positive-wash);
-  color: var(--k-positive);
+  background: var(--k-positive);
   border-color: var(--k-positive);
+  color: #ffffff;
+  filter: brightness(1.07);
+}
+
+/* Keep current — a strong neutral secondary; still prominent, clearly not the accept. */
+.survey-workbench-embed .btn.keep{
+  border-color: var(--k-line-strong);
+  background: var(--k-panel-raised, var(--k-raised));
 }
 
 /* "Suggestion was wrong" — optional quiet calibration toggle on Keep current.
    Ticking it turns a keep-current decision into the reject signal. Not a third action. */
 .survey-workbench-embed .wrong{
-  margin-left: auto;
+  order: -1;
+  margin-right: auto;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -740,7 +751,8 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   color: var(--k-faint);
   cursor: pointer;
   user-select: none;
-  padding: 6px 4px;
+  padding: 8px 4px;
+  min-height: 40px;
 }
 
 .survey-workbench-embed .wrong:hover{
@@ -758,6 +770,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 .survey-workbench-embed .decided{
   display: none;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
   font-size: 13px;
   color: var(--k-muted);
@@ -1076,11 +1089,19 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   color: var(--k-faint);
 }
 
-/* ---------- responsive ---------- */
+/* ---------- responsive ----------
+   The workbench sets \`container-type: inline-size\`, so these breakpoints fire on
+   the component's own width — correct whether it renders full-bleed on a phone or
+   in a narrow column on a wide desktop. Mobile is the primary context, so tap
+   targets stay comfortable and nothing forces a horizontal scroll. */
 
-@media (max-width: 620px) {
+@container (max-width: 620px) {
+  .survey-workbench-embed .workbench{
+    padding: 16px 12px 56px;
+  }
+
   .survey-workbench-embed .fbody{
-    padding: 16px 16px 18px;
+    padding: 16px 15px 18px;
   }
 
   .survey-workbench-embed .rhead{
@@ -1088,18 +1109,69 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   }
 
   .survey-workbench-embed .foot{
-    padding: 14px 16px;
+    padding: 14px 15px;
+  }
+
+  .survey-workbench-embed .rhead h1{
+    font-size: 19px;
+  }
+
+  /* current → proposed stack vertically; the arrow rotates to point down. */
+  .survey-workbench-embed .diff{
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .survey-workbench-embed .diff .arrow{
+    transform: rotate(90deg);
+    justify-self: start;
+    margin: 1px 0;
+  }
+
+  /* Apply spans the header row as an easy thumb target. */
+  .survey-workbench-embed .apply{
+    flex: 1;
+    min-height: 44px;
   }
 }
 
-@container (max-width: 420px) {
+@container (max-width: 480px) {
+  /* The two primary actions go full-width and tall so they're the obvious,
+     thumb-friendly call to action; the calibration toggle sits below them. */
   .survey-workbench-embed .decide{
     flex-direction: column;
     align-items: stretch;
+    gap: 8px;
+  }
+
+  .survey-workbench-embed .btn{
+    width: 100%;
+    min-height: 46px;
+    font-size: 15px;
   }
 
   .survey-workbench-embed .wrong{
-    margin-left: 0;
+    order: 1;
+    margin-right: 0;
+    justify-content: flex-start;
+    min-height: 44px;
+  }
+
+  .survey-workbench-embed .frow1{
+    gap: 8px;
+  }
+}
+
+/* The diff-collapse must also hold in host contexts without a query container
+   (e.g. an embed that doesn't establish \`container-type\`): fall back to viewport. */
+@media (max-width: 620px) {
+  .survey-workbench-embed .diff{
+    grid-template-columns: 1fr;
+  }
+
+  .survey-workbench-embed .diff .arrow{
+    transform: rotate(90deg);
+    justify-self: start;
   }
 }
 

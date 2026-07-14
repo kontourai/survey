@@ -100,7 +100,7 @@ describe("review workbench prototype", () => {
       });
 
       assert.match(html, new RegExp(escapeRegExp(entry.selectedText)));
-      assert.match(html, /ReviewDecision payload/);
+      assert.match(html, /Saved record \(JSON\)/);
       assert.match(html, /&quot;kind&quot;: &quot;ReviewDecision&quot;/);
     });
   }

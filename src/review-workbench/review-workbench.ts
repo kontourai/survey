@@ -1107,11 +1107,13 @@ function renderAuditDetails(
         </dl>
         ${preview
           ? `<div class="preview-section-grid">${renderSurfacePreviewSections(preview)}</div><p class="preview-disclaimer preview-disclaimer-footer">${escapeHtml(preview.postureDisclaimer)}</p>`
-          : "<p class=\"preview-disclaimer\">Choose \"Use proposed\" or \"Keep current\" to preview the Surface projection.</p>"}
-        <details class="reference-details">
-          <summary>ReviewDecision payload</summary>
-          <pre data-testid="decision-payload">${escapeHtml(JSON.stringify(reviewDecisionPayload ?? null, null, 2))}</pre>
-        </details>
+          : "<p class=\"preview-disclaimer\">No decision recorded yet — pick an option above to preview the saved record.</p>"}
+        ${reviewDecisionPayload
+          ? `<details class="reference-details">
+          <summary>Saved record (JSON)</summary>
+          <pre data-testid="decision-payload">${escapeHtml(JSON.stringify(reviewDecisionPayload, null, 2))}</pre>
+        </details>`
+          : ""}
       </div>
     </details>
   `;

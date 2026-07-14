@@ -281,7 +281,37 @@ test("keeps the review controls usable on mobile width", async ({ page }) => {
     expect(fieldBox.x + fieldBox.width).toBeLessThanOrEqual(viewport.width + 1);
   }
 
-  await field.getByTestId("keep-current").click();
+  // Nothing may force a horizontal scroll — mobile is the primary context.
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(1);
+
+  // current → proposed stack vertically at this width (single-column diff).
+  const currentBox = await field.getByTestId("current-value").boundingBox();
+  const proposedBox = await field.getByTestId("proposed-value").boundingBox();
+  expect(currentBox).not.toBeNull();
+  expect(proposedBox).not.toBeNull();
+  if (currentBox && proposedBox) {
+    expect(proposedBox.y).toBeGreaterThanOrEqual(currentBox.y + currentBox.height - 1);
+  }
+
+  // Decision buttons are full-width and tall enough to tap comfortably.
+  const useBtn = field.getByTestId("use-proposed");
+  const keepBtn = field.getByTestId("keep-current");
+  const useBox = await useBtn.boundingBox();
+  const keepBox = await keepBtn.boundingBox();
+  expect(useBox).not.toBeNull();
+  expect(keepBox).not.toBeNull();
+  if (useBox && keepBox && fieldBox) {
+    expect(useBox.height).toBeGreaterThanOrEqual(44);
+    expect(keepBox.height).toBeGreaterThanOrEqual(44);
+    // Full-width: each button spans most of the card's inner width.
+    expect(useBox.width).toBeGreaterThan(fieldBox.width * 0.6);
+    expect(keepBox.width).toBeGreaterThan(fieldBox.width * 0.6);
+  }
+
+  await keepBtn.click();
   await expect(field).toHaveAttribute("data-state", "kept");
   expect(consoleErrors).toEqual([]);
 });
@@ -290,7 +320,7 @@ test("keeps the review controls usable on mobile width", async ({ page }) => {
 // AUDIT DETAILS: single collapsed power-user surface per field
 // ---------------------------------------------------------------------------
 
-test("audit details are collapsed by default and expand to show trace IDs and the decision payload", async ({ page }) => {
+test("audit details are collapsed by default and expand to show trace IDs; the JSON payload appears only after a decision (never a bare null)", async ({ page }) => {
   const consoleErrors = await loadWorkbench(page);
   const field = fieldByItemName(page, "public-directory-hours");
   const details = field.getByTestId("audit-details");
@@ -299,7 +329,17 @@ test("audit details are collapsed by default and expand to show trace IDs and th
   await details.locator("summary").first().click();
   await expect(details).toHaveAttribute("open", "");
   await expect(details).toContainText("Proposed candidate ID");
-  await expect(details).toContainText("ReviewDecision payload");
+
+  // Before any decision: a plain-language prompt, and NO null payload leak.
+  await expect(details).toContainText("No decision recorded yet");
+  await expect(field.getByTestId("decision-payload")).toHaveCount(0);
+  await expect(details).not.toContainText("Surface projection");
+
+  // After a decision: the saved-record JSON appears under the reworded summary.
+  await field.getByTestId("use-proposed").click();
+  await field.getByTestId("audit-details").locator("summary").first().click();
+  await expect(field.getByTestId("audit-details")).toContainText("Saved record (JSON)");
+  await expect(field.getByTestId("decision-payload")).toContainText("\"kind\": \"ReviewDecision\"");
   expect(consoleErrors).toEqual([]);
 });
 
