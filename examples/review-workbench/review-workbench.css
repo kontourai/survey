@@ -1,79 +1,63 @@
-/* Survey Review Workbench — "forensic review console" aesthetic.
-   Reviewers judge whether a proposed value should overwrite a verified one;
-   the visual language is built to highlight the value diff, the decision, the
-   confidence, and the provenance — in that order. */
+/* Survey Review Workbench — field-diff review UI.
+   Reviewers judge, field by field, whether a proposed value should replace a
+   current one. The visual language leads with the value diff, then confidence,
+   then provenance, then the decision — plain language on the primary surface,
+   audit/trace detail tucked behind one collapsed <details> per field.
 
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700;9..144,900&family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
+   Token contract: every color/radius/shadow/font below resolves through --k-*
+   custom properties so a host app can re-skin the whole surface by overriding
+   tokens alone (see the "Theming" section of docs/consumer-integration-guide.md).
+   The aliases declared here (--k-muted, --k-raised, --k-sunken, --k-brand-ink,
+   --k-brand-wash, --k-positive-wash, --k-caution-wash, --k-negative-wash,
+   --k-radius) derive from Survey's existing --k-text-muted / --k-panel-raised /
+   --k-brand-contrast / --k-*-soft / --k-radius-md tokens so overriding the base
+   token a host already knows about re-skins these too — a host can also override
+   any alias directly for finer control. */
 
 :root {
   color-scheme: dark;
 
-  /* Local aliases preserve the existing workbench selectors while the values
-     come from the shared Console Kit token contract. */
-  --ink-1000: var(--k-bg);
-  --ink-900: color-mix(in srgb, var(--k-bg) 60%, var(--k-panel));
-  --ink-850: color-mix(in srgb, var(--k-bg) 40%, var(--k-panel));
-  --ink-800: var(--k-panel);
-  --ink-750: var(--k-panel-raised);
-  --ink-700: color-mix(in srgb, var(--k-panel-raised) 80%, var(--k-line-strong));
-  --paper: var(--k-text);
-  --paper-dim: var(--k-text-muted);
-  --paper-faint: var(--k-text-faint);
-  --line: var(--k-line);
-  --line-strong: var(--k-line-strong);
-  --accent: var(--k-brand);
-  --accent-deep: color-mix(in srgb, var(--k-brand) 34%, var(--k-bg));
-  --proposed: var(--k-active);
-  --verify: var(--k-positive);
-  --hold: var(--k-caution);
-  --reject: var(--k-negative);
-  --radius: var(--k-radius-md);
-  --radius-sm: var(--k-radius-sm);
-
-  /* Panel surface alpha — stronger contrast in light mode, subtle in dark */
-  --surface-alpha: 0.55;
-  /* Overlay tint alpha for brand-coloured gradient overlays */
-  --overlay-alpha: 0.10;
-  /* Grain overlay: visible dark only, 0 in light */
-  --grain-opacity: 0.04;
-  /* VS marker bg */
-  --vs-bg: var(--ink-750);
+  --k-muted: var(--k-text-muted);
+  --k-faint: var(--k-text-faint);
+  --k-raised: var(--k-panel-raised);
+  --k-sunken: color-mix(in srgb, var(--k-bg) 55%, var(--k-panel) 45%);
+  --k-brand-ink: var(--k-brand-contrast);
+  --k-brand-wash: color-mix(in srgb, var(--k-brand) 14%, transparent);
+  --k-positive-wash: var(--k-positive-soft, color-mix(in srgb, var(--k-positive) 14%, transparent));
+  --k-caution-wash: var(--k-caution-soft, color-mix(in srgb, var(--k-caution) 14%, transparent));
+  --k-negative-wash: var(--k-negative-soft, color-mix(in srgb, var(--k-negative) 14%, transparent));
+  --k-radius: var(--k-radius-md);
 
   font-family: var(--k-font-ui);
-  background: var(--ink-1000);
-  color: var(--paper);
+  background: var(--k-bg);
+  color: var(--k-text);
 }
 
-/* ---- Light mode token overrides --------------------------------------- */
-/* The token sheet already flips --k-bg/panel/text etc. for [data-theme="light"].
-   Here we tune the workbench-specific overlay and surface alphas so the
-   grain/gradient overlays are invisible in light mode, and panel surfaces
-   have enough contrast without the dark alpha tricks. */
+/* Re-assert the base structural tokens for light mode. themes.css's `.theme-*`
+   preset classes hardcode a dark --k-bg/--k-panel/etc (so the preset "just
+   works" without requiring [data-theme] to be set), and a bare class selector
+   ties with the `[data-theme="light"]` selector in tokens.css on specificity —
+   so source order decides, and themes.css loads after tokens.css. Re-declaring
+   the light values here (loaded after themes.css) wins that tie-break. Presets
+   still control --k-brand (and theme-console's fuller palette) via their own,
+   more specific `[data-theme="light"].theme-*` rules in themes.css. */
 [data-theme="light"] {
   color-scheme: light;
-  /* Structural tokens: override .theme-survey which hardcodes dark values.
-     These match the [data-theme="light"] block in tokens.css. */
   --k-bg: #f5f4ef;
   --k-panel: #ffffff;
   --k-panel-raised: #fbfaf7;
   --k-line: rgba(36, 40, 46, 0.12);
   --k-line-strong: rgba(36, 40, 46, 0.20);
+  --k-shadow: 0 18px 50px -30px rgba(0, 0, 0, 0.25);
   --k-text: #202124;
   --k-text-muted: #5b626b;
   --k-text-faint: #707782;
+  --k-brand-contrast: #ffffff;
   --k-positive: #168257;
   --k-caution: #8a5a00;
   --k-negative: #c83b3b;
+  --k-neutral: #5f6975;
   --k-active: #3f6fd6;
-  /* Workbench-specific overlay and surface alphas */
-  --grain-opacity: 0;
-  --overlay-alpha: 0.06;
-  --surface-alpha: 0.70;
-  --vs-bg: var(--ink-750);
-  /* In light mode the brand accent is remapped by themes.css — ensure the
-     ink aliases derive cleanly from the token bg/panel values. */
-  --ink-900: color-mix(in srgb, var(--k-bg) 60%, var(--k-panel));
-  --ink-850: color-mix(in srgb, var(--k-bg) 40%, var(--k-panel));
 }
 
 * {
@@ -83,30 +67,21 @@
 body {
   margin: 0;
   min-width: 320px;
-  position: relative;
-  background:
-    radial-gradient(1100px 620px at 12% -8%, color-mix(in srgb, var(--k-brand) 10%, transparent), transparent 60%),
-    radial-gradient(900px 560px at 100% 0%, color-mix(in srgb, var(--k-active) 10%, transparent), transparent 55%),
-    radial-gradient(800px 800px at 88% 110%, color-mix(in srgb, var(--k-caution) 7%, transparent), transparent 60%),
-    linear-gradient(180deg, var(--ink-1000), var(--ink-900) 55%, var(--ink-1000));
-  background-attachment: fixed;
 }
 
-/* Grain + faint engineering grid for control-room atmosphere.
-   Grain opacity is 0 in light mode via --grain-opacity. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
-  opacity: var(--grain-opacity);
-  mix-blend-mode: screen;
+button,
+textarea,
+input {
+  font: inherit;
+  color: inherit;
 }
 
-/* ---- Demo page chrome -------------------------------------------------- */
-/* Light/dark toggle button on the demo wrapper around the workbench */
+h1, h2, h3, p {
+  margin: 0;
+}
+
+/* ---------- demo page chrome (host page only, not part of the component) ---------- */
+
 .demo-toolbar {
   position: fixed;
   top: 12px;
@@ -123,23 +98,20 @@ body::before {
   gap: 6px;
   height: 32px;
   padding: 0 12px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--k-line-strong);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--k-panel) 90%, transparent);
-  color: var(--paper-dim);
+  background: var(--k-panel);
+  color: var(--k-muted);
   cursor: pointer;
-  font-family: var(--k-font-mono, "IBM Plex Mono", monospace);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  backdrop-filter: blur(6px);
+  letter-spacing: 0.02em;
   transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
 }
 
 .theme-toggle:hover {
-  background: color-mix(in srgb, var(--k-panel) 100%, transparent);
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--k-brand);
+  color: var(--k-brand);
 }
 
 .theme-toggle-icon {
@@ -147,775 +119,656 @@ body::before {
   line-height: 1;
 }
 
-button,
-textarea {
-  font: inherit;
-}
-
-h1,
-h2,
-h3,
-p {
-  margin: 0;
-}
+/* ---------- outer containers ---------- */
 
 .workbench {
   position: relative;
-  z-index: 1;
   container-type: inline-size;
   min-height: 100vh;
-  padding: 22px 22px 50px;
+  padding: 28px 20px 80px;
 }
 
 .workbench-shell {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 16px;
-  max-width: 1360px;
+  max-width: 940px;
   margin: 0 auto;
 }
 
-/* ---- Shared label vocabulary ------------------------------------------ */
+/* ---------- review panel + header ---------- */
 
-.eyebrow,
-.field-label,
-.state-label {
-  color: var(--accent);
-  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.18em;
+.review {
+  background: var(--k-panel);
+  border: 1px solid var(--k-line);
+  border-radius: var(--k-radius);
+  box-shadow: var(--k-shadow);
+  overflow: hidden;
+}
+
+.rhead {
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--k-line);
+  display: grid;
+  gap: 14px;
+}
+
+.rhead .top {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.rhead .eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+  color: var(--k-faint);
+}
+
+.rhead h1 {
+  margin: 2px 0 0;
+  font-size: 21px;
+  line-height: 1.2;
+  text-wrap: balance;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.rhead .subj {
+  flex: 1;
+  min-width: 240px;
+}
+
+.meta {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--k-muted);
+}
+
+.meta b {
+  color: var(--k-text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* progress + apply */
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.bar {
+  flex: 1;
+  min-width: 80px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--k-sunken);
+  overflow: hidden;
+  border: 1px solid var(--k-line);
+}
+
+.bar > i {
+  display: block;
+  height: 100%;
+  background: var(--k-brand);
+  border-radius: 999px;
+  transition: width 0.35s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.ptext {
+  font-size: 13px;
+  color: var(--k-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ptext b {
+  color: var(--k-text);
+}
+
+.apply {
+  border: 0;
+  background: var(--k-brand);
+  color: var(--k-brand-ink);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 9px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.08s, filter 0.15s;
+}
+
+.apply:hover {
+  filter: brightness(1.06);
+}
+
+.apply:active {
+  transform: translateY(1px);
+}
+
+.apply:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: none;
+}
+
+/* ---------- field cards ---------- */
+
+.fields {
+  display: flex;
+  flex-direction: column;
+}
+
+.field {
+  display: grid;
+  grid-template-columns: 4px 1fr;
+  gap: 0;
+  border-top: 1px solid var(--k-line);
+}
+
+.field:first-child {
+  border-top: 0;
+}
+
+.stripe {
+  background: var(--k-line);
+  transition: background 0.25s;
+}
+
+.field[data-state="accepted"] .stripe { background: var(--k-positive); }
+.field[data-state="kept"] .stripe { background: var(--k-faint); }
+.field[data-state="rejected"] .stripe { background: var(--k-negative); }
+.field[data-state="review"] .stripe { background: var(--k-brand); }
+
+.fbody {
+  padding: 18px 22px 20px;
+  display: grid;
+  gap: 13px;
+  min-width: 0;
+}
+
+.frow1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.fname {
+  font-size: 15.5px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+}
+
+.fkind {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--k-faint);
+  border: 1px solid var(--k-line-strong);
+  padding: 1px 7px;
+  border-radius: 999px;
+}
+
+.chip {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chip::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.chip.review { color: var(--k-brand); background: var(--k-brand-wash); }
+.chip.accepted { color: var(--k-positive); background: var(--k-positive-wash); }
+.chip.kept { color: var(--k-muted); background: var(--k-sunken); }
+.chip.rejected { color: var(--k-negative); background: var(--k-negative-wash); }
+
+.frow1 .push {
+  margin-left: auto;
+}
+
+/* the diff */
+
+.diff {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 12px;
+  align-items: stretch;
+}
+
+/* narrow-width collapse for .diff lives in the responsive section at the foot. */
+
+.val {
+  border: 1px solid var(--k-line);
+  border-radius: var(--k-radius-sm);
+  padding: 10px 12px;
+  background: var(--k-raised);
+  min-width: 0;
+}
+
+.val .vlbl {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--k-faint);
+  margin-bottom: 4px;
+}
+
+.val .vtext {
+  font-size: 14.5px;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.val.current {
+  background: var(--k-sunken);
+}
+
+.val.current .vtext {
+  color: var(--k-muted);
+}
+
+.val.proposed {
+  border-color: color-mix(in srgb, var(--k-brand) 45%, var(--k-line));
+}
+
+.val.empty .vtext {
+  color: var(--k-faint);
+  font-style: italic;
+}
+
+.arrow {
+  align-self: center;
+  color: var(--k-faint);
+}
+
+.editrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.editrow input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  color: var(--k-text);
+  background: var(--k-panel);
+  border: 1px solid var(--k-line-strong);
+  border-radius: 6px;
+  padding: 6px 9px;
+}
+
+.editrow input:focus-visible {
+  outline: 2px solid var(--k-brand);
+  outline-offset: 1px;
+  border-color: var(--k-brand);
+}
+
+.editrow .ehint {
+  font-size: 11.5px;
+  color: var(--k-faint);
+  white-space: nowrap;
+}
+
+/* confidence + provenance */
+
+.prov {
+  display: grid;
+  gap: 9px;
+  padding: 11px 13px;
+  border-radius: var(--k-radius-sm);
+  background: var(--k-sunken);
+  border: 1px solid var(--k-line);
+}
+
+.conf {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--k-muted);
+  flex-wrap: wrap;
+}
+
+.conf .meter {
+  width: 84px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--k-line-strong);
+  overflow: hidden;
+}
+
+.conf .meter > i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--k-positive);
+}
+
+.conf .meter.mid > i {
+  background: var(--k-caution);
+}
+
+.conf .pct {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--k-text);
+  font-family: var(--k-font-mono);
+  font-size: 12px;
+}
+
+.excerpt {
+  font-size: 13px;
+  color: var(--k-text);
+}
+
+.excerpt q {
+  color: var(--k-text);
+}
+
+.excerpt q::before { content: "\201C"; }
+.excerpt q::after { content: "\201D"; }
+
+.excerpt .from {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--k-muted);
+  flex-wrap: wrap;
+}
+
+.excerpt .from a {
+  color: var(--k-brand);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.noprov {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--k-caution);
+  flex-wrap: wrap;
+}
+
+.noprov svg {
+  flex: none;
+}
+
+.noprov .tag {
+  background: var(--k-caution-wash);
+  color: var(--k-caution);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+/* decisions */
+
+/* The decision row is the point of the card, so it sits on its own line,
+   right-aligned and prominent. The quiet calibration toggle is pushed to the
+   far left so the two primary actions read as the clear call to action. */
+.decide {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+
+.btn {
+  border: 1px solid var(--k-line-strong);
+  background: var(--k-raised);
+  color: var(--k-text);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 0 18px;
+  min-height: 42px;
+  border-radius: 9px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: background 0.12s, border-color 0.12s, color 0.12s, filter 0.12s;
+}
+
+.btn:hover {
+  background: var(--k-sunken);
+  border-color: var(--k-line-strong);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--k-brand);
+  outline-offset: 2px;
+}
+
+/* Use proposed — the filled positive primary, the loudest thing on the card. */
+.btn.use {
+  background: var(--k-positive);
+  border-color: var(--k-positive);
+  color: #ffffff;
+}
+
+.btn.use:hover {
+  background: var(--k-positive);
+  border-color: var(--k-positive);
+  color: #ffffff;
+  filter: brightness(1.07);
+}
+
+/* Keep current — a strong neutral secondary; still prominent, clearly not the accept. */
+.btn.keep {
+  border-color: var(--k-line-strong);
+  background: var(--k-panel-raised, var(--k-raised));
+}
+
+/* "Suggestion was wrong" — optional quiet calibration toggle on Keep current.
+   Ticking it turns a keep-current decision into the reject signal. Not a third action. */
+.wrong {
+  order: -1;
+  margin-right: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--k-faint);
+  cursor: pointer;
+  user-select: none;
+  padding: 8px 4px;
+  min-height: 40px;
+}
+
+.wrong:hover {
+  color: var(--k-negative);
+}
+
+.wrong input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--k-negative);
+  cursor: pointer;
+  margin: 0;
+}
+
+.decided {
+  display: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--k-muted);
+}
+
+.field[data-decided="1"] .decide {
+  display: none;
+}
+
+.field[data-decided="1"] .decided {
+  display: flex;
+}
+
+.undo {
+  border: 0;
+  background: none;
+  color: var(--k-brand);
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0;
+}
+
+/* footer tally */
+
+.foot {
+  padding: 16px 22px;
+  border-top: 1px solid var(--k-line);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: var(--k-raised);
+}
+
+.tally {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--k-muted);
+  flex-wrap: wrap;
+}
+
+.tally b {
+  color: var(--k-text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- audit details: the single collapsed power-user surface per field ---------- */
+
+.audit-details {
+  border-top: 1px dashed var(--k-line);
+  padding-top: 4px;
+}
+
+.audit-details summary {
+  cursor: pointer;
+  padding: 6px 0;
+  color: var(--k-faint);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.audit-details summary:hover {
+  color: var(--k-muted);
+}
+
+.audit-details[open] summary {
+  color: var(--k-brand);
+}
+
+.audit-body {
+  display: grid;
+  gap: 14px;
+  padding: 4px 0 6px;
+}
+
+.note-field {
+  display: grid;
+  gap: 6px;
 }
 
 .field-label {
-  color: var(--paper-faint);
-  letter-spacing: 0.14em;
-}
-
-.field-value,
-.meta-value {
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  line-height: 1.4;
-  color: var(--paper);
-}
-
-/* ---- Top command bar -------------------------------------------------- */
-
-.topbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
-  align-items: center;
-  padding: 15px 17px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--k-brand) 8%, transparent), transparent 42%),
-    linear-gradient(180deg, var(--ink-800), var(--ink-850));
-  box-shadow: var(--k-shadow, 0 24px 60px -34px rgba(0, 0, 0, 0.9)), inset 0 1px 0 var(--line);
-  animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.topbar > div {
-  min-width: 0;
-}
-
-.topbar .eyebrow::before {
-  content: "● ";
-  color: var(--verify);
-}
-
-h1 {
-  margin-top: 6px;
-  font-family: "Fraunces", Georgia, "Times New Roman", serif;
-  font-optical-sizing: auto;
-  font-weight: 600;
-  font-size: clamp(21px, 2vw, 27px);
-  line-height: 1.08;
-  letter-spacing: -0.01em;
-  overflow-wrap: anywhere;
-  color: var(--paper);
-}
-
-.review-question {
-  max-width: 720px;
-  margin-top: 7px;
-  color: var(--paper-dim);
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.review-question strong {
-  color: var(--paper);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.95em;
-}
-
-.review-target-label {
-  margin-top: 4px;
-}
-
-.review-target-label strong {
-  color: var(--paper);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.meta-grid {
-  display: none;
-  grid-template-columns: repeat(4, minmax(110px, 1fr));
-  gap: 10px;
-  width: 100%;
-}
-
-.meta-item,
-.field {
-  min-width: 0;
-}
-
-.meta-item {
-  padding: 11px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--k-bg) 55%, var(--k-panel));
-}
-
-[data-theme="light"] .meta-item {
-  background: color-mix(in srgb, var(--k-bg) 70%, var(--k-panel));
-}
-
-.meta-value {
-  margin-top: 6px;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.45;
-  color: var(--paper);
-}
-
-/* Status reads as a signal in the command bar. */
-.meta-item:nth-child(2) .meta-value {
-  color: var(--accent);
-  font-weight: 600;
-}
-
-/* ---- Layout scaffold -------------------------------------------------- */
-
-.queue-layout {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
-}
-
-.queue-panel {
-  display: grid;
-  gap: 14px;
-  position: sticky;
-  top: 18px;
-}
-
-.active-review-strip {
-  display: none;
-}
-
-/* ---- Mobile queue progress bar (mobile only) -------------------------- */
-
-.mobile-queue-bar {
-  display: none;
-}
-
-/* ---- Queue drawer backdrop -------------------------------------------- */
-
-.queue-drawer-backdrop {
-  display: none;
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  background: color-mix(in srgb, var(--k-bg) 55%, transparent);
-  backdrop-filter: blur(2px);
-  opacity: 0;
-  transition: opacity 0.22s ease;
-  pointer-events: none;
-}
-
-.queue-drawer-backdrop.is-visible {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-/* ---- Queue drawer close button (mobile only) -------------------------- */
-
-.queue-drawer-close {
-  display: none;
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--k-bg) 80%, transparent);
-  color: var(--paper-faint);
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
-  align-items: center;
-  justify-content: center;
-  z-index: 2;
-}
-
-.queue-list,
-.session-summary,
-.session-audit {
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: linear-gradient(180deg, var(--ink-800), var(--ink-850));
-  padding: 14px;
-  box-shadow: var(--k-shadow, 0 22px 50px -38px rgba(0, 0, 0, 0.9));
-  animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
-  animation-delay: 0.05s;
-}
-
-.queue-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 14px;
-}
-
-.queue-head h2,
-.session-summary h2,
-.session-audit h2 {
-  font-family: "Fraunces", Georgia, serif;
-  font-weight: 600;
-  font-size: 16px;
-  line-height: 1.1;
-  letter-spacing: -0.01em;
-}
-
-/* ---- Queue rows: status carried on data-queue-status ------------------ */
-
-.queue-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
-  width: 100%;
-  min-height: 54px;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--paper-faint);
-  border-radius: var(--radius-sm);
-  margin-top: 8px;
-  padding: 9px 10px;
-  background: color-mix(in srgb, var(--k-bg) 50%, var(--k-panel));
-  color: var(--paper);
-  cursor: pointer;
-  text-align: left;
-  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
-}
-
-.queue-row:hover {
-  transform: translateX(2px);
-  border-color: var(--line-strong);
-  background: color-mix(in srgb, var(--k-bg) 20%, var(--k-panel));
-}
-
-.queue-row.is-active {
-  border-left-width: 3px;
-  background: color-mix(in srgb, var(--k-brand) 8%, var(--k-panel));
-  box-shadow: inset 0 0 0 1px var(--line-strong);
-}
-
-.queue-row[data-queue-status="resolved"] { border-left-color: var(--verify); }
-.queue-row[data-queue-status="rejected"] { border-left-color: var(--reject); }
-.queue-row[data-queue-status="escalated"] { border-left-color: var(--hold); }
-.queue-row[data-queue-status="in-review"] { border-left-color: var(--accent); }
-.queue-row[data-queue-status="pending"] { border-left-color: var(--paper-faint); }
-
-.queue-row-main {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.queue-row-title,
-.queue-row-target {
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.queue-row-title {
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 12.5px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--paper);
-}
-
-.queue-row-target {
-  color: var(--paper-dim);
-  font-size: 12px;
-}
-
-/* ---- Status pills ----------------------------------------------------- */
-
-.state-label {
-  min-width: 78px;
-  padding: 4px 9px;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  text-align: center;
-  color: var(--paper-dim);
-  background: color-mix(in srgb, var(--k-bg) 60%, var(--k-panel));
-  letter-spacing: 0.08em;
-  font-size: 9.5px;
-}
-
-.queue-row[data-queue-status="resolved"] .state-label { color: var(--verify); border-color: color-mix(in srgb, var(--verify) 40%, transparent); }
-.queue-row[data-queue-status="rejected"] .state-label { color: var(--reject); border-color: color-mix(in srgb, var(--reject) 40%, transparent); }
-.queue-row[data-queue-status="escalated"] .state-label { color: var(--hold); border-color: color-mix(in srgb, var(--hold) 40%, transparent); }
-.queue-row[data-queue-status="in-review"] .state-label { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
-
-.next-button {
-  min-height: 34px;
-  padding: 0 14px;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--k-brand) 8%, transparent);
-  color: var(--accent);
-  cursor: pointer;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  color: var(--k-faint);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
-  transition: background 0.16s ease, border-color 0.16s ease;
-}
-
-.next-button:hover {
-  background: color-mix(in srgb, var(--k-brand) 16%, transparent);
-  border-color: var(--accent);
-}
-
-/* ---- Session summary: scoreboard tiles -------------------------------- */
-
-.summary-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.summary-grid .meta-item {
-  display: grid;
-  gap: 2px;
-  padding: 10px;
-  background: color-mix(in srgb, var(--k-bg) 60%, var(--k-panel));
-}
-
-.summary-grid .meta-value {
-  font-family: "Fraunces", Georgia, serif;
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--paper);
-}
-
-/* ---- Session audit: replayable resource trail ------------------------- */
-
-.session-audit {
-  display: grid;
-  gap: 14px;
-  animation-delay: 0.08s;
-}
-
-.session-audit-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: start;
-}
-
-.session-audit-head h2 {
-  margin-top: 5px;
-  overflow-wrap: anywhere;
-}
-
-.audit-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.audit-grid .meta-value {
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 11px;
-  line-height: 1.3;
-}
-
-.session-event-list {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.session-event-list li {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
-  gap: 8px;
-  min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 8px;
-  background: color-mix(in srgb, var(--k-bg) 45%, transparent);
-}
-
-.event-sequence {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  color: var(--accent);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.session-event-list strong,
-.session-event-list small {
-  display: block;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.session-event-list strong {
-  color: var(--paper);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 11px;
-}
-
-.session-event-list small {
-  margin-top: 3px;
-  color: var(--paper-faint);
-  font-size: 10.5px;
-  line-height: 1.35;
-}
-
-.session-export {
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
-}
-
-.session-export summary {
-  cursor: pointer;
-  color: var(--accent);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-}
-
-.session-export pre {
-  max-height: 300px;
-}
-
-/* ---- Content grid ----------------------------------------------------- */
-
-.content-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-areas:
-    "focus"
-    "decision"
-    "candidates";
-  gap: 14px;
-  align-items: start;
-}
-
-.review-main {
-  display: grid;
-  gap: 14px;
-  min-width: 0;
-}
-
-/* ---- Active review focus ---------------------------------------------- */
-
-.review-focus {
-  grid-area: focus;
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--k-brand) 28%, transparent);
-  border-radius: var(--radius);
-  padding: 14px;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--k-brand) 12%, transparent), transparent 34%),
-    linear-gradient(180deg, var(--ink-800), var(--ink-850));
-  box-shadow: var(--k-shadow, 0 26px 60px -42px rgba(0, 0, 0, 0.95)), inset 0 1px 0 var(--line);
-}
-
-.focus-head,
-.focus-values {
-  display: grid;
-  gap: 10px;
-}
-
-.focus-head {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-}
-
-.focus-values {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.focus-value {
-  min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  background: color-mix(in srgb, var(--k-bg) 56%, var(--k-panel));
-}
-
-.focus-value strong {
-  display: block;
-  margin-top: 6px;
-  color: var(--paper);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: clamp(18px, 1.8vw, 25px);
-  line-height: 1.14;
-  overflow-wrap: anywhere;
-}
-
-.focus-value span:last-child {
-  display: block;
-  margin-top: 6px;
-  color: var(--paper-faint);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 11px;
-}
-
-.focus-value.is-proposed {
-  border-color: color-mix(in srgb, var(--k-active) 34%, transparent);
-  background: color-mix(in srgb, var(--k-active) 10%, color-mix(in srgb, var(--k-bg) 56%, var(--k-panel)));
-}
-
-.focus-value.is-proposed strong {
-  color: var(--proposed);
-}
-
-.focus-evidence {
-  display: grid;
-  grid-template-columns: minmax(110px, 0.65fr) minmax(0, 1.2fr) minmax(0, 1.4fr);
-  gap: 10px;
-  margin: 0;
-}
-
-.focus-evidence .field {
-  border-top: 1px solid var(--line);
-  padding-top: 10px;
-}
-
-/* ---- Candidate comparison: the hero of the console -------------------- */
-
-.candidate-grid {
-  grid-area: candidates;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  position: relative;
-}
-
-/* "VS" diff marker between the two candidates. */
-.candidate-grid::before {
-  content: "vs";
-  position: absolute;
-  top: 18px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 3;
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  border: 1px solid var(--line-strong);
-  background: var(--vs-bg);
-  color: var(--paper-faint);
-  font-family: "Fraunces", Georgia, serif;
-  font-style: italic;
-  font-size: 13px;
-  box-shadow: var(--k-shadow, 0 10px 26px -12px rgba(0, 0, 0, 0.9));
-}
-
-.candidate-card,
-.payload-panel,
-.surface-preview,
-.decision-row {
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: linear-gradient(180deg, var(--ink-800), var(--ink-850));
-  box-shadow: var(--k-shadow, 0 26px 60px -42px rgba(0, 0, 0, 0.95));
-}
-
-.candidate-card {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
-  gap: 11px;
-  min-height: auto;
-  padding: 14px;
-  position: relative;
-  overflow: hidden;
-  animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
-  animation-delay: 0.1s;
-}
-
-/* The proposed candidate (2nd card) is the incoming change — flag it. */
-.candidate-card:nth-child(2) {
-  border-color: color-mix(in srgb, var(--k-active) 32%, transparent);
-}
-
-.candidate-card:nth-child(2)::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: radial-gradient(420px 200px at 80% -10%, color-mix(in srgb, var(--k-active) 12%, transparent), transparent 70%);
-}
-
-.candidate-card.is-selected {
-  border-color: color-mix(in srgb, var(--k-positive) 55%, transparent);
-  box-shadow: 0 26px 60px -36px rgba(0, 0, 0, 0.95), inset 0 0 0 1px color-mix(in srgb, var(--k-positive) 35%, transparent), inset 0 0 60px -30px color-mix(in srgb, var(--k-positive) 60%, transparent);
-}
-
-.candidate-card.is-unselected {
-  opacity: 0.5;
-  filter: saturate(0.7);
-}
-
-.card-head {
-  display: flex;
-  gap: 10px;
-  justify-content: space-between;
-  align-items: flex-start;
-  position: relative;
-  z-index: 1;
-}
-
-.card-head .eyebrow {
-  color: var(--paper-faint);
-  font-size: 10px;
-  letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+
+.field-value {
   overflow-wrap: anywhere;
   word-break: break-word;
+  line-height: 1.4;
+  color: var(--k-text);
+  font-size: 12.5px;
 }
 
-.role {
-  margin-top: 3px;
-  font-family: "Fraunces", Georgia, serif;
-  font-weight: 600;
-  font-size: 18px;
-  letter-spacing: -0.01em;
-  color: var(--paper);
+.note-field textarea {
+  display: block;
+  width: 100%;
+  min-height: 60px;
+  resize: vertical;
+  border: 1px solid var(--k-line-strong);
+  border-radius: var(--k-radius-sm);
+  padding: 8px 10px;
+  color: var(--k-text);
+  background: var(--k-sunken);
+  font-family: var(--k-font-mono);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
-.candidate-card:nth-child(2) .role {
-  color: var(--proposed);
-}
-
-.is-selected .state-label {
-  color: var(--verify);
-  border-color: color-mix(in srgb, var(--verify) 50%, transparent);
-  background: color-mix(in srgb, var(--verify) 12%, transparent);
-}
-
-/* The value — the single most important datapoint on the screen. */
-.candidate-value {
-  position: relative;
-  z-index: 1;
-  border-block: 1px solid var(--line);
-  padding: 10px 0;
-}
-
-.candidate-value .field-value {
-  margin-top: 7px;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: clamp(16px, 1.35vw, 20px);
-  font-weight: 600;
-  line-height: 1.22;
-  letter-spacing: 0;
-  color: var(--paper);
-}
-
-.candidate-card:nth-child(2) .candidate-value .field-value {
-  color: var(--proposed);
-}
-
-.is-selected .candidate-value .field-value {
-  color: var(--verify);
+.note-field textarea:focus-visible {
+  outline: none;
+  border-color: var(--k-brand);
+  box-shadow: 0 0 0 3px var(--k-brand-wash);
 }
 
 .field-stack {
   display: grid;
   gap: 9px;
-  position: relative;
-  z-index: 1;
-  align-content: start;
 }
 
-.field-value {
-  margin-top: 4px;
-  font-size: 12.5px;
+.field-stack.compact {
+  gap: 6px;
 }
 
-/* Source refs / locators / ids read as data. */
-.candidate-card .field-stack .field-value {
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+.kv {
+  min-width: 0;
+}
+
+.kv .field-value {
+  margin-top: 3px;
+  font-family: var(--k-font-mono);
   font-size: 11.5px;
-  color: var(--paper-dim);
+  color: var(--k-muted);
 }
 
-/* Highlight extraction confidence (5th field in the stack) as a chip. */
-.candidate-card .field-stack > .field:nth-child(5) .field-value {
-  display: inline-block;
-  margin-top: 5px;
-  padding: 4px 9px;
-  border: 1px solid color-mix(in srgb, var(--k-brand) 35%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--k-brand) 10%, transparent);
-  color: var(--accent);
-  font-size: 11.5px;
-  font-weight: 600;
-}
-
-.excerpt {
-  border-left: 2px solid var(--accent-deep);
-  padding-left: 12px;
-}
-
-.excerpt .field-value {
-  font-style: italic;
-  color: var(--paper-dim) !important;
-}
-
-/* ---- Excerpt / rationale 3-line clamp with inline expander ----------- */
-/* Applied to .field-value inside .excerpt or .excerpt-clamp containers,
-   and to .rationale-clamp for reviewer rationale fields.
-   The "more / less" toggle is a <button class="clamp-toggle"> sibling. */
-
-.excerpt-clamp .field-value,
-.rationale-clamp .field-value {
+/* Excerpt / rationale 3-line clamp with inline "more / less" expander. */
+.kv.excerpt .field-value,
+.kv.rationale-clamp .field-value {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   overflow: hidden;
+  font-family: var(--k-font-ui);
+  font-style: italic;
+  color: var(--k-muted);
 }
 
 .excerpt-clamp.is-expanded .field-value,
@@ -931,9 +784,9 @@ h1 {
   padding: 0;
   border: none;
   background: none;
-  color: var(--accent);
+  color: var(--k-brand);
   cursor: pointer;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-family: var(--k-font-mono);
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -943,13 +796,10 @@ h1 {
 }
 
 .clamp-toggle:hover {
-  color: var(--paper);
+  color: var(--k-text);
 }
 
-/* ---- Candidate history expander -------------------------------------- */
-/* When there are >3 unselected candidates the UI renders the first 3 and
-   hides the rest behind a "view all (N)" expander. */
-
+/* Candidate history expander: >3 unselected candidates hide behind "view all (N)". */
 .history-overflow {
   display: none;
 }
@@ -964,21 +814,19 @@ h1 {
   gap: 4px;
   margin-top: 6px;
   padding: 3px 10px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--k-line-strong);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--k-brand) 6%, transparent);
-  color: var(--accent);
+  background: var(--k-brand-wash);
+  color: var(--k-brand);
   cursor: pointer;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   transition: background 0.14s ease, border-color 0.14s ease;
 }
 
 .history-expand-btn:hover {
-  background: color-mix(in srgb, var(--k-brand) 14%, transparent);
-  border-color: var(--accent);
+  border-color: var(--k-brand);
 }
 
 .history-expander.is-expanded .history-expand-btn .expand-label {
@@ -993,273 +841,46 @@ h1 {
   display: none;
 }
 
-/* ---- Decision column -------------------------------------------------- */
-
-.decision-column {
-  grid-area: decision;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
-  animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
-  animation-delay: 0.15s;
-}
-
-.decision-row,
-.payload-panel,
-.surface-preview {
-  padding: 14px;
-}
-
-textarea {
-  display: block;
-  width: 100%;
-  min-height: 74px;
-  margin-top: 8px;
-  resize: vertical;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  padding: 10px;
-  color: var(--paper);
-  background: color-mix(in srgb, var(--k-bg) 70%, var(--k-panel));
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-textarea::placeholder {
-  color: var(--paper-faint);
-}
-
-textarea:focus {
-  border-color: var(--accent);
-  outline: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--k-brand) 18%, transparent);
-}
-
-/* Decision actions — color-coded to outcome (accept / keep / reject). */
-.decision-buttons {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 0;
-}
-
-.decision-button {
-  min-height: 42px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--k-bg) 60%, var(--k-panel));
-  color: var(--paper);
-  cursor: pointer;
-  font-weight: 700;
-  font-size: 12px;
-  letter-spacing: 0.01em;
-  transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease, box-shadow 0.14s ease;
-}
-
-.decision-button:hover,
-.decision-button:focus {
-  transform: translateY(-2px);
-  outline: none;
-}
-
-.decision-button:nth-child(1):hover { border-color: var(--verify); box-shadow: 0 10px 24px -14px color-mix(in srgb, var(--verify) 80%, transparent); }
-.decision-button:nth-child(2):hover { border-color: var(--hold); box-shadow: 0 10px 24px -14px color-mix(in srgb, var(--hold) 80%, transparent); }
-.decision-button:nth-child(3):hover { border-color: var(--reject); box-shadow: 0 10px 24px -14px color-mix(in srgb, var(--reject) 80%, transparent); }
-
-.decision-button.is-active {
-  color: var(--k-bg);
-  border-color: transparent;
-}
-
-.decision-button:nth-child(1).is-active { background: var(--verify); box-shadow: 0 14px 30px -14px color-mix(in srgb, var(--verify) 90%, transparent); }
-.decision-button:nth-child(2).is-active { background: var(--hold); box-shadow: 0 14px 30px -14px color-mix(in srgb, var(--hold) 90%, transparent); }
-.decision-button:nth-child(3).is-active { background: var(--reject); box-shadow: 0 14px 30px -14px color-mix(in srgb, var(--reject) 90%, transparent); }
-
-.effect {
-  display: grid;
-  gap: 7px;
-  margin-top: 12px;
-  border-top: 1px solid var(--line);
-  padding-top: 11px;
-}
-
-.effect .field-value {
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: var(--paper-dim);
-}
-
-.feedback-tags {
-  display: grid;
-  gap: 8px;
-  margin-top: 12px;
-  border-top: 1px solid var(--line);
-  padding-top: 11px;
-}
-
-.tag-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.tag {
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  padding: 5px 11px;
-  background: color-mix(in srgb, var(--k-active) 8%, transparent);
-  color: var(--proposed);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.tag.is-empty {
-  background: color-mix(in srgb, var(--k-bg) 60%, var(--k-panel));
-  color: var(--paper-faint);
-}
-
-/* ---- Surface preview dossier ------------------------------------------ */
-
-.surface-preview {
-  display: grid;
-  gap: 11px;
-}
-
-/* When surface-preview is a <details> element */
-details.surface-preview {
-  display: block;
-}
-
-details.surface-preview[open] {
-  display: grid;
-  gap: 11px;
-}
-
-.surface-summary {
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-  list-style: none;
-  padding: 0;
-}
-
-.surface-summary::-webkit-details-marker {
-  display: none;
-}
-
-.surface-summary::before {
-  content: none;
-}
-
-.surface-summary-label {
-  font-family: "Fraunces", Georgia, serif;
-  font-weight: 600;
-  font-size: 16px;
-  letter-spacing: -0.01em;
-  color: var(--paper);
-}
-
-.surface-summary-label::before {
-  content: "› ";
-  color: var(--accent);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 13px;
-}
-
-details.surface-preview[open] .surface-summary-label::before {
-  content: "⌄ ";
-}
-
-.surface-head {
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-
-.surface-head h2 {
-  font-family: "Fraunces", Georgia, serif;
-  font-weight: 600;
-  font-size: 16px;
-  letter-spacing: -0.01em;
-}
-
-.preview-disclaimer {
-  border-left: 2px solid var(--hold);
-  padding: 2px 0 2px 12px;
-  color: var(--paper-dim);
-  font-size: 12.5px;
-  line-height: 1.5;
-}
-
-.preview-disclaimer-footer {
-  margin-top: 4px;
-  border-left-color: var(--line);
-  font-size: 11.5px;
-  color: var(--paper-faint);
-}
-
 .preview-section-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 10px;
 }
 
 .preview-section {
-  min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 10px 11px;
-  background: color-mix(in srgb, var(--k-bg) 55%, var(--k-panel));
+  border: 1px solid var(--k-line);
+  border-radius: var(--k-radius-sm);
+  padding: 10px 12px;
+  background: var(--k-sunken);
 }
 
 .preview-section h3 {
-  margin-bottom: 7px;
-  color: var(--accent);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 10px;
+  margin-bottom: 6px;
+  color: var(--k-faint);
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
-.field-stack.compact {
-  gap: 9px;
-}
-
-.compact .field-value {
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 12px;
-  color: var(--paper-dim);
-}
-
 .preview-section.is-neutral {
-  border-style: dashed;
-  border-color: var(--line);
-  background: color-mix(in srgb, var(--k-bg) 35%, var(--k-panel));
+  background: var(--k-raised);
 }
 
 .preview-section.is-neutral h3 {
-  color: var(--paper-faint);
+  color: var(--k-faint);
 }
 
 .reference-details {
-  margin-top: 10px;
-  border-top: 1px solid var(--line);
-  padding-top: 8px;
+  margin-top: 8px;
 }
 
 .reference-details summary {
   cursor: pointer;
-  color: var(--paper-faint);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 10px;
+  list-style: none;
+  color: var(--k-faint);
+  font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
@@ -1268,580 +889,140 @@ details.surface-preview[open] .surface-summary-label::before {
 }
 
 .reference-details summary::before {
-  content: "› ";
-  color: var(--paper-faint);
-}
-
-.reference-details[open] summary {
-  color: var(--accent);
+  content: "▸ ";
 }
 
 .reference-details[open] summary::before {
-  content: "⌄ ";
-  color: var(--accent);
+  content: "▾ ";
 }
 
 .reference-details .field-stack {
   margin-top: 8px;
 }
 
-/* ---- Decision payload: terminal readout, intentionally demoted -------- */
-
-.payload-panel {
-  background: linear-gradient(180deg, var(--ink-850), var(--ink-900));
+.preview-disclaimer {
+  font-size: 11.5px;
+  color: var(--k-faint);
+  line-height: 1.5;
 }
 
-.payload-panel summary.field-label {
-  cursor: pointer;
-  list-style: none;
+.preview-disclaimer-footer {
+  border-top: 1px solid var(--k-line);
+  padding-top: 10px;
 }
 
-.payload-panel summary.field-label::-webkit-details-marker {
-  display: none;
-}
-
-.payload-panel summary.field-label::before {
-  content: "› ";
-  color: var(--verify);
-}
-
-pre {
-  max-height: 280px;
-  margin: 12px 0 0;
+/* ReviewDecision payload — deliberately the deepest, last thing in the audit details. */
+.reference-details pre,
+pre[data-testid="decision-payload"] {
+  margin: 8px 0 0;
+  max-height: 260px;
   overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--ink-1000);
-  padding: 11px;
-  color: color-mix(in srgb, var(--k-positive) 80%, var(--k-text));
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  padding: 10px;
+  border: 1px solid var(--k-line);
+  border-radius: var(--k-radius-sm);
+  background: var(--k-bg);
+  color: var(--k-muted);
+  font-family: var(--k-font-mono);
   font-size: 11px;
-  line-height: 1.55;
+  line-height: 1.5;
   white-space: pre-wrap;
-  word-break: break-word;
 }
 
-/* ---- Motion ----------------------------------------------------------- */
+.caption {
+  text-align: center;
+  margin-top: 24px;
+  font-size: 12.5px;
+  color: var(--k-faint);
+}
 
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
+/* ---------- responsive ----------
+   The workbench sets `container-type: inline-size`, so these breakpoints fire on
+   the component's own width — correct whether it renders full-bleed on a phone or
+   in a narrow column on a wide desktop. Mobile is the primary context, so tap
+   targets stay comfortable and nothing forces a horizontal scroll. */
+
+@container (max-width: 620px) {
+  .workbench {
+    padding: 16px 12px 56px;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+
+  .fbody {
+    padding: 16px 15px 18px;
+  }
+
+  .rhead {
+    padding: 16px;
+  }
+
+  .foot {
+    padding: 14px 15px;
+  }
+
+  .rhead h1 {
+    font-size: 19px;
+  }
+
+  /* current → proposed stack vertically; the arrow rotates to point down. */
+  .diff {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .diff .arrow {
+    transform: rotate(90deg);
+    justify-self: start;
+    margin: 1px 0;
+  }
+
+  /* Apply spans the header row as an easy thumb target. */
+  .apply {
+    flex: 1;
+    min-height: 44px;
+  }
+}
+
+@container (max-width: 480px) {
+  /* The two primary actions go full-width and tall so they're the obvious,
+     thumb-friendly call to action; the calibration toggle sits below them. */
+  .decide {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .btn {
+    width: 100%;
+    min-height: 46px;
+    font-size: 15px;
+  }
+
+  .wrong {
+    order: 0;
+    margin-right: 0;
+    justify-content: flex-start;
+    min-height: 44px;
+  }
+
+  .frow1 {
+    gap: 8px;
+  }
+}
+
+/* The diff-collapse must also hold in host contexts without a query container
+   (e.g. an embed that doesn't establish `container-type`): fall back to viewport. */
+@media (max-width: 620px) {
+  .diff {
+    grid-template-columns: 1fr;
+  }
+
+  .diff .arrow {
+    transform: rotate(90deg);
+    justify-self: start;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   * {
-    animation: none !important;
     transition: none !important;
-  }
-}
-
-/* ---- Responsive ------------------------------------------------------- */
-
-@media (max-width: 980px) {
-  .topbar,
-  .focus-evidence,
-  .candidate-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .content-grid {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      "focus"
-      "decision"
-      "candidates";
-  }
-
-  .queue-layout {
-    display: block;
-    position: relative;
-  }
-
-  .active-review-strip {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 12px;
-    align-items: center;
-    border: 1px solid var(--line-strong);
-    border-left: 3px solid var(--accent);
-    border-radius: var(--radius);
-    padding: 13px 14px;
-    background:
-      linear-gradient(90deg, color-mix(in srgb, var(--k-brand) 12%, transparent), transparent 46%),
-      linear-gradient(180deg, var(--ink-800), var(--ink-850));
-    box-shadow: var(--k-shadow, 0 18px 44px -36px rgba(0, 0, 0, 0.9));
-  }
-
-  .active-review-copy,
-  .active-review-actions,
-  .active-review-decisions {
-    min-width: 0;
-  }
-
-  .active-review-copy {
-    display: grid;
-    gap: 4px;
-  }
-
-  .active-review-copy strong {
-    overflow-wrap: anywhere;
-    color: var(--paper);
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
-    font-size: 13px;
-  }
-
-  .active-review-copy span:last-child {
-    overflow-wrap: anywhere;
-    color: var(--paper-dim);
-    font-size: 13px;
-  }
-
-  .active-review-actions {
-    display: grid;
-    gap: 8px;
-    justify-items: end;
-  }
-
-  .active-review-decisions {
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-  }
-
-  .active-review-decisions .decision-button {
-    min-height: 38px;
-    padding: 7px 8px;
-    font-size: 11px;
-  }
-
-  .queue-drawer-backdrop {
-    display: block;
-  }
-
-  .queue-drawer-close {
-    display: flex;
-  }
-
-  .mobile-queue-bar {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 12px;
-    align-items: center;
-    border: 1px solid var(--line-strong);
-    border-left: 3px solid var(--accent);
-    border-radius: var(--radius);
-    padding: 11px 14px;
-    margin-bottom: 14px;
-    background:
-      linear-gradient(90deg, color-mix(in srgb, var(--k-brand) 8%, transparent), transparent 46%),
-      linear-gradient(180deg, var(--ink-800), var(--ink-850));
-    animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
-  }
-
-  .mobile-queue-progress {
-    display: grid;
-    gap: 3px;
-    min-width: 0;
-  }
-
-  .mobile-queue-item-label {
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--paper);
-    overflow-wrap: anywhere;
-    word-break: break-word;
-  }
-
-  .mobile-queue-open {
-    flex-shrink: 0;
-    min-height: 34px;
-    padding: 0 14px;
-    border: 1px solid var(--line-strong);
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--k-brand) 8%, transparent);
-    color: var(--accent);
-    cursor: pointer;
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    transition: background 0.16s ease, border-color 0.16s ease;
-  }
-
-  .mobile-queue-open:hover {
-    background: color-mix(in srgb, var(--k-brand) 16%, transparent);
-    border-color: var(--accent);
-  }
-
-  /* Higher specificity than the @container stacked-layout fallback below:
-     on a narrow viewport the drawer must win even inside a narrow container. */
-  .queue-layout .queue-panel {
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: min(320px, 90vw);
-    z-index: 50;
-    overflow-y: auto;
-    overflow-x: hidden;
-    transform: translateX(-105%);
-    transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
-    border-radius: 0 var(--radius) var(--radius) 0;
-    padding-top: 50px;
-  }
-
-  .queue-layout .queue-panel.is-open {
-    transform: translateX(0);
-  }
-
-  .content-grid {
-    grid-area: content;
-  }
-
-  .candidate-grid::before {
-    display: none;
-  }
-
-  .content-grid,
-  .review-main,
-  .candidate-grid,
-  .decision-column {
-    min-width: 0;
-  }
-
-  .meta-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .candidate-card {
-    min-height: auto;
-  }
-}
-
-@container (max-width: 1100px) {
-  .topbar,
-  .queue-layout,
-  .focus-evidence {
-    grid-template-columns: 1fr;
-  }
-
-  .queue-layout {
-    grid-template-areas:
-      "content"
-      "queue";
-  }
-
-  .queue-panel {
-    grid-area: queue;
-    position: static;
-  }
-
-  .content-grid {
-    grid-area: content;
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      "focus"
-      "decision"
-      "candidates";
-  }
-
-  .content-grid,
-  .review-main,
-  .candidate-grid,
-  .decision-column {
-    min-width: 0;
-  }
-}
-
-@container (max-width: 860px) {
-  .candidate-grid,
-  .focus-values,
-  .preview-section-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .candidate-grid::before {
-    display: none;
-  }
-
-  .candidate-card {
-    min-height: auto;
-  }
-}
-
-@container (max-width: 620px) {
-  .topbar .meta-grid {
-    display: none;
-  }
-
-  .decision-buttons,
-  .summary-grid,
-  .audit-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 560px) {
-  .workbench {
-    padding: 14px 10px 36px;
-  }
-
-  .workbench-shell {
-    gap: 14px;
-  }
-
-  .topbar,
-  .active-review-strip,
-  .queue-list,
-  .session-summary,
-  .session-audit,
-  .candidate-card,
-  .decision-row,
-  .payload-panel,
-  .surface-preview {
-    border-radius: 10px;
-    padding: 14px;
-  }
-
-  .topbar {
-    gap: 14px;
-  }
-
-  .topbar .meta-grid {
-    display: none;
-  }
-
-  .active-review-strip {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  .active-review-actions {
-    grid-template-columns: minmax(0, 1fr);
-    justify-items: stretch;
-  }
-
-  .active-review-actions .state-label {
-    justify-self: start;
-  }
-
-  .review-question {
-    font-size: 13px;
-  }
-
-  h1 {
-    font-size: 25px;
-    line-height: 1.08;
-  }
-
-  .summary-grid,
-  .focus-values,
-  .decision-buttons {
-    grid-template-columns: 1fr;
-  }
-
-  .queue-head,
-  .queue-row,
-  .surface-head,
-  .card-head {
-    display: grid;
-    grid-template-columns: 1fr;
-  }
-
-  .queue-head {
-    align-items: stretch;
-  }
-
-  .next-button {
-    width: 100%;
-  }
-
-  .queue-row {
-    justify-items: start;
-  }
-
-  .state-label {
-    min-width: 0;
-    max-width: 100%;
-    justify-self: start;
-    white-space: normal;
-  }
-
-  .role {
-    font-size: 19px;
-  }
-
-  .review-focus {
-    border-radius: 10px;
-    padding: 14px;
-  }
-
-  .focus-head {
-    grid-template-columns: 1fr;
-  }
-
-  .focus-value strong {
-    font-size: clamp(16px, 5cqi, 22px);
-  }
-
-  .candidate-value .field-value {
-    font-size: clamp(15px, 4.5cqi, 20px);
-    line-height: 1.12;
-  }
-
-  .candidate-card .field-stack .field-value,
-  .compact .field-value,
-  pre {
-    font-size: 11.5px;
-  }
-
-  .field-label,
-  .eyebrow {
-    letter-spacing: 0.09em;
-  }
-
-  .decision-button {
-    min-height: 44px;
-  }
-
-  pre {
-    max-height: 360px;
-    padding: 11px;
-  }
-}
-
-/* ---- Type legibility: serif → UI sans below 480px -------------------- */
-/* At small container sizes the Fraunces display font reads poorly; fall back
-   to the UI sans-serif stack for headings while keeping serif on desktop. */
-@media (max-width: 480px) {
-  h1,
-  h2,
-  h3,
-  .role,
-  .surface-summary-label,
-  .queue-head h2,
-  .session-summary h2,
-  .session-audit h2,
-  .surface-head h2,
-  .summary-grid .meta-value {
-    font-family: var(--k-font-ui, "Hanken Grotesk", system-ui, sans-serif);
-    letter-spacing: -0.01em;
-  }
-}
-
-@container (max-width: 480px) {
-  h1,
-  h2,
-  h3,
-  .role,
-  .surface-summary-label,
-  .queue-head h2,
-  .session-summary h2,
-  .session-audit h2,
-  .surface-head h2,
-  .summary-grid .meta-value {
-    font-family: var(--k-font-ui, "Hanken Grotesk", system-ui, sans-serif);
-    letter-spacing: -0.01em;
-  }
-}
-
-@media (max-width: 420px) {
-  h1 {
-    font-size: 23px;
-    line-height: 1.1;
-  }
-
-  .topbar {
-    padding: 12px;
-  }
-
-  .topbar .meta-grid {
-    gap: 8px;
-  }
-
-  .topbar .meta-item {
-    padding: 9px 10px;
-  }
-
-  .candidate-card .field-stack .field-value,
-  .compact .field-value {
-    display: block;
-    text-align: left;
-  }
-
-  .decision-buttons {
-    gap: 8px;
-  }
-
-  .decision-button {
-    min-height: 40px;
-    padding: 8px 10px;
-    font-size: 12px;
-  }
-
-  .candidate-card .field-stack > .field:nth-child(5) .field-value {
-    display: inline-block;
-  }
-}
-
-@media (max-width: 360px) {
-  .workbench {
-    padding-inline: 8px;
-  }
-
-  .topbar,
-  .active-review-strip,
-  .queue-list,
-  .session-summary,
-  .session-audit,
-  .review-focus,
-  .candidate-card,
-  .decision-row,
-  .payload-panel,
-  .surface-preview {
-    padding: 12px;
-  }
-
-  h1 {
-    font-size: 20px;
-  }
-
-  .review-question {
-    font-size: 12px;
-    line-height: 1.35;
-  }
-
-  .topbar .meta-grid {
-    display: none;
-  }
-
-  .review-focus {
-    gap: 10px;
-  }
-
-  .focus-value {
-    padding: 10px;
-  }
-
-  .focus-value strong {
-    margin-top: 6px;
-    font-size: 18px;
-    line-height: 1.05;
-  }
-
-  .focus-value span:last-child {
-    margin-top: 6px;
-  }
-
-  .candidate-value .field-value {
-    font-size: 17px;
   }
 }

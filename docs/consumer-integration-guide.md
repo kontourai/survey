@@ -647,35 +647,115 @@ state message.
 CSS custom properties inherit through the shadow boundary. Set any `--k-*` token
 on `survey-review-workbench` or an ancestor to override the shadow defaults.
 The element declares default token values on `:host` so host-page rules always win.
+See the "Theming" section below for the full token list and a worked example.
 
-| Token | Default | Role |
-|---|---|---|
-| `--k-bg` | `#060a10` | Shell background |
-| `--k-panel` | `#101822` | Panel background |
-| `--k-panel-raised` | `#161e2b` | Raised panel layer |
-| `--k-text` | `#e8eaf0` | Primary text |
-| `--k-text-muted` | `#8b93a8` | Secondary text |
-| `--k-text-faint` | `#4e5870` | Tertiary / label text |
-| `--k-line` | `rgba(255,255,255,0.08)` | Subtle borders |
-| `--k-line-strong` | `rgba(255,255,255,0.14)` | Visible borders |
-| `--k-brand` | `#5ce0c6` | Accent / brand colour |
-| `--k-active` | `#7aa2ff` | Proposed-candidate highlight |
-| `--k-positive` | `#34d399` | Accept / verified indicator |
-| `--k-caution` | `#f3b14b` | Escalate / hold indicator |
-| `--k-negative` | `#ff6f6f` | Reject indicator |
-| `--k-radius-md` | `10px` | Panel border radius |
-| `--k-radius-sm` | `6px` | Inner element radius |
-| `--k-font-ui` | `"Hanken Grotesk", system-ui, sans-serif` | UI typeface |
+**Responsive layout**
 
-When using `@kontourai/ui` tokens, those values flow through automatically.
+At viewports ≤ 620 px (or when the embed container width is that narrow), each
+field card's Current → Proposed diff stacks vertically instead of side by side,
+and the decision row wraps. There is no separate mobile mode to opt into — the
+same markup and CSS handle every width via `@media`/container queries.
 
-**Mobile drawer**
+## Theming
 
-At viewports ≤ 980 px (or when the embed container width is ≤ 980 px), the queue
-panel becomes a slide-in drawer. A compact progress bar at the top of the workbench
-shows "Queue · N of M resolved" and the current item label with a "Queue" button
-that opens the drawer. The drawer closes on item selection, backdrop tap, or Escape.
-Focus is moved into the drawer on open and returned to the open button on close.
+The review workbench (both `mountReviewWorkbench` into a plain element and the
+`<survey-review-workbench>` custom element) is themed entirely through `--k-*`
+CSS custom properties. A host app can re-skin the whole surface — backgrounds,
+text, borders, the brand accent, and the accept/keep/reject signal colors —
+by overriding tokens; no markup or class-name changes are needed.
+
+**The full token set**
+
+| Token | Role |
+|---|---|
+| `--k-bg` | Page/shell background |
+| `--k-panel` | Card/panel background |
+| `--k-panel-raised` (alias `--k-raised`) | Raised panel layer (the proposed-value box) |
+| `--k-sunken` | Recessed well background (provenance box, audit details) |
+| `--k-text` | Primary text |
+| `--k-text-muted` (alias `--k-muted`) | Secondary text |
+| `--k-text-faint` (alias `--k-faint`) | Tertiary / label text |
+| `--k-line` | Subtle borders |
+| `--k-line-strong` | Visible borders |
+| `--k-brand` | Accent / brand colour (Apply button, "Needs review" chip, links) |
+| `--k-brand-contrast` (alias `--k-brand-ink`) | Text color on a brand-colored background |
+| `--k-brand-wash` | Brand tint wash (behind the "Needs review" chip) |
+| `--k-positive` | Accept / verified indicator |
+| `--k-positive-wash` | Tint wash behind the "Accepted" chip |
+| `--k-caution` | Escalate / low-confidence / no-source indicator |
+| `--k-caution-wash` | Tint wash behind the "No source" flag |
+| `--k-negative` | Reject / flagged-wrong indicator |
+| `--k-negative-wash` | Tint wash behind the "Kept — flagged wrong" chip |
+| `--k-radius-md` (alias `--k-radius`) | Card/panel border radius |
+| `--k-radius-sm` | Inner element radius (buttons, wells) |
+| `--k-shadow` | Card drop shadow |
+| `--k-font-ui` | UI typeface |
+| `--k-font-mono` | Monospace typeface (confidence %, audit IDs) |
+
+The `--k-muted`/`--k-faint`/`--k-raised`/`--k-brand-ink`/`--k-*-wash`/`--k-radius`
+aliases are declared as `var()` references onto the base token they derive
+from (e.g. `--k-muted: var(--k-text-muted)`), so overriding the base token a
+host already knows re-skins the alias automatically — and a host can still
+override an alias directly for finer-grained control without touching the
+base token.
+
+**Preset themes vs. a host's own brand**
+
+Four built-in presets ship in `@kontourai/ui`'s `themes.css` and are selected
+with the `theme` attribute/class: `survey`, `console`, `flow`, `surface`. Each
+sets its own `--k-brand` (and `theme-console` swaps the full palette and
+typeface). These are conveniences, not the only path to a themed workbench.
+
+**The escape hatch — a host's own full palette, no preset required**
+
+Pass `theme="custom"` on the custom element (or omit `theme`/any of the four
+preset names when mounting the plain `.survey-workbench-embed` container) to
+opt out of the presets entirely, then set `--k-*` tokens directly — either as
+inline styles or in the host's own stylesheet. Because none of the preset
+classes apply, there is nothing to override or fight:
+
+```html
+<style>
+  /* A host's own brand palette — set on the element or any ancestor. */
+  survey-review-workbench.acme-brand {
+    --k-bg: #faf7f3;
+    --k-panel: #ffffff;
+    --k-panel-raised: #fffcf8;
+    --k-sunken: #f3ede4;
+    --k-text: #241a12;
+    --k-text-muted: #6b5b4b;
+    --k-text-faint: #9a8974;
+    --k-line: #ebe2d6;
+    --k-line-strong: #d8cbb8;
+    --k-brand: #c2521e;
+    --k-brand-contrast: #ffffff;
+    --k-positive: #2f7d32;
+    --k-caution: #a9660a;
+    --k-negative: #c13a31;
+  }
+  @media (prefers-color-scheme: dark) {
+    survey-review-workbench.acme-brand {
+      --k-bg: #17120d;
+      --k-panel: #211a13;
+      --k-panel-raised: #281f16;
+      --k-sunken: #120e09;
+      --k-text: #f1e7da;
+      --k-text-muted: #b6a48f;
+      --k-text-faint: #7c6c58;
+      --k-line: #2e2419;
+      --k-line-strong: #40331f;
+      --k-brand: #e8823f;
+      --k-brand-contrast: #1c0f06;
+    }
+  }
+</style>
+<survey-review-workbench class="acme-brand" theme="custom" color-scheme="dark">
+</survey-review-workbench>
+```
+
+The same layout, class names, and interactions render — only the tokens
+change. This is the same technique the approved redesign mockup uses to prove
+a Survey-default palette and a distinct host palette from one shared markup.
 
 ## Mount The Workbench
 

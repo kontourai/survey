@@ -50,7 +50,16 @@ export interface ExtractionReference {
   extractionId?: string;
   target: string;
   confidence?: number;
+  /** The extraction tool/pipeline that produced this candidate (e.g. a crawler or parser). */
   extractor?: string;
+  /**
+   * The model or model-version that generated this candidate, when the producer
+   * knows it (e.g. an LLM id or a dated extraction-model tag). Distinct from
+   * `extractor` (the tool): a reviewer wants to know *which model* proposed a
+   * value for trust/calibration. Producer-provided provenance; Survey only
+   * carries and displays it.
+   */
+  model?: string;
   extractedAt?: string;
 }
 
@@ -155,6 +164,15 @@ export interface ReviewDecisionSpec {
    *  their own admissible block. */
   authorizing?: ReviewAuthorizing;
   projection?: SurveyRecordProjectionHint;
+  /**
+   * Reviewer-edited override for the proposed candidate's value, captured when the
+   * reviewer edits the inline proposed-value editor before choosing "Use proposed".
+   * Only meaningful when the decision selects the proposed candidate. Downstream
+   * consumers should read the effective value as `editedValue ?? <selected candidate value>`
+   * rather than assuming the candidate's original value was applied verbatim.
+   * Additive/optional: absent means the candidate's original value was used unchanged.
+   */
+  editedValue?: unknown;
 }
 
 export interface ReviewDecisionStatus {

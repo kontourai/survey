@@ -284,7 +284,7 @@ function landingContent(): string {
 
 <section class="showcase">
   <h2>The Review Workbench</h2>
-  <p>A example-backed queue rendered by the embeddable workbench: current vs proposed values, source refs and excerpts, decision effect, and the Surface projection preview.</p>
+  <p>A example-backed queue rendered by the embeddable workbench: current vs proposed values, source refs and excerpts, decision effect, and a preview of the saved record.</p>
   <p><a class="button primary" href="demo/">Open the live demo</a></p>
   <img src="assets/review-workbench-desktop.png" alt="Survey Review Workbench showing a review queue, current versus proposed values, decision controls, and a Surface preview" loading="lazy">
 </section>

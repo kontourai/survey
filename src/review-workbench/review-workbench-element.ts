@@ -24,7 +24,11 @@
  *   host-page rules always win over the shadow defaults.
  *
  * Attributes:
- *   theme       — "survey" | "console" | "flow" | "surface"  (maps to theme-* class)
+ *   theme       — "survey" | "console" | "flow" | "surface" (maps to a theme-* class
+ *                 with its own brand colour) | "custom" (or any other value: no
+ *                 theme-* class at all, so a host's own --k-* overrides apply with
+ *                 nothing to fight — see the "Theming" section of
+ *                 docs/consumer-integration-guide.md for a full host-brand example)
  *   color-scheme — "dark" | "light"  (default: "dark")
  *   src          — URL to fetch a JSON-serialised ReviewQueueSessionState
  */
@@ -69,20 +73,41 @@ const TOKEN_INHERIT_CSS = `/* 1. Host token defaults — literal values, not var
   --k-line: rgba(255,255,255,0.08);
   --k-line-strong: rgba(255,255,255,0.14);
   --k-brand: #5ce0c6;
+  --k-brand-contrast: #06080b;
   --k-active: #7aa2ff;
   --k-positive: #34d399;
   --k-caution: #f3b14b;
   --k-negative: #ff6f6f;
   --k-neutral: #8b93a8;
+  --k-positive-soft: rgba(52,211,153,0.14);
+  --k-caution-soft: rgba(243,177,75,0.14);
+  --k-negative-soft: rgba(255,111,111,0.14);
+  --k-active-soft: rgba(122,162,255,0.14);
   --k-radius-md: 10px;
   --k-radius-sm: 6px;
+  --k-shadow: 0 26px 60px -42px rgba(0, 0, 0, 0.95);
   --k-font-ui: "Hanken Grotesk", system-ui, sans-serif;
+  /* Field-diff card aliases (Theming section of docs/consumer-integration-guide.md).
+     Derived from the tokens above by default; a host may override any of these
+     directly for finer control without touching the base token it derives from. */
+  --k-muted: var(--k-text-muted);
+  --k-faint: var(--k-text-faint);
+  --k-raised: var(--k-panel-raised);
+  --k-sunken: color-mix(in srgb, var(--k-bg) 55%, var(--k-panel) 45%);
+  --k-brand-ink: var(--k-brand-contrast);
+  --k-brand-wash: color-mix(in srgb, var(--k-brand) 14%, transparent);
+  --k-positive-wash: var(--k-positive-soft);
+  --k-caution-wash: var(--k-caution-soft);
+  --k-negative-wash: var(--k-negative-soft);
+  --k-radius: var(--k-radius-md);
 }
 /* 2. Token inheritance delegation — re-delegate --k-* tokens on the embed root
    to inherit from :host, so external overrides set on the host element propagate
    through the shadow boundary. The [class] attribute selector raises specificity
    to (0,2,0) — matching the theme class selectors — and this sheet comes AFTER
-   the workbench defaults, so source order makes these rules win. */
+   the workbench defaults, so source order makes these rules win. Every token the
+   workbench CSS reads is listed here so a host can override ANY of them (the full
+   --k-* set, not just a fixed subset) without forking styles or picking a preset. */
 .survey-workbench-embed[class] {
   --k-bg: inherit;
   --k-panel: inherit;
@@ -93,16 +118,32 @@ const TOKEN_INHERIT_CSS = `/* 1. Host token defaults — literal values, not var
   --k-line: inherit;
   --k-line-strong: inherit;
   --k-brand: inherit;
+  --k-brand-contrast: inherit;
   --k-active: inherit;
   --k-positive: inherit;
   --k-caution: inherit;
   --k-negative: inherit;
   --k-neutral: inherit;
+  --k-positive-soft: inherit;
+  --k-caution-soft: inherit;
+  --k-negative-soft: inherit;
+  --k-active-soft: inherit;
   --k-radius-md: inherit;
   --k-radius-sm: inherit;
+  --k-shadow: inherit;
   --k-font-ui: inherit;
   --k-font-mono: inherit;
   --k-font-display: inherit;
+  --k-muted: inherit;
+  --k-faint: inherit;
+  --k-raised: inherit;
+  --k-sunken: inherit;
+  --k-brand-ink: inherit;
+  --k-brand-wash: inherit;
+  --k-positive-wash: inherit;
+  --k-caution-wash: inherit;
+  --k-negative-wash: inherit;
+  --k-radius: inherit;
 }
 /* 3. Light mode token overrides — applied when color-scheme="light" sets data-theme="light"
    on the embed root. These are literal values (not var()) to avoid self-reference cycles.
@@ -120,11 +161,17 @@ const TOKEN_INHERIT_CSS = `/* 1. Host token defaults — literal values, not var
   --k-text-muted: #5b626b;
   --k-text-faint: #707782;
   --k-brand: #16806f;
+  --k-brand-contrast: #ffffff;
   --k-positive: #168257;
   --k-caution: #8a5a00;
   --k-negative: #c83b3b;
   --k-active: #3f6fd6;
 }`;
+
+/** The four built-in theme presets from vendor kontourai-ui/tokens/themes.css. Any
+ *  other `theme` attribute value (including the documented `"custom"`) opts out of
+ *  presets entirely — see {@link SurveyReviewWorkbenchElement.#applyThemeClasses}. */
+const KNOWN_WORKBENCH_THEMES = new Set(["survey", "console", "flow", "surface"]);
 
 export class SurveyReviewWorkbenchElement extends HTMLElement {
   static readonly observedAttributes = ["theme", "color-scheme", "src"];
@@ -170,13 +217,28 @@ export class SurveyReviewWorkbenchElement extends HTMLElement {
         --k-line: rgba(255,255,255,0.08);
         --k-line-strong: rgba(255,255,255,0.14);
         --k-brand: #5ce0c6;
+        --k-brand-contrast: #06080b;
         --k-active: #7aa2ff;
         --k-positive: #34d399;
         --k-caution: #f3b14b;
         --k-negative: #ff6f6f;
+        --k-positive-soft: rgba(52,211,153,0.14);
+        --k-caution-soft: rgba(243,177,75,0.14);
+        --k-negative-soft: rgba(255,111,111,0.14);
         --k-radius-md: 10px;
         --k-radius-sm: 6px;
+        --k-shadow: 0 26px 60px -42px rgba(0, 0, 0, 0.95);
         --k-font-ui: "Hanken Grotesk", system-ui, sans-serif;
+        --k-muted: var(--k-text-muted);
+        --k-faint: var(--k-text-faint);
+        --k-raised: var(--k-panel-raised);
+        --k-sunken: color-mix(in srgb, var(--k-bg) 55%, var(--k-panel) 45%);
+        --k-brand-ink: var(--k-brand-contrast);
+        --k-brand-wash: color-mix(in srgb, var(--k-brand) 14%, transparent);
+        --k-positive-wash: var(--k-positive-soft);
+        --k-caution-wash: var(--k-caution-soft);
+        --k-negative-wash: var(--k-negative-soft);
+        --k-radius: var(--k-radius-md);
       }
       .workbench-empty, .workbench-error {
         display: flex;
@@ -207,15 +269,30 @@ export class SurveyReviewWorkbenchElement extends HTMLElement {
         --k-line: inherit;
         --k-line-strong: inherit;
         --k-brand: inherit;
+        --k-brand-contrast: inherit;
         --k-active: inherit;
         --k-positive: inherit;
         --k-caution: inherit;
         --k-negative: inherit;
+        --k-positive-soft: inherit;
+        --k-caution-soft: inherit;
+        --k-negative-soft: inherit;
         --k-radius-md: inherit;
         --k-radius-sm: inherit;
+        --k-shadow: inherit;
         --k-font-ui: inherit;
         --k-font-mono: inherit;
         --k-font-display: inherit;
+        --k-muted: inherit;
+        --k-faint: inherit;
+        --k-raised: inherit;
+        --k-sunken: inherit;
+        --k-brand-ink: inherit;
+        --k-brand-wash: inherit;
+        --k-positive-wash: inherit;
+        --k-caution-wash: inherit;
+        --k-negative-wash: inherit;
+        --k-radius: inherit;
       }
     `;
     this.#root.appendChild(hostStyle);
@@ -287,7 +364,14 @@ export class SurveyReviewWorkbenchElement extends HTMLElement {
   #applyThemeClasses(): void {
     const theme = this.getAttribute("theme") ?? "survey";
     const colorScheme = this.getAttribute("color-scheme") ?? "dark";
-    this.#mountRoot.className = `workbench survey-workbench-embed theme-${theme}`;
+    // Only the four built-in presets get a `theme-*` class (see vendor
+    // kontourai-ui/tokens/themes.css). `theme="custom"` — or any other value that
+    // isn't one of the four presets — deliberately gets NO theme class, so none of
+    // the presets' brand-colour overrides apply. This is the escape hatch for a
+    // host that wants to set its own full `--k-*` palette (see the "Theming"
+    // section of docs/consumer-integration-guide.md) without fighting a preset.
+    const themeClass = KNOWN_WORKBENCH_THEMES.has(theme) ? ` theme-${theme}` : "";
+    this.#mountRoot.className = `workbench survey-workbench-embed${themeClass}`;
     this.#mountRoot.setAttribute("data-color-scheme", colorScheme);
     // data-theme="light" is required by the token sheet for light mode token overrides.
     // data-dark is kept for any existing selectors that used it.

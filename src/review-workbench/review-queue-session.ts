@@ -21,6 +21,12 @@ export interface ReviewWorkbenchState {
   readonly decision?: ReviewWorkbenchDecision;
   readonly reviewedAt: string;
   readonly actorId: string;
+  /**
+   * Reviewer-edited override for the item's proposed value (inline edit in the
+   * field-diff card). Additive/optional: undefined means no edit was made and the
+   * proposed candidate's original value applies.
+   */
+  readonly editedValue?: unknown;
 }
 
 export interface ReviewQueueSessionState {
@@ -30,6 +36,13 @@ export interface ReviewQueueSessionState {
   readonly decisionsByItemName: Readonly<Record<string, ReviewWorkbenchDecision>>;
   readonly reviewedAt: string;
   readonly actorId: string;
+  /**
+   * Reviewer-edited overrides for proposed values, keyed by ReviewItem name.
+   * Additive/optional: a session built before this field existed behaves exactly
+   * as before (every lookup resolves to undefined, meaning "use the candidate's
+   * original value").
+   */
+  readonly editedValuesByItemName?: Readonly<Record<string, unknown>>;
 }
 
 export interface ReviewSessionSummary {
@@ -86,6 +99,7 @@ export function initialReviewQueueSessionState(
     activeItemName: items[0]?.metadata.name ?? "",
     notesByItemName: {},
     decisionsByItemName: {},
+    editedValuesByItemName: {},
     reviewedAt: "2026-06-04T00:00:00.000Z",
     actorId: "review-workbench-operator",
   };
@@ -98,6 +112,7 @@ export function currentReviewWorkbenchState(session: ReviewQueueSessionState): R
     item,
     note: session.notesByItemName[item.metadata.name] ?? "",
     decision: session.decisionsByItemName[item.metadata.name],
+    editedValue: session.editedValuesByItemName?.[item.metadata.name],
     reviewedAt: session.reviewedAt,
     actorId: session.actorId,
   };
@@ -181,6 +196,23 @@ export function candidateForDecision(item: ReviewItem, decision: ReviewWorkbench
   }
 
   return candidate;
+}
+
+/**
+ * The value that should actually be applied for a decision: the reviewer's inline
+ * edit when one was made for an accept-proposed decision, otherwise the selected
+ * candidate's original value. Consumers reading `ReviewWorkbenchResult` should
+ * prefer `effectiveValue`/`effectiveDisplayValue`, which are already computed with
+ * this rule; this helper exists for callers deriving the value from raw session
+ * state directly.
+ */
+export function effectiveValueForDecision(
+  item: ReviewItem,
+  decision: ReviewWorkbenchDecision,
+  editedValue?: unknown,
+): unknown {
+  const candidate = candidateForDecision(item, decision);
+  return decision === "accept-proposed" && editedValue !== undefined ? editedValue : candidate.value;
 }
 
 export function selectedCandidateRole(state: ReviewWorkbenchState): ReviewCandidate["role"] | undefined {
@@ -328,6 +360,11 @@ export function replayReviewSessionEvents(
 
     if ((event.spec.eventType === "decision-changed" || event.spec.eventType === "decision-submitted")
       && event.spec.reviewItemName) {
+      if (isClearedWorkbenchDecisionEvent(event)) {
+        const { [event.spec.reviewItemName]: _removed, ...remainingDecisions } = session.decisionsByItemName;
+        return { ...session, decisionsByItemName: remainingDecisions };
+      }
+
       const decision = workbenchDecisionFromEvent(event);
       return decision
         ? {
@@ -342,6 +379,19 @@ export function replayReviewSessionEvents(
 
     return session;
   }, startState);
+}
+
+/**
+ * Detects the explicit "clear this ReviewItem's decision" replay signal (emitted
+ * by the workbench's "Change" / undo control): a decision event whose
+ * `data.workbenchDecision` is the literal `null` sentinel, as opposed to `undefined`
+ * (no decision info present — event is ignored by replay, same as before this
+ * feature existed).
+ */
+export function isClearedWorkbenchDecisionEvent(event: ReviewSessionEvent): boolean {
+  return event.spec.data !== undefined
+    && "workbenchDecision" in event.spec.data
+    && event.spec.data.workbenchDecision === null;
 }
 
 export function buildReviewSessionEvent(
