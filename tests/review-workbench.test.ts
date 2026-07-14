@@ -31,6 +31,7 @@ import {
   replayReviewSessionEventsForSnapshot,
   ReviewApplyActionMappingError,
   reviewSessionSummary,
+  validateProposedValue,
   validateReviewSessionEventsForSnapshot,
   type ReviewPresentationAdapter,
   type ReviewWorkbenchDecision,
@@ -1325,6 +1326,128 @@ describe("review workbench prototype", () => {
     assert.doesNotMatch(root.field(itemName).payloadText, /"editedValue"/);
   });
 
+  describe("typed proposed-value editors (ReviewValueDescriptor)", () => {
+    const withDescriptor = (
+      item: ReviewItem,
+      valueDescriptor: ReviewItem["spec"]["valueDescriptor"],
+    ): ReviewItem => ({ ...item, spec: { ...item.spec, valueDescriptor } });
+
+    it("renders a plain text input and 'editable' hint when no descriptor is present", () => {
+      const html = renderReviewWorkbenchHtml(initialReviewWorkbenchState());
+      assert.match(html, /<input\s+type="text"[^>]*data-testid="edit-proposed-value"/);
+      assert.match(html, /class="ehint">editable</);
+    });
+
+    it("always renders a hidden value-error slot", () => {
+      const html = renderReviewWorkbenchHtml(initialReviewWorkbenchState());
+      assert.match(html, /data-testid="value-error"[^>]*hidden/);
+    });
+
+    it("renders a <select> of the declared enum values", () => {
+      const item = withDescriptor(publicDirectoryReviewItemExample, {
+        type: "enum",
+        enumValues: ["open", "waitlist", "closed"],
+      });
+      const html = renderReviewWorkbenchHtml(initialReviewWorkbenchState(item));
+      assert.match(html, /<select[^>]*data-testid="edit-proposed-value"/);
+      for (const opt of ["open", "waitlist", "closed"]) {
+        assert.match(html, new RegExp(`<option value="${opt}"`));
+      }
+      assert.match(html, /class="ehint">choose one</);
+    });
+
+    it("renders a date input for a date field", () => {
+      const item = withDescriptor(publicDirectoryReviewItemExample, { type: "date" });
+      const html = renderReviewWorkbenchHtml(initialReviewWorkbenchState(item));
+      assert.match(html, /<input\s+type="date"[^>]*data-testid="edit-proposed-value"/);
+    });
+
+    it("renders a number input for a number field", () => {
+      const item = withDescriptor(publicDirectoryReviewItemExample, { type: "number" });
+      const html = renderReviewWorkbenchHtml(initialReviewWorkbenchState(item));
+      assert.match(html, /<input\s+type="number"[^>]*data-testid="edit-proposed-value"/);
+    });
+
+    it("renders a true/false select for a boolean field", () => {
+      const item = withDescriptor(publicDirectoryReviewItemExample, { type: "boolean" });
+      const html = renderReviewWorkbenchHtml(initialReviewWorkbenchState(item));
+      assert.match(html, /<select[^>]*data-testid="edit-proposed-value"/);
+      assert.match(html, /<option value="true"/);
+      assert.match(html, /<option value="false"/);
+    });
+
+    it("blocks Use proposed on a value that violates the typed descriptor and surfaces the reason", () => {
+      // reviewWorkbenchQueueExamples[0] ("public-directory-hours") is a genuinely
+      // undecided "needs-review" item, so it starts in the editable review state.
+      const item = withDescriptor(reviewWorkbenchQueueExamples[0]!, { type: "number" });
+      const itemName = item.metadata.name;
+      const root = new ReviewWorkbenchTestRoot();
+      mountReviewWorkbench(root as unknown as HTMLElement, initialReviewQueueSessionState([item]));
+
+      const field = root.field(itemName);
+      field.editInput!.value = "not-a-number";
+      field.useButton.click();
+
+      // The decision is refused — the field is still in the undecided review state,
+      // never accepted — and the inline error is revealed rather than a bad value
+      // being persisted.
+      assert.match(root.html, new RegExp(`data-item-name="${itemName}"[\\s\\S]*?data-state="review"`));
+      assert.doesNotMatch(root.html, /data-state="accepted"/);
+      assert.equal(field.valueError.hidden, false);
+      assert.match(field.valueError.textContent, /not a number/);
+    });
+
+    it("accepts a value that satisfies the typed descriptor", () => {
+      const item = withDescriptor(reviewWorkbenchQueueExamples[0]!, { type: "number" });
+      const itemName = item.metadata.name;
+      const root = new ReviewWorkbenchTestRoot();
+      mountReviewWorkbench(root as unknown as HTMLElement, initialReviewQueueSessionState([item]));
+
+      const field = root.field(itemName);
+      field.editInput!.value = "42";
+      field.useButton.click();
+
+      assert.match(root.html, new RegExp(`data-item-name="${itemName}"[\\s\\S]*?data-state="accepted"`));
+      assert.match(root.field(itemName).payloadText, /"editedValue": "42"/);
+    });
+  });
+
+  describe("validateProposedValue", () => {
+    it("returns undefined when there is no descriptor", () => {
+      assert.equal(validateProposedValue(undefined, "anything"), undefined);
+    });
+
+    it("accepts finite numbers and rejects non-numeric / empty for type number", () => {
+      assert.equal(validateProposedValue({ type: "number" }, "42"), undefined);
+      assert.equal(validateProposedValue({ type: "number" }, "3.14"), undefined);
+      assert.match(validateProposedValue({ type: "number" }, "abc") ?? "", /not a number/);
+      assert.match(validateProposedValue({ type: "number" }, "  ") ?? "", /Enter a number/);
+    });
+
+    it("accepts only true/false for type boolean", () => {
+      assert.equal(validateProposedValue({ type: "boolean" }, "true"), undefined);
+      assert.equal(validateProposedValue({ type: "boolean" }, "false"), undefined);
+      assert.match(validateProposedValue({ type: "boolean" }, "yes") ?? "", /true or false/);
+    });
+
+    it("accepts an ISO calendar date and rejects other shapes for type date", () => {
+      assert.equal(validateProposedValue({ type: "date" }, "2026-03-03"), undefined);
+      assert.match(validateProposedValue({ type: "date" }, "March 3") ?? "", /valid date/);
+      assert.match(validateProposedValue({ type: "date" }, "2026-13-40") ?? "", /valid date/);
+    });
+
+    it("enforces the declared enum set, and enforces nothing when the set is empty", () => {
+      const descriptor = { type: "enum" as const, enumValues: ["a", "b"] };
+      assert.equal(validateProposedValue(descriptor, "a"), undefined);
+      assert.match(validateProposedValue(descriptor, "c") ?? "", /Choose one of: a, b/);
+      assert.equal(validateProposedValue({ type: "enum", enumValues: [] }, "anything"), undefined);
+    });
+
+    it("never constrains a free-form string field", () => {
+      assert.equal(validateProposedValue({ type: "string" }, "any text at all"), undefined);
+    });
+  });
+
   it("persists mounted review decisions through a ReviewSessionEvent store and replays them on remount", () => {
     const store = createInMemoryReviewSessionEventStore();
     const firstRoot = new ReviewWorkbenchTestRoot();
@@ -1473,6 +1596,7 @@ class TestFieldScope {
   readonly noteTextarea: TestTextAreaElement;
   readonly wrongbox = new TestCheckboxElement();
   readonly editInput: TestInputElement | null;
+  readonly valueError = new TestValueErrorElement();
   readonly #payload: TestPreElement;
 
   constructor(itemName: string, editValue: string | undefined, noteValue: string, payloadText: string) {
@@ -1491,6 +1615,7 @@ class TestFieldScope {
   querySelector<T>(selector: string): T | null {
     if (selector === "[data-testid='edit-proposed-value']") return this.editInput as T;
     if (selector === "[data-testid='wrong-toggle']") return this.wrongbox as T;
+    if (selector === "[data-testid='value-error']") return this.valueError as T;
     if (selector === "[data-testid='decision-payload']") return this.#payload as T;
     return null;
   }
@@ -1553,6 +1678,12 @@ class TestTextAreaElement {
 
 class TestInputElement {
   constructor(public value: string) {}
+  focus(): void {}
+}
+
+class TestValueErrorElement {
+  hidden = true;
+  textContent = "";
 }
 
 class TestCheckboxElement {

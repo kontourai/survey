@@ -42,6 +42,7 @@ import {
   type ReviewItem,
   type ReviewSession,
   type ReviewSessionEvent,
+  type ReviewValueDescriptor,
 } from "../review-resource.js";
 import { validateAuthorizing, buildAuthorizedActionAuthorizing } from "../review-authorizing.js";
 import { humanizeIdentifier } from "./review-presentation.js";
@@ -989,24 +990,134 @@ function renderDiffRow(
  * from an enum's allowed values, or date/number/boolean inputs — driven by an
  * optional neutral value-type descriptor, without touching the rest of the
  * field-card renderer. Survey deliberately has no value-type/enum system of its
- * own (that belongs to the upstream field-schema owner), so today this always
- * renders a plain text input, matching the approved mockup.
+ * own (that belongs to the upstream field-schema owner) — but a producer MAY
+ * carry a field's declared shape down via the neutral
+ * {@link ReviewValueDescriptor} on the item spec. When present, this renders a
+ * typed control (an enum `<select>`, a date/number input, a true/false select)
+ * and a validation-error slot the mount handler populates before "Use
+ * proposed"; when absent, it renders the plain text input, matching the
+ * approved mockup.
  */
 function renderProposedValueEditor(item: ReviewItem, proposed: ReviewCandidate, targetLabel: string): string {
+  const descriptor = item.spec.valueDescriptor;
   const valueText = formatValue(proposed.value);
-  return `
-    <div class="editrow">
-      <input
-        type="text"
+  const commonAttrs = `
         class="proposed-value-input"
         data-testid="edit-proposed-value"
         data-item-name="${escapeHtml(item.metadata.name)}"
-        value="${escapeHtml(valueText)}"
-        aria-label="Edit proposed ${escapeHtml(targetLabel)}"
-      >
-      <span class="ehint">editable</span>
+        aria-label="Edit proposed ${escapeHtml(targetLabel)}"`;
+  const control = renderTypedProposedControl(descriptor, valueText, commonAttrs);
+  return `
+    <div class="editrow">
+      ${control}
+      <span class="ehint">${escapeHtml(proposedEditorHint(descriptor))}</span>
     </div>
+    <span class="verr" data-testid="value-error" role="alert" hidden></span>
   `;
+}
+
+/**
+ * Picks the concrete input control for the proposed-value editor from the
+ * neutral value-type descriptor. All variants carry the SAME
+ * `data-testid="edit-proposed-value"` and `.value` semantics so the mount
+ * handler reads a reviewer's edit uniformly (both `<input>` and `<select>`
+ * expose `.value`). Falls back to a plain text input when there is no
+ * descriptor, an enum without a declared set, or a free-form type
+ * (string/array/object).
+ */
+function renderTypedProposedControl(
+  descriptor: ReviewValueDescriptor | undefined,
+  valueText: string,
+  commonAttrs: string,
+): string {
+  switch (descriptor?.type) {
+    case "enum": {
+      const allowed = descriptor.enumValues ?? [];
+      if (allowed.length === 0) break;
+      // Keep an out-of-set current value selectable rather than silently
+      // rewriting it — the reviewer sees exactly what was proposed.
+      const leadingOption = allowed.includes(valueText)
+        ? ""
+        : `<option value="${escapeHtml(valueText)}" selected>${escapeHtml(valueText === "" ? "(unset)" : valueText)}</option>`;
+      const options = allowed
+        .map((opt) => `<option value="${escapeHtml(opt)}"${opt === valueText ? " selected" : ""}>${escapeHtml(opt)}</option>`)
+        .join("");
+      return `<select${commonAttrs}>${leadingOption}${options}</select>`;
+    }
+    case "boolean": {
+      const options = ["true", "false"]
+        .map((opt) => `<option value="${opt}"${opt === valueText ? " selected" : ""}>${opt}</option>`)
+        .join("");
+      return `<select${commonAttrs}>${options}</select>`;
+    }
+    case "date":
+      return `<input type="date"${commonAttrs} value="${escapeHtml(toDateInputValue(valueText))}">`;
+    case "number":
+      return `<input type="number" inputmode="decimal"${commonAttrs} value="${escapeHtml(valueText)}">`;
+    default:
+      break;
+  }
+  return `<input type="text"${commonAttrs} value="${escapeHtml(valueText)}">`;
+}
+
+/** The trailing editor hint, keyed to the declared value type. */
+function proposedEditorHint(descriptor: ReviewValueDescriptor | undefined): string {
+  switch (descriptor?.type) {
+    case "enum":
+      return "choose one";
+    case "boolean":
+      return "true / false";
+    case "date":
+      return "date";
+    case "number":
+      return "number";
+    default:
+      return "editable";
+  }
+}
+
+/** Normalizes an arbitrary value string to the `YYYY-MM-DD` an `<input type="date">` accepts. */
+function toDateInputValue(text: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const parsed = Date.parse(text);
+  return Number.isNaN(parsed) ? "" : new Date(parsed).toISOString().slice(0, 10);
+}
+
+/**
+ * Validates a reviewer's raw (string) edit of a proposed value against the
+ * field's neutral {@link ReviewValueDescriptor}, returning a human-readable
+ * error message when the value violates the declared type/enum constraint, or
+ * `undefined` when it is acceptable — including when there is no descriptor or
+ * the type carries no single-line constraint (string/array/object). This is a
+ * FORMAT check only: it never coerces or rewrites the value (the workbench
+ * stores the reviewer's string edit unchanged, as it did before typed editors).
+ */
+export function validateProposedValue(
+  descriptor: ReviewValueDescriptor | undefined,
+  rawValue: string,
+): string | undefined {
+  if (!descriptor) return undefined;
+  const value = rawValue.trim();
+  switch (descriptor.type) {
+    case "number":
+      if (value === "") return "Enter a number.";
+      return Number.isFinite(Number(value)) ? undefined : `"${rawValue}" is not a number.`;
+    case "boolean":
+      if (value === "") return "Choose true or false.";
+      return value === "true" || value === "false" ? undefined : `"${rawValue}" is not true or false.`;
+    case "date":
+      if (value === "") return "Enter a date.";
+      return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value))
+        ? undefined
+        : `"${rawValue}" is not a valid date (YYYY-MM-DD).`;
+    case "enum": {
+      const allowed = descriptor.enumValues ?? [];
+      if (allowed.length === 0) return undefined; // nothing declared to enforce
+      return allowed.includes(value) ? undefined : `Choose one of: ${allowed.join(", ")}.`;
+    }
+    default:
+      return undefined;
+  }
 }
 
 function renderProvenanceRow(
@@ -1480,7 +1591,26 @@ function bindFieldCardInteractions(root: HTMLElement, controller: ReviewWorkbenc
     button.addEventListener("click", () => {
       const itemName = button.dataset.itemName ?? "";
       const field = button.closest<HTMLElement>("[data-testid='review-field']");
-      const input = field?.querySelector<HTMLInputElement>("[data-testid='edit-proposed-value']");
+      const input = field?.querySelector<HTMLInputElement | HTMLSelectElement>("[data-testid='edit-proposed-value']");
+      const descriptor = controller
+        .currentSession()
+        .items.find((entry) => entry.metadata.name === itemName)?.spec.valueDescriptor;
+      const error = validateProposedValue(descriptor, input?.value ?? "");
+      const errorEl = field?.querySelector<HTMLElement>("[data-testid='value-error']");
+      if (error) {
+        // Block the decision and surface the reason inline; the transient DOM
+        // message survives until the next interaction (no re-render on reject).
+        if (errorEl) {
+          errorEl.textContent = error;
+          errorEl.hidden = false;
+        }
+        input?.focus?.();
+        return;
+      }
+      if (errorEl) {
+        errorEl.textContent = "";
+        errorEl.hidden = true;
+      }
       controller.setDecision(itemName, "accept-proposed", input?.value);
       controller.renderCurrentState();
     });

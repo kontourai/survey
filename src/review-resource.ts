@@ -126,6 +126,37 @@ export interface ReviewCandidate {
   producer?: Record<string, unknown>;
 }
 
+/**
+ * Well-known neutral value-type vocabulary for {@link ReviewValueDescriptor}.
+ * Survey defines NO field-schema system of its own; this deliberately MIRRORS
+ * the shape an upstream field-schema owner already uses (e.g. traverse's
+ * `TargetFieldSchema.type` / `ExtractionProposal.valueType`), so a producer can
+ * carry a reviewed field's declared type down to the review UI WITHOUT Survey
+ * importing that owner's package (structural match, zero coupling).
+ */
+export type ReviewValueType =
+  | "string"
+  | "number"
+  | "boolean"
+  | "date"
+  | "enum"
+  | "array"
+  | "object";
+
+/**
+ * Optional, producer-supplied descriptor of a reviewed field's declared value
+ * shape. Purely descriptive: the workbench uses it ONLY to pick a typed editor
+ * (an enum `<select>`, a date/number input) and to validate a reviewer's edit
+ * before "Use proposed". Survey never re-derives, coerces, or overrides a
+ * candidate's value from it — a producer can still surface an out-of-shape
+ * candidate, which is exactly what a typed reviewer catches.
+ */
+export interface ReviewValueDescriptor {
+  type: ReviewValueType;
+  /** Allowed values — meaningful with `type: "enum"`; ignored otherwise. */
+  enumValues?: string[];
+}
+
 export interface ReviewItemSpec {
   target: string;
   candidates: ReviewCandidate[];
@@ -134,6 +165,13 @@ export interface ReviewItemSpec {
   rationale?: string;
   producerPolicy?: ProducerPolicy;
   projection?: SurveyRecordProjectionHint;
+  /**
+   * Optional neutral descriptor of the reviewed field's declared value type.
+   * When present, the workbench renders a typed editor and validates a
+   * reviewer's inline edit against it before accepting the proposed value.
+   * Absent → a plain text editor with no validation (today's behavior).
+   */
+  valueDescriptor?: ReviewValueDescriptor;
 }
 
 export interface ReviewItemStatus {

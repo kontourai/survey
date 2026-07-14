@@ -49,6 +49,8 @@ export type {
   ReviewSessionEventType,
   ReviewSessionSpec,
   ReviewSessionStatus,
+  ReviewValueDescriptor,
+  ReviewValueType,
   SourceReference,
   SurveyRecordProjectionHint,
 } from "./review-resource.js";
