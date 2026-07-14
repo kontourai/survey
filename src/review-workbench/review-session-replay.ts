@@ -1,6 +1,7 @@
 import type { ReviewSessionEvent } from "../review-resource.js";
 import {
   candidateForDecision,
+  isClearedWorkbenchDecisionEvent,
   workbenchDecisionDefinitions,
   type ReviewQueueSessionState,
   type ReviewWorkbenchDecision,
@@ -71,7 +72,11 @@ export function validateReviewSessionEventsForSnapshot(
       });
     }
 
-    if (event.spec.eventType === "decision-changed" || event.spec.eventType === "decision-submitted") {
+    if ((event.spec.eventType === "decision-changed" || event.spec.eventType === "decision-submitted")
+      && isClearedWorkbenchDecisionEvent(event)) {
+      // Explicit "clear this ReviewItem's decision" signal (undo). No candidate/status
+      // expectations apply — the event carries no selected candidate.
+    } else if (event.spec.eventType === "decision-changed" || event.spec.eventType === "decision-submitted") {
       const decision = replayableWorkbenchDecision(event.spec.data?.workbenchDecision);
       if (!decision) {
         issues.push({

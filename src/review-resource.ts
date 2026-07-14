@@ -155,6 +155,15 @@ export interface ReviewDecisionSpec {
    *  their own admissible block. */
   authorizing?: ReviewAuthorizing;
   projection?: SurveyRecordProjectionHint;
+  /**
+   * Reviewer-edited override for the proposed candidate's value, captured when the
+   * reviewer edits the inline proposed-value editor before choosing "Use proposed".
+   * Only meaningful when the decision selects the proposed candidate. Downstream
+   * consumers should read the effective value as `editedValue ?? <selected candidate value>`
+   * rather than assuming the candidate's original value was applied verbatim.
+   * Additive/optional: absent means the candidate's original value was used unchanged.
+   */
+  editedValue?: unknown;
 }
 
 export interface ReviewDecisionStatus {
