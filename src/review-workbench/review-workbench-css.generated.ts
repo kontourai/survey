@@ -1151,7 +1151,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   }
 
   .survey-workbench-embed .wrong{
-    order: 1;
+    order: 0;
     margin-right: 0;
     justify-content: flex-start;
     min-height: 44px;

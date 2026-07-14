@@ -50,7 +50,16 @@ export interface ExtractionReference {
   extractionId?: string;
   target: string;
   confidence?: number;
+  /** The extraction tool/pipeline that produced this candidate (e.g. a crawler or parser). */
   extractor?: string;
+  /**
+   * The model or model-version that generated this candidate, when the producer
+   * knows it (e.g. an LLM id or a dated extraction-model tag). Distinct from
+   * `extractor` (the tool): a reviewer wants to know *which model* proposed a
+   * value for trust/calibration. Producer-provided provenance; Survey only
+   * carries and displays it.
+   */
+  model?: string;
   extractedAt?: string;
 }
 

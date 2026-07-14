@@ -37,7 +37,8 @@ describe("downstream public-directory adapter example", () => {
     assert.equal(proposed.confidence, 0.82);
     assert.equal(proposed.source.sourceRef, "https://example.test/listings/example-program");
     assert.equal(proposed.locator?.excerpt, "Join the waitlist for this listing.");
-    assert.equal(proposed.extraction.extractor, "example-directory-extractor-2026-05");
+    assert.equal(proposed.extraction.model, "example-directory-extractor-2026-05");
+    assert.equal(proposed.extraction.extractor, "downstream-directory-extractor");
     assert.equal(proposed.producer?.previousValue, "OPEN");
     assert.ok(item.spec.candidates.every(hasRequiredCandidateEvidence));
   });

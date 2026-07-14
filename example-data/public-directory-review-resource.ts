@@ -94,6 +94,7 @@ export const publicDirectoryReviewItemExample = {
           target: "availabilityStatus",
           confidence: 0.82,
           extractor: "example-crawl",
+          model: "example-extraction-model-2026-05",
           extractedAt: "2026-05-31T15:00:00.000Z",
         },
         claimTarget: {

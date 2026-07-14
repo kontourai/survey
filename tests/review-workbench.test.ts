@@ -125,6 +125,9 @@ describe("review workbench prototype", () => {
     assert.match(html, /Use proposed/);
     assert.match(html, /Keep current/);
     assert.match(html, /Suggestion was wrong/);
+    // The producing model is surfaced as its own audit line (distinct from the extractor tool).
+    assert.match(html, /Model/);
+    assert.match(html, /example-extraction-model-2026-05/);
   });
 
   it("renders structured candidate values without downstream pre-stringification", () => {

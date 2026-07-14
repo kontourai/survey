@@ -997,7 +997,7 @@ pre[data-testid="decision-payload"] {
   }
 
   .wrong {
-    order: 1;
+    order: 0;
     margin-right: 0;
     justify-content: flex-start;
     min-height: 44px;

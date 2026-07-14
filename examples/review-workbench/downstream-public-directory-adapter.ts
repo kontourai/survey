@@ -135,7 +135,8 @@ function proposedReviewCandidate(
     sourceRef: diff.sourceUrl ?? proposal.sourceUrl,
     observedAt: proposal.createdAt,
     excerpt: diff.excerpt ?? `Proposed ${field} value from downstream extraction.`,
-    extractor: proposal.extractionModel,
+    extractor: "downstream-directory-extractor",
+    model: proposal.extractionModel,
     extractedAt: proposal.createdAt,
     confidence: diff.confidence,
     sourceRank: selectedRole === "proposed" ? 1 : 2,
@@ -153,6 +154,7 @@ function reviewCandidate(args: {
   observedAt: string;
   excerpt: string;
   extractor: string;
+  model?: string;
   extractedAt: string;
   confidence: number;
   sourceRank: number;
@@ -255,6 +257,7 @@ function candidateExtraction(args: CandidateArgs, extractionId: string): ReviewC
     target: args.field,
     confidence: args.confidence,
     extractor: args.extractor,
+    ...(args.model ? { model: args.model } : {}),
     extractedAt: args.extractedAt,
   };
 }

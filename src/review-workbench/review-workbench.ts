@@ -931,8 +931,8 @@ function renderFieldCard(
           : "<p class=\"field-value\">No proposed value is available for this field.</p>"}
         ${proposed ? renderProvenanceRow(item, proposed, presentationAdapter) : ""}
         <div class="decide">
-          <button class="btn use" type="button" data-testid="use-proposed" data-item-name="${escapeHtml(item.metadata.name)}">Use proposed</button>
           <button class="btn keep" type="button" data-testid="keep-current" data-item-name="${escapeHtml(item.metadata.name)}">${keepLabel}</button>
+          <button class="btn use" type="button" data-testid="use-proposed" data-item-name="${escapeHtml(item.metadata.name)}">Use proposed</button>
           <label class="wrong">
             <input type="checkbox" class="wrongbox" data-testid="wrong-toggle" data-item-name="${escapeHtml(item.metadata.name)}">
             Suggestion was wrong
@@ -1102,6 +1102,7 @@ function renderAuditDetails(
           ${proposed ? fieldItem("Claim ID", proposed.claimTarget.claimId ?? proposed.claimTarget.fieldOrBehavior) : ""}
           ${proposed ? fieldItem("Raw Source ID", proposed.source.sourceId ?? proposed.source.sourceRef) : ""}
           ${proposed?.locator ? fieldItem("Locator", proposed.locator.locator ?? proposed.locator.scheme) : ""}
+          ${proposed?.extraction.model ? fieldItem("Model", proposed.extraction.model) : ""}
           ${proposed ? fieldItem("Extractor", proposed.extraction.extractor ?? "unknown") : ""}
           ${proposed ? fieldItem("Extracted at", proposed.extraction.extractedAt ?? "unknown") : ""}
         </dl>
