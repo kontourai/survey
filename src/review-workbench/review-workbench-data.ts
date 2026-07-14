@@ -494,6 +494,177 @@ function queueFixture(
   };
 }
 
+/**
+ * A field with a proposed value but no current candidate at all — the "New" field
+ * kind in the review workbench (no "Current" value to diff against, so the diff
+ * shows "Not set" and the Keep-current button reads "Leave unset").
+ */
+const dropInPriceReviewItemExample: ReviewItem = {
+  apiVersion: reviewResourceApiVersion,
+  kind: "ReviewItem",
+  metadata: {
+    name: "public-directory-dropin-price",
+    labels: { domain: "public-directory" },
+    producer: { displayName: "Example Program", slug: "example-program" },
+  },
+  spec: {
+    target: "dropInPrice",
+    candidateSetStatus: "needs-review",
+    producerPolicy: { feedbackTags: ["pricing-field", "crawler-suggested"] },
+    rationale: "Example-backed local review queue item for dropInPrice.",
+    candidates: [
+      {
+        id: "public-directory-dropin-price:candidate:proposed",
+        role: "proposed",
+        value: "$85 / day",
+        confidence: 0.72,
+        source: {
+          sourceId: "public-directory-dropin-price:source:proposed",
+          sourceRef: "https://example.test/listings/example-program/pricing",
+          kind: "web-page",
+          observedAt: "2026-05-31T15:00:00.000Z",
+          locatorScheme: "html",
+        },
+        locator: {
+          scheme: "html",
+          locator: "html:field=dropInPrice",
+          excerpt: "Daily drop-in rate: $85 (members $70). Full-week enrollment preferred.",
+        },
+        extraction: {
+          extractionId: "public-directory-dropin-price:extraction:proposed",
+          target: "dropInPrice",
+          confidence: 0.72,
+          extractor: "example-crawl",
+          extractedAt: "2026-05-31T15:00:00.000Z",
+        },
+        claimTarget: {
+          claimId: "public-field.entity-123.dropin-price.proposal-457",
+          subjectType: "public-record.entity",
+          subjectId: "entity-123",
+          facet: "public-record.profile",
+          claimType: "public-data.field-candidate",
+          fieldOrBehavior: "dropInPrice",
+          impactLevel: "low",
+          collectedBy: "example-crawl",
+        },
+        projection: {
+          rawSourceId: "public-directory-dropin-price:source:proposed",
+          extractionId: "public-directory-dropin-price:extraction:proposed",
+          candidateSetId: "public-directory-dropin-price:candidate-set",
+          candidateId: "public-directory-dropin-price:candidate:proposed",
+          claimId: "public-field.entity-123.dropin-price.proposal-457",
+        },
+        producer: { proposalId: "proposal-457" },
+      },
+    ],
+  },
+  status: { observedCandidateCount: 1 },
+};
+
+/**
+ * A field whose proposed value has NO supporting excerpt/locator — the review
+ * workbench must show the explicit "No source — verify before accepting" flag
+ * instead of a confidence meter or a weak "none" placeholder.
+ */
+const dailyHoursNoSourceReviewItemExample: ReviewItem = {
+  apiVersion: reviewResourceApiVersion,
+  kind: "ReviewItem",
+  metadata: {
+    name: "public-directory-daily-hours-no-source",
+    labels: { domain: "public-directory" },
+    producer: { displayName: "Example Program", slug: "example-program" },
+  },
+  spec: {
+    target: "dailyHours",
+    candidateSetStatus: "needs-review",
+    producerPolicy: { feedbackTags: ["hours-change", "unsourced-proposal"] },
+    rationale: "Example-backed local review queue item for dailyHours with no provenance.",
+    candidates: [
+      {
+        id: "public-directory-daily-hours-no-source:candidate:current",
+        role: "current",
+        value: "9:00 AM - 3:00 PM",
+        confidence: 0.9,
+        source: {
+          sourceId: "public-directory-daily-hours-no-source:source:current",
+          sourceRef: "https://example.test/listings/example-program",
+          kind: "web-page",
+          observedAt: "2026-05-30T18:00:00.000Z",
+          locatorScheme: "html",
+        },
+        locator: {
+          scheme: "html",
+          locator: "html:field=dailyHours",
+          excerpt: "Daily program hours are 9:00 AM to 3:00 PM.",
+        },
+        extraction: {
+          extractionId: "public-directory-daily-hours-no-source:extraction:current",
+          target: "dailyHours",
+          confidence: 0.9,
+          extractor: "example-field-review",
+          extractedAt: "2026-05-30T18:00:00.000Z",
+        },
+        claimTarget: {
+          claimId: "public-field.entity-123.daily-hours.current",
+          subjectType: "public-record.entity",
+          subjectId: "entity-123",
+          facet: "public-record.profile",
+          claimType: "public-data.field",
+          fieldOrBehavior: "dailyHours",
+          impactLevel: "medium",
+          collectedBy: "example-field-review",
+        },
+        projection: {
+          rawSourceId: "public-directory-daily-hours-no-source:source:current",
+          extractionId: "public-directory-daily-hours-no-source:extraction:current",
+          candidateSetId: "public-directory-daily-hours-no-source:candidate-set",
+          candidateId: "public-directory-daily-hours-no-source:candidate:current",
+          claimId: "public-field.entity-123.daily-hours.current",
+        },
+      },
+      {
+        // No `locator` at all — the proposed value has no supporting excerpt.
+        id: "public-directory-daily-hours-no-source:candidate:proposed",
+        role: "proposed",
+        value: "8:30 AM - 4:00 PM",
+        confidence: 0.68,
+        source: {
+          sourceId: "public-directory-daily-hours-no-source:source:proposed",
+          sourceRef: "manual-entry://example-program/daily-hours-update",
+          kind: "manual-entry",
+          observedAt: "2026-05-31T15:00:00.000Z",
+        },
+        extraction: {
+          extractionId: "public-directory-daily-hours-no-source:extraction:proposed",
+          target: "dailyHours",
+          confidence: 0.68,
+          extractor: "example-crawl",
+          extractedAt: "2026-05-31T15:00:00.000Z",
+        },
+        claimTarget: {
+          claimId: "public-field.entity-123.daily-hours.proposal-458",
+          subjectType: "public-record.entity",
+          subjectId: "entity-123",
+          facet: "public-record.profile",
+          claimType: "public-data.field-candidate",
+          fieldOrBehavior: "dailyHours",
+          impactLevel: "medium",
+          collectedBy: "example-crawl",
+        },
+        projection: {
+          rawSourceId: "public-directory-daily-hours-no-source:source:proposed",
+          extractionId: "public-directory-daily-hours-no-source:extraction:proposed",
+          candidateSetId: "public-directory-daily-hours-no-source:candidate-set",
+          candidateId: "public-directory-daily-hours-no-source:candidate:proposed",
+          claimId: "public-field.entity-123.daily-hours.proposal-458",
+        },
+        producer: { proposalId: "proposal-458" },
+      },
+    ],
+  },
+  status: { observedCandidateCount: 2 },
+};
+
 export const reviewWorkbenchQueueExamples = [
   queueFixture(
     "public-directory-hours",
@@ -511,6 +682,8 @@ export const reviewWorkbenchQueueExamples = [
     "needs-review",
     ["contact-field", "source-conflict"],
   ),
+  dropInPriceReviewItemExample,
+  dailyHoursNoSourceReviewItemExample,
   publicDirectoryReviewItemExample,
   queueFixture(
     "public-directory-address",
