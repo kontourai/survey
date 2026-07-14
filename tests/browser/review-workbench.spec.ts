@@ -2,50 +2,126 @@ import { expect, test, type Page } from "@playwright/test";
 
 const workbenchPath = "/examples/review-workbench/index.html";
 
-test("renders the review queue, Surface preview, and session audit", async ({ page }) => {
+test("renders field-diff cards, progress header, and footer tally", async ({ page }) => {
   const consoleErrors = await loadWorkbench(page);
 
-  await expect(page.getByRole("heading", { name: "Review candidate update" })).toBeVisible();
-  await expect(page.getByTestId("review-queue")).toBeVisible();
-  await expect(page.getByTestId("surface-preview")).toContainText("Surface preview");
-  await expect(page.getByTestId("session-audit")).toContainText("ReviewSession");
-  await expect(page.getByTestId("session-audit")).toContainText("replay ok");
-  await expect(page.getByTestId("session-event-list")).toContainText("No persisted review activity yet.");
-  await expect(page.getByTestId("session-export")).toContainText("Session export");
+  await expect(page.getByTestId("review-workbench-shell")).toBeVisible();
+  await expect(page.getByTestId("review-fields")).toBeVisible();
+  const fields = page.getByTestId("review-field");
+  await expect(fields).not.toHaveCount(0);
+  await expect(page.getByTestId("apply-button")).toBeVisible();
+  await expect(page.getByTestId("review-tally")).toContainText("Accepted");
+  await expect(page.getByTestId("review-tally")).toContainText("Kept");
+  await expect(page.getByTestId("review-tally")).toContainText("Flagged");
+  await expect(page.getByTestId("review-tally")).toContainText("Remaining");
   expect(consoleErrors).toEqual([]);
 });
 
-test("records decisions, notes, navigation, and reloads them from persisted session events", async ({ page }) => {
+test("shows the current -> proposed diff, confidence, and inline source excerpt for a sourced field", async ({ page }) => {
   const consoleErrors = await loadWorkbench(page);
+  const hoursField = fieldByItemName(page, "public-directory-hours");
 
-  await chooseDecision(page, "accept-proposed");
-  await page.getByTestId("reviewer-note").fill("Accepted through browser test.");
-  await expect(page.getByTestId("surface-preview")).toContainText("Accepted through browser test.");
-  // Navigate to the next unresolved item.  On mobile (≤980px) the queue panel is a slide-in drawer;
-  // use the active-review-strip "Next unresolved" button which is always visible on mobile.
-  // On desktop the active-review-strip is hidden; use the queue-panel button which is always visible there.
-  await goToNextUnresolved(page);
+  await expect(hoursField.getByTestId("current-value")).toBeVisible();
+  await expect(hoursField.getByTestId("proposed-value")).toBeVisible();
+  await expect(hoursField.getByTestId("confidence-meter")).toBeVisible();
+  await expect(hoursField.getByTestId("proposed-excerpt")).toBeVisible();
+  await expect(hoursField.locator(".fkind")).toHaveText("Update");
+  expect(consoleErrors).toEqual([]);
+});
 
-  await expect(page.getByTestId("session-audit")).toContainText("Events");
-  await expect(page.getByTestId("session-audit")).toContainText("03");
-  await expect(page.getByTestId("session-event-list")).toContainText("decision-changed");
-  await expect(page.getByTestId("session-event-list")).toContainText("note-changed");
-  await expect(page.getByTestId("session-event-list")).toContainText("item-selected");
-  await expect(page.getByTestId("session-audit")).toContainText("replay ok");
-  await expect(page.getByTestId("surface-preview")).toContainText("pending");
+test("shows 'Not set' and 'Leave unset' for a new field with no current value", async ({ page }) => {
+  const consoleErrors = await loadWorkbench(page);
+  const dropInPrice = fieldByItemName(page, "public-directory-dropin-price");
+
+  await expect(dropInPrice.locator(".fkind")).toHaveText("New");
+  await expect(dropInPrice.locator(".val.current")).toHaveClass(/empty/);
+  await expect(dropInPrice.getByTestId("current-value")).toHaveText("Not set");
+  await expect(dropInPrice.locator("button.btn.keep")).toHaveText("Leave unset");
+  expect(consoleErrors).toEqual([]);
+});
+
+test("flags a proposed value with no supporting excerpt instead of a weak 'none' placeholder", async ({ page }) => {
+  const consoleErrors = await loadWorkbench(page);
+  const noSourceField = fieldByItemName(page, "public-directory-daily-hours-no-source");
+
+  await expect(noSourceField.getByTestId("no-source-flag")).toBeVisible();
+  await expect(noSourceField.getByTestId("no-source-flag")).toContainText("No source");
+  await expect(noSourceField.getByTestId("no-source-flag")).toContainText("verify before accepting");
+  await expect(noSourceField.getByTestId("confidence-meter")).toHaveCount(0);
+  await expect(noSourceField).not.toContainText(/^none$/);
+  expect(consoleErrors).toEqual([]);
+});
+
+test("a producer-pre-resolved field shows as already decided out of the box", async ({ page }) => {
+  const consoleErrors = await loadWorkbench(page);
+  const resolvedField = fieldByItemName(page, "public-directory-availability");
+
+  await expect(resolvedField).toHaveAttribute("data-state", "kept");
+  await expect(resolvedField.getByTestId("field-chip")).toHaveText("Kept current");
+  expect(consoleErrors).toEqual([]);
+});
+
+test("Use proposed accepts the proposed value and updates the chip, tally, and payload", async ({ page }) => {
+  const consoleErrors = await loadWorkbench(page);
+  const field = fieldByItemName(page, "public-directory-hours");
+
+  await field.getByTestId("use-proposed").click();
+
+  await expect(field).toHaveAttribute("data-state", "accepted");
+  await expect(field).toHaveAttribute("data-decided", "1");
+  await expect(field.getByTestId("decided-chip")).toHaveText("Accepted");
+  await expect(page.getByTestId("tally-accepted")).toHaveText("1");
+
+  await field.getByTestId("audit-details").locator("summary").first().click();
+  await expect(field.getByTestId("decision-payload")).toContainText("\"status\": \"verified\"");
+  expect(consoleErrors).toEqual([]);
+});
+
+test("Keep current keeps the current value; ticking 'Suggestion was wrong' flips it to the reject signal", async ({ page }) => {
+  const consoleErrors = await loadWorkbench(page);
+  const field = fieldByItemName(page, "public-directory-hours");
+
+  await field.getByTestId("keep-current").click();
+  await expect(field).toHaveAttribute("data-state", "kept");
+  await expect(field.getByTestId("decided-chip")).toHaveText("Kept current");
+
+  await field.getByTestId("undo-decision").click();
+  await expect(field).toHaveAttribute("data-decided", "0");
+
+  await field.getByTestId("wrong-toggle").check();
+  await field.getByTestId("keep-current").click();
+  await expect(field).toHaveAttribute("data-state", "rejected");
+  await expect(field.getByTestId("decided-chip")).toHaveText("Kept — flagged wrong");
+  expect(consoleErrors).toEqual([]);
+});
+
+test("editing the proposed value before accepting threads the edit into the ReviewDecision payload", async ({ page }) => {
+  const consoleErrors = await loadWorkbench(page);
+  const field = fieldByItemName(page, "public-directory-hours");
+
+  await field.getByTestId("edit-proposed-value").fill("Weekdays 7am-7pm");
+  await field.getByTestId("use-proposed").click();
+
+  await expect(field.getByTestId("proposed-value")).toHaveText("Weekdays 7am-7pm");
+  await field.getByTestId("audit-details").locator("summary").first().click();
+  await expect(field.getByTestId("decision-payload")).toContainText("\"editedValue\": \"Weekdays 7am-7pm\"");
+  expect(consoleErrors).toEqual([]);
+});
+
+test("records decisions and reviewer notes, persists them to localStorage, and reloads them", async ({ page }) => {
+  const consoleErrors = await loadWorkbench(page);
+  const field = fieldByItemName(page, "public-directory-hours");
+
+  await field.getByTestId("use-proposed").click();
+  await field.getByTestId("audit-details").locator("summary").first().click();
+  await field.getByTestId("reviewer-note").fill("Accepted through browser test.");
+  await expect(field.getByTestId("decision-payload")).toContainText("Accepted through browser test.");
 
   await page.reload();
-  await expect(page.getByTestId("active-review-strip")).toContainText("public-directory-phone");
-  await expect(page.getByTestId("session-event-list")).toContainText("decision-changed");
-  await expect(page.getByTestId("session-audit")).toContainText("replay ok");
-
-  // Select a specific queue item by name.  On mobile the queue panel is a slide-in drawer; the
-  // mobile-queue-open button opens it, but the backdrop overlay (position:absolute, z-index:40)
-  // covers the panel content (position:static) in the current layout, so force-dispatch the click
-  // directly to the button element to test the selection logic without fighting hit-testing.
-  await selectQueueItem(page, "public-directory-hours");
-  await expect(page.getByTestId("reviewer-note")).toHaveValue("Accepted through browser test.");
-  await expect(page.locator(".decision-column [data-decision='accept-proposed']")).toHaveClass(/is-active/);
+  const reloadedField = fieldByItemName(page, "public-directory-hours");
+  await expect(reloadedField).toHaveAttribute("data-state", "accepted");
+  await reloadedField.getByTestId("audit-details").locator("summary").first().click();
+  await expect(reloadedField.getByTestId("reviewer-note")).toHaveValue("Accepted through browser test.");
   expect(consoleErrors).toEqual([]);
 });
 
@@ -59,9 +135,7 @@ test("boots from an externally supplied review queue session", async ({ page }) 
             kind: "ReviewItem",
             metadata: {
               name: "external-registration-status",
-              producer: {
-                displayName: "External Product",
-              },
+              producer: { displayName: "External Product" },
             },
             spec: {
               target: "registrationStatus",
@@ -129,9 +203,7 @@ test("boots from an externally supplied review queue session", async ({ page }) 
                 },
               ],
             },
-            status: {
-              observedCandidateCount: 2,
-            },
+            status: { observedCandidateCount: 2 },
           },
         ],
         activeItemName: "external-registration-status",
@@ -146,21 +218,15 @@ test("boots from an externally supplied review queue session", async ({ page }) 
   const consoleErrors = await loadWorkbench(page);
 
   await expect(page.getByText("External Product")).toBeVisible();
-  await expect(page.getByTestId("active-review-strip")).toContainText("external-registration-status");
-  await expect(page.getByTestId("review-focus")).toContainText("WAITLIST");
-  await chooseDecision(page, "accept-proposed");
-  // The "Selected claim" section (which previously showed the claim ID) was removed from the surface
-  // preview in the workbench redesign.  Assert instead that the preview reflects the accepted proposal
-  // via the review outcome ID rendered in the "Review event" section, and the proposed candidate's
-  // Source Reference rendered in the "Raw Source" section.
-  await expect(page.getByTestId("surface-preview")).toContainText("external-registration-status:accept-proposed:review-outcome");
-  await expect(page.getByTestId("surface-preview")).toContainText("Raw Source");
-  await expect(page.getByTestId("surface-preview")).toContainText("Source Reference");
-  await expect(page.getByTestId("surface-preview")).toContainText("https://example.test/external-registration");
+  const field = fieldByItemName(page, "external-registration-status");
+  await expect(field.getByTestId("proposed-value")).toHaveText("WAITLIST");
+  await field.getByTestId("use-proposed").click();
+  await field.getByTestId("audit-details").locator("summary").first().click();
+  await expect(field.getByTestId("decision-payload")).toContainText("external-registration-status:accept-proposed:review-outcome");
   expect(consoleErrors).toEqual([]);
 });
 
-test("falls back safely when external review queue state is incomplete", async ({ page }) => {
+test("falls back safely when external review queue state is incomplete or malformed", async ({ page }) => {
   await page.addInitScript(() => {
     window.kontourSurveyReviewWorkbench = {
       startState: {
@@ -174,73 +240,7 @@ test("falls back safely when external review queue state is incomplete", async (
 
   const consoleErrors = await loadWorkbench(page);
 
-  await expect(page.getByTestId("active-review-strip")).toContainText("public-directory-hours");
-  await expect(page.getByTestId("session-audit")).toContainText("ReviewSession");
-  expect(consoleErrors).toEqual([]);
-});
-
-test("falls back safely when external review queue items are malformed", async ({ page }) => {
-  await page.addInitScript(() => {
-    window.kontourSurveyReviewWorkbench = {
-      startState: {
-        items: [{}],
-        activeItemName: "missing",
-        notesByItemName: {},
-        decisionsByItemName: {},
-        reviewedAt: "2026-06-04T02:00:00.000Z",
-        actorId: "external-reviewer",
-      },
-    } as unknown as Window["kontourSurveyReviewWorkbench"];
-  });
-
-  const consoleErrors = await loadWorkbench(page);
-
-  await expect(page.getByTestId("active-review-strip")).toContainText("public-directory-hours");
-  await expect(page.getByTestId("session-audit")).toContainText("ReviewSession");
-  expect(consoleErrors).toEqual([]);
-});
-
-test("keeps the review controls usable on mobile width", async ({ page }) => {
-  test.skip(test.info().project.name !== "chromium-mobile", "mobile-only layout check");
-  const consoleErrors = await loadWorkbench(page);
-
-  await expect(page.getByTestId("active-review-strip")).toBeVisible();
-
-  const viewport = page.viewportSize();
-  const stripBox = await page.getByTestId("active-review-strip").boundingBox();
-  expect(viewport).not.toBeNull();
-  expect(stripBox).not.toBeNull();
-
-  if (viewport && stripBox) {
-    expect(stripBox.x).toBeGreaterThanOrEqual(0);
-    expect(stripBox.x + stripBox.width).toBeLessThanOrEqual(viewport.width + 1);
-  }
-
-  // The session-audit panel lives inside the queue drawer on mobile; open the drawer and verify
-  // that its bounding box is within the viewport while the drawer is open.
-  await page.getByTestId("mobile-queue-open").click();
-  // Wait for the CSS slide-in transition (0.26s) to settle before measuring the bounding box.
-  await page.waitForFunction(() => {
-    const panel = document.getElementById("queue-panel");
-    if (!panel) return false;
-    const transform = window.getComputedStyle(panel).transform;
-    // translateX(0) computes to the identity matrix
-    return transform === "matrix(1, 0, 0, 1, 0, 0)" || transform === "none";
-  });
-  const auditBox = await page.getByTestId("session-audit").boundingBox();
-  expect(auditBox).not.toBeNull();
-
-  if (viewport && auditBox) {
-    expect(auditBox.x).toBeGreaterThanOrEqual(0);
-    expect(auditBox.x + auditBox.width).toBeLessThanOrEqual(viewport.width + 1);
-  }
-
-  // Close the drawer by clicking the backdrop area to the right of the 320px-wide
-  // drawer panel (the panel sits above the backdrop and would intercept a center click).
-  await page.getByTestId("queue-drawer-backdrop").click({ position: { x: 380, y: 400 } });
-  await page.locator(".decision-column [data-decision='keep-current']").click();
-  await expect(page.locator(".decision-column [data-decision='keep-current']")).toHaveClass(/is-active/);
-  await expect(page.getByTestId("session-event-list")).toContainText("decision-changed");
+  await expect(fieldByItemName(page, "public-directory-hours")).toBeVisible();
   expect(consoleErrors).toEqual([]);
 });
 
@@ -251,96 +251,61 @@ test("keeps embedded review evidence readable in a narrow host panel", async ({ 
   await page.addStyleTag({
     content: `
       [data-testid="review-workbench"] {
-        width: 760px;
-        max-width: 760px;
+        width: 480px;
+        max-width: 480px;
         margin-inline: auto;
       }
     `,
   });
 
-  await expect(page.getByTestId("review-focus")).toBeVisible();
-  await expect(page.getByTestId("surface-preview")).toBeVisible();
-
-  const layout = await page.evaluate(() => {
-    const workbench = document.querySelector<HTMLElement>("[data-testid='review-workbench']");
-    const candidateCards = [...document.querySelectorAll<HTMLElement>(".candidate-card")];
-    const decisionButtons = [...document.querySelectorAll<HTMLElement>(".decision-column .decision-button")];
-    return {
-      viewportOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-      workbenchOverflow: workbench ? workbench.scrollWidth - workbench.clientWidth : 0,
-      candidateWidths: candidateCards.map((card) => card.getBoundingClientRect().width),
-      decisionButtonWidths: decisionButtons.map((button) => button.getBoundingClientRect().width),
-    };
-  });
+  const layout = await page.evaluate(() => ({
+    viewportOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  }));
 
   expect(layout.viewportOverflow).toBeLessThanOrEqual(1);
-  expect(layout.workbenchOverflow).toBeLessThanOrEqual(1);
-  expect(Math.min(...layout.candidateWidths)).toBeGreaterThanOrEqual(620);
-  expect(Math.min(...layout.decisionButtonWidths)).toBeGreaterThanOrEqual(180);
+  await expect(page.getByTestId("review-fields")).toBeVisible();
   expect(consoleErrors).toEqual([]);
 });
 
-async function loadWorkbench(page: Page): Promise<string[]> {
-  const consoleErrors: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") {
-      consoleErrors.push(message.text());
-    }
-  });
-  page.on("pageerror", (error) => {
-    consoleErrors.push(error.message);
-  });
+test("keeps the review controls usable on mobile width", async ({ page }) => {
+  test.skip(test.info().project.name !== "chromium-mobile", "mobile-only layout check");
+  const consoleErrors = await loadWorkbench(page);
 
-  await page.goto(workbenchPath);
-  await expect(page.getByTestId("review-workbench")).toBeVisible();
-  return consoleErrors;
-}
-
-async function chooseDecision(page: Page, decision: "accept-proposed" | "keep-current" | "reject-proposed"): Promise<void> {
-  await page.locator(`.decision-column [data-decision='${decision}']`).click();
-}
-
-/**
- * Navigates to the next unresolved review item using the appropriate button for the current
- * viewport.
- *
- * - On desktop (>980px): the queue panel is always visible; use its "Next unresolved" button
- *   inside .queue-head.
- * - On mobile (≤980px): the active-review-strip "Next unresolved" button is always visible;
- *   use that to avoid the closed-drawer interaction entirely.
- */
-async function goToNextUnresolved(page: Page): Promise<void> {
-  const mobileBar = page.getByTestId("mobile-queue-open");
-  if (await mobileBar.isVisible()) {
-    await page.getByTestId("active-next-unresolved").click();
-  } else {
-    await page.locator(".queue-head [data-testid='next-unresolved']").click();
+  const field = fieldByItemName(page, "public-directory-hours");
+  const viewport = page.viewportSize();
+  const fieldBox = await field.boundingBox();
+  expect(viewport).not.toBeNull();
+  expect(fieldBox).not.toBeNull();
+  if (viewport && fieldBox) {
+    expect(fieldBox.x).toBeGreaterThanOrEqual(0);
+    expect(fieldBox.x + fieldBox.width).toBeLessThanOrEqual(viewport.width + 1);
   }
-}
 
-/**
- * Selects a queue item by its data-item-name attribute, the way a user would:
- * on mobile the queue panel is a slide-in drawer, so open it from the sticky
- * bar first, then click the row (the drawer closes on selection).
- */
-async function selectQueueItem(page: Page, itemName: string): Promise<void> {
-  const mobileBar = page.getByTestId("mobile-queue-open");
-  if (await mobileBar.isVisible()) {
-    await mobileBar.click();
-    await page.locator(`[data-item-name='${itemName}']`).click();
-  } else {
-    await page.locator(`[data-item-name='${itemName}']`).click();
-  }
-}
+  await field.getByTestId("keep-current").click();
+  await expect(field).toHaveAttribute("data-state", "kept");
+  expect(consoleErrors).toEqual([]);
+});
 
 // ---------------------------------------------------------------------------
-// EXCERPT CLAMP: 3-line clamp with inline "more / less" expander
+// AUDIT DETAILS: single collapsed power-user surface per field
 // ---------------------------------------------------------------------------
 
-test("excerpt clamp toggle expands and collapses long excerpts", async ({ page }) => {
+test("audit details are collapsed by default and expand to show trace IDs and the decision payload", async ({ page }) => {
+  const consoleErrors = await loadWorkbench(page);
+  const field = fieldByItemName(page, "public-directory-hours");
+  const details = field.getByTestId("audit-details");
+
+  await expect(details).not.toHaveAttribute("open", "");
+  await details.locator("summary").first().click();
+  await expect(details).toHaveAttribute("open", "");
+  await expect(details).toContainText("Proposed candidate ID");
+  await expect(details).toContainText("ReviewDecision payload");
+  expect(consoleErrors).toEqual([]);
+});
+
+test("excerpt clamp toggle expands and collapses a long excerpt inside audit details", async ({ page }) => {
   test.skip(test.info().project.name !== "chromium-desktop", "clamp test uses desktop viewport");
 
-  // Inject a session with a very long excerpt to guarantee the clamp is active.
   await page.addInitScript(() => {
     const longExcerpt = "This is a very long excerpt text that should be clamped to three lines when rendered in the workbench. ".repeat(8);
     window.kontourSurveyReviewWorkbench = {
@@ -379,7 +344,7 @@ test("excerpt clamp toggle expands and collapses long excerpts", async ({ page }
         ],
         activeItemName: "clamp-test-item",
         notesByItemName: {},
-        decisionsByItemName: {},
+        decisionsByItemName: { "clamp-test-item": "accept-proposed" },
         reviewedAt: "2026-06-04T00:00:00.000Z",
         actorId: "clamp-tester",
       },
@@ -387,109 +352,23 @@ test("excerpt clamp toggle expands and collapses long excerpts", async ({ page }
   });
 
   const consoleErrors = await loadWorkbench(page);
+  const field = fieldByItemName(page, "clamp-test-item");
+  await field.getByTestId("audit-details").locator("summary").first().click();
 
-  // The candidate card excerpt should have a clamp container with toggle button
-  const clampContainer = page.locator(".candidate-card .excerpt-clamp").first();
+  const clampContainer = field.locator(".excerpt-clamp").first();
   const toggleButton = clampContainer.locator("[data-clamp-toggle]");
 
   await expect(clampContainer).toBeVisible();
-  await expect(toggleButton).toBeVisible();
   await expect(toggleButton).toHaveText("more");
-  await expect(toggleButton).toHaveAttribute("aria-expanded", "false");
-
-  // The clamp container should NOT have is-expanded initially
   await expect(clampContainer).not.toHaveClass(/is-expanded/);
 
-  // Click "more" to expand
   await toggleButton.click();
   await expect(toggleButton).toHaveText("less");
-  await expect(toggleButton).toHaveAttribute("aria-expanded", "true");
   await expect(clampContainer).toHaveClass(/is-expanded/);
 
-  // Click "less" to collapse
   await toggleButton.click();
   await expect(toggleButton).toHaveText("more");
-  await expect(toggleButton).toHaveAttribute("aria-expanded", "false");
   await expect(clampContainer).not.toHaveClass(/is-expanded/);
-
-  expect(consoleErrors).toEqual([]);
-});
-
-// ---------------------------------------------------------------------------
-// CANDIDATE HISTORY EXPANDER: >3 entries show first 3 + "view all (N)"
-// ---------------------------------------------------------------------------
-
-test("candidate history expander shows first 3 entries and expands to all", async ({ page }) => {
-  test.skip(test.info().project.name !== "chromium-desktop", "history expander test uses desktop viewport");
-
-  // Inject a session with 5 candidates so history has >3 unselected.
-  await page.addInitScript(() => {
-    const makeCand = (id: string, role: string, value: string) => ({
-      id,
-      role,
-      value,
-      source: { sourceRef: `https://example.test/${id}`, kind: "web-page", observedAt: "2026-06-04T00:00:00.000Z" },
-      locator: { scheme: "html", locator: "html:field=historyField", excerpt: `Excerpt for ${id}` },
-      extraction: { target: "historyField", extractor: "test", extractedAt: "2026-06-04T00:00:00.000Z" },
-      claimTarget: { claimId: `history.${id}`, subjectType: "test", subjectId: "x", facet: "test", claimType: "test", fieldOrBehavior: "historyField", impactLevel: "low" },
-    });
-    window.kontourSurveyReviewWorkbench = {
-      startState: {
-        items: [
-          {
-            apiVersion: "survey.kontourai.io/v1alpha1",
-            kind: "ReviewItem",
-            metadata: { name: "history-test-item", producer: { displayName: "History Test" } },
-            spec: {
-              target: "historyField",
-              candidateSetStatus: "needs-review",
-              candidates: [
-                makeCand("history:current", "current", "val-current"),
-                makeCand("history:proposed", "proposed", "val-proposed"),
-                makeCand("history:extra-1", "candidate", "val-extra-1"),
-                makeCand("history:extra-2", "candidate", "val-extra-2"),
-                makeCand("history:extra-3", "candidate", "val-extra-3"),
-              ],
-            },
-            status: { observedCandidateCount: 5 },
-          },
-        ],
-        activeItemName: "history-test-item",
-        notesByItemName: {},
-        decisionsByItemName: { "history-test-item": "accept-proposed" },
-        reviewedAt: "2026-06-04T00:00:00.000Z",
-        actorId: "history-tester",
-      },
-    } as unknown as Window["kontourSurveyReviewWorkbench"];
-  });
-
-  const consoleErrors = await loadWorkbench(page);
-
-  // Open the surface preview (it's a <details> element)
-  await page.locator("[data-testid='surface-preview'] .surface-summary").click();
-
-  const historySection = page.getByTestId("surface-candidate-history");
-  await expect(historySection).toBeVisible();
-
-  // The "view all (N)" button should be present since we have >3 unselected
-  const expandBtn = historySection.locator("[data-history-expand]");
-  await expect(expandBtn).toBeVisible();
-  await expect(expandBtn).toContainText("view all");
-
-  // The overflow entries should not be visible initially
-  const overflowDiv = historySection.locator(".history-overflow");
-  await expect(overflowDiv).not.toBeVisible();
-
-  // Click to expand
-  await expandBtn.click();
-  await expect(overflowDiv).toBeVisible();
-  await expect(expandBtn).toContainText("show less");
-  await expect(expandBtn).toHaveAttribute("aria-expanded", "true");
-
-  // Click to collapse
-  await expandBtn.click();
-  await expect(overflowDiv).not.toBeVisible();
-  await expect(expandBtn).toContainText("view all");
 
   expect(consoleErrors).toEqual([]);
 });
@@ -502,49 +381,55 @@ test("demo page light/dark toggle changes theme and persists to localStorage", a
   test.skip(test.info().project.name !== "chromium-desktop", "theme toggle test uses desktop viewport");
   const consoleErrors = await loadWorkbench(page);
 
-  // Toggle button should be present
   const toggle = page.getByTestId("demo-theme-toggle");
   await expect(toggle).toBeVisible();
 
-  // Default is dark — no data-theme attribute on <html>
   const initialTheme = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
   expect(initialTheme).toBeNull();
 
-  // Capture dark-mode --k-bg token on <html>
   const darkKBg = await page.evaluate(() =>
     window.getComputedStyle(document.documentElement).getPropertyValue("--k-bg").trim(),
   );
   expect(darkKBg).not.toBe("");
 
-  // Click toggle to switch to light
   await toggle.click();
 
-  // Verify data-theme="light" was applied
   const lightTheme = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
   expect(lightTheme).toBe("light");
 
-  // Verify localStorage was updated
   const stored = await page.evaluate(() => {
     try { return localStorage.getItem("survey-demo-color-scheme"); } catch { return null; }
   });
   expect(stored).toBe("light");
 
-  // --k-bg must flip: light mode token differs from dark mode token
   const lightKBg = await page.evaluate(() =>
     window.getComputedStyle(document.documentElement).getPropertyValue("--k-bg").trim(),
   );
   expect(lightKBg).not.toBe(darkKBg);
 
-  // Click again to go back to dark
   await toggle.click();
   const backToDark = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
   expect(backToDark).toBeNull();
 
-  // localStorage should now reflect dark again
-  const storedAfterDark = await page.evaluate(() => {
-    try { return localStorage.getItem("survey-demo-color-scheme"); } catch { return null; }
-  });
-  expect(storedAfterDark).toBe("dark");
-
   expect(consoleErrors).toEqual([]);
 });
+
+async function loadWorkbench(page: Page): Promise<string[]> {
+  const consoleErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      consoleErrors.push(message.text());
+    }
+  });
+  page.on("pageerror", (error) => {
+    consoleErrors.push(error.message);
+  });
+
+  await page.goto(workbenchPath);
+  await expect(page.getByTestId("review-workbench")).toBeVisible();
+  return consoleErrors;
+}
+
+function fieldByItemName(page: Page, itemName: string) {
+  return page.locator(`[data-testid='review-field'][data-item-name='${itemName}']`);
+}

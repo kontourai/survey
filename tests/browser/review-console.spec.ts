@@ -29,9 +29,9 @@ test.afterAll(async () => {
 async function gotoConsole(page: import("@playwright/test").Page): Promise<void> {
   await page.goto(handle.url);
   // The workbench is mounted asynchronously after fetching /api/session;
-  // wait for the review-queue (rendered by mountReviewWorkbench) to appear.
+  // wait for the review fields (rendered by mountReviewWorkbench) to appear.
   await expect(page.getByTestId("review-workbench")).toBeVisible();
-  await expect(page.getByTestId("review-queue")).toBeVisible({ timeout: 10000 });
+  await expect(page.getByTestId("review-fields")).toBeVisible({ timeout: 10000 });
 }
 
 test("console page: workbench renders the review queue", async ({ page }) => {
@@ -60,9 +60,11 @@ test("console page: make a decision and assert it persists (reload shows resolve
     { timeout: 5000 },
   );
 
-  // Accept the first (active) item
-  await page.locator(".decision-column [data-decision='accept-proposed']").click();
-  await expect(page.locator(".decision-column [data-decision='accept-proposed']")).toHaveClass(/is-active/);
+  // Accept the proposed value on the first field card
+  const firstField = page.locator("[data-testid='review-field']").first();
+  const itemName = await firstField.getAttribute("data-item-name");
+  await firstField.getByTestId("use-proposed").click();
+  await expect(firstField).toHaveAttribute("data-state", "accepted");
 
   // Wait for the POST to /api/events to complete
   await eventsSaved;
@@ -74,10 +76,10 @@ test("console page: make a decision and assert it persists (reload shows resolve
 
   // Reload the page — the decision should be restored from persisted events
   await page.reload();
-  await expect(page.getByTestId("review-queue")).toBeVisible({ timeout: 10000 });
+  await expect(page.getByTestId("review-fields")).toBeVisible({ timeout: 10000 });
 
-  // The first item should now show accept-proposed as active
-  await expect(page.locator(".decision-column [data-decision='accept-proposed']")).toHaveClass(/is-active/);
+  // The same field should now show accepted as its restored state
+  await expect(page.locator(`[data-testid='review-field'][data-item-name='${itemName}']`)).toHaveAttribute("data-state", "accepted");
   expect(consoleErrors).toEqual([]);
 });
 

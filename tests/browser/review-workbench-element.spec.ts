@@ -227,18 +227,18 @@ test.describe("SINGLE-IMPORT BOOT: element self-contained module import", () => 
 
     await assignSession(page, SESSION_FIXTURE);
 
-    // Queue panel renders inside shadow DOM (Playwright pierces shadow boundary)
-    await expect(page.locator("[data-testid='review-queue']")).toBeVisible();
+    // Field cards render inside shadow DOM (Playwright pierces shadow boundary)
+    await expect(page.locator("[data-testid='review-fields']")).toBeVisible();
 
-    // Review focus renders the active item candidate values
-    await expect(page.locator("[data-testid='review-focus']")).toContainText("Weekdays 9am-5pm");
-    await expect(page.locator("[data-testid='review-focus']")).toContainText("Weekdays 8am-6pm");
+    // The first field card renders its current/proposed candidate values
+    const hoursField = page.locator("[data-testid='review-field'][data-item-name='element-spec-hours']");
+    await expect(hoursField.getByTestId("current-value")).toContainText("Weekdays 9am-5pm");
+    await expect(hoursField.getByTestId("proposed-value")).toContainText("Weekdays 8am-6pm");
 
-    // Active review strip shows the active item name
-    await expect(page.locator("[data-testid='active-review-strip']")).toContainText("element-spec-hours");
+    // Both fields render as field cards
+    await expect(page.locator("[data-testid='review-field']")).toHaveCount(2);
 
-    // The embedded CSS is applied — the .eyebrow selector (same rule as .field-label, .state-label)
-    // gets `color: var(--accent)` which is `var(--k-brand)` = #5ce0c6 (teal).
+    // The embedded CSS is applied — the .eyebrow selector gets `color: var(--k-faint)`.
     // If the CSS were not attached the element would be black (rgb(0,0,0)) — the default.
     const eyebrowColor: string = await page.evaluate(() => {
       const host = document.getElementById("wbe");
@@ -280,8 +280,9 @@ test.describe("SRC ATTRIBUTE: element loads session from URL", () => {
     });
 
     await page.locator(".workbench-shell").waitFor({ state: "visible" });
-    await expect(page.locator("[data-testid='review-focus']")).toContainText("Weekdays 9am-5pm");
-    await expect(page.locator("[data-testid='review-queue']")).toBeVisible();
+    const hoursField = page.locator("[data-testid='review-field'][data-item-name='element-spec-hours']");
+    await expect(hoursField.getByTestId("current-value")).toContainText("Weekdays 9am-5pm");
+    await expect(page.locator("[data-testid='review-fields']")).toBeVisible();
 
     expect(consoleErrors).toEqual([]);
     expect(pageErrors).toEqual([]);
@@ -341,54 +342,53 @@ test.describe("THEME PIERCING: host CSS custom properties reach shadow DOM", () 
 
     await assignSession(page, SESSION_FIXTURE);
 
-    // Capture the baseline .eyebrow color — it uses `color: var(--accent)` which
-    // resolves to `var(--k-brand)` (#5ce0c6 ≈ rgb(92, 224, 198) in dark theme).
-    const baselineEyebrowColor: string = await page.evaluate(() => {
+    // Capture the baseline "Needs review" chip color — .chip.review uses
+    // `color: var(--k-brand)` directly (both fixture items are undecided).
+    const baselineChipColor: string = await page.evaluate(() => {
       const host = document.getElementById("wbe");
       if (!host?.shadowRoot) return "";
-      const el = host.shadowRoot.querySelector<HTMLElement>(".eyebrow");
+      const el = host.shadowRoot.querySelector<HTMLElement>(".chip.review");
       return el ? window.getComputedStyle(el).color : "";
     });
-    expect(baselineEyebrowColor).not.toBe("");
+    expect(baselineChipColor).not.toBe("");
 
     // Override --k-brand and --k-positive on the host element.
     // CSS custom properties inherit through shadow DOM boundaries, so the
-    // shadow-internal `--accent: var(--k-brand)` chain will pick up the override.
-    // The inline style on the host has higher specificity than the :host block
-    // and the .survey-workbench-embed block inside the shadow.
+    // shadow-internal `.chip.review { color: var(--k-brand) }` rule picks up the
+    // override. The inline style on the host has higher specificity than the
+    // :host block and the .survey-workbench-embed block inside the shadow.
     await page.evaluate(() => {
       const host = document.getElementById("wbe")!;
       host.style.setProperty("--k-brand", "rgb(255, 0, 128)");
       host.style.setProperty("--k-positive", "rgb(0, 200, 100)");
     });
 
-    // Wait until the computed color of .eyebrow diverges from the baseline,
+    // Wait until the computed color of the chip diverges from the baseline,
     // indicating the shadow DOM has processed the custom-property inheritance.
     await page.waitForFunction(
       (baseline) => {
         const host = document.getElementById("wbe");
         if (!host?.shadowRoot) return false;
-        const el = host.shadowRoot.querySelector<HTMLElement>(".eyebrow");
+        const el = host.shadowRoot.querySelector<HTMLElement>(".chip.review");
         return el ? window.getComputedStyle(el).color !== baseline : false;
       },
-      baselineEyebrowColor,
+      baselineChipColor,
     );
 
-    const overriddenEyebrowColor: string = await page.evaluate(() => {
+    const overriddenChipColor: string = await page.evaluate(() => {
       const host = document.getElementById("wbe");
       if (!host?.shadowRoot) return "";
-      const el = host.shadowRoot.querySelector<HTMLElement>(".eyebrow");
+      const el = host.shadowRoot.querySelector<HTMLElement>(".chip.review");
       return el ? window.getComputedStyle(el).color : "";
     });
 
     // The overridden color must differ from baseline and match our injected value,
     // proving --k-brand inherited through the shadow boundary.
-    expect(overriddenEyebrowColor).not.toBe(baselineEyebrowColor);
-    expect(overriddenEyebrowColor).toBe("rgb(255, 0, 128)");
+    expect(overriddenChipColor).not.toBe(baselineChipColor);
+    expect(overriddenChipColor).toBe("rgb(255, 0, 128)");
 
-    // Also verify --k-positive pierceing: .topbar .eyebrow::before uses var(--verify)
-    // which resolves to var(--k-positive). We measure via getPropertyValue to read
-    // the resolved custom property value on the shadow-internal element.
+    // Also verify --k-positive piercing by reading the resolved custom property
+    // value on the shadow-internal embed root.
     const resolvedKPositive: string = await page.evaluate(() => {
       const host = document.getElementById("wbe");
       if (!host?.shadowRoot) return "";

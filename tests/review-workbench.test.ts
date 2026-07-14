@@ -108,25 +108,23 @@ describe("review workbench prototype", () => {
   it("renders candidate and evidence context from the public directory fixture", () => {
     const html = renderReviewWorkbenchHtml(initialReviewWorkbenchState());
 
-    assert.match(html, /Review candidate update/);
+    assert.match(html, /data-testid="review-workbench-shell"/);
     assert.match(html, /Availability Status/);
-    assert.match(html, /data-testid="review-target-label"/);
-    assert.match(html, /data-testid="review-focus"/);
-    assert.match(html, /Active review/);
-    assert.match(html, /Current/);
-    assert.match(html, /Proposed/);
+    assert.match(html, /data-testid="review-field"/);
+    assert.match(html, /data-testid="review-fields"/);
+    assert.match(html, />Current</);
+    assert.match(html, />Proposed</);
     assert.match(html, /AVAILABLE/);
     assert.match(html, /WAITLIST/);
     assert.match(html, /https:\/\/example\.test\/listings\/example-program/);
     assert.match(html, /html:field=availabilityStatus/);
-    assert.match(html, /Availability is open for the example program\./);
     assert.match(html, /Join the waitlist for this listing\./);
-    assert.match(html, /91% \(0\.91\)/);
-    assert.match(html, /82% \(0\.82\)/);
+    assert.match(html, /<span class="pct">0\.82<\/span>/);
+    assert.match(html, /width:82%/);
     assert.match(html, /Reviewer note/);
-    assert.match(html, /Accept proposed/);
+    assert.match(html, /Use proposed/);
     assert.match(html, /Keep current/);
-    assert.match(html, /Reject proposed/);
+    assert.match(html, /Suggestion was wrong/);
   });
 
   it("renders structured candidate values without downstream pre-stringification", () => {
@@ -227,7 +225,10 @@ describe("review workbench prototype", () => {
 
     assert.equal(item.spec.candidateSetStatus, "needs-review");
     assert.equal(presentation.statusLabel, "Needs Review");
-    assert.match(html, /Needs Review/);
+    // The workbench's own field-card chip ("Needs review") is independent display
+    // vocabulary from the presentation adapter's statusLabel, which is no longer
+    // surfaced on the primary review surface.
+    assert.match(html, /Needs review/);
   });
 
   it("renders embedded workbench labels and value summaries from the presentation adapter", () => {
@@ -242,8 +243,7 @@ describe("review workbench prototype", () => {
     assert.match(html, /Reviewable field/);
     assert.match(html, /display:waitlist/);
     assert.match(html, /display:available/);
-    assert.match(html, /Needs operator review/);
-    assert.doesNotMatch(html, /<strong>availabilityStatus<\/strong>/);
+    assert.doesNotMatch(html, /<span class="fname">Availability Status<\/span>/);
   });
 
   it("presents a non-product facility credential ReviewItem with nested structured values", () => {
@@ -271,7 +271,6 @@ describe("review workbench prototype", () => {
 
     assert.match(html, /Operating license credential/);
     assert.match(html, /FAC-2026-1042 active through 2027-01-15; 3 permitted services; 2 inspections/);
-    assert.match(html, /Credential review needed/);
     assert.match(html, /facility-credential-review-operating-license:candidate:proposed/);
     assert.match(html, /facility-credential-review-operating-license:source:registry/);
     assert.doesNotMatch(html, /public-directory/);
@@ -313,25 +312,27 @@ describe("review workbench prototype", () => {
         "public-directory-address": "reject-proposed" as const,
       },
     };
+    const itemByName = (name: string): ReviewItem => {
+      const item = reviewWorkbenchQueueExamples.find((entry) => entry.metadata.name === name);
+      assert.ok(item, `Missing fixture ReviewItem ${name}`);
+      return item;
+    };
 
-    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueExamples[0], session), "in-review");
-    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueExamples[1], session), "pending");
-    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueExamples[2], session), "resolved");
-    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueExamples[3], session), "rejected");
-    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueExamples[4], session), "escalated");
-    assert.equal(deriveQueueRowStatus(reviewWorkbenchQueueExamples[5], session), "pending");
+    assert.equal(deriveQueueRowStatus(itemByName("public-directory-hours"), session), "in-review");
+    assert.equal(deriveQueueRowStatus(itemByName("public-directory-phone"), session), "pending");
+    assert.equal(deriveQueueRowStatus(itemByName("public-directory-availability"), session), "resolved");
+    assert.equal(deriveQueueRowStatus(itemByName("public-directory-address"), session), "rejected");
+    assert.equal(deriveQueueRowStatus(itemByName("public-directory-license"), session), "escalated");
+    assert.equal(deriveQueueRowStatus(itemByName("regulated-rule-conflict-standard-threshold"), session), "pending");
 
+    // The field-diff renderer derives its own (simpler) per-field chip vocabulary
+    // (review/accepted/kept/rejected) independent of deriveQueueRowStatus, which
+    // remains available for producers building their own queue UI.
     const html = renderReviewWorkbenchHtml(session);
-    assert.match(html, /data-testid="active-review-strip"/);
-    assert.match(html, /Review 1 of 6/);
-    assert.match(html, /data-testid="active-next-unresolved"/);
-    assert.doesNotMatch(html, /active-review-decisions/);
-    assert.doesNotMatch(html, /Quick review decision/);
-    assert.match(html, /data-testid="queue-row" data-queue-status="in-review"/);
-    assert.match(html, /data-testid="queue-row" data-queue-status="pending"/);
-    assert.match(html, /data-testid="queue-row" data-queue-status="resolved"/);
-    assert.match(html, /data-testid="queue-row" data-queue-status="rejected"/);
-    assert.match(html, /data-testid="queue-row" data-queue-status="escalated"/);
+    assert.match(html, /data-testid="review-workbench-shell"/);
+    assert.match(html, new RegExp(`data-item-name="public-directory-hours"[\\s\\S]*?data-state="review"`));
+    assert.match(html, new RegExp(`data-item-name="public-directory-address"[\\s\\S]*?data-state="rejected"`));
+    assert.match(html, new RegExp(`data-item-name="public-directory-availability"[\\s\\S]*?data-state="kept"`));
   });
 
   it("AC37-2 retains local decisions and notes by ReviewItem name while navigating", () => {
@@ -350,7 +351,7 @@ describe("review workbench prototype", () => {
 
     assert.equal(currentReviewWorkbenchState(session).note, "Phone source reviewed.");
     assert.equal(currentReviewWorkbenchState(session).decision, "keep-current");
-    assert.equal(nextUnresolvedItemName(session), "public-directory-address");
+    assert.equal(nextUnresolvedItemName(session), "public-directory-dropin-price");
 
     const returnedSession = {
       ...session,
@@ -375,62 +376,25 @@ describe("review workbench prototype", () => {
       keptCurrent: 1,
       rejected: 1,
       escalated: 1,
-      unresolved: 1,
+      unresolved: 3,
     });
 
+    // The field-diff footer tally uses its own plain-language vocabulary
+    // (Accepted / Kept / Flagged / Remaining) rather than reviewSessionSummary's.
     const html = renderReviewWorkbenchHtml(initialReviewQueueSessionState());
-    assert.match(html, /Session summary/);
-    assert.match(html, /Accepted/);
-    assert.match(html, /Kept current/);
-    assert.match(html, /Rejected/);
-    assert.match(html, /Escalated/);
-    assert.match(html, /Unresolved/);
+    assert.match(html, /data-testid="review-tally"/);
+    assert.match(html, /data-testid="tally-accepted"/);
+    assert.match(html, /data-testid="tally-kept"/);
+    assert.match(html, /data-testid="tally-rejected"/);
+    assert.match(html, /data-testid="tally-review"/);
   });
 
-  it("renders ReviewSession audit metadata, replay status, and ordered events", () => {
-    const session = {
-      ...initialReviewQueueSessionState(),
-      notesByItemName: {
-        "public-directory-hours": "Accepted longer posted hours.",
-      },
-      decisionsByItemName: {
-        "public-directory-hours": "accept-proposed" as const,
-      },
-    };
-    const events = buildReviewSessionEvents(session);
-    const html = renderReviewWorkbenchHtml(session, events);
-
-    assert.match(html, /data-testid="session-audit"/);
-    assert.match(html, /ReviewSession/);
-    assert.match(html, /review-workbench-session/);
-    assert.match(html, /replay ok/);
-    assert.match(html, /Events/);
-    assert.match(html, /Decisions/);
-    assert.match(html, /Actor/);
-    assert.match(html, /review-workbench-operator/);
-    assert.match(html, /data-testid="session-event-list"/);
-    assert.match(html, /session-started/);
-    assert.match(html, /item-selected/);
-    assert.match(html, /note-changed/);
-    assert.match(html, /decision-changed/);
-    assert.match(html, /decision-submitted/);
-    assert.match(html, /Session export/);
-    assert.match(html, /&quot;kind&quot;: &quot;ReviewSession&quot;/);
-    assert.match(html, /&quot;kind&quot;: &quot;ReviewSessionEvent&quot;/);
-  });
-
-  it("marks ReviewSession audit replay drift when events do not reconstruct the current session", () => {
-    const session = {
-      ...initialReviewQueueSessionState(),
-      decisionsByItemName: {
-        "public-directory-hours": "accept-proposed" as const,
-      },
-    };
-    const html = renderReviewWorkbenchHtml(session, []);
-
-    assert.match(html, /data-testid="session-audit"/);
-    assert.match(html, /replay drift/);
-  });
+  // The whole-session audit trail panel (ReviewSession metadata, replay status,
+  // ordered event list, session export JSON) was removed from the rendered UI in
+  // the field-diff redesign — audit detail is now scoped per field (see the
+  // "audit-details" tests below). The underlying session/event/replay functions
+  // (buildReviewSessionEvents, replayReviewSessionEvents, etc.) are unchanged and
+  // covered by the data-layer tests elsewhere in this file.
 
   it("AC37-4 displays producer feedback tags as producer vocabulary", () => {
     const session = initialReviewQueueSessionState();
@@ -1033,13 +997,16 @@ describe("review workbench prototype", () => {
       decision: "reject-proposed",
     });
 
-    assert.match(acceptedHtml, /data-testid="candidate-proposed" data-outcome="selected"/);
-    assert.match(acceptedHtml, /data-testid="candidate-current" data-outcome="unselected"/);
-    assert.match(keptHtml, /data-testid="candidate-current" data-outcome="selected"/);
-    assert.match(keptHtml, /data-testid="candidate-proposed" data-outcome="unselected"/);
-    assert.match(rejectedHtml, /data-testid="candidate-proposed" data-outcome="selected"/);
-    assert.match(rejectedHtml, /data-testid="candidate-current" data-outcome="unselected"/);
-    assert.doesNotMatch(rejectedHtml, /data-testid="candidate-current" data-outcome="selected"/);
+    assert.match(acceptedHtml, /data-state="accepted"/);
+    assert.match(acceptedHtml, /data-decision="accept-proposed"/);
+    assert.match(acceptedHtml, /<span class="chip accepted"[^>]*>Accepted<\/span>/);
+    assert.match(keptHtml, /data-state="kept"/);
+    assert.match(keptHtml, /data-decision="keep-current"/);
+    assert.match(keptHtml, /<span class="chip kept"[^>]*>Kept current<\/span>/);
+    assert.match(rejectedHtml, /data-state="rejected"/);
+    assert.match(rejectedHtml, /data-decision="reject-proposed"/);
+    assert.match(rejectedHtml, /Kept — flagged wrong/);
+    assert.doesNotMatch(rejectedHtml, /data-state="kept"/);
   });
 
   it("keeps reject-proposed visually distinct from keep-current", () => {
@@ -1063,8 +1030,12 @@ describe("review workbench prototype", () => {
     const rejectedHtml = renderReviewWorkbenchHtml(rejectedState);
     const keptHtml = renderReviewWorkbenchHtml(keptState);
 
-    assert.match(rejectedHtml, /data-testid="candidate-proposed" data-outcome="selected"/);
-    assert.match(keptHtml, /data-testid="candidate-current" data-outcome="selected"/);
+    assert.match(rejectedHtml, /data-state="rejected"/);
+    assert.match(keptHtml, /data-state="kept"/);
+    assert.notEqual(
+      rejectedHtml.match(/<span class="chip rejected"[^>]*>([^<]+)<\/span>/)?.[1],
+      keptHtml.match(/<span class="chip kept"[^>]*>([^<]+)<\/span>/)?.[1],
+    );
   });
 
   it("AC1 builds different Surface previews for accept-proposed and keep-current decisions", () => {
@@ -1259,28 +1230,25 @@ describe("review workbench prototype", () => {
     assert.match(html, /Regulated Rule Review/);
     assert.match(html, /standardThreshold/);
     assert.match(html, /Example Individual Standard Threshold \$16,000/);
-    assert.match(html, /data-testid="candidate-current" data-outcome="selected"/);
-    assert.match(html, /data-testid="candidate-proposed" data-outcome="unselected"/);
+    assert.match(html, /data-state="kept"/);
+    assert.match(html, /data-decision="keep-current"/);
   });
 
-  it("updates the mounted payload and replaces Surface preview when the reviewer enters a note", () => {
+  it("updates the reviewer note in place without a full re-render", () => {
     const root = new ReviewWorkbenchTestRoot();
-    const documentRestore = installTestDocument();
 
-    try {
-      mountReviewWorkbench(root as unknown as HTMLElement);
-      root.clickDecision("accept-proposed");
-      root.textarea.value = "Checked the source excerpt.";
-      root.textarea.dispatch("input");
-    } finally {
-      documentRestore();
-    }
+    mountReviewWorkbench(root as unknown as HTMLElement, initialReviewQueueSessionState([publicDirectoryReviewItemExample]));
+    root.field(publicDirectoryReviewItemExample.metadata.name).useButton.click();
 
-    assert.match(root.payload.textContent, /Checked the source excerpt\./);
-    assert.match(root.payload.textContent, /"kind": "ReviewDecision"/);
-    assert.match(root.surfacePreview.html, /Checked the source excerpt\./);
-    assert.match(root.surfacePreview.html, /data-testid="surface-review-event"/);
-    assert.equal(root.surfacePreview.replaceCount, 1);
+    const field = root.field(publicDirectoryReviewItemExample.metadata.name);
+    field.noteTextarea.value = "Checked the source excerpt.";
+    field.noteTextarea.dispatch("input");
+
+    // The same field-scope object is still attached (no full re-render happened),
+    // and its decision-payload <pre> was patched in place with the new rationale.
+    assert.equal(root.field(publicDirectoryReviewItemExample.metadata.name), field);
+    assert.match(field.payloadText, /Checked the source excerpt\./);
+    assert.match(field.payloadText, /"kind": "ReviewDecision"/);
   });
 
   it("preserves the mounted single-item start state behavior", () => {
@@ -1292,72 +1260,103 @@ describe("review workbench prototype", () => {
       note: "Rejected proposed source.",
     });
 
-    assert.equal(root.textarea.value, "Rejected proposed source.");
-    assert.match(root.html, /decision-button is-active" type="button" data-decision="reject-proposed"/);
-    assert.match(root.payload.textContent, /"candidateId": "public-directory:candidate:proposed"/);
-    assert.match(root.payload.textContent, /"status": "rejected"/);
-    assert.match(root.html, /data-testid="candidate-proposed" data-outcome="selected"/);
+    const field = root.field(publicDirectoryReviewItemExample.metadata.name);
+    assert.equal(field.noteTextarea.value, "Rejected proposed source.");
+    assert.match(root.html, /data-state="rejected"/);
+    assert.match(root.html, /data-decision="reject-proposed"/);
+    assert.match(field.payloadText, /"candidateId": "public-directory:candidate:proposed"/);
+    assert.match(field.payloadText, /"status": "rejected"/);
   });
 
-  it("AC37-2 handles mounted queue navigation without losing local note or decision", () => {
+  it("uses proposed, keeps current, and flags the wrong-toggle reject signal via mounted clicks", () => {
     const root = new ReviewWorkbenchTestRoot();
-    const documentRestore = installTestDocument();
+    // "public-directory-hours" has candidateSetStatus "needs-review" (not a
+    // producer-pre-resolved item), so undo cleanly returns it to "review" state.
+    const itemName = "public-directory-hours";
+    mountReviewWorkbench(root as unknown as HTMLElement, initialReviewQueueSessionState());
 
-    try {
-      mountReviewWorkbench(root as unknown as HTMLElement);
-      root.clickDecision("accept-proposed");
-      root.textarea.value = "Accepted the hours update.";
-      root.textarea.dispatch("input");
-      root.clickNextUnresolved();
-      assert.match(root.html, /public-directory-phone/);
-      root.clickDecision("keep-current");
-      root.textarea.value = "Kept the listed phone.";
-      root.textarea.dispatch("input");
-      root.clickQueueRow("public-directory-hours");
-    } finally {
-      documentRestore();
-    }
+    root.field(itemName).useButton.click();
+    assert.match(root.html, new RegExp(`data-item-name="${itemName}"[\\s\\S]*?data-state="accepted"`));
+    assert.match(root.field(itemName).payloadText, /"status": "verified"/);
 
-    assert.equal(root.textarea.value, "Accepted the hours update.");
-    assert.match(root.html, /decision-button is-active" type="button" data-decision="accept-proposed"/);
-    assert.match(root.html, /data-queue-status="resolved"/);
-    assert.match(root.html, /Kept current/);
+    root.field(itemName).undoButton.click();
+    assert.match(root.html, new RegExp(`data-item-name="${itemName}"[\\s\\S]*?data-state="review"`));
+
+    root.field(itemName).keepButton.click();
+    assert.match(root.html, new RegExp(`data-item-name="${itemName}"[\\s\\S]*?data-state="kept"`));
+    assert.match(root.field(itemName).payloadText, /"candidateId": "public-directory-hours:candidate:current"/);
+
+    root.field(itemName).undoButton.click();
+    root.field(itemName).wrongbox.checked = true;
+    root.field(itemName).keepButton.click();
+    assert.match(root.html, new RegExp(`data-item-name="${itemName}"[\\s\\S]*?data-state="rejected"`));
+    assert.match(root.field(itemName).payloadText, /"candidateId": "public-directory-hours:candidate:proposed"/);
+    assert.match(root.field(itemName).payloadText, /"status": "rejected"/);
   });
 
-  it("persists mounted review decisions and notes through a ReviewSessionEvent store", () => {
+  it("threads an inline-edited proposed value into the ReviewDecision payload's editedValue", () => {
+    const root = new ReviewWorkbenchTestRoot();
+    const itemName = publicDirectoryReviewItemExample.metadata.name;
+    mountReviewWorkbench(root as unknown as HTMLElement, initialReviewQueueSessionState([publicDirectoryReviewItemExample]));
+
+    const field = root.field(itemName);
+    assert.ok(field.editInput);
+    field.editInput!.value = "WAITLIST (verified by phone)";
+    field.useButton.click();
+
+    const decided = root.field(itemName);
+    assert.match(decided.payloadText, /"editedValue": "WAITLIST \(verified by phone\)"/);
+    // The candidateId still identifies the real proposed candidate — the edit does
+    // not fabricate a new candidate identity.
+    assert.match(decided.payloadText, /"candidateId": "public-directory:candidate:proposed"/);
+    assert.match(root.html, /WAITLIST \(verified by phone\)/);
+  });
+
+  it("does not record editedValue when the input is left unchanged", () => {
+    const root = new ReviewWorkbenchTestRoot();
+    const itemName = publicDirectoryReviewItemExample.metadata.name;
+    mountReviewWorkbench(root as unknown as HTMLElement, initialReviewQueueSessionState([publicDirectoryReviewItemExample]));
+
+    root.field(itemName).useButton.click();
+
+    assert.doesNotMatch(root.field(itemName).payloadText, /"editedValue"/);
+  });
+
+  it("persists mounted review decisions through a ReviewSessionEvent store and replays them on remount", () => {
     const store = createInMemoryReviewSessionEventStore();
     const firstRoot = new ReviewWorkbenchTestRoot();
-    const documentRestore = installTestDocument();
+    const itemName = "public-directory-hours";
 
-    try {
-      mountReviewWorkbench(firstRoot as unknown as HTMLElement, initialReviewQueueSessionState(), { eventStore: store });
-      firstRoot.clickDecision("accept-proposed");
-      firstRoot.textarea.value = "Accepted persisted hours.";
-      firstRoot.textarea.dispatch("input");
-      firstRoot.clickNextUnresolved();
-    } finally {
-      documentRestore();
-    }
+    mountReviewWorkbench(firstRoot as unknown as HTMLElement, initialReviewQueueSessionState(), { eventStore: store });
+    firstRoot.field(itemName).useButton.click();
+    firstRoot.field(itemName).noteTextarea.value = "Accepted persisted hours.";
+    firstRoot.field(itemName).noteTextarea.dispatch("input");
 
     assert.deepEqual(store.events().map((event) => event.spec.eventType), [
       "decision-changed",
       "note-changed",
-      "item-selected",
     ]);
-    assert.match(firstRoot.html, /data-testid="session-audit"/);
-    assert.match(firstRoot.html, /Events/);
-    assert.match(firstRoot.html, /03/);
-    assert.match(firstRoot.html, /note-changed/);
 
     const secondRoot = new ReviewWorkbenchTestRoot();
     mountReviewWorkbench(secondRoot as unknown as HTMLElement, initialReviewQueueSessionState(), { eventStore: store });
 
-    assert.match(secondRoot.html, /public-directory-phone/);
-    assert.match(secondRoot.html, /replay ok/);
-    assert.match(secondRoot.html, /decision-changed/);
-    secondRoot.clickQueueRow("public-directory-hours");
-    assert.equal(secondRoot.textarea.value, "Accepted persisted hours.");
-    assert.match(secondRoot.html, /decision-button is-active" type="button" data-decision="accept-proposed"/);
+    assert.match(secondRoot.html, new RegExp(`data-item-name="${itemName}"[\\s\\S]*?data-state="accepted"`));
+    assert.equal(secondRoot.field(itemName).noteTextarea.value, "Accepted persisted hours.");
+  });
+
+  it("replays an undo (Change) signal so a cleared decision does not resurface after reload", () => {
+    const store = createInMemoryReviewSessionEventStore();
+    const firstRoot = new ReviewWorkbenchTestRoot();
+    const itemName = "public-directory-hours";
+
+    mountReviewWorkbench(firstRoot as unknown as HTMLElement, initialReviewQueueSessionState(), { eventStore: store });
+    firstRoot.field(itemName).useButton.click();
+    firstRoot.field(itemName).undoButton.click();
+
+    const secondRoot = new ReviewWorkbenchTestRoot();
+    mountReviewWorkbench(secondRoot as unknown as HTMLElement, initialReviewQueueSessionState(), { eventStore: store });
+
+    assert.match(secondRoot.html, new RegExp(`data-item-name="${itemName}"[\\s\\S]*?data-state="review"`));
   });
 
   it("keeps local ReviewSessionEvent storage scoped to the review item set", () => {
@@ -1391,15 +1390,22 @@ describe("review workbench prototype", () => {
   for (const entry of cases) {
     it(`handles mounted ${entry.decision} button clicks`, () => {
       const root = new ReviewWorkbenchTestRoot();
+      const itemName = publicDirectoryReviewItemExample.metadata.name;
 
       mountReviewWorkbench(root as unknown as HTMLElement, initialReviewQueueSessionState([publicDirectoryReviewItemExample]));
-      root.clickDecision(entry.decision);
+      const field = root.field(itemName);
+      if (entry.decision === "reject-proposed") {
+        field.wrongbox.checked = true;
+        field.keepButton.click();
+      } else if (entry.decision === "keep-current") {
+        field.keepButton.click();
+      } else {
+        field.useButton.click();
+      }
 
       assert.match(root.html, new RegExp(escapeRegExp(entry.selectedText)));
-      assert.match(root.html, new RegExp(`data-decision="${entry.decision}"`));
-      assert.match(root.html, new RegExp(`decision-button is-active" type="button" data-decision="${entry.decision}"`));
-      assert.match(root.payload.textContent, new RegExp(`"candidateId": "${escapeRegExp(entry.candidateId)}"`));
-      assert.match(root.payload.textContent, new RegExp(`"status": "${entry.status}"`));
+      assert.match(root.field(itemName).payloadText, new RegExp(`"candidateId": "${escapeRegExp(entry.candidateId)}"`));
+      assert.match(root.field(itemName).payloadText, new RegExp(`"status": "${entry.status}"`));
     });
   }
 });
@@ -1408,231 +1414,175 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/**
+ * Minimal DOM shim for `mountReviewWorkbench`. Unlike the pre-redesign harness,
+ * this does not attempt to simulate `closest()`/`querySelector()` scoping in the
+ * abstract — it parses the rendered HTML into one `TestFieldScope` per rendered
+ * field card (keyed by `data-item-name`) and hands the controller's event
+ * delegation exactly the elements it asks for, scoped the same way the real DOM
+ * would scope them. Real interactive/visual verification (clicks, focus, CSS
+ * state) lives in the Playwright specs under tests/browser/; this harness exists
+ * to keep the controller-wiring contract (click -> decision -> re-render ->
+ * payload) covered at the node:test layer without a full DOM dependency.
+ */
 class ReviewWorkbenchTestRoot {
   html = "";
-  textarea = new TestTextAreaElement();
-  payload = new TestPayloadElement();
-  surfacePreview = new TestSurfacePreviewElement(this);
-  private buttons: TestButtonElement[] = [];
-  private queueRows: TestQueueRowElement[] = [];
-  private nextButtons: TestNextButtonElement[] = [];
+  #fieldsByItemName = new Map<string, TestFieldScope>();
+  #applyButton: TestApplyButtonElement | null = null;
 
   set innerHTML(value: string) {
     this.html = value;
-    this.textarea = new TestTextAreaElement(textareaValue(value));
-    this.payload = new TestPayloadElement(payloadValue(value));
-    this.surfacePreview = new TestSurfacePreviewElement(this, surfacePreviewValue(value));
-    this.buttons = decisionValues(value).map((decision) => new TestButtonElement(decision));
-    this.queueRows = queueItemNames(value).map((itemName) => new TestQueueRowElement(itemName));
-    this.nextButtons = nextButtonTestIds(value).map(() => new TestNextButtonElement());
+    this.#fieldsByItemName = parseFieldScopes(value);
+    this.#applyButton = /data-testid="apply-button"/.test(value) ? new TestApplyButtonElement() : null;
   }
 
   get innerHTML(): string {
     return this.html;
   }
 
+  field(itemName: string): TestFieldScope {
+    const scope = this.#fieldsByItemName.get(itemName);
+    assert.ok(scope, `Missing rendered field for ${itemName}`);
+    return scope as TestFieldScope;
+  }
+
   querySelector<T>(selector: string): T | null {
-    if (selector === "[data-testid='reviewer-note']") {
-      return this.textarea as T;
+    if (selector === "[data-testid='apply-button']") {
+      return this.#applyButton as T;
     }
-
-    if (selector === "[data-testid='decision-payload']") {
-      return this.payload as T;
-    }
-
-    if (selector === "[data-testid='surface-preview']") {
-      return this.surfacePreview as T;
-    }
-
-    if (selector === "[data-testid='next-unresolved']") {
-      return this.nextButtons[0] as T;
-    }
-
     return null;
   }
 
   querySelectorAll<T>(selector: string): T[] {
-    if (selector === "[data-decision]") {
-      return this.buttons as T[];
-    }
-
-    if (selector === "[data-item-name]") {
-      return this.queueRows as T[];
-    }
-
-    if (selector === "[data-testid='next-unresolved'], [data-testid='active-next-unresolved']") {
-      return this.nextButtons as T[];
-    }
-
+    const scopes = [...this.#fieldsByItemName.values()];
+    if (selector === "[data-testid='use-proposed']") return scopes.map((scope) => scope.useButton) as T[];
+    if (selector === "[data-testid='keep-current']") return scopes.map((scope) => scope.keepButton) as T[];
+    if (selector === "[data-testid='undo-decision']") return scopes.map((scope) => scope.undoButton) as T[];
+    if (selector === "[data-testid='reviewer-note']") return scopes.map((scope) => scope.noteTextarea) as T[];
     return [];
   }
+}
 
-  clickDecision(decision: ReviewWorkbenchDecision): void {
-    const button = this.buttons.find((entry) => entry.dataset.decision === decision);
-    assert.ok(button, `Missing test button for ${decision}`);
-    button.click();
+class TestFieldScope {
+  readonly useButton: TestFieldButtonElement;
+  readonly keepButton: TestFieldButtonElement;
+  readonly undoButton: TestFieldButtonElement;
+  readonly noteTextarea: TestTextAreaElement;
+  readonly wrongbox = new TestCheckboxElement();
+  readonly editInput: TestInputElement | null;
+  readonly #payload: TestPreElement;
+
+  constructor(itemName: string, editValue: string | undefined, noteValue: string, payloadText: string) {
+    this.useButton = new TestFieldButtonElement(itemName, this);
+    this.keepButton = new TestFieldButtonElement(itemName, this);
+    this.undoButton = new TestFieldButtonElement(itemName, this);
+    this.noteTextarea = new TestTextAreaElement(noteValue, this, itemName);
+    this.editInput = editValue === undefined ? null : new TestInputElement(editValue);
+    this.#payload = new TestPreElement(payloadText);
   }
 
-  clickQueueRow(itemName: string): void {
-    const row = this.queueRows.find((entry) => entry.dataset.itemName === itemName);
-    assert.ok(row, `Missing test queue row for ${itemName}`);
-    row.click();
+  get payloadText(): string {
+    return this.#payload.textContent;
   }
 
-  clickNextUnresolved(): void {
-    this.nextButtons[0]?.click();
+  querySelector<T>(selector: string): T | null {
+    if (selector === "[data-testid='edit-proposed-value']") return this.editInput as T;
+    if (selector === "[data-testid='wrong-toggle']") return this.wrongbox as T;
+    if (selector === "[data-testid='decision-payload']") return this.#payload as T;
+    return null;
   }
 }
 
-class TestSurfacePreviewElement {
-  replaceCount = 0;
-
-  constructor(
-    private readonly root: ReviewWorkbenchTestRoot,
-    public html = "",
-  ) {}
-
-  replaceWith(replacement: TestSurfacePreviewElement): void {
-    this.replaceCount += 1;
-    this.html = replacement.html;
-    this.root.surfacePreview = this;
-    this.root.html = replaceSurfacePreview(this.root.html, replacement.html);
-  }
-}
-
-class TestWrapperElement {
-  firstElementChild: TestSurfacePreviewElement | null = null;
-
-  set innerHTML(value: string) {
-    this.firstElementChild = new TestSurfacePreviewElement(new ReviewWorkbenchTestRoot(), value);
-  }
-}
-
-class TestTextAreaElement {
-  private readonly listeners = new Map<string, Array<(event: { target: TestTextAreaElement }) => void>>();
-
-  constructor(public value = "") {}
-
-  addEventListener(type: string, listener: (event: { target: TestTextAreaElement }) => void): void {
-    this.listeners.set(type, [...this.listeners.get(type) ?? [], listener]);
-  }
-
-  dispatch(type: string): void {
-    for (const listener of this.listeners.get(type) ?? []) {
-      listener({ target: this });
-    }
-  }
-}
-
-class TestButtonElement {
-  readonly dataset: { decision: ReviewWorkbenchDecision };
-  private readonly listeners = new Map<string, Array<() => void>>();
-
-  constructor(decision: ReviewWorkbenchDecision) {
-    this.dataset = { decision };
-  }
-
-  addEventListener(type: string, listener: () => void): void {
-    this.listeners.set(type, [...this.listeners.get(type) ?? [], listener]);
-  }
-
-  click(): void {
-    for (const listener of this.listeners.get("click") ?? []) {
-      listener();
-    }
-  }
-}
-
-class TestQueueRowElement {
+class TestFieldButtonElement {
   readonly dataset: { itemName: string };
-  private readonly listeners = new Map<string, Array<() => void>>();
+  #listeners: Array<() => void> = [];
 
-  constructor(itemName: string) {
+  constructor(itemName: string, private readonly scope: TestFieldScope) {
     this.dataset = { itemName };
   }
 
   addEventListener(type: string, listener: () => void): void {
-    this.listeners.set(type, [...this.listeners.get(type) ?? [], listener]);
+    if (type === "click") this.#listeners.push(listener);
+  }
+
+  closest<T>(selector: string): T | null {
+    return selector === "[data-testid='review-field']" ? (this.scope as unknown as T) : null;
   }
 
   click(): void {
-    for (const listener of this.listeners.get("click") ?? []) {
-      listener();
-    }
+    for (const listener of this.#listeners) listener();
   }
 }
 
-class TestNextButtonElement {
-  private readonly listeners = new Map<string, Array<() => void>>();
+class TestApplyButtonElement {
+  #listeners: Array<() => void> = [];
 
   addEventListener(type: string, listener: () => void): void {
-    this.listeners.set(type, [...this.listeners.get(type) ?? [], listener]);
+    if (type === "click") this.#listeners.push(listener);
   }
 
   click(): void {
-    for (const listener of this.listeners.get("click") ?? []) {
-      listener();
-    }
+    for (const listener of this.#listeners) listener();
   }
 }
 
-class TestPayloadElement {
-  constructor(public textContent = "") {}
+class TestTextAreaElement {
+  readonly dataset: { itemName: string };
+  #listeners: Array<(event: { target: TestTextAreaElement }) => void> = [];
+
+  constructor(public value: string, private readonly scope?: TestFieldScope, itemName = "") {
+    this.dataset = { itemName };
+  }
+
+  addEventListener(type: string, listener: (event: { target: TestTextAreaElement }) => void): void {
+    if (type === "input") this.#listeners.push(listener);
+  }
+
+  closest<T>(selector: string): T | null {
+    return this.scope && selector === "[data-testid='review-field']" ? (this.scope as unknown as T) : null;
+  }
+
+  dispatch(type: string): void {
+    if (type !== "input") return;
+    for (const listener of this.#listeners) listener({ target: this });
+  }
 }
 
-function installTestDocument(): () => void {
-  const previousDocument = globalThis.document;
-  Object.defineProperty(globalThis, "document", {
-    configurable: true,
-    value: {
-      createElement: () => new TestWrapperElement(),
-    },
+class TestInputElement {
+  constructor(public value: string) {}
+}
+
+class TestCheckboxElement {
+  checked = false;
+}
+
+class TestPreElement {
+  constructor(public textContent: string) {}
+}
+
+function parseFieldScopes(html: string): Map<string, TestFieldScope> {
+  const fieldStartPattern = /<section\s+class="field"\s+data-testid="review-field"\s+data-item-name="([^"]+)"/g;
+  const starts: Array<{ index: number; itemName: string }> = [];
+  for (const match of html.matchAll(fieldStartPattern)) {
+    starts.push({ index: match.index ?? 0, itemName: unescapeHtml(match[1] ?? "") });
+  }
+
+  const scopes = new Map<string, TestFieldScope>();
+  starts.forEach(({ index, itemName }, position) => {
+    const end = position + 1 < starts.length ? starts[position + 1]!.index : html.length;
+    const fragment = html.slice(index, end);
+    const editValue = fragment.match(/data-testid="edit-proposed-value"[^>]*value="([^"]*)"/)?.[1];
+    const noteValue = fragment.match(/<textarea[^>]*data-testid="reviewer-note"[^>]*>([\s\S]*?)<\/textarea>/)?.[1] ?? "";
+    const payloadText = fragment.match(/<pre[^>]*data-testid="decision-payload"[^>]*>([\s\S]*?)<\/pre>/)?.[1] ?? "";
+    scopes.set(itemName, new TestFieldScope(
+      itemName,
+      editValue === undefined ? undefined : unescapeHtml(editValue),
+      unescapeHtml(noteValue),
+      unescapeHtml(payloadText),
+    ));
   });
 
-  return () => {
-    if (previousDocument === undefined) {
-      Reflect.deleteProperty(globalThis, "document");
-      return;
-    }
-
-    Object.defineProperty(globalThis, "document", {
-      configurable: true,
-      value: previousDocument,
-    });
-  };
-}
-
-function decisionValues(html: string): ReviewWorkbenchDecision[] {
-  return [...html.matchAll(/data-decision="([^"]+)"/g)].map((match) => match[1] as ReviewWorkbenchDecision);
-}
-
-function queueItemNames(html: string): string[] {
-  return [...html.matchAll(/data-item-name="([^"]+)"/g)].map((match) => unescapeHtml(match[1]));
-}
-
-function nextButtonTestIds(html: string): string[] {
-  return [...html.matchAll(/data-testid="(?:next-unresolved|active-next-unresolved)"/g)].map((match) => match[0]);
-}
-
-function textareaValue(html: string): string {
-  return unescapeHtml(html.match(/<textarea[^>]*data-testid="reviewer-note"[^>]*>([\s\S]*?)<\/textarea>/)?.[1] ?? "");
-}
-
-function payloadValue(html: string): string {
-  return unescapeHtml(html.match(/<pre[^>]*data-testid="decision-payload"[^>]*>([\s\S]*?)<\/pre>/)?.[1] ?? "");
-}
-
-function surfacePreviewValue(html: string): string {
-  return html.match(/(<section class="surface-preview"[^>]*data-testid="surface-preview"[\s\S]*?)\s*<details class="payload-panel">/)?.[1]
-    ?? html.match(/<section class="surface-preview"[^>]*data-testid="surface-preview"[\s\S]*?<\/section>/)?.[0]
-    ?? "";
-}
-
-function replaceSurfacePreview(html: string, replacement: string): string {
-  return html.replace(
-    /<section class="surface-preview"[^>]*data-testid="surface-preview"[\s\S]*?(?=\s*<details class="payload-panel">)/,
-    `${replacement}\n      `,
-  );
+  return scopes;
 }
 
 function replaceReviewEventSpec(
