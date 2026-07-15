@@ -558,7 +558,8 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   margin-top: 8px;
 }
 
-.survey-workbench-embed .editrow input{
+.survey-workbench-embed .editrow input,
+.survey-workbench-embed .editrow select{
   flex: 1;
   min-width: 0;
   font-size: 13.5px;
@@ -569,7 +570,8 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   padding: 6px 9px;
 }
 
-.survey-workbench-embed .editrow input:focus-visible{
+.survey-workbench-embed .editrow input:focus-visible,
+.survey-workbench-embed .editrow select:focus-visible{
   outline: 2px solid var(--k-brand);
   outline-offset: 1px;
   border-color: var(--k-brand);
@@ -579,6 +581,20 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   font-size: 11.5px;
   color: var(--k-faint);
   white-space: nowrap;
+}
+
+/* Validation message for a typed proposed-value edit (hidden until the mount
+   handler blocks a "Use proposed" on an out-of-shape value). */
+.survey-workbench-embed .verr{
+  display: block;
+  margin-top: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--k-negative);
+}
+
+.survey-workbench-embed .verr[hidden]{
+  display: none;
 }
 
 /* confidence + provenance */

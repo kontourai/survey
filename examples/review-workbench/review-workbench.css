@@ -404,7 +404,8 @@ h1, h2, h3, p {
   margin-top: 8px;
 }
 
-.editrow input {
+.editrow input,
+.editrow select {
   flex: 1;
   min-width: 0;
   font-size: 13.5px;
@@ -415,7 +416,8 @@ h1, h2, h3, p {
   padding: 6px 9px;
 }
 
-.editrow input:focus-visible {
+.editrow input:focus-visible,
+.editrow select:focus-visible {
   outline: 2px solid var(--k-brand);
   outline-offset: 1px;
   border-color: var(--k-brand);
@@ -425,6 +427,20 @@ h1, h2, h3, p {
   font-size: 11.5px;
   color: var(--k-faint);
   white-space: nowrap;
+}
+
+/* Validation message for a typed proposed-value edit (hidden until the mount
+   handler blocks a "Use proposed" on an out-of-shape value). */
+.verr {
+  display: block;
+  margin-top: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--k-negative);
+}
+
+.verr[hidden] {
+  display: none;
 }
 
 /* confidence + provenance */
