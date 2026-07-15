@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.0](https://github.com/kontourai/survey/compare/v1.12.0...v1.13.0) (2026-07-15)
+
+
+### Features
+
+* typed proposed-value editors + validation in the review workbench ([#44](https://github.com/kontourai/survey/issues/44)) ([#145](https://github.com/kontourai/survey/issues/145)) ([734f71b](https://github.com/kontourai/survey/commit/734f71b08e53e4aa447417161936cfbc7ebeaa78))
+
 ## [1.12.0](https://github.com/kontourai/survey/compare/v1.11.0...v1.12.0) (2026-07-14)
 
 
