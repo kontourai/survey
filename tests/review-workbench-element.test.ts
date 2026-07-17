@@ -32,6 +32,19 @@ describe("review-workbench-element", () => {
       /survey-workbench-embed/,
       "generated CSS must include the embed scope class",
     );
+    // Token defaults must be host-overridable: emitted as `var(--k-x, default)`
+    // so a host's ancestor/inline --k-* propagates in without a specificity war.
+    // A bare `--k-brand: <color>;` default would mean that path is dormant.
+    assert.match(
+      source,
+      /--k-brand:\s*var\(--k-brand,/,
+      "token defaults must be emitted in the host-overridable var(--k-*, default) form",
+    );
+    assert.doesNotMatch(
+      source,
+      /--k-brand:\s*#[0-9a-fA-F]/,
+      "token defaults must not be bare colors (the host-override path would be dormant)",
+    );
   });
 
   it("review-workbench-element imports the generated CSS module directly", async () => {

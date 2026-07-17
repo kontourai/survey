@@ -6,149 +6,149 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   color-scheme: dark;
 
   /* structure */
-  --k-bg: #0a0e13;
-  --k-panel: #111824;
-  --k-panel-raised: #16202d;
-  --k-line: rgba(150, 180, 210, 0.12);
-  --k-line-strong: rgba(150, 180, 210, 0.22);
-  --k-shadow: 0 26px 60px -42px rgba(0, 0, 0, 0.95);
+  --k-bg: var(--k-bg, #0a0e13);
+  --k-panel: var(--k-panel, #111824);
+  --k-panel-raised: var(--k-panel-raised, #16202d);
+  --k-line: var(--k-line, rgba(150, 180, 210, 0.12));
+  --k-line-strong: var(--k-line-strong, rgba(150, 180, 210, 0.22));
+  --k-shadow: var(--k-shadow, 0 26px 60px -42px rgba(0, 0, 0, 0.95));
 
   /* text */
-  --k-text: #eef3f8;
-  --k-text-muted: #aebccb;
-  --k-text-faint: #72869b;
+  --k-text: var(--k-text, #eef3f8);
+  --k-text-muted: var(--k-text-muted, #aebccb);
+  --k-text-faint: var(--k-text-faint, #72869b);
 
   /* brand */
-  --k-brand: #5ce0c6;
-  --k-brand-contrast: #06080b;
+  --k-brand: var(--k-brand, #5ce0c6);
+  --k-brand-contrast: var(--k-brand-contrast, #06080b);
 
   /* semantic status scale */
-  --k-positive: #34d399;
-  --k-caution: #f3b14b;
-  --k-negative: #ff6f6f;
-  --k-neutral: #6f8095;
-  --k-active: #7aa2ff;
+  --k-positive: var(--k-positive, #34d399);
+  --k-caution: var(--k-caution, #f3b14b);
+  --k-negative: var(--k-negative, #ff6f6f);
+  --k-neutral: var(--k-neutral, #6f8095);
+  --k-active: var(--k-active, #7aa2ff);
   --k-positive-soft: color-mix(in oklab, var(--k-positive) 14%, transparent);
   --k-caution-soft: color-mix(in oklab, var(--k-caution) 14%, transparent);
   --k-negative-soft: color-mix(in oklab, var(--k-negative) 14%, transparent);
   --k-active-soft: color-mix(in oklab, var(--k-active) 14%, transparent);
 
   /* spacing */
-  --k-space-1: 4px;
-  --k-space-2: 8px;
-  --k-space-3: 12px;
-  --k-space-4: 16px;
-  --k-space-5: 24px;
-  --k-space-6: 32px;
+  --k-space-1: var(--k-space-1, 4px);
+  --k-space-2: var(--k-space-2, 8px);
+  --k-space-3: var(--k-space-3, 12px);
+  --k-space-4: var(--k-space-4, 16px);
+  --k-space-5: var(--k-space-5, 24px);
+  --k-space-6: var(--k-space-6, 32px);
 
   /* radius */
-  --k-radius-sm: 9px;
-  --k-radius-md: 14px;
+  --k-radius-sm: var(--k-radius-sm, 9px);
+  --k-radius-md: var(--k-radius-md, 14px);
 
   /* type */
-  --k-text-xs: 11px;
-  --k-text-sm: 12.5px;
-  --k-text-md: 14px;
-  --k-text-lg: 18px;
-  --k-text-xl: 22px;
-  --k-text-2xl: clamp(26px, 3.4vw, 38px);
+  --k-text-xs: var(--k-text-xs, 11px);
+  --k-text-sm: var(--k-text-sm, 12.5px);
+  --k-text-md: var(--k-text-md, 14px);
+  --k-text-lg: var(--k-text-lg, 18px);
+  --k-text-xl: var(--k-text-xl, 22px);
+  --k-text-2xl: var(--k-text-2xl, clamp(26px, 3.4vw, 38px));
 
   /* fonts */
-  --k-font-display: "Fraunces", Georgia, "Times New Roman", serif;
-  --k-font-ui: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --k-font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --k-font-display: var(--k-font-display, "Fraunces", Georgia, "Times New Roman", serif);
+  --k-font-ui: var(--k-font-ui, "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif);
+  --k-font-mono: var(--k-font-mono, "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace);
 
   /* motion */
-  --k-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --k-dur: 0.16s;
+  --k-ease: var(--k-ease, cubic-bezier(0.22, 1, 0.36, 1));
+  --k-dur: var(--k-dur, 0.16s);
 }
 
 .survey-workbench-embed[data-theme="light"]{
   color-scheme: light;
-  --k-bg: #f5f4ef;
-  --k-panel: #ffffff;
-  --k-panel-raised: #fbfaf7;
-  --k-line: rgba(36, 40, 46, 0.12);
-  --k-line-strong: rgba(36, 40, 46, 0.20);
-  --k-shadow: 0 18px 50px -30px rgba(0, 0, 0, 0.25);
-  --k-text: #202124;
-  --k-text-muted: #5b626b;
-  --k-text-faint: #707782;
-  --k-brand-contrast: #ffffff;
-  --k-positive: #168257;
-  --k-caution: #8a5a00;
-  --k-negative: #c83b3b;
-  --k-neutral: #5f6975;
-  --k-active: #3f6fd6;
+  --k-bg: var(--k-bg, #f5f4ef);
+  --k-panel: var(--k-panel, #ffffff);
+  --k-panel-raised: var(--k-panel-raised, #fbfaf7);
+  --k-line: var(--k-line, rgba(36, 40, 46, 0.12));
+  --k-line-strong: var(--k-line-strong, rgba(36, 40, 46, 0.20));
+  --k-shadow: var(--k-shadow, 0 18px 50px -30px rgba(0, 0, 0, 0.25));
+  --k-text: var(--k-text, #202124);
+  --k-text-muted: var(--k-text-muted, #5b626b);
+  --k-text-faint: var(--k-text-faint, #707782);
+  --k-brand-contrast: var(--k-brand-contrast, #ffffff);
+  --k-positive: var(--k-positive, #168257);
+  --k-caution: var(--k-caution, #8a5a00);
+  --k-negative: var(--k-negative, #c83b3b);
+  --k-neutral: var(--k-neutral, #5f6975);
+  --k-active: var(--k-active, #3f6fd6);
 }
 
 
 .survey-workbench-embed.theme-survey{
-  --k-bg: #06080b;
-  --k-brand: #5ce0c6;
-  --k-text-faint: #6f8095;
+  --k-bg: var(--k-bg, #06080b);
+  --k-brand: var(--k-brand, #5ce0c6);
+  --k-text-faint: var(--k-text-faint, #6f8095);
 }
 
 .survey-workbench-embed.theme-console{
-  --k-font-ui: "Aptos Narrow", "DIN Condensed", "IBM Plex Sans Condensed", "Gill Sans", sans-serif;
-  --k-font-display: "Aptos Narrow", "DIN Condensed", "IBM Plex Sans Condensed", "Gill Sans", sans-serif;
-  --k-radius-sm: 0;
-  --k-radius-md: 0;
-  --k-brand: #c9ff4a;
-  --k-brand-contrast: #11120f;
-  --k-bg: #11120f;
-  --k-panel: #191b16;
-  --k-panel-raised: #20231e;
-  --k-line: #3a4035;
-  --k-line-strong: #8ea36e;
-  --k-text: #f2f0e8;
-  --k-text-muted: #a6ab9c;
-  --k-text-faint: #747a6c;
-  --k-positive: #a6d37b;
-  --k-caution: #e8c15f;
-  --k-negative: #ee776f;
-  --k-active: #84d8c8;
+  --k-font-ui: var(--k-font-ui, "Aptos Narrow", "DIN Condensed", "IBM Plex Sans Condensed", "Gill Sans", sans-serif);
+  --k-font-display: var(--k-font-display, "Aptos Narrow", "DIN Condensed", "IBM Plex Sans Condensed", "Gill Sans", sans-serif);
+  --k-radius-sm: var(--k-radius-sm, 0);
+  --k-radius-md: var(--k-radius-md, 0);
+  --k-brand: var(--k-brand, #c9ff4a);
+  --k-brand-contrast: var(--k-brand-contrast, #11120f);
+  --k-bg: var(--k-bg, #11120f);
+  --k-panel: var(--k-panel, #191b16);
+  --k-panel-raised: var(--k-panel-raised, #20231e);
+  --k-line: var(--k-line, #3a4035);
+  --k-line-strong: var(--k-line-strong, #8ea36e);
+  --k-text: var(--k-text, #f2f0e8);
+  --k-text-muted: var(--k-text-muted, #a6ab9c);
+  --k-text-faint: var(--k-text-faint, #747a6c);
+  --k-positive: var(--k-positive, #a6d37b);
+  --k-caution: var(--k-caution, #e8c15f);
+  --k-negative: var(--k-negative, #ee776f);
+  --k-active: var(--k-active, #84d8c8);
 }
 
 .survey-workbench-embed.theme-flow{
-  --k-brand: #2f88a6;
+  --k-brand: var(--k-brand, #2f88a6);
 }
 
 .survey-workbench-embed.theme-surface{
-  --k-brand: #14a37a;
+  --k-brand: var(--k-brand, #14a37a);
 }
 
 .survey-workbench-embed[data-theme="light"].theme-survey,
 .survey-workbench-embed[data-theme="light"] .theme-survey{
-  --k-brand: #16806f;
+  --k-brand: var(--k-brand, #16806f);
 }
 
 .survey-workbench-embed[data-theme="light"].theme-console,
 .survey-workbench-embed[data-theme="light"] .theme-console{
-  --k-brand: #6c9400;
-  --k-brand-contrast: #ffffff;
-  --k-bg: #f3f5eb;
-  --k-panel: #fbfcf7;
-  --k-panel-raised: #eef2e6;
-  --k-line: #ccd5bf;
-  --k-line-strong: #8fa36f;
-  --k-text: #1e2319;
-  --k-text-muted: #596250;
-  --k-text-faint: #77816d;
-  --k-positive: #2f7d32;
-  --k-caution: #8a6500;
-  --k-negative: #b93a36;
-  --k-active: #247f75;
+  --k-brand: var(--k-brand, #6c9400);
+  --k-brand-contrast: var(--k-brand-contrast, #ffffff);
+  --k-bg: var(--k-bg, #f3f5eb);
+  --k-panel: var(--k-panel, #fbfcf7);
+  --k-panel-raised: var(--k-panel-raised, #eef2e6);
+  --k-line: var(--k-line, #ccd5bf);
+  --k-line-strong: var(--k-line-strong, #8fa36f);
+  --k-text: var(--k-text, #1e2319);
+  --k-text-muted: var(--k-text-muted, #596250);
+  --k-text-faint: var(--k-text-faint, #77816d);
+  --k-positive: var(--k-positive, #2f7d32);
+  --k-caution: var(--k-caution, #8a6500);
+  --k-negative: var(--k-negative, #b93a36);
+  --k-active: var(--k-active, #247f75);
 }
 
 .survey-workbench-embed[data-theme="light"].theme-flow,
 .survey-workbench-embed[data-theme="light"] .theme-flow{
-  --k-brand: #1f6f88;
+  --k-brand: var(--k-brand, #1f6f88);
 }
 
 .survey-workbench-embed[data-theme="light"].theme-surface,
 .survey-workbench-embed[data-theme="light"] .theme-surface{
-  --k-brand: #0f6b52;
+  --k-brand: var(--k-brand, #0f6b52);
 }
 
 
