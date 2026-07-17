@@ -975,7 +975,7 @@ function renderDiffRow(
       <div class="val proposed">
         <div class="vlbl">Proposed</div>
         <div class="vtext" data-value data-testid="proposed-value">${escapeHtml(effectiveProposedText)}</div>
-        ${decided ? "" : renderProposedValueEditor(item, proposed, targetLabel)}
+        ${decided || item.spec.editable === false ? "" : renderProposedValueEditor(item, proposed, targetLabel)}
       </div>
     </div>
   `;
