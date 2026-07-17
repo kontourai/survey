@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.14.0](https://github.com/kontourai/survey/compare/v1.13.0...v1.14.0) (2026-07-17)
+
+
+### Features
+
+* carry reviewer inline edits through the event log so replay reconstructs them ([#149](https://github.com/kontourai/survey/issues/149)) ([bb82e31](https://github.com/kontourai/survey/commit/bb82e31359303865345a737ac3eb939e397582b3))
+* editable flag to disable inline proposed-value editing per item ([#148](https://github.com/kontourai/survey/issues/148)) ([34394d8](https://github.com/kontourai/survey/commit/34394d80f7e8ce36ce68c9dc608dc9c7150bef8c))
+
 ## [1.13.0](https://github.com/kontourai/survey/compare/v1.12.0...v1.13.0) (2026-07-15)
 
 
