@@ -61,8 +61,14 @@ async function buildEmbeddedWorkbenchCss() {
 
   return [
     "/* Bundled, scoped Survey Review Workbench styles for downstream embeds. Font loading is left to the host app. */",
-    scopeCssForEmbeddedWorkbench(tokensCss),
-    scopeCssForEmbeddedWorkbench(themesCss),
+    // Make the --k-* token DEFAULTS overridable: a `--k-x: <value>` default is
+    // emitted as `--k-x: var(--k-x, <value>)`, so a host that sets any --k-*
+    // token on an ancestor (or inline on the embed element) has it propagate in
+    // WITHOUT out-specificity-ing the embed's own token selectors. Absent a host
+    // override the fallback keeps the default appearance, so this is invisible
+    // to consumers that do not theme. Component styles below are untouched.
+    makeTokensInheritable(scopeCssForEmbeddedWorkbench(tokensCss)),
+    makeTokensInheritable(scopeCssForEmbeddedWorkbench(themesCss)),
     scopedWorkbenchCss,
     [
       ".survey-workbench-embed {",

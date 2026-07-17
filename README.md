@@ -147,6 +147,32 @@ The embedded stylesheet is scoped to `.survey-workbench-embed` and bundles Conso
 
 `@kontourai/survey/review-workbench/standalone.css` exists for pages Survey owns entirely.
 
+### Theme it as your own brand
+
+The bundled `--k-*` token defaults are emitted in overridable form
+(`--k-brand: var(--k-brand, <default>)`), so a host brand is authoritative: set
+any `--k-*` token on an ancestor of the embed (or inline on the embed element,
+or the host element of the web component) and it propagates in — no need to
+out-specificity the embed's own selectors. Unset tokens keep their default, so
+you only declare what you re-brand.
+
+```css
+/* Your app's own palette drives the workbench — no Kontour branding. */
+.survey-workbench-embed {
+  --k-brand: var(--brand-accent);
+  --k-bg: var(--paper);
+  --k-panel: var(--paper-2);
+  --k-text: var(--ink);
+  --k-line: var(--hairline);
+  --k-font-ui: var(--font-body);
+  --k-radius-md: 2px;
+}
+```
+
+The full token list is in the [Consumer Integration Guide](docs/consumer-integration-guide.md).
+Prefer this over the built-in `theme-survey`/`theme-console`/… presets when the
+host app should read as itself.
+
 ## Review MCP
 
 Drive review-queue decisions from an MCP agent (Claude Desktop, Cursor, or any MCP host):
