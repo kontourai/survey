@@ -47,6 +47,12 @@ export interface CurrentProposedReviewItemInput {
   readonly producerPolicy?: ProducerPolicy;
   readonly projection?: SurveyRecordProjectionHint;
   readonly candidateIdSuffix?: { readonly current?: string; readonly proposed?: string };
+  /**
+   * Whether the reviewer may edit the proposed value inline. Defaults to
+   * `true`. Pass `false` for keep/use/reject-only queues (see
+   * {@link ReviewItemSpec.editable}).
+   */
+  readonly editable?: boolean;
 }
 
 /**
@@ -91,6 +97,7 @@ export function currentProposedReviewItem(input: CurrentProposedReviewItemInput)
       ...(selectedCandidateId ? { selectedCandidateId } : {}),
       ...(input.rationale ? { rationale: input.rationale } : {}),
       ...(input.producerPolicy ? { producerPolicy: input.producerPolicy } : {}),
+      ...(input.editable === false ? { editable: false } : {}),
       projection: { ...input.projection, candidateSetId },
     },
     status: {

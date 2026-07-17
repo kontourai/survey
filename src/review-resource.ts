@@ -172,6 +172,17 @@ export interface ReviewItemSpec {
    * Absent → a plain text editor with no validation (today's behavior).
    */
   valueDescriptor?: ReviewValueDescriptor;
+  /**
+   * Whether the reviewer may edit the proposed value inline before accepting
+   * it. Defaults to `true` (today's behavior). Set `false` for queues where an
+   * edited value is meaningless or must not be accepted — an approve/keep
+   * identity decision, a value the producer will re-derive, a review that only
+   * chooses between the two candidates as given. The workbench then renders no
+   * editor at all: the decision is keep-current / use-proposed / reject only,
+   * and `effectiveValue` is always the selected candidate's own value. This is
+   * enforcement (the affordance is absent), not a cosmetic hide.
+   */
+  editable?: boolean;
 }
 
 export interface ReviewItemStatus {
