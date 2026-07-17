@@ -12,4 +12,6 @@ Numbered ADRs under `docs/adr/` are frozen history and are not listed here.
 | --- | --- | --- |
 | [calibration](./calibration.md) | current | Confidence Calibration from Review Outcomes |
 | [producer-profile](./producer-profile.md) | current | Producer Profile |
+| [proposed-value-edit](./proposed-value-edit.md) | current | Proposed-Value Edit |
+| [review-workbench](./review-workbench.md) | current | Review Workbench |
 | [reviewed-current-proposed-resolution](./reviewed-current-proposed-resolution.md) | needs-decision | Reviewed Current/Proposed Resolution |
