@@ -131,6 +131,23 @@ describe("review workbench prototype", () => {
     assert.match(html, /example-extraction-model-2026-05/);
   });
 
+  it("renders the inline proposed-value editor by default", () => {
+    const html = renderReviewWorkbenchHtml(initialReviewWorkbenchState(publicDirectoryReviewItemExample));
+    assert.match(html, /data-testid="edit-proposed-value"/);
+  });
+
+  it("omits the inline editor entirely when the item declares editable:false", () => {
+    const nonEditable: ReviewItem = {
+      ...publicDirectoryReviewItemExample,
+      spec: { ...publicDirectoryReviewItemExample.spec, editable: false },
+    };
+    const html = renderReviewWorkbenchHtml(initialReviewWorkbenchState(nonEditable));
+    // The affordance is absent, not hidden — keep/use/reject remain.
+    assert.doesNotMatch(html, /data-testid="edit-proposed-value"/);
+    assert.match(html, /Use proposed/);
+    assert.match(html, /Keep current/);
+  });
+
   it("renders structured candidate values without downstream pre-stringification", () => {
     const structuredItem: ReviewItem = {
       ...publicDirectoryReviewItemExample,
