@@ -26,6 +26,14 @@ Roles include `current` and `proposed`, but also neutral roles such as
 `alternative`, `source-version`, and `computed` so regulated-document reviews
 do not have to pretend every comparison is a current/proposed pair.
 
+`ReviewItem.spec` also carries two optional review-UX hints for the Review
+Workbench, both producer-owned and both defaulting to today's behavior when
+absent: `valueDescriptor` (a neutral value-type descriptor that selects a typed
+editor and validates a reviewer's edit) and `editable` (a boolean; `false`
+turns off inline proposed-value editing for that item entirely — the workbench
+renders no editor and the decision is keep/use/reject only, so `effectiveValue`
+is always the selected candidate's own value). `editable` defaults to `true`.
+
 `ReviewCandidate` is embedded inside `ReviewItem`. It is intentionally not a
 top-level resource because candidate lifecycle belongs to the producer and the
 portable contract only needs the serializable candidate payload.
@@ -42,7 +50,14 @@ producer's own system.
 
 `ReviewSessionEvent` is a single event in a review session, such as a decision,
 undo, or session-complete marker. Events are replayed against the session
-snapshot to derive the final apply result. See
+snapshot to derive the final apply result. When a reviewer inline-edits a
+proposed value (an accept-proposed decision), the edit is carried on the
+decision event as `spec.data.workbenchEditedValue`, and `replayReviewSessionEvents`
+reconstructs `editedValuesByItemName` from it — so `snapshot + persisted events`
+is a complete record of reviewer intent and the derived `effectiveValue`
+reflects the edit with no separate edit channel. A decision that moves off
+accept-proposed, or an accept with no carried edit, clears any prior edit for
+that item on replay. See
 [`consumer-integration-guide.md`](consumer-integration-guide.md) for the full
 replay and apply boundary.
 
@@ -59,6 +74,8 @@ Field ownership:
 | --- | --- | --- |
 | `metadata.name`, `labels`, `annotations` | producer | Stable producer identity and grouping labels. |
 | `metadata.producer`, `spec.producerPolicy`, `candidate.producer` | producer | Domain context and policy hints; Survey treats these as opaque data. As of this delivery, the well-known `decisionMode` sub-key is typed (`ReviewDecisionMode`) and can be optionally enforced via `applyReviewSession`'s `enforceProducerPolicy` option or `assertReviewDecisionModeAllows` directly; all other keys remain opaque, and enforcement is off by default — unset `producerPolicy`/`decisionMode` never changes behavior. |
+| `spec.valueDescriptor`, `spec.editable` | producer | Optional Review Workbench UX hints. `valueDescriptor` selects a typed proposed-value editor and validation; `editable: false` removes the inline editor entirely (keep/use/reject only). Both default to today's behavior when absent (`editable` defaults `true`); neither changes the portable record shapes or the derived apply result beyond which value a reviewer can produce. |
+| `ReviewSessionEvent.spec.data.workbenchEditedValue` | reviewer input, Survey-replayed | The reviewer's inline **Proposed-Value Edit** carried on an accept-proposed decision event. `replayReviewSessionEvents` reconstructs `editedValuesByItemName` from it so the server apply boundary derives the edited `effectiveValue` from snapshot + events alone. Absent → no edit (unchanged behavior). |
 | `candidate.source` | producer declares, Survey maps | Maps to `RawSource` when an adapter emits Survey records. |
 | `candidate.locator`, `candidate.extraction` | producer declares, Survey maps | Maps to `Extraction`, including locator, excerpt, confidence, extractor, and extracted time. |
 | `candidate.role`, `spec.selectedCandidateId` | producer declares | Survey does not enforce current/proposed-only policy by default. A producer may opt in via `producerPolicy.decisionMode` (see [Producer decision mode](#producer-decision-mode)). |

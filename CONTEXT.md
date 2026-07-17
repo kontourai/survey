@@ -126,6 +126,14 @@ _Avoid_: Trust Record, Survey record, report
 Survey's narrower application of Surface **Producer Discipline** to the source/extraction/review boundary. In Survey, verified or assumed claims require review authority, reviewed timing, and source locators for non-manual sources so unreviewed extractions are not laundered into trusted claims.
 _Avoid_: Survey policy, validation only, Surface-owned truth
 
+**Review Workbench**:
+The framework-neutral, embeddable UI Survey ships for working a **Review Item** queue: it renders current-vs-proposed **Candidate** values with their source references and locators, records the reviewer's decision, and emits a replayable **Review Session Event** log. The **Review Workbench** owns interaction and presentation only; it never decides a **Claim** status or writes to a producer's records. Its output is derived server-side from the pre-decision snapshot plus persisted events (the server-owned apply boundary), so a host never trusts a browser-computed result. A host embeds it as unstyled DOM themed entirely by its own `--k-*` tokens — the library is plumbing, not a brand.
+_Avoid_: Review console, review queue as a synonym, treating browser-computed results as authoritative, letting the workbench own claim status
+
+**Proposed-Value Edit**:
+A reviewer's inline change to a proposed **Candidate** value before accepting it in the **Review Workbench** — for example, correcting a typo in an extracted value rather than rejecting the whole proposal. A **Proposed-Value Edit** is producer-facing review input, not a new **Extraction**: the accepted value carries the reviewer's edit while the original proposed value stays in the provenance trail. Whether editing is offered is a per-**Review Item** producer choice; when offered and used, the edit is carried in the **Review Session Event** log so replay reconstructs it and the derived apply result is complete from snapshot plus events alone.
+_Avoid_: Re-extraction, a separate candidate, silent value substitution, an edit that lives only in browser state
+
 ## Status Language
 
 **Surface Status**:
