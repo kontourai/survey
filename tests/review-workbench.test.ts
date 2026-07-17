@@ -492,6 +492,56 @@ describe("review workbench prototype", () => {
     assert.equal(rejectedPreview?.reviewEvent?.rationale, "Rejected proposed address as low confidence.");
   });
 
+  it("carries an inline edit through the event log so replay reconstructs the edited effectiveValue", () => {
+    const session = {
+      ...initialReviewQueueSessionState(),
+      decisionsByItemName: {
+        "public-directory-hours": "accept-proposed" as const,
+      },
+      editedValuesByItemName: {
+        "public-directory-hours": "Weekdays 7am-7pm",
+      },
+    };
+
+    const events = buildReviewSessionEvents(session);
+    // The edit rides the decision events, not just browser state.
+    const decisionEvent = events.find((event) => event.spec.eventType === "decision-submitted" && event.spec.reviewItemName === "public-directory-hours");
+    assert.equal(decisionEvent?.spec.data?.workbenchEditedValue, "Weekdays 7am-7pm");
+
+    // Replaying snapshot + events alone (the server apply boundary's view)
+    // reconstructs the edit and the edited effective value.
+    const replayed = replayReviewSessionEvents(initialReviewQueueSessionState(), events);
+    assert.equal(replayed.editedValuesByItemName?.["public-directory-hours"], "Weekdays 7am-7pm");
+    const results = buildReviewWorkbenchResultsFromSession(replayed);
+    const hours = results.find((result) => result.reviewItemName === "public-directory-hours");
+    assert.equal(hours?.effectiveValue, "Weekdays 7am-7pm");
+    assert.equal(hours?.editedValue, "Weekdays 7am-7pm");
+  });
+
+  it("clears a stale inline edit on replay when the decision moves off accept-proposed", () => {
+    const edited = {
+      ...initialReviewQueueSessionState(),
+      decisionsByItemName: { "public-directory-hours": "accept-proposed" as const },
+      editedValuesByItemName: { "public-directory-hours": "Weekdays 7am-7pm" },
+    };
+    // Later the reviewer switches the same item to keep-current.
+    const editEvents = buildReviewSessionEvents(edited);
+    const keptEvents = buildReviewSessionEvents({
+      ...initialReviewQueueSessionState(),
+      reviewedAt: edited.reviewedAt,
+      decisionsByItemName: { "public-directory-hours": "keep-current" as const },
+    }).filter((event) => event.spec.reviewItemName === "public-directory-hours")
+      .map((event, index) => ({ ...event, spec: { ...event.spec, sequence: editEvents.length + index + 1 } }));
+
+    const replayed = replayReviewSessionEvents(initialReviewQueueSessionState(), [...editEvents, ...keptEvents]);
+    assert.equal(replayed.decisionsByItemName["public-directory-hours"], "keep-current");
+    assert.equal(replayed.editedValuesByItemName?.["public-directory-hours"], undefined);
+    const hours = buildReviewWorkbenchResultsFromSession(replayed).find((result) => result.reviewItemName === "public-directory-hours");
+    // Effective value falls back to the current candidate, not the abandoned edit.
+    assert.equal(hours?.editedValue, undefined);
+    assert.notEqual(hours?.effectiveValue, "Weekdays 7am-7pm");
+  });
+
   it("exports review session results by strictly replaying events against the supplied snapshot", () => {
     const session = {
       ...initialReviewQueueSessionState(),

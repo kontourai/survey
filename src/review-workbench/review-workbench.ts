@@ -1455,6 +1455,16 @@ function createReviewWorkbenchController(
     const candidate = item && decision ? candidateForDecision(item, decision) : undefined;
     const definition = decision ? workbenchDecisionDefinitions[decision] : undefined;
     const note = itemName ? session.notesByItemName[itemName] : undefined;
+    // Carry the reviewer's inline edit in the event (accept-proposed only), so
+    // it survives replay and the server apply boundary derives the edited
+    // effectiveValue from snapshot + events alone. setDecision updates the
+    // session before this runs, so the edit is already in state.
+    const editedValue = itemName && decision === "accept-proposed" ? session.editedValuesByItemName?.[itemName] : undefined;
+    const defaultData = decision
+      ? (editedValue !== undefined
+        ? { workbenchDecision: decision, workbenchEditedValue: editedValue }
+        : { workbenchDecision: decision })
+      : undefined;
 
     events = [
       ...events,
@@ -1468,7 +1478,7 @@ function createReviewWorkbenchController(
         candidateId: candidate?.id,
         status: definition?.status,
         rationale: note,
-        data: dataOverride ?? (decision ? { workbenchDecision: decision } : undefined),
+        data: dataOverride ?? defaultData,
       }),
     ];
   };

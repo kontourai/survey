@@ -840,6 +840,13 @@ review, replay persisted events against that snapshot, derive
 `ReviewWorkbenchResult` values through Survey, validate those values against
 the current product state, and only then apply product-specific policy.
 
+A reviewer's inline edit to a proposed value is carried in the decision event
+itself (`data.workbenchEditedValue`) and reconstructed by
+`replayReviewSessionEvents`, so `snapshot + persisted events` is a complete
+record: the derived `effectiveValue` reflects the edit without any separate
+edit channel. Persist the events (which the workbench emits) and you have the
+edit; you do not need to capture `editedValuesByItemName` out of band.
+
 For server-side replay, prefer the snapshot-safe apply preparation helper:
 
 ```ts
