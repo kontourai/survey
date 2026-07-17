@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.0](https://github.com/kontourai/survey/compare/v1.14.0...v1.15.0) (2026-07-17)
+
+
+### Features
+
+* emit --k-* token defaults in host-overridable var() form ([#151](https://github.com/kontourai/survey/issues/151)) ([a2021dd](https://github.com/kontourai/survey/commit/a2021dd9914d0268837b401a579ae86446ce73ac))
+
 ## [1.14.0](https://github.com/kontourai/survey/compare/v1.13.0...v1.14.0) (2026-07-17)
 
 
