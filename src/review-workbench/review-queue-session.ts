@@ -295,7 +295,15 @@ export function buildReviewSessionEvents(
     const candidate = candidateForDecision(item, decision);
     const definition = workbenchDecisionDefinitions[decision];
     const reviewDecisionName = `${item.metadata.name}-${decision}`;
-    const data = { workbenchDecision: decision };
+    // Carry the reviewer's inline edit in the event itself (accept-proposed
+    // only — it is the sole decision where an edited value is meaningful), so
+    // that replaying snapshot + events reconstructs editedValuesByItemName and
+    // the server apply boundary derives effectiveValue from it. Without this
+    // the edit lives only in browser state and never survives replay.
+    const editedValue = decision === "accept-proposed" ? session.editedValuesByItemName?.[item.metadata.name] : undefined;
+    const data: Record<string, unknown> = editedValue !== undefined
+      ? { workbenchDecision: decision, workbenchEditedValue: editedValue }
+      : { workbenchDecision: decision };
 
     events.push(buildReviewSessionEvent(session, {
       sessionName,
@@ -360,25 +368,50 @@ export function replayReviewSessionEvents(
 
     if ((event.spec.eventType === "decision-changed" || event.spec.eventType === "decision-submitted")
       && event.spec.reviewItemName) {
+      const itemName = event.spec.reviewItemName;
       if (isClearedWorkbenchDecisionEvent(event)) {
-        const { [event.spec.reviewItemName]: _removed, ...remainingDecisions } = session.decisionsByItemName;
-        return { ...session, decisionsByItemName: remainingDecisions };
+        const { [itemName]: _removedDecision, ...remainingDecisions } = session.decisionsByItemName;
+        const { [itemName]: _removedEdit, ...remainingEdits } = session.editedValuesByItemName ?? {};
+        return { ...session, decisionsByItemName: remainingDecisions, editedValuesByItemName: remainingEdits };
       }
 
       const decision = workbenchDecisionFromEvent(event);
-      return decision
-        ? {
-            ...session,
-            decisionsByItemName: {
-              ...session.decisionsByItemName,
-              [event.spec.reviewItemName]: decision,
-            },
-          }
-        : session;
+      if (!decision) {
+        return session;
+      }
+      // Restore the inline edit the event carried (accept-proposed only); any
+      // other decision, or an accept with no carried edit, clears a stale edit
+      // for this item so effectiveValue can't fall back to an edit the
+      // reviewer moved away from.
+      const editedValue = workbenchEditedValueFromEvent(event);
+      const editedValuesByItemName = { ...session.editedValuesByItemName };
+      if (decision === "accept-proposed" && editedValue !== undefined) {
+        editedValuesByItemName[itemName] = editedValue;
+      } else {
+        delete editedValuesByItemName[itemName];
+      }
+      return {
+        ...session,
+        decisionsByItemName: {
+          ...session.decisionsByItemName,
+          [itemName]: decision,
+        },
+        editedValuesByItemName,
+      };
     }
 
     return session;
   }, startState);
+}
+
+/**
+ * Extracts a decision event's carried inline edit, or `undefined` when the
+ * event carries none. The edit rides `data.workbenchEditedValue`.
+ */
+function workbenchEditedValueFromEvent(event: ReviewSessionEvent): unknown {
+  return event.spec.data && "workbenchEditedValue" in event.spec.data
+    ? event.spec.data.workbenchEditedValue
+    : undefined;
 }
 
 /**
