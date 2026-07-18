@@ -180,6 +180,7 @@ export interface CalibrationMetrics {
  * label. A sample is skipped when it carries no human label or no prediction:
  *
  * - status "proposed" (not yet reviewed);
+ * - resolution "could_not_confirm" (no human correctness label);
  * - a machine auto-accept, unless `includeAutoAccepted` is set;
  * - no `selectedCandidateId`, or the selected candidate / its confidence is
  *   missing or non-finite (no prediction to calibrate).
@@ -215,6 +216,10 @@ export function deriveCalibration(
   let skippedCount = 0;
 
   for (const outcome of input.reviewOutcomes) {
+    if (outcome.resolution === "could_not_confirm") {
+      skippedCount++;
+      continue;
+    }
     if (cutoff !== undefined) {
       const t = outcome.reviewedAt ? Date.parse(outcome.reviewedAt) : NaN;
       if (isNaN(t) || t < cutoff) {

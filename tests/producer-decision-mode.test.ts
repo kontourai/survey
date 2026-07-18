@@ -57,6 +57,15 @@ describe("validateReviewDecisionMode", () => {
     assert.deepEqual(issues.map((issue) => issue.code), ["decision-not-allowed"]);
   });
 
+  it("deliberately allows could-not-confirm regardless of producer decisionMode", () => {
+    for (const decisionMode of ["keep-current", "current-proposed", "free-select"] as const) {
+      assert.deepEqual(validateReviewDecisionMode(
+        itemWithPolicy({ decisionMode }),
+        result({ decision: "could-not-confirm" }),
+      ), [], decisionMode);
+    }
+  });
+
   it("allows every workbench decision under decisionMode current-proposed", () => {
     const item = itemWithPolicy({ decisionMode: "current-proposed" });
     assert.deepEqual(validateReviewDecisionMode(item, result({ decision: "accept-proposed", selectedCandidateRole: "proposed" })), []);

@@ -119,6 +119,14 @@ describe("survey-review-mcp", () => {
         assert.equal(typeof tool.description, "string");
         assert.equal(tool.inputSchema.type, "object");
       }
+      const decideTool = (toolsList.result?.tools ?? []).find(
+        (t: { name: string }) => t.name === "survey_review_decide",
+      ) as Record<string, any> | undefined;
+      assert.deepEqual(decideTool?.inputSchema.properties.decision.enum, [
+        "accept", "hold", "reject", "could-not-confirm",
+      ]);
+      assert.equal(decideTool?.inputSchema.properties.reason.minLength, 1);
+      assert.deepEqual(decideTool?.inputSchema.allOf[0].then.required, ["reason"]);
       // survey_review_queue declares its SEP-1865 UI in both key shapes.
       const queueTool = (toolsList.result?.tools ?? []).find(
         (t: { name: string }) => t.name === "survey_review_queue",
@@ -295,6 +303,63 @@ describe("survey-review-mcp", () => {
       assert.equal(queueResult.result?.isError, false);
       const queueText = (queueResult.result?.content?.[0] as { text?: string })?.text ?? "";
       assert.match(queueText, /accepted=1|resolved/);
+    } finally {
+      server.stdin!.end();
+      await once(server, "exit");
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test("survey_review_decide records could-not-confirm only with a required reason", async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), "survey-mcp-test-"));
+    const sessionPath = join(tmpDir, "session.json");
+    await copyFile("example-data/mcp-review-session.json", sessionPath);
+    const server = spawn("node", ["bin/survey-review-mcp.mjs", "--session", sessionPath], {
+      stdio: ["pipe", "pipe", "inherit"],
+    });
+    const responses = collectResponses(server.stdout!);
+
+    try {
+      send(server, { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "0" } } });
+      await responses.next(1);
+      send(server, { jsonrpc: "2.0", method: "notifications/initialized" });
+
+      send(server, {
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/call",
+        params: { name: "survey_review_decide", arguments: { itemName: "public-directory-hours", decision: "could-not-confirm" } },
+      });
+      const missingReason = await responses.next(2);
+      assert.equal(missingReason.result?.isError, true);
+      assert.match(missingReason.result?.content[0]?.text ?? "", /requires a non-empty reason/);
+
+      send(server, {
+        jsonrpc: "2.0",
+        id: 3,
+        method: "tools/call",
+        params: {
+          name: "survey_review_decide",
+          arguments: {
+            itemName: "public-directory-hours",
+            decision: "could-not-confirm",
+            reason: "The listed hours could not be matched to an effective date.",
+            attemptEvidenceIds: ["evidence.hours.page", "evidence.hours.archive"],
+          },
+        },
+      });
+      const result = await responses.next(3);
+      assert.equal(result.result?.isError, false);
+      assert.match(result.result?.content[0]?.text ?? "", /Could not confirm/);
+
+      const parsed = JSON.parse(await readFile(sessionPath, "utf8")) as {
+        events: Array<{ spec: Record<string, any> }>;
+      };
+      const event = parsed.events.find((entry) => entry.spec.data?.workbenchDecision === "could-not-confirm");
+      assert.equal(event?.spec.status, "proposed");
+      assert.equal(event?.spec.resolution, "could_not_confirm");
+      assert.equal(event?.spec.resolutionReason, "The listed hours could not be matched to an effective date.");
+      assert.deepEqual(event?.spec.attemptEvidenceIds, ["evidence.hours.page", "evidence.hours.archive"]);
     } finally {
       server.stdin!.end();
       await once(server, "exit");

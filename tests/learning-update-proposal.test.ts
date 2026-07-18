@@ -186,7 +186,7 @@ describe("buildReviewedLearningUpdateProposal", () => {
     for (const value of arrays) { const input = fixture(); input.survey.candidateSets[0]!.candidates[1]!.value = value; input.survey.extractions[1]!.value = value; assert.throws(() => buildReviewedLearningUpdateProposal(input), /canonical JSON value/); }
   });
 
-  it("leaves existing projections byte-identical and pins canonical v2 proof hashing", () => {
+  it("leaves existing projections byte-identical and pins canonical v3 proof hashing", () => {
     const input = fixture();
     const learningBefore = JSON.stringify(buildSurveyLearningProjections(input.survey));
     const trustBefore = JSON.stringify(buildSurveyTrustBundle(input.survey));
@@ -195,7 +195,7 @@ describe("buildReviewedLearningUpdateProposal", () => {
     assert.equal(JSON.stringify(buildSurveyTrustBundle(input.survey)), trustBefore);
     const candidate = input.survey.candidateSets[0]!.candidates[1]!;
     const proofPayload = buildCanonicalReviewProofPayload({ rawSource: input.survey.rawSources[1]!, extraction: input.survey.extractions[1]!, candidateSet: input.survey.candidateSets[0]!, candidate, reviewOutcome: input.survey.reviewOutcomes[0]!, claim: input.survey.claims[1]! });
-    assert.equal(hashCanonicalReviewProofPayload(proofPayload), "7dc9c493cfa2732c395ed6948964181e56e9e854a969b3ec1b10dcc77865c1e9");
+    assert.equal(hashCanonicalReviewProofPayload(proofPayload), "66b9890bcbe6ffe77d9c45263e372f682cb631027bf140c8d94235f413f0b9db");
   });
 
   it("does not mutate inputs and gives a generic consumer a complete record", () => {

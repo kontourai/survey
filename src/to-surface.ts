@@ -82,11 +82,16 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
     const extraction = requireMapValue(extractions, candidate.extractionId, "extraction");
     const rawSource = requireMapValue(rawSources, extraction.sourceId, "raw source");
     const review = selectReview(reviewsByCandidateSet.get(candidateSet.id) ?? [], candidate.id);
-    const status = projection.status ?? statusFor({ candidateSet, candidate, review });
-    assertProducerDiscipline({ status, review, extraction, rawSource, projection });
+    const projectionReview = review?.resolution === "could_not_confirm" ? undefined : review;
+    const unreviewedStatus = statusFor({ candidateSet, candidate });
+    const status = projection.status
+      ?? (review?.resolution === "could_not_confirm"
+        ? (unreviewedStatus === "disputed" ? unreviewedStatus : review.status)
+        : statusFor({ candidateSet, candidate, review }));
+    assertProducerDiscipline({ status, review, candidateSet, extraction, rawSource, projection });
     const claimValue = projection.value ?? candidate.value;
     const createdAt = projection.createdAt ?? extraction.extractedAt;
-    const updatedAt = projection.updatedAt ?? review?.reviewedAt ?? input.generatedAt;
+    const updatedAt = projection.updatedAt ?? projectionReview?.reviewedAt ?? input.generatedAt;
     const evidenceId = `${projection.id}.evidence.source`;
 
     const claim: Claim = {
@@ -113,7 +118,15 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
       },
       metadata: {
         ...projection.metadata,
-        survey: buildSurveyMetadata({ projection, rawSource, extraction, candidateSet, candidate, review }),
+        survey: buildSurveyMetadata({
+          projection,
+          rawSource,
+          extraction,
+          candidateSet,
+          candidate,
+          review: projectionReview,
+          comfortZoneReview: review,
+        }),
       },
     };
 
@@ -139,7 +152,7 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
         }
       : undefined;
     const affirmedConclusion = status === "verified" || status === "assumed";
-    const calibrated = calibrationMetrics && review && affirmedConclusion
+    const calibrated = calibrationMetrics && projectionReview && affirmedConclusion
       ? lookupCalibratedValue(calibrationMetrics, extraction.extractor, extraction.target, calibrationMinSamples)
       : undefined;
     if (comfortZone || calibrated) {
@@ -149,13 +162,16 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
       };
     }
 
-    if (options.reviewProofs && review) {
+    // Could-not-confirm stays byte-quiet at the Surface boundary. In particular,
+    // do not attach an anchor whose public observedAt would disclose review time;
+    // callers can persist/recompute Survey's canonical v3 proof separately.
+    if (options.reviewProofs && projectionReview) {
       claim.currentIntegrityAnchor = buildReviewProofAnchor({
         rawSource,
         extraction,
         candidate,
         candidateSet,
-        reviewOutcome: review,
+        reviewOutcome: projectionReview,
         claim: {
           ...projection,
           value: claimValue,
@@ -191,16 +207,16 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
       },
     });
 
-    const rationale = review?.rationale ?? candidateSet.rationale;
+    const rationale = projectionReview?.rationale ?? candidateSet.rationale;
     events.push({
       id: `${projection.id}.event.${status}`,
       claimId: projection.id,
       status,
-      actor: projection.actor ?? review?.actor ?? projection.collectedBy,
+      actor: projection.actor ?? projectionReview?.actor ?? projection.collectedBy,
       method: projection.eventMethod ?? eventMethodFor(status, candidateSet),
-      evidenceIds: review?.evidenceIds?.length ? review.evidenceIds : [evidenceId],
-      createdAt: review?.reviewedAt ?? input.generatedAt,
-      verifiedAt: status === "verified" || status === "assumed" ? review?.reviewedAt ?? input.generatedAt : undefined,
+      evidenceIds: projectionReview?.evidenceIds?.length ? projectionReview.evidenceIds : [evidenceId],
+      createdAt: projectionReview?.reviewedAt ?? input.generatedAt,
+      verifiedAt: status === "verified" || status === "assumed" ? projectionReview?.reviewedAt ?? input.generatedAt : undefined,
       notes: rationale,
     });
   }
@@ -465,6 +481,7 @@ function buildSurveyMetadata(input: {
   candidateSet: CandidateSet;
   candidate: Candidate;
   review?: ReviewOutcome;
+  comfortZoneReview?: ReviewOutcome;
 }): Record<string, unknown> {
   const producerSurveyMetadata = isRecord(input.projection.metadata?.survey) ? input.projection.metadata.survey : {};
   const producerCandidateMetadata = isRecord(producerSurveyMetadata.candidate) ? producerSurveyMetadata.candidate : {};
@@ -483,11 +500,11 @@ function buildSurveyMetadata(input: {
           },
         }
       : {}),
-    ...(input.review?.withinComfortZone === false
+    ...(input.comfortZoneReview?.withinComfortZone === false
       ? {
           comfortZone: {
             withinComfortZone: false,
-            ...(input.review.comfortZoneNote ? { note: input.review.comfortZoneNote } : {}),
+            ...(input.comfortZoneReview.comfortZoneNote ? { note: input.comfortZoneReview.comfortZoneNote } : {}),
           },
         }
       : {}),
@@ -511,6 +528,7 @@ function statusFor(input: {
 function assertProducerDiscipline(input: {
   status: TrustStatus;
   review?: ReviewOutcome;
+  candidateSet: CandidateSet;
   extraction: Extraction;
   rawSource: RawSource;
   projection: ClaimTarget;
@@ -519,6 +537,7 @@ function assertProducerDiscipline(input: {
     subject: `Claim ${input.projection.id}`,
     status: input.status,
     review: input.review,
+    candidateSetStatus: input.candidateSet.status,
   });
   if (input.rawSource.kind !== "manual-entry" && !input.extraction.locator) {
     throw new Error(`Claim ${input.projection.id} needs a source locator for ${input.rawSource.kind}`);

@@ -17,6 +17,7 @@ export type {
   ReviewAuthorizingExplicitStatement,
   ReviewAuthorizingKind,
   ReviewOutcome,
+  ReviewResolution,
   ReviewStatus,
   SurveyInput,
 } from "./types.js";

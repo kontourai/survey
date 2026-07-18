@@ -57,6 +57,8 @@ export interface CandidateSet {
 
 export type ReviewStatus = Extract<TrustStatus, "verified" | "assumed" | "rejected" | "proposed">;
 
+export type ReviewResolution = "accepted" | "rejected" | "held" | "could_not_confirm";
+
 export type ReviewAuthorizingKind = "explicit-statement" | "exchange" | "authorized-action";
 
 export interface ReviewAuthorizingExplicitStatement {
@@ -90,6 +92,13 @@ export interface ReviewOutcome {
   candidateSetId: string;
   candidateId?: string;
   status: ReviewStatus;
+  /** Explicit terminal resolution for this review round. Absent outcomes retain
+   *  the legacy status-inference behavior. */
+  resolution?: ReviewResolution;
+  /** Required, non-empty explanation when resolution is `could_not_confirm`. */
+  resolutionReason?: string;
+  /** Evidence of attempts made before the reviewer concluded they could not confirm. */
+  attemptEvidenceIds?: string[];
   actor?: string;
   reviewedAt?: string;
   rationale?: string;

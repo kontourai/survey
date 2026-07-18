@@ -1,4 +1,5 @@
 import { publicDirectoryReviewItemExample, reviewWorkbenchQueueExamples } from "./review-workbench-data.js";
+import { assertReviewResolutionConsistency } from "../producer-discipline.js";
 import {
   reviewResourceApiVersion,
   type ReviewCandidate,
@@ -9,8 +10,8 @@ import {
   type ReviewSessionEventSpec,
 } from "../../src/review-resource.js";
 
-export type ReviewWorkbenchDecision = "accept-proposed" | "keep-current" | "reject-proposed";
-export type ReviewQueueRowStatus = "pending" | "in-review" | "resolved" | "rejected" | "escalated";
+export type ReviewWorkbenchDecision = "accept-proposed" | "keep-current" | "reject-proposed" | "could-not-confirm";
+export type ReviewQueueRowStatus = "pending" | "in-review" | "resolved" | "rejected" | "could-not-confirm" | "escalated";
 
 export const reviewWorkbenchSessionStorageKey = "kontourai.survey.review-workbench.session-events.v1";
 export const defaultReviewSessionName = "review-workbench-session";
@@ -27,6 +28,7 @@ export interface ReviewWorkbenchState {
    * proposed candidate's original value applies.
    */
   readonly editedValue?: unknown;
+  readonly attemptEvidenceIds?: readonly string[];
 }
 
 export interface ReviewQueueSessionState {
@@ -43,12 +45,14 @@ export interface ReviewQueueSessionState {
    * original value").
    */
   readonly editedValuesByItemName?: Readonly<Record<string, unknown>>;
+  readonly attemptEvidenceIdsByItemName?: Readonly<Record<string, readonly string[]>>;
 }
 
 export interface ReviewSessionSummary {
   readonly accepted: number;
   readonly keptCurrent: number;
   readonly rejected: number;
+  readonly couldNotConfirm?: number;
   readonly escalated: number;
   readonly unresolved: number;
 }
@@ -78,6 +82,12 @@ export const workbenchDecisionDefinitions = {
     effect: "Proposed value is rejected and the current value remains unmodified.",
     candidateRole: "proposed",
     status: "rejected",
+  },
+  "could-not-confirm": {
+    label: "Could not confirm",
+    effect: "The review round ends without changing or escalating the proposed claim.",
+    candidateRole: "proposed",
+    status: "proposed",
   },
 } satisfies Record<ReviewWorkbenchDecision, DecisionDefinition>;
 
@@ -113,6 +123,7 @@ export function currentReviewWorkbenchState(session: ReviewQueueSessionState): R
     note: session.notesByItemName[item.metadata.name] ?? "",
     decision: session.decisionsByItemName[item.metadata.name],
     editedValue: session.editedValuesByItemName?.[item.metadata.name],
+    attemptEvidenceIds: session.attemptEvidenceIdsByItemName?.[item.metadata.name],
     reviewedAt: session.reviewedAt,
     actorId: session.actorId,
   };
@@ -131,6 +142,9 @@ export function deriveQueueRowStatus(item: ReviewItem, session: ReviewQueueSessi
   const decision = session.decisionsByItemName[item.metadata.name];
   if (decision === "reject-proposed") {
     return "rejected";
+  }
+  if (decision === "could-not-confirm") {
+    return "could-not-confirm";
   }
 
   if (decision === "accept-proposed" || decision === "keep-current" || item.spec.candidateSetStatus === "resolved") {
@@ -169,6 +183,9 @@ export function reviewSessionSummary(session: ReviewQueueSessionState): ReviewSe
     }
     if (decision === "reject-proposed") {
       return { ...summary, rejected: summary.rejected + 1 };
+    }
+    if (decision === "could-not-confirm") {
+      return { ...summary, couldNotConfirm: (summary.couldNotConfirm ?? 0) + 1 };
     }
     if (item.spec.candidateSetStatus === "escalated") {
       return { ...summary, escalated: summary.escalated + 1 };
@@ -291,6 +308,9 @@ export function buildReviewSessionEvents(
     if (!decision) {
       continue;
     }
+    if (decision === "could-not-confirm" && !note?.trim()) {
+      throw new Error(`ReviewItem ${item.metadata.name} could not confirm requires a non-empty reason.`);
+    }
 
     const candidate = candidateForDecision(item, decision);
     const definition = workbenchDecisionDefinitions[decision];
@@ -301,9 +321,20 @@ export function buildReviewSessionEvents(
     // the server apply boundary derives effectiveValue from it. Without this
     // the edit lives only in browser state and never survives replay.
     const editedValue = decision === "accept-proposed" ? session.editedValuesByItemName?.[item.metadata.name] : undefined;
+    const attemptEvidenceIds = decision === "could-not-confirm"
+      ? session.attemptEvidenceIdsByItemName?.[item.metadata.name]
+      : undefined;
+    assertReviewResolutionConsistency(`ReviewItem ${item.metadata.name}`, {
+      status: definition.status,
+      resolution: decision === "could-not-confirm" ? "could_not_confirm" : undefined,
+      resolutionReason: decision === "could-not-confirm" ? note : undefined,
+      attemptEvidenceIds,
+      actor: session.actorId,
+      reviewedAt: session.reviewedAt,
+    });
     const data: Record<string, unknown> = editedValue !== undefined
       ? { workbenchDecision: decision, workbenchEditedValue: editedValue }
-      : { workbenchDecision: decision };
+      : { workbenchDecision: decision, ...(attemptEvidenceIds?.length ? { attemptEvidenceIds } : {}) };
 
     events.push(buildReviewSessionEvent(session, {
       sessionName,
@@ -314,6 +345,13 @@ export function buildReviewSessionEvents(
       reviewDecisionName,
       candidateId: candidate.id,
       status: definition.status,
+      ...(decision === "could-not-confirm"
+        ? {
+            resolution: "could_not_confirm" as const,
+            resolutionReason: note,
+            ...(attemptEvidenceIds ? { attemptEvidenceIds: [...attemptEvidenceIds] } : {}),
+          }
+        : {}),
       data,
     }));
     events.push(buildReviewSessionEvent(session, {
@@ -326,6 +364,13 @@ export function buildReviewSessionEvents(
       candidateId: candidate.id,
       status: definition.status,
       rationale: note,
+      ...(decision === "could-not-confirm"
+        ? {
+            resolution: "could_not_confirm" as const,
+            resolutionReason: note,
+            ...(attemptEvidenceIds ? { attemptEvidenceIds: [...attemptEvidenceIds] } : {}),
+          }
+        : {}),
       data,
     }));
   }
@@ -372,7 +417,13 @@ export function replayReviewSessionEvents(
       if (isClearedWorkbenchDecisionEvent(event)) {
         const { [itemName]: _removedDecision, ...remainingDecisions } = session.decisionsByItemName;
         const { [itemName]: _removedEdit, ...remainingEdits } = session.editedValuesByItemName ?? {};
-        return { ...session, decisionsByItemName: remainingDecisions, editedValuesByItemName: remainingEdits };
+        const { [itemName]: _removedAttempts, ...remainingAttempts } = session.attemptEvidenceIdsByItemName ?? {};
+        return {
+          ...session,
+          decisionsByItemName: remainingDecisions,
+          editedValuesByItemName: remainingEdits,
+          attemptEvidenceIdsByItemName: remainingAttempts,
+        };
       }
 
       const decision = workbenchDecisionFromEvent(event);
@@ -385,10 +436,16 @@ export function replayReviewSessionEvents(
       // reviewer moved away from.
       const editedValue = workbenchEditedValueFromEvent(event);
       const editedValuesByItemName = { ...session.editedValuesByItemName };
+      const attemptEvidenceIdsByItemName = { ...session.attemptEvidenceIdsByItemName };
       if (decision === "accept-proposed" && editedValue !== undefined) {
         editedValuesByItemName[itemName] = editedValue;
       } else {
         delete editedValuesByItemName[itemName];
+      }
+      if (decision === "could-not-confirm" && event.spec.attemptEvidenceIds?.length) {
+        attemptEvidenceIdsByItemName[itemName] = [...event.spec.attemptEvidenceIds];
+      } else {
+        delete attemptEvidenceIdsByItemName[itemName];
       }
       return {
         ...session,
@@ -397,6 +454,7 @@ export function replayReviewSessionEvents(
           [itemName]: decision,
         },
         editedValuesByItemName,
+        attemptEvidenceIdsByItemName,
       };
     }
 

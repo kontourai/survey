@@ -10,16 +10,19 @@ import type {
   ReviewOutcome,
 } from "./types.js";
 import { validateAuthorizing } from "./review-authorizing.js";
+import { assertReviewResolutionConsistency } from "./producer-discipline.js";
 
 export const REVIEW_PROOF_SCHEMA = "survey.review-proof";
-export const REVIEW_PROOF_SCHEMA_VERSION = 2;
+export const REVIEW_PROOF_SCHEMA_VERSION = 3;
 export const REVIEW_PROOF_PACKAGE_NAME = "@kontourai/survey";
 // Version of the review proof contract emitted by this helper. This is intentionally
 // independent from the npm package release version because it participates in hashes.
-export const REVIEW_PROOF_CONTRACT_VERSION = "2";
+export const REVIEW_PROOF_CONTRACT_VERSION = "3";
 
 const LEGACY_REVIEW_PROOF_SCHEMA_VERSION = 1;
 const LEGACY_REVIEW_PROOF_CONTRACT_VERSION = "1";
+const REVIEW_PROOF_SCHEMA_VERSION_V2 = 2;
+const REVIEW_PROOF_CONTRACT_VERSION_V2 = "2";
 
 export interface ReviewProofInput {
   rawSource: RawSource;
@@ -140,20 +143,40 @@ export type CanonicalReviewProofPayloadV2 = Omit<
 > & {
   schemaVersion: 2;
   proof: Omit<CanonicalReviewProofPayloadV1["proof"], "schemaVersion" | "packageVersion"> & {
-    schemaVersion: typeof REVIEW_PROOF_SCHEMA_VERSION;
-    packageVersion: typeof REVIEW_PROOF_CONTRACT_VERSION;
+    schemaVersion: typeof REVIEW_PROOF_SCHEMA_VERSION_V2;
+    packageVersion: typeof REVIEW_PROOF_CONTRACT_VERSION_V2;
   };
   reviewOutcome?: NonNullable<CanonicalReviewProofPayloadV1["reviewOutcome"]> & {
     authorizing?: CanonicalReviewAuthorizing;
   };
 };
 
+export type CanonicalReviewProofPayloadV3 = Omit<
+  CanonicalReviewProofPayloadV2,
+  "schemaVersion" | "proof" | "reviewOutcome"
+> & {
+  schemaVersion: 3;
+  proof: Omit<CanonicalReviewProofPayloadV2["proof"], "schemaVersion" | "packageVersion"> & {
+    schemaVersion: typeof REVIEW_PROOF_SCHEMA_VERSION;
+    packageVersion: typeof REVIEW_PROOF_CONTRACT_VERSION;
+  };
+  reviewOutcome?: NonNullable<CanonicalReviewProofPayloadV2["reviewOutcome"]> & {
+    resolution?: ReviewOutcome["resolution"];
+    resolutionReason?: string;
+    attemptEvidenceIds?: string[];
+  };
+};
+
 export type CanonicalReviewProofPayload =
   | CanonicalReviewProofPayloadV1
-  | CanonicalReviewProofPayloadV2;
+  | CanonicalReviewProofPayloadV2
+  | CanonicalReviewProofPayloadV3;
 
-export function buildCanonicalReviewProofPayload(input: ReviewProofInput): CanonicalReviewProofPayloadV2 {
+export function buildCanonicalReviewProofPayload(input: ReviewProofInput): CanonicalReviewProofPayloadV3 {
   assertCandidateConsistency(input);
+  if (input.reviewOutcome) {
+    assertReviewResolutionConsistency("Canonical review proof", input.reviewOutcome);
+  }
 
   return {
     schemaVersion: REVIEW_PROOF_SCHEMA_VERSION,
@@ -222,6 +245,13 @@ export function buildCanonicalReviewProofPayload(input: ReviewProofInput): Canon
           candidateSetId: input.reviewOutcome.candidateSetId,
           candidateId: input.reviewOutcome.candidateId,
           status: input.reviewOutcome.status,
+          ...(input.reviewOutcome.resolution !== undefined ? { resolution: input.reviewOutcome.resolution } : {}),
+          ...(input.reviewOutcome.resolutionReason !== undefined
+            ? { resolutionReason: input.reviewOutcome.resolutionReason }
+            : {}),
+          ...(input.reviewOutcome.attemptEvidenceIds
+            ? { attemptEvidenceIds: [...input.reviewOutcome.attemptEvidenceIds].sort() }
+            : {}),
           actor: input.reviewOutcome.actor,
           reviewedAt: input.reviewOutcome.reviewedAt,
           rationale: input.reviewOutcome.rationale,
@@ -357,8 +387,8 @@ export function hashCanonicalReviewProofPayload(payload: CanonicalReviewProofPay
 }
 
 /**
- * Verifies the integrity hash of a persisted v1 or v2 canonical review proof.
- * Envelope compatibility and v2 authorizing admissibility are checked before
+ * Verifies the integrity hash of a persisted v1, v2, or v3 canonical review proof.
+ * Envelope compatibility and version-specific admissibility are checked before
  * the expected hash is compared.
  */
 export function verifyCanonicalReviewProofPayload(payload: unknown, expectedHash: string): boolean {
@@ -381,7 +411,34 @@ export function verifyCanonicalReviewProofPayload(payload: unknown, expectedHash
       ) {
         return false;
       }
-      if (isRecord(reviewOutcome) && Object.prototype.hasOwnProperty.call(reviewOutcome, "authorizing")) {
+      if (
+        isRecord(reviewOutcome)
+        && (Object.prototype.hasOwnProperty.call(reviewOutcome, "authorizing")
+          || Object.prototype.hasOwnProperty.call(reviewOutcome, "resolution")
+          || Object.prototype.hasOwnProperty.call(reviewOutcome, "resolutionReason")
+          || Object.prototype.hasOwnProperty.call(reviewOutcome, "attemptEvidenceIds"))
+      ) {
+        return false;
+      }
+    } else if (schemaVersion === REVIEW_PROOF_SCHEMA_VERSION_V2) {
+      if (proofSchemaVersion !== REVIEW_PROOF_SCHEMA_VERSION_V2 || packageVersion !== REVIEW_PROOF_CONTRACT_VERSION_V2) {
+        return false;
+      }
+      if (reviewOutcome !== undefined && !isRecord(reviewOutcome)) return false;
+      if (
+        isRecord(reviewOutcome)
+        && Object.prototype.hasOwnProperty.call(reviewOutcome, "authorizing")
+        && reviewOutcome.authorizing !== undefined
+        && validateAuthorizing(reviewOutcome.authorizing).length > 0
+      ) {
+        return false;
+      }
+      if (
+        isRecord(reviewOutcome)
+        && (Object.prototype.hasOwnProperty.call(reviewOutcome, "resolution")
+          || Object.prototype.hasOwnProperty.call(reviewOutcome, "resolutionReason")
+          || Object.prototype.hasOwnProperty.call(reviewOutcome, "attemptEvidenceIds"))
+      ) {
         return false;
       }
     } else if (schemaVersion === REVIEW_PROOF_SCHEMA_VERSION) {
@@ -396,6 +453,28 @@ export function verifyCanonicalReviewProofPayload(payload: unknown, expectedHash
         && validateAuthorizing(reviewOutcome.authorizing).length > 0
       ) {
         return false;
+      }
+      if (isRecord(reviewOutcome)) {
+        if (
+          reviewOutcome.resolution !== undefined
+          && reviewOutcome.resolution !== "accepted"
+          && reviewOutcome.resolution !== "rejected"
+          && reviewOutcome.resolution !== "held"
+          && reviewOutcome.resolution !== "could_not_confirm"
+        ) {
+          return false;
+        }
+        if (
+          reviewOutcome.attemptEvidenceIds !== undefined
+          && (!Array.isArray(reviewOutcome.attemptEvidenceIds)
+            || reviewOutcome.attemptEvidenceIds.some((id) => typeof id !== "string"))
+        ) {
+          return false;
+        }
+        assertReviewResolutionConsistency(
+          "Canonical review proof",
+          reviewOutcome as unknown as ReviewOutcome,
+        );
       }
     } else {
       return false;

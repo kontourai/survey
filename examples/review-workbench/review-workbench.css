@@ -283,6 +283,7 @@ h1, h2, h3, p {
 .field[data-state="accepted"] .stripe { background: var(--k-positive); }
 .field[data-state="kept"] .stripe { background: var(--k-faint); }
 .field[data-state="rejected"] .stripe { background: var(--k-negative); }
+.field[data-state="could-not-confirm"] .stripe { background: var(--k-caution); }
 .field[data-state="review"] .stripe { background: var(--k-brand); }
 
 .fbody {
@@ -337,6 +338,7 @@ h1, h2, h3, p {
 .chip.accepted { color: var(--k-positive); background: var(--k-positive-wash); }
 .chip.kept { color: var(--k-muted); background: var(--k-sunken); }
 .chip.rejected { color: var(--k-negative); background: var(--k-negative-wash); }
+.chip.could-not-confirm { color: var(--k-caution); background: var(--k-caution-wash); }
 
 .frow1 .push {
   margin-left: auto;
@@ -599,6 +601,12 @@ h1, h2, h3, p {
 .btn.keep {
   border-color: var(--k-line-strong);
   background: var(--k-panel-raised, var(--k-raised));
+}
+
+.btn.unconfirmed {
+  border-color: var(--k-caution);
+  color: var(--k-caution);
+  background: var(--k-caution-wash);
 }
 
 /* "Suggestion was wrong" — optional quiet calibration toggle on Keep current.

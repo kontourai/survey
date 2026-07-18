@@ -116,8 +116,7 @@ describe("Survey Surface projection", () => {
       },
     });
 
-    assert.equal(canonicalPayload.schemaVersion, 2);
-    if (canonicalPayload.schemaVersion !== 2) throw new Error("expected a canonical v2 review proof payload");
+    assert.equal(canonicalPayload.schemaVersion, 3);
     assert.deepEqual(canonicalPayload.reviewOutcome?.authorizing, authorizing);
     assert.deepEqual(canonicalPayload.reviewOutcome?.evidenceIds, [
       "evidence.review.primary",

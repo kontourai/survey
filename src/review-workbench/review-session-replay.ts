@@ -17,7 +17,9 @@ export type ReviewSessionReplayIssueCode =
   | "missing-review-item"
   | "invalid-workbench-decision"
   | "decision-candidate-mismatch"
-  | "decision-status-mismatch";
+  | "decision-status-mismatch"
+  | "decision-resolution-mismatch"
+  | "missing-resolution-reason";
 
 export interface ReviewSessionReplayIssue {
   readonly code: ReviewSessionReplayIssueCode;
@@ -112,6 +114,26 @@ export function validateReviewSessionEventsForSnapshot(
             reviewItemName: itemName,
             candidateId: event.spec.candidateId,
             message: `ReviewSessionEvent ${event.metadata.name} decision ${decision} expects status ${expectedStatus}, but references ${event.spec.status ?? "no status"}.`,
+          });
+        }
+
+        const expectedResolution = decision === "could-not-confirm" ? "could_not_confirm" : undefined;
+        if (event.spec.resolution !== expectedResolution) {
+          issues.push({
+            ...eventRef,
+            code: "decision-resolution-mismatch",
+            reviewItemName: itemName,
+            candidateId: event.spec.candidateId,
+            message: `ReviewSessionEvent ${event.metadata.name} decision ${decision} expects resolution ${expectedResolution ?? "none"}, but references ${event.spec.resolution ?? "no resolution"}.`,
+          });
+        }
+        if (decision === "could-not-confirm" && !event.spec.resolutionReason?.trim()) {
+          issues.push({
+            ...eventRef,
+            code: "missing-resolution-reason",
+            reviewItemName: itemName,
+            candidateId: event.spec.candidateId,
+            message: `ReviewSessionEvent ${event.metadata.name} decision could-not-confirm requires a non-empty resolutionReason.`,
           });
         }
       }

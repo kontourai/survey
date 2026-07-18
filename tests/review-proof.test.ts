@@ -321,13 +321,11 @@ describe("review proof helper", () => {
       };
 
       const payload = buildCanonicalReviewProofPayload(input);
-      assert.equal(payload.schemaVersion, 2, `${name} must use the v2 envelope`);
-      if (payload.schemaVersion !== 2) throw new Error(`${name} unexpectedly produced a non-v2 payload`);
+      assert.equal(payload.schemaVersion, 3, `${name} must use the v3 envelope`);
       const hash = hashCanonicalReviewProofPayload(payload);
       const parsed = JSON.parse(canonicalReviewProofJson(payload)) as CanonicalReviewProofPayload;
 
-      assert.equal(parsed.schemaVersion, 2);
-      if (parsed.schemaVersion !== 2) throw new Error(`${name} read back as a non-v2 payload`);
+      assert.equal(parsed.schemaVersion, 3);
       assert.equal(verifyCanonicalReviewProofPayload(parsed, hash), true, `${name} must verify after JSON readback`);
       assert.deepEqual(parsed.reviewOutcome?.authorizing, authorizing, `${name} must survive readback losslessly`);
       assert.deepEqual(parsed.reviewOutcome?.evidenceIds, [
@@ -410,7 +408,65 @@ describe("review proof helper", () => {
   it("verifies a persisted v1 payload without authorizing", () => {
     assert.equal(verifyCanonicalReviewProofPayload(LEGACY_V1_PAYLOAD, LEGACY_V1_HASH), true);
     assert.equal("authorizing" in LEGACY_V1_PAYLOAD.reviewOutcome!, false);
-    assert.equal(buildCanonicalReviewProofPayload(reviewProofInput()).schemaVersion, 2);
+    assert.equal(buildCanonicalReviewProofPayload(reviewProofInput()).schemaVersion, 3);
+  });
+
+  it("verifies persisted v2 proofs and emits v3 proofs that commit could-not-confirm details", () => {
+    assert.equal(verifyCanonicalReviewProofPayload(LEGACY_V2_PAYLOAD, LEGACY_V2_HASH), true);
+
+    const input = reviewProofInput();
+    input.reviewOutcome = {
+      ...input.reviewOutcome!,
+      status: "proposed",
+      resolution: "could_not_confirm",
+      resolutionReason: "The registry timed out after two independent attempts.",
+      attemptEvidenceIds: ["attempt.second", "attempt.first"],
+    };
+    input.claim = { ...input.claim, status: "proposed" };
+    const payload = buildCanonicalReviewProofPayload(input);
+    const hash = hashCanonicalReviewProofPayload(payload);
+
+    assert.equal(payload.schemaVersion, 3);
+    assert.equal(payload.reviewOutcome?.resolution, "could_not_confirm");
+    assert.equal(payload.reviewOutcome?.resolutionReason, "The registry timed out after two independent attempts.");
+    assert.deepEqual(payload.reviewOutcome?.attemptEvidenceIds, ["attempt.first", "attempt.second"]);
+    assert.equal(verifyCanonicalReviewProofPayload(payload, hash), true);
+
+    const tampered = structuredClone(payload);
+    tampered.reviewOutcome!.resolutionReason = "No attempt was made.";
+    assert.equal(verifyCanonicalReviewProofPayload(tampered, hash), false);
+  });
+
+  it("rejects invalid could-not-confirm proof combinations", () => {
+    for (const reviewOutcome of [
+      { status: "proposed" as const, resolutionReason: "   " },
+      { status: "verified" as const, resolutionReason: "Source unavailable." },
+      { status: "rejected" as const, resolutionReason: "Source unavailable." },
+    ]) {
+      const input = reviewProofInput();
+      input.reviewOutcome = {
+        ...input.reviewOutcome!,
+        ...reviewOutcome,
+        resolution: "could_not_confirm",
+      };
+      assert.throws(() => buildCanonicalReviewProofPayload(input), /could_not_confirm/);
+    }
+  });
+
+  it("rejects contradictory explicit resolution/status proof combinations", () => {
+    for (const { resolution, status } of [
+      { resolution: "accepted" as const, status: "rejected" as const },
+      { resolution: "accepted" as const, status: "proposed" as const },
+      { resolution: "rejected" as const, status: "verified" as const },
+      { resolution: "held" as const, status: "rejected" as const },
+    ]) {
+      const input = reviewProofInput();
+      input.reviewOutcome = { ...input.reviewOutcome!, resolution, status };
+      assert.throws(
+        () => buildCanonicalReviewProofPayload(input),
+        new RegExp(`resolution ${resolution} cannot use status ${status}`),
+      );
+    }
   });
 
   it("rejects hybrid review proof version envelopes and v1 authorizing", () => {
@@ -419,7 +475,7 @@ describe("review proof helper", () => {
       withLegacyEnvelope({ outerSchemaVersion: 2 }),
       withLegacyEnvelope({ packageVersion: "2" }),
       withLegacyEnvelope({ outerSchemaVersion: 2, proofSchemaVersion: 2, packageVersion: "1" }),
-      withLegacyEnvelope({ outerSchemaVersion: 3, proofSchemaVersion: 3, packageVersion: "3" }),
+      withLegacyEnvelope({ outerSchemaVersion: 4, proofSchemaVersion: 4, packageVersion: "4" }),
       withLegacyEnvelope({
         authorizing: {
           kind: "explicit-statement",
@@ -450,9 +506,9 @@ describe("review proof helper", () => {
         const input = reviewProofInput();
         input.reviewOutcome = { ...input.reviewOutcome!, authorizing };
         const payload = buildCanonicalReviewProofPayload(input);
-        assert.equal(payload.schemaVersion, 2);
-        if (payload.schemaVersion !== 2 || !payload.reviewOutcome?.authorizing) {
-          throw new Error("expected a canonical v2 authorizing payload");
+        assert.equal(payload.schemaVersion, 3);
+        if (!payload.reviewOutcome?.authorizing) {
+          throw new Error("expected a canonical v3 authorizing payload");
         }
         (payload.reviewOutcome.authorizing as unknown as Record<string, unknown>).source = source;
         const matchingMalformedHash = hashUnknownCanonicalPayload(payload);
@@ -469,14 +525,14 @@ describe("review proof helper", () => {
       authorizing: { kind: "explicit-statement", statement: "ok" },
     };
     const payload = buildCanonicalReviewProofPayload(input);
-    assert.equal(payload.schemaVersion, 2);
-    if (payload.schemaVersion !== 2 || !payload.reviewOutcome) {
-      throw new Error("expected a canonical v2 review outcome");
+    assert.equal(payload.schemaVersion, 3);
+    if (!payload.reviewOutcome) {
+      throw new Error("expected a canonical v3 review outcome");
     }
 
     const invalidPayload = structuredClone(payload);
-    assert.equal(invalidPayload.schemaVersion, 2);
-    if (invalidPayload.schemaVersion !== 2 || invalidPayload.reviewOutcome?.authorizing?.kind !== "explicit-statement") {
+    assert.equal(invalidPayload.schemaVersion, 3);
+    if (invalidPayload.reviewOutcome?.authorizing?.kind !== "explicit-statement") {
       throw new Error("expected an explicit-statement fixture");
     }
     invalidPayload.reviewOutcome.authorizing.statement = "";
@@ -541,8 +597,7 @@ describe("review proof helper", () => {
       const input = reviewProofInput();
       input.reviewOutcome = { ...input.reviewOutcome!, authorizing };
       const payload = buildCanonicalReviewProofPayload(input);
-      assert.equal(payload.schemaVersion, 2);
-      if (payload.schemaVersion !== 2) throw new Error("expected a canonical v2 review proof payload");
+      assert.equal(payload.schemaVersion, 3);
       const capturedHash = hashCanonicalReviewProofPayload(payload);
       const tampered = structuredClone(payload);
       assert.ok(tampered.reviewOutcome?.authorizing);
@@ -564,8 +619,7 @@ describe("review proof helper", () => {
       },
     };
     const payload = buildCanonicalReviewProofPayload(input);
-    assert.equal(payload.schemaVersion, 2);
-    if (payload.schemaVersion !== 2) throw new Error("expected a canonical v2 review proof payload");
+    assert.equal(payload.schemaVersion, 3);
     const hash = hashCanonicalReviewProofPayload(payload);
     const reordered = structuredClone(payload);
     assert.ok(reordered.reviewOutcome?.authorizing?.kind === "exchange");
@@ -654,6 +708,14 @@ const LEGACY_V1_CANONICAL_JSON = '{"candidate":{"extractionId":"extraction.fixtu
 const LEGACY_V1_HASH = "7d52f65d7d1c72f1ce8d5a9412f46a42a277a13247ca951d028b2d1db1a4fe78";
 const LEGACY_V1_PAYLOAD = deepFreeze(
   JSON.parse(LEGACY_V1_CANONICAL_JSON) as CanonicalReviewProofPayload,
+);
+
+// Captured by running the unmodified HEAD (v2) builder from an isolated
+// `git archive HEAD`, not by downgrading a v3 payload.
+const LEGACY_V2_CANONICAL_JSON = '{"candidate":{"confidence":0.9,"extractionId":"extraction.v2.fixture","id":"candidate.v2.fixture","sourceRank":1,"value":"ACTIVE"},"candidateSet":{"candidateIds":["candidate.v2.fixture"],"id":"candidate-set.v2.fixture","rationale":"Selected fixture value.","selectedCandidateId":"candidate.v2.fixture","status":"resolved","target":"status"},"claim":{"candidateId":"candidate.v2.fixture","candidateSetId":"candidate-set.v2.fixture","claimType":"fixture.field","collectedBy":"fixture-producer","facet":"fixture.profile","fieldOrBehavior":"status","id":"claim.v2.fixture","impactLevel":"medium","status":"verified","subjectId":"fixture-v2","subjectType":"fixture-record","value":"ACTIVE"},"extraction":{"confidence":0.9,"excerpt":"Status is ACTIVE.","extractedAt":"2026-01-02T03:01:00.000Z","extractor":"fixture-extractor","id":"extraction.v2.fixture","locator":"json:$.status","sourceId":"source.v2.fixture","target":"status","value":"ACTIVE"},"proof":{"issuedAt":"2026-01-02T03:04:05.000Z","issuer":"fixture-producer","packageName":"@kontourai/survey","packageVersion":"2","producer":"fixture-extractor","schema":"survey.review-proof","schemaVersion":2,"sourcePayload":{"checksum":"sha256:v2-fixture","id":"source.v2.fixture","sourceRef":"fixture://v2/status"},"subject":{"candidateId":"candidate.v2.fixture","candidateSetId":"candidate-set.v2.fixture","claimId":"claim.v2.fixture","claimType":"fixture.field","facet":"fixture.profile","fieldOrBehavior":"status","subjectId":"fixture-v2","subjectType":"fixture-record"}},"rawSource":{"checksum":"sha256:v2-fixture","id":"source.v2.fixture","kind":"api-record","locatorScheme":"structured-field","observedAt":"2026-01-02T03:00:00.000Z","sourceRef":"fixture://v2/status"},"reviewOutcome":{"actor":"fixture-reviewer","authorizing":{"kind":"explicit-statement","source":"fixture-attestation","statement":"I confirm the v2 fixture."},"candidateId":"candidate.v2.fixture","candidateSetId":"candidate-set.v2.fixture","evidenceIds":["evidence.v2.primary","evidence.v2.secondary"],"id":"review.v2.fixture","rationale":"Confirmed from fixture.","reviewedAt":"2026-01-02T03:04:05.000Z","status":"verified"},"schemaVersion":2}';
+const LEGACY_V2_HASH = "2ceaa561977003401103e774dcc0a08cc761b96c7783b2574fe32e1cb104039e";
+const LEGACY_V2_PAYLOAD = deepFreeze(
+  JSON.parse(LEGACY_V2_CANONICAL_JSON) as CanonicalReviewProofPayload,
 );
 
 function withLegacyEnvelope(options: {

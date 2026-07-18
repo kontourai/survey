@@ -40,6 +40,7 @@ export function validateReviewDecisionMode(
   item: ReviewItem,
   result: ReviewDecisionModeResult,
 ): ReviewDecisionModeIssue[] {
+  if (result.decision === "could-not-confirm") return [];
   const decisionMode = item.spec.producerPolicy?.decisionMode;
   if (decisionMode === undefined) {
     return [];
