@@ -39,8 +39,13 @@ top-level resource because candidate lifecycle belongs to the producer and the
 portable contract only needs the serializable candidate payload.
 
 `ReviewDecision` describes the reviewer decision for a `ReviewItem`: candidate,
-status, actor, reviewed time, rationale, evidence ids, comfort-zone notes, and
-projection hints.
+status, optional explicit resolution, actor, reviewed time, rationale, evidence
+ids, comfort-zone notes, and projection hints. The `could_not_confirm`
+resolution requires `resolutionReason`, may carry `attemptEvidenceIds`, keeps
+status proposed/assumed, and ends the review round without a product apply
+action or candidate-set escalation.
+Because it selects no product mutation, `could-not-confirm` deliberately bypasses
+`producerPolicy.decisionMode`; those modes constrain candidate-selection actions.
 
 `ReviewSession` is a portable envelope for one review session. It carries the
 session snapshot hash, item count, event count, and status so downstream systems
@@ -91,7 +96,7 @@ Field ownership:
 | `ReviewCandidate.source.sourceRef`, `kind`, `observedAt`, `checksum`, `locatorScheme` | `RawSource` |
 | `ReviewCandidate.extraction.target`, `confidence`, `extractor`, `extractedAt` plus `locator` | `Extraction` |
 | `ReviewItem.spec.target`, `candidates`, `selectedCandidateId`, `candidateSetStatus`, `rationale`, `candidate.rejectionReason` | `CandidateSet` and `Candidate` |
-| `ReviewDecision.spec.status`, `actor`, `reviewedAt`, `rationale`, `evidenceIds`, `withinComfortZone` | `ReviewOutcome` |
+| `ReviewDecision.spec.status`, `resolution`, `resolutionReason`, `attemptEvidenceIds`, `actor`, `reviewedAt`, `rationale`, `evidenceIds`, `withinComfortZone` | `ReviewOutcome` |
 | `ReviewCandidate.claimTarget` | `ClaimTarget` |
 | `projection` | Optional id bridge for tests and adapters |
 | `ReviewSession.spec.snapshot`, `itemCount`, `eventCount` | Replay envelope for session validation |
@@ -126,7 +131,7 @@ See [`review-workbench-prototype.md`](review-workbench-prototype.md) for the
 example-backed browser prototype that renders a browser-safe copy of the
 public-directory `ReviewItem`, guarded against drift from the canonical example,
 and emits local in-memory `ReviewDecision` payloads for accept proposed, keep
-current, and reject proposed decisions.
+current, reject proposed, and could-not-confirm decisions.
 
 See [`consumer-integration-guide.md`](consumer-integration-guide.md) for the
 recommended consumer path from `ReviewItem` construction through persisted

@@ -202,6 +202,9 @@ export interface ReviewDecisionSpec {
   reviewItemName: string;
   candidateId?: string;
   status: ReviewOutcome["status"];
+  resolution?: ReviewOutcome["resolution"];
+  resolutionReason?: string;
+  attemptEvidenceIds?: string[];
   actor?: ReviewActor;
   reviewedAt?: string;
   rationale?: string;
@@ -262,6 +265,9 @@ export interface ReviewSessionEventSpec {
   reviewDecisionName?: string;
   candidateId?: string;
   status?: ReviewOutcome["status"];
+  resolution?: ReviewOutcome["resolution"];
+  resolutionReason?: string;
+  attemptEvidenceIds?: string[];
   rationale?: string;
   data?: Record<string, unknown>;
 }

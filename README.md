@@ -105,6 +105,24 @@ Keep producer operational state outside Survey. Queue status, reviewer form stat
 
 When you build an `authorized-action` authorizing block outside the workbench, pair `buildAuthorizedActionAuthorizing` with `buildPromptRef({ module, component, version?, scheme? })` — `buildPromptRef` formats a well-formed, versioned `promptRef` (bare `"review-workbench/decision-card@v1"` or scheme-prefixed `"survey://<module>/<component>@v1"`) that `buildAuthorizedActionAuthorizing` accepts directly, instead of hand-formatting the string.
 
+## Review lifecycle
+
+`ReviewOutcome.resolution` optionally records the terminal result of a review
+round while preserving compatibility with outcomes that infer their result from
+`status`. The explicit `could_not_confirm` resolution requires a non-empty
+`resolutionReason`; `attemptEvidenceIds` may record evidence of what the reviewer
+tried. It is valid only with an unchanged `proposed` or `assumed` status.
+Other explicit resolutions must also agree with status: accepted is
+verified/assumed, rejected is rejected, and held is any non-rejected retained
+posture.
+
+Could-not-confirm is terminal for the review round, but it is not rejection,
+verification, or escalation. Surface projection stays quiet: the claim keeps its
+pre-review status, no attempt evidence is projected, and no review-derived
+freshness, validity, gap, or verification posture is added. The outcome remains
+available in Survey review records, canonical review proof v3, and the distinct
+`learning.could-not-confirm` producer-learning signal.
+
 ## Review Workbench embed
 
 **Web component** (shadow DOM, no framework required):
@@ -181,7 +199,7 @@ Drive review-queue decisions from an MCP agent (Claude Desktop, Cursor, or any M
 npx survey-review-mcp --session path/to/session.json
 ```
 
-Three tools: `survey_review_queue` (queue state), `survey_review_item` (item detail), and `survey_review_decide` (record a decision). Each queue and item call includes an embedded, fully self-contained review card with Accept / Hold / Reject buttons. See [docs/review-mcp.md](docs/review-mcp.md).
+Three tools: `survey_review_queue` (queue state), `survey_review_item` (item detail), and `survey_review_decide` (record a decision). Each queue and item call includes an embedded, fully self-contained review card with Accept / Hold / Reject / Could not confirm actions. See [docs/review-mcp.md](docs/review-mcp.md).
 
 At viewports ≤ 980 px, the queue panel becomes a slide-in drawer with a compact progress bar. At narrow container widths, `cqi`-based type scaling keeps candidate values from overflowing at 360 px. CSS custom properties (`--k-*`) inherit through the shadow boundary so the host can theme either mode without forking styles.
 

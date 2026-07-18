@@ -77,7 +77,7 @@ export function buildSurfaceProjectionPreview(
     canonicalClaim: buildPreviewClaim(item, selectedCandidate, decision, projection, presentationAdapter),
     candidateHistory: buildCandidateHistory(item, selectedCandidate, presentationAdapter),
     sourceEvidence: buildSourceEvidence(selectedCandidate),
-    reviewEvent: buildReviewEvent(decision, projection),
+    reviewEvent: decision.spec.resolution === "could_not_confirm" ? undefined : buildReviewEvent(decision, projection),
     integrityPosture: buildIntegrityPosture(item, selectedCandidate, projection),
     authorityTrace: portableAuthorityTrace(selectedCandidate.producer?.authorityTrace),
     postureDisclaimer: postureDisclaimer(),

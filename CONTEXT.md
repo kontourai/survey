@@ -71,7 +71,7 @@ The candidate the **Producer** currently prefers within a **Candidate Set**. Sel
 _Avoid_: Verified candidate, winner
 
 **Review Outcome**:
-The producer's recorded review decision for a **Candidate Set** or a specific **Candidate**. A **Review Outcome** can verify, assume, reject, or leave a candidate proposed, but it belongs to the producer workflow rather than Survey policy.
+The producer's recorded review decision for a **Candidate Set** or a specific **Candidate**. A **Review Outcome** can verify, assume, reject, leave a candidate proposed, or end a review round with the explicit `could_not_confirm` resolution and a required reason. A could-not-confirm outcome preserves the claim's honest pre-review status and remains Survey-local rather than projecting a new Surface verification posture. It belongs to the producer workflow rather than Survey policy.
 _Avoid_: Review, approval when the status may not be verified, policy decision
 
 **Comfort Zone Flag**:
@@ -79,7 +79,7 @@ An optional `withinComfortZone: false` marker on a **Review Outcome**, paired wi
 _Avoid_: Encoding uncertainty only in rationale text, using a low-confidence extraction as a proxy for reviewer uncertainty, conflating extraction confidence with reviewer comfort zone
 
 **Learning Projection**:
-A Survey-local `learning.*` record derived from structured Survey producer/review data for workflow routing, evaluation, and producer feedback. A **Learning Projection** is separate from Surface `TrustInput`: it is not a truth or veracity assertion, not a **Claim**, not **Evidence**, not a **Verification Event**, and not a claim status. Use `learning.rejected-candidate` for ordinary rejected **Candidate** feedback, `learning.comfort-zone` for structured comfort-zone review signals, and `learning.escalation` for unresolved **Escalation Records**, including unattached escalations that producer tooling can route even when Surface cannot attach an event to a claim.
+A Survey-local `learning.*` record derived from structured Survey producer/review data for workflow routing, evaluation, and producer feedback. A **Learning Projection** is separate from Surface `TrustInput`: it is not a truth or veracity assertion, not a **Claim**, not **Evidence**, not a **Verification Event**, and not a claim status. Use `learning.rejected-candidate` for ordinary rejected **Candidate** feedback, `learning.comfort-zone` for structured comfort-zone review signals, `learning.could-not-confirm` for review rounds that ended without a confirmable answer, and `learning.escalation` for unresolved **Escalation Records**, including unattached escalations that producer tooling can route even when Surface cannot attach an event to a claim.
 _Avoid_: Treating `learning.*` as Surface state, hiding learning signals in verification event notes, adding product-specific routing names to Survey
 
 **Rejected Candidate Learning**:

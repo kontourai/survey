@@ -1,4 +1,5 @@
 import { canonicalJson } from "./canonical.js";
+import { assertReviewResolutionConsistency } from "../producer-discipline.js";
 import {
   candidateForDecision,
   buildReviewSessionEvent,
@@ -117,6 +118,9 @@ export function buildReviewDecision(state: ReviewWorkbenchState): ReviewDecision
   }
 
   const definition = workbenchDecisionDefinitions[state.decision];
+  if (state.decision === "could-not-confirm" && !state.note.trim()) {
+    throw new Error("Could not confirm requires a non-empty reason.");
+  }
   const candidate = candidateForDecision(state.item, state.decision);
   const projection = {
     ...candidate.projection,
@@ -124,7 +128,7 @@ export function buildReviewDecision(state: ReviewWorkbenchState): ReviewDecision
       ?? `${state.item.metadata.name}:${state.decision}:review-outcome`,
   };
 
-  return {
+  const reviewDecision: ReviewDecision = {
     apiVersion: reviewResourceApiVersion,
     kind: "ReviewDecision",
     metadata: {
@@ -136,6 +140,13 @@ export function buildReviewDecision(state: ReviewWorkbenchState): ReviewDecision
       reviewItemName: state.item.metadata.name,
       candidateId: candidate.id,
       status: definition.status,
+      ...(state.decision === "could-not-confirm"
+        ? {
+            resolution: "could_not_confirm" as const,
+            resolutionReason: state.note.trim(),
+            ...(state.attemptEvidenceIds?.length ? { attemptEvidenceIds: [...state.attemptEvidenceIds] } : {}),
+          }
+        : {}),
       actor: {
         id: state.actorId,
       },
@@ -149,6 +160,15 @@ export function buildReviewDecision(state: ReviewWorkbenchState): ReviewDecision
       appliedToClaimIds: candidate.projection?.claimId ? [candidate.projection.claimId] : undefined,
     },
   };
+  assertReviewResolutionConsistency(`ReviewDecision ${reviewDecision.metadata.name}`, {
+    status: reviewDecision.spec.status,
+    resolution: reviewDecision.spec.resolution,
+    resolutionReason: reviewDecision.spec.resolutionReason,
+    attemptEvidenceIds: reviewDecision.spec.attemptEvidenceIds,
+    actor: reviewDecision.spec.actor?.id,
+    reviewedAt: reviewDecision.spec.reviewedAt,
+  });
+  return reviewDecision;
 }
 
 /**
@@ -500,6 +520,9 @@ function mapReviewApplyResultToActions<TAction>(input: {
   readonly options: MapReviewWorkbenchResultsToApplyActionsOptions<TAction>;
   readonly issues: ReviewApplyActionIssue[];
 }): ReviewApplyActionMapping<TAction>[] {
+  if (input.result.decision === "could-not-confirm") {
+    return [];
+  }
   const context = buildReviewApplyActionContext(input.result, input.itemByName, input.issues);
   if (!context || input.options.skip?.(context)) {
     return [];
@@ -816,7 +839,7 @@ export function renderReviewWorkbenchHtml(
   return renderReviewQueueSessionHtml(session, options.presentationAdapter);
 }
 
-type FieldCardState = "review" | "accepted" | "kept" | "rejected";
+type FieldCardState = "review" | "accepted" | "kept" | "rejected" | "could-not-confirm";
 
 /**
  * The visual/decision state of a field card, derived from the reviewer's local
@@ -827,6 +850,7 @@ function fieldCardState(item: ReviewItem, decision: ReviewWorkbenchDecision | un
   if (decision === "accept-proposed") return "accepted";
   if (decision === "keep-current") return "kept";
   if (decision === "reject-proposed") return "rejected";
+  if (decision === "could-not-confirm") return "could-not-confirm";
   if (item.spec.candidateSetStatus === "resolved") return "kept";
   return "review";
 }
@@ -836,6 +860,7 @@ function chipLabel(state: FieldCardState): string {
     case "accepted": return "Accepted";
     case "kept": return "Kept current";
     case "rejected": return "Kept — flagged wrong";
+    case "could-not-confirm": return "Could not confirm";
     default: return "Needs review";
   }
 }
@@ -938,6 +963,7 @@ function renderFieldCard(
             <input type="checkbox" class="wrongbox" data-testid="wrong-toggle" data-item-name="${escapeHtml(item.metadata.name)}">
             Suggestion was wrong
           </label>
+          <button class="btn unconfirmed" type="button" data-testid="could-not-confirm" data-item-name="${escapeHtml(item.metadata.name)}">Could not confirm</button>
         </div>
         <div class="decided">
           <span class="chip ${state}" data-testid="decided-chip">${chipLabel(state)}</span>
@@ -1246,7 +1272,7 @@ function renderProducerFeedbackTags(item: ReviewItem): string {
 }
 
 function renderFooterTally(session: ReviewQueueSessionState): string {
-  const counts: Record<FieldCardState, number> = { review: 0, accepted: 0, kept: 0, rejected: 0 };
+  const counts: Record<FieldCardState, number> = { review: 0, accepted: 0, kept: 0, rejected: 0, "could-not-confirm": 0 };
   for (const item of session.items) {
     const state = fieldCardState(item, session.decisionsByItemName[item.metadata.name]);
     counts[state] += 1;
@@ -1258,6 +1284,7 @@ function renderFooterTally(session: ReviewQueueSessionState): string {
         <span>Accepted <b data-testid="tally-accepted">${counts.accepted}</b></span>
         <span>Kept <b data-testid="tally-kept">${counts.kept}</b></span>
         <span>Flagged <b data-testid="tally-rejected">${counts.rejected}</b></span>
+        <span>Unconfirmed <b data-testid="tally-could-not-confirm">${counts["could-not-confirm"]}</b></span>
         <span>Remaining <b data-testid="tally-review">${counts.review}</b></span>
       </div>
     </footer>
@@ -1460,10 +1487,13 @@ function createReviewWorkbenchController(
     // effectiveValue from snapshot + events alone. setDecision updates the
     // session before this runs, so the edit is already in state.
     const editedValue = itemName && decision === "accept-proposed" ? session.editedValuesByItemName?.[itemName] : undefined;
+    const attemptEvidenceIds = itemName && decision === "could-not-confirm"
+      ? session.attemptEvidenceIdsByItemName?.[itemName]
+      : undefined;
     const defaultData = decision
       ? (editedValue !== undefined
         ? { workbenchDecision: decision, workbenchEditedValue: editedValue }
-        : { workbenchDecision: decision })
+        : { workbenchDecision: decision, ...(attemptEvidenceIds?.length ? { attemptEvidenceIds } : {}) })
       : undefined;
 
     events = [
@@ -1477,6 +1507,13 @@ function createReviewWorkbenchController(
         reviewDecisionName: item && decision ? `${item.metadata.name}-${decision}` : undefined,
         candidateId: candidate?.id,
         status: definition?.status,
+        ...(decision === "could-not-confirm"
+          ? {
+              resolution: "could_not_confirm" as const,
+              resolutionReason: note?.trim(),
+              ...(attemptEvidenceIds ? { attemptEvidenceIds: [...attemptEvidenceIds] } : {}),
+            }
+          : {}),
         rationale: note,
         data: dataOverride ?? defaultData,
       }),
@@ -1488,6 +1525,9 @@ function createReviewWorkbenchController(
   };
 
   const setDecision = (itemName: string, decision: ReviewWorkbenchDecision, rawEditedValue?: string): void => {
+    if (decision === "could-not-confirm" && !session.notesByItemName[itemName]?.trim()) {
+      throw new Error("Could not confirm requires a non-empty reason.");
+    }
     applySessionUpdate((current) => {
       const item = current.items.find((entry) => entry.metadata.name === itemName);
       const proposed = item?.spec.candidates.find((candidate) => candidate.role === "proposed");
@@ -1517,12 +1557,15 @@ function createReviewWorkbenchController(
       delete remainingDecisions[itemName];
       const remainingEdits: Record<string, unknown> = { ...current.editedValuesByItemName };
       delete remainingEdits[itemName];
+      const remainingAttemptEvidenceIds = { ...current.attemptEvidenceIdsByItemName };
+      delete remainingAttemptEvidenceIds[itemName];
 
       return {
         ...current,
         activeItemName: itemName,
         decisionsByItemName: remainingDecisions,
         editedValuesByItemName: remainingEdits,
+        attemptEvidenceIdsByItemName: remainingAttemptEvidenceIds,
       };
     });
     appendEvent("decision-changed", itemName, { workbenchDecision: null });
@@ -1591,6 +1634,9 @@ function queueSessionFromStartState(
     editedValuesByItemName: startState.editedValue !== undefined
       ? { [startState.item.metadata.name]: startState.editedValue }
       : {},
+    ...(startState.attemptEvidenceIds?.length
+      ? { attemptEvidenceIdsByItemName: { [startState.item.metadata.name]: [...startState.attemptEvidenceIds] } }
+      : {}),
     reviewedAt: startState.reviewedAt,
     actorId: startState.actorId,
   };
@@ -1637,6 +1683,24 @@ function bindFieldCardInteractions(root: HTMLElement, controller: ReviewWorkbenc
     });
   });
 
+  root.querySelectorAll<HTMLButtonElement>("[data-testid='could-not-confirm']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const itemName = button.dataset.itemName ?? "";
+      const note = controller.currentSession().notesByItemName[itemName]?.trim() ?? "";
+      const field = button.closest<HTMLElement>("[data-testid='review-field']");
+      const textarea = field?.querySelector<HTMLTextAreaElement>("[data-testid='reviewer-note']");
+      if (!note) {
+        textarea?.setCustomValidity?.("A reason is required when you could not confirm.");
+        textarea?.reportValidity?.();
+        textarea?.focus();
+        return;
+      }
+      textarea?.setCustomValidity?.("");
+      controller.setDecision(itemName, "could-not-confirm");
+      controller.renderCurrentState();
+    });
+  });
+
   root.querySelectorAll<HTMLButtonElement>("[data-testid='undo-decision']").forEach((button) => {
     button.addEventListener("click", () => {
       controller.clearDecision(button.dataset.itemName ?? "");
@@ -1646,6 +1710,7 @@ function bindFieldCardInteractions(root: HTMLElement, controller: ReviewWorkbenc
 
   root.querySelectorAll<HTMLTextAreaElement>("[data-testid='reviewer-note']").forEach((textarea) => {
     textarea.addEventListener("input", () => {
+      textarea.setCustomValidity?.("");
       const itemName = textarea.dataset.itemName ?? "";
       controller.updateReviewerNote(itemName, textarea.value);
       refreshAuditPayloadForItem(textarea, controller, itemName);

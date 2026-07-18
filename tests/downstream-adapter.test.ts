@@ -4,7 +4,9 @@ import { downstreamPublicDirectoryProposalExample } from "../example-data/downst
 import { downstreamPublicDirectoryProposalToReviewItem } from "../examples/review-workbench/downstream-public-directory-adapter.js";
 import {
   buildReviewDecision,
+  buildReviewWorkbenchResultsFromSession,
   buildSurfaceProjectionPreview,
+  mapReviewWorkbenchResultsToApplyActions,
   initialReviewWorkbenchState,
   renderReviewWorkbenchHtml,
 } from "../src/review-workbench/review-workbench.js";
@@ -165,6 +167,53 @@ describe("downstream public-directory adapter example", () => {
     assert.equal(rejectedPreview?.canonicalClaim.candidateId, proposed.id);
     assert.equal(rejectedPreview?.canonicalClaim.value, "WAITLIST");
     assert.equal(rejectedPreview?.reviewEvent?.status, "rejected");
+  });
+
+  it("builds a terminal could-not-confirm decision with a required reason and no apply action", () => {
+    const item = downstreamPublicDirectoryProposalToReviewItem(downstreamPublicDirectoryProposalExample);
+    assert.throws(
+      () => buildReviewDecision({ ...initialReviewWorkbenchState(), item, decision: "could-not-confirm" }),
+      /requires a non-empty reason/,
+    );
+
+    const state = {
+      ...initialReviewWorkbenchState(),
+      item,
+      decision: "could-not-confirm" as const,
+      note: "The source excerpt does not identify which registration state is current.",
+      attemptEvidenceIds: ["evidence.source-excerpt"],
+    };
+    const decision = buildReviewDecision(state);
+
+    assert.equal(decision?.spec.status, "proposed");
+    assert.equal(decision?.spec.resolution, "could_not_confirm");
+    assert.equal(decision?.spec.resolutionReason, state.note);
+    assert.deepEqual(decision?.spec.attemptEvidenceIds, ["evidence.source-excerpt"]);
+    assert.equal(buildSurfaceProjectionPreview(item, decision)?.reviewEvent, undefined);
+
+    const session = {
+      items: [item],
+      activeItemName: item.metadata.name,
+      notesByItemName: { [item.metadata.name]: state.note },
+      decisionsByItemName: { [item.metadata.name]: "could-not-confirm" as const },
+      attemptEvidenceIdsByItemName: { [item.metadata.name]: ["evidence.source-excerpt"] },
+      reviewedAt: state.reviewedAt,
+      actorId: state.actorId,
+    };
+    const results = buildReviewWorkbenchResultsFromSession(session);
+    let mapCalls = 0;
+    const actions = mapReviewWorkbenchResultsToApplyActions({
+      items: [item],
+      results,
+      map: () => {
+        mapCalls += 1;
+        return { kind: "must-not-run" };
+      },
+    });
+
+    assert.equal(results[0]?.decision, "could-not-confirm");
+    assert.deepEqual(actions, []);
+    assert.equal(mapCalls, 0);
   });
 });
 

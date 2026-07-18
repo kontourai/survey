@@ -1,8 +1,8 @@
 import type { Candidate, CandidateSet, ClaimTarget, EscalationRecord, Extraction, ReviewOutcome, SurveyInput } from "./types.js";
 
-export type LearningProjectionKind = "learning.comfort-zone" | "learning.escalation" | "learning.rejected-candidate";
+export type LearningProjectionKind = "learning.comfort-zone" | "learning.escalation" | "learning.rejected-candidate" | "learning.could-not-confirm";
 
-export type LearningProjectionSignal = "comfort-zone.outside" | "escalation.unresolved" | "rejected-candidate.reason";
+export type LearningProjectionSignal = "comfort-zone.outside" | "escalation.unresolved" | "rejected-candidate.reason" | "could-not-confirm.reason";
 
 export type LearningProjectionSeverity = "info" | "attention";
 
@@ -69,6 +69,31 @@ export function buildSurveyLearningProjections(input: SurveyInput): LearningProj
   }
 
   for (const reviewOutcome of input.reviewOutcomes) {
+    if (reviewOutcome.resolution === "could_not_confirm") {
+      const target = candidateSetTargets.get(reviewOutcome.candidateSetId);
+      const claim = findClaimForReview(claimsByCandidateSet.get(reviewOutcome.candidateSetId) ?? [], reviewOutcome);
+      const resolutionReason = normalizeText(reviewOutcome.resolutionReason) ?? "(no reason recorded)";
+      projections.push({
+        id: `${reviewOutcome.id}.learning.could-not-confirm`,
+        kind: "learning.could-not-confirm",
+        source: input.source,
+        createdAt: reviewOutcome.reviewedAt ?? input.generatedAt,
+        target,
+        claimId: claim?.id,
+        reviewOutcomeId: reviewOutcome.id,
+        signal: "could-not-confirm.reason",
+        severity: "attention",
+        summary: `Could not confirm: ${resolutionReason}`,
+        metadata: {
+          couldNotConfirm: {
+            reason: resolutionReason,
+            ...(reviewOutcome.attemptEvidenceIds?.length
+              ? { attemptEvidenceIds: [...reviewOutcome.attemptEvidenceIds] }
+              : {}),
+          },
+        },
+      });
+    }
     if (reviewOutcome.withinComfortZone !== false) continue;
 
     const target = candidateSetTargets.get(reviewOutcome.candidateSetId);

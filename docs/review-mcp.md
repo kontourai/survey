@@ -23,7 +23,7 @@ Options:
 | --- | --- | --- |
 | `survey_review_queue` | _(none)_ | Text summary + JSON of all items with status, active item, queue progress, and session totals |
 | `survey_review_item` | `itemName: string` | Full item detail: current vs proposed values, confidence, source refs, excerpts, and current decision |
-| `survey_review_decide` | `itemName: string`, `decision: "accept" \| "hold" \| "reject"`, `note?: string` | Applies the decision through the real session APIs, persists atomically, returns updated item detail + remaining queue summary |
+| `survey_review_decide` | `itemName: string`, `decision: "accept" \| "hold" \| "reject" \| "could-not-confirm"`, `note?: string`, `reason?: string`, `attemptEvidenceIds?: string[]` | Applies the decision through the real session APIs and persists atomically. `reason` is required and non-empty for `could-not-confirm`. |
 
 Decision mapping:
 
@@ -32,6 +32,7 @@ Decision mapping:
 | `accept` | `accept-proposed` | Proposed value becomes the verified outcome |
 | `hold` | `keep-current` | Current value remains the verified outcome |
 | `reject` | `reject-proposed` | Proposed value is rejected; current value is unmodified |
+| `could-not-confirm` | `could-not-confirm` | Review round ends without changing, rejecting, or escalating the claim; a reason is required |
 
 ### Domain failures
 
@@ -61,7 +62,7 @@ The HTML card is compact and fully self-contained (no external network requests)
 - Queue progress (resolved / total)
 - Current decision badge (if any)
 - A reviewer note textarea
-- Accept / Hold / Reject buttons
+- Accept / Hold / Reject / Could not confirm buttons
 
 Buttons post back to the host using the MCP guest-to-host postMessage protocol:
 

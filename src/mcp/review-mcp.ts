@@ -50,6 +50,7 @@ const MCP_DECISION_MAP: Record<string, ReviewWorkbenchDecision> = {
   accept: "accept-proposed",
   hold: "keep-current",
   reject: "reject-proposed",
+  "could-not-confirm": "could-not-confirm",
 };
 
 interface JsonRpcRequest {
@@ -105,7 +106,7 @@ function queueSummaryText(snapshot: ReviewQueueSessionState, events: readonly Re
     `Active item: ${activeItem.metadata.name} (${activeItem.spec.target})`,
     ...(nextItem ? [`Next unresolved: ${nextItem}`] : ["All items resolved."]),
     ``,
-    `Session summary: accepted=${summary.accepted} keptCurrent=${summary.keptCurrent} rejected=${summary.rejected} escalated=${summary.escalated} unresolved=${summary.unresolved}`,
+    `Session summary: accepted=${summary.accepted} keptCurrent=${summary.keptCurrent} rejected=${summary.rejected} couldNotConfirm=${summary.couldNotConfirm ?? 0} escalated=${summary.escalated} unresolved=${summary.unresolved}`,
     ``,
     `Items:`,
     ...rows,
@@ -274,12 +275,13 @@ h1{font-size:15px;font-weight:700;margin:0 0 4px}
 .note-label{font-size:11px;color:var(--k-text-muted);margin-bottom:4px}
 .note-input{width:100%;background:var(--k-panel-raised);border:1px solid var(--k-line-strong);border-radius:var(--k-radius-sm);color:var(--k-text);font:inherit;font-size:12px;padding:7px 10px;resize:vertical;min-height:52px}
 .note-input:focus{outline:2px solid var(--k-brand);outline-offset:1px;border-color:transparent}
-.btn-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px}
+.btn-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
 .btn{padding:9px 4px;border:1px solid var(--k-line-strong);border-radius:var(--k-radius-sm);background:var(--k-panel-raised);color:var(--k-text-muted);font:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:background .12s,color .12s,border-color .12s}
 .btn:hover{background:var(--k-panel);border-color:var(--k-brand);color:var(--k-text)}
 .btn-accept:hover,.btn-accept.active{background:color-mix(in srgb,var(--k-positive) 16%,transparent);border-color:var(--k-positive);color:var(--k-positive)}
 .btn-hold:hover,.btn-hold.active{background:color-mix(in srgb,var(--k-caution) 16%,transparent);border-color:var(--k-caution);color:var(--k-caution)}
 .btn-reject:hover,.btn-reject.active{background:color-mix(in srgb,var(--k-negative) 16%,transparent);border-color:var(--k-negative);color:var(--k-negative)}
+.btn-unconfirmed:hover,.btn-unconfirmed.active{background:color-mix(in srgb,var(--k-caution) 16%,transparent);border-color:var(--k-caution);color:var(--k-caution)}
 .feedback{font-size:11px;color:var(--k-text-faint);margin-top:8px;min-height:16px}
 </style>
 </head>
@@ -311,13 +313,14 @@ h1{font-size:15px;font-weight:700;margin:0 0 4px}
 
 <div class="divider"></div>
 
-<div class="note-label">Reviewer note (optional)</div>
+<div class="note-label">Reviewer note (required for Could not confirm)</div>
 <textarea class="note-input" id="note" placeholder="Add a rationale for this decision...">${escapeHtml(current.notesByItemName[item.metadata.name] ?? "")}</textarea>
 
 <div class="btn-row">
   <button class="btn btn-accept${decision === "accept-proposed" ? " active" : ""}" id="btn-accept">Accept proposed</button>
   <button class="btn btn-hold${decision === "keep-current" ? " active" : ""}" id="btn-hold">Hold / Keep current</button>
   <button class="btn btn-reject${decision === "reject-proposed" ? " active" : ""}" id="btn-reject">Reject proposed</button>
+  <button class="btn btn-unconfirmed${decision === "could-not-confirm" ? " active" : ""}" id="btn-unconfirmed">Could not confirm</button>
 </div>
 <div class="feedback" id="feedback"></div>
 
@@ -328,20 +331,29 @@ h1{font-size:15px;font-weight:700;margin:0 0 4px}
 
   function postDecision(decision) {
     var note = document.getElementById('note').value;
+    if (decision === 'could-not-confirm' && !note.trim()) {
+      document.getElementById('feedback').textContent = 'A reason is required when you could not confirm.';
+      document.getElementById('note').focus();
+      return false;
+    }
     window.parent.postMessage({
       jsonrpc: "2.0",
       id: msgId++,
       method: "tools/call",
       params: {
         name: "survey_review_decide",
-        arguments: { itemName: itemName, decision: decision, note: note || undefined }
+        arguments: decision === 'could-not-confirm'
+          ? { itemName: itemName, decision: decision, reason: note }
+          : { itemName: itemName, decision: decision, note: note || undefined }
       }
     }, "*");
+    return true;
   }
 
   document.getElementById('btn-accept').addEventListener('click', function () { postDecision('accept'); document.getElementById('feedback').textContent = 'Submitting accept…'; });
   document.getElementById('btn-hold').addEventListener('click', function () { postDecision('hold'); document.getElementById('feedback').textContent = 'Submitting hold…'; });
   document.getElementById('btn-reject').addEventListener('click', function () { postDecision('reject'); document.getElementById('feedback').textContent = 'Submitting reject…'; });
+  document.getElementById('btn-unconfirmed').addEventListener('click', function () { if (postDecision('could-not-confirm')) document.getElementById('feedback').textContent = 'Submitting could not confirm…'; });
 
   window.addEventListener('message', function (evt) {
     var data = evt.data;
@@ -436,11 +448,15 @@ async function toolDecide(
   itemName: string,
   mcpDecision: string,
   note: string | undefined,
+  attemptEvidenceIds: readonly string[] | undefined,
   options: ReviewMcpOptions,
 ): Promise<ContentItem[]> {
   const wbDecision = MCP_DECISION_MAP[mcpDecision];
   if (!wbDecision) {
-    throw new DomainError(`Invalid decision: ${mcpDecision}. Must be accept, hold, or reject.`);
+    throw new DomainError(`Invalid decision: ${mcpDecision}. Must be accept, hold, reject, or could-not-confirm.`);
+  }
+  if (wbDecision === "could-not-confirm" && !note?.trim()) {
+    throw new DomainError("survey_review_decide requires a non-empty reason for could-not-confirm");
   }
 
   const file = await readSessionFile(options.sessionPath);
@@ -469,6 +485,14 @@ async function toolDecide(
           notesByItemName: {
             ...current.notesByItemName,
             [itemName]: note,
+          },
+        }
+      : {}),
+    ...(attemptEvidenceIds?.length
+      ? {
+          attemptEvidenceIdsByItemName: {
+            ...current.attemptEvidenceIdsByItemName,
+            [itemName]: [...attemptEvidenceIds],
           },
         }
       : {}),
@@ -658,19 +682,29 @@ async function handleLine(
               name: "survey_review_decide",
               title: "Record a review decision",
               description:
-                "Apply a decision to a review item and persist it to the session file. Decision must be accept (accept-proposed), hold (keep-current), or reject (reject-proposed). Domain failures return isError:true.",
+                "Apply a decision to a review item and persist it to the session file. Decision must be accept, hold, reject, or could-not-confirm. Could-not-confirm requires a reason. Domain failures return isError:true.",
               inputSchema: {
                 type: "object",
                 properties: {
                   itemName: { type: "string", description: "The ReviewItem name to decide." },
                   decision: {
                     type: "string",
-                    enum: ["accept", "hold", "reject"],
-                    description: "accept = accept-proposed, hold = keep-current, reject = reject-proposed.",
+                    enum: ["accept", "hold", "reject", "could-not-confirm"],
+                    description: "accept = accept-proposed, hold = keep-current, reject = reject-proposed, could-not-confirm = terminal non-answer.",
                   },
                   note: { type: "string", description: "Optional reviewer note / rationale." },
+                  reason: { type: "string", minLength: 1, description: "Required non-empty reason when decision is could-not-confirm." },
+                  attemptEvidenceIds: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Optional evidence ids recording what was attempted before could-not-confirm.",
+                  },
                 },
                 required: ["itemName", "decision"],
+                allOf: [{
+                  if: { properties: { decision: { const: "could-not-confirm" } }, required: ["decision"] },
+                  then: { required: ["reason"] },
+                }],
               },
             },
           ],
@@ -725,9 +759,14 @@ async function handleLine(
           const itemName = typeof toolArgs.itemName === "string" ? toolArgs.itemName : "";
           const decision = typeof toolArgs.decision === "string" ? toolArgs.decision : "";
           const note = typeof toolArgs.note === "string" ? toolArgs.note : undefined;
+          const reason = typeof toolArgs.reason === "string" ? toolArgs.reason : undefined;
+          const attemptEvidenceIds = Array.isArray(toolArgs.attemptEvidenceIds)
+            && toolArgs.attemptEvidenceIds.every((value) => typeof value === "string")
+            ? toolArgs.attemptEvidenceIds as string[]
+            : undefined;
           if (!itemName) throw new DomainError("survey_review_decide requires itemName");
           if (!decision) throw new DomainError("survey_review_decide requires decision");
-          content = await toolDecide(itemName, decision, note, options);
+          content = await toolDecide(itemName, decision, decision === "could-not-confirm" ? reason : note, attemptEvidenceIds, options);
         } else {
           send({ jsonrpc: "2.0", id, error: { code: -32602, message: `Unknown tool: ${name || "(missing name)"}` } });
           return;

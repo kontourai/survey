@@ -437,6 +437,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 .survey-workbench-embed .field[data-state="accepted"] .stripe{ background: var(--k-positive); }
 .survey-workbench-embed .field[data-state="kept"] .stripe{ background: var(--k-faint); }
 .survey-workbench-embed .field[data-state="rejected"] .stripe{ background: var(--k-negative); }
+.survey-workbench-embed .field[data-state="could-not-confirm"] .stripe{ background: var(--k-caution); }
 .survey-workbench-embed .field[data-state="review"] .stripe{ background: var(--k-brand); }
 
 .survey-workbench-embed .fbody{
@@ -491,6 +492,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 .survey-workbench-embed .chip.accepted{ color: var(--k-positive); background: var(--k-positive-wash); }
 .survey-workbench-embed .chip.kept{ color: var(--k-muted); background: var(--k-sunken); }
 .survey-workbench-embed .chip.rejected{ color: var(--k-negative); background: var(--k-negative-wash); }
+.survey-workbench-embed .chip.could-not-confirm{ color: var(--k-caution); background: var(--k-caution-wash); }
 
 .survey-workbench-embed .frow1 .push{
   margin-left: auto;
@@ -753,6 +755,12 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 .survey-workbench-embed .btn.keep{
   border-color: var(--k-line-strong);
   background: var(--k-panel-raised, var(--k-raised));
+}
+
+.survey-workbench-embed .btn.unconfirmed{
+  border-color: var(--k-caution);
+  color: var(--k-caution);
+  background: var(--k-caution-wash);
 }
 
 /* "Suggestion was wrong" — optional quiet calibration toggle on Keep current.

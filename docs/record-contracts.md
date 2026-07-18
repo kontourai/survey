@@ -434,7 +434,7 @@ The result contains a generic subject, `applicability.target`, the previous and
 proposed values, opaque review evidence ids, candidate/claim/review lineage,
 and two complementary provenance anchors. A narrow
 `{ kind: "review-proof", algorithm: "sha256", proofSchemaVersion: 2, value }`
-reference identifies the canonical v2 proof without copying its payload. The
+reference identifies the canonical v3 proof without copying its payload. The
 separate provenance references retain each raw source's origin and resolution
 axis because the canonical proof intentionally does not commit that axis.
 `authorizationRef` links the review outcome id to the same proof hash; it does
@@ -706,11 +706,13 @@ The canonical payload is the portable review proof contract. It contains:
 | `proof.sourcePayload` / `rawSource.checksum` | Source payload identity, ref, and producer-supplied checksum when present. |
 | `extraction` | Extracted target, value, locator, excerpt, extractor, confidence, and extraction time. |
 | `candidate` / `candidateSet` | Candidate identity/value plus the ordered candidate set, selected candidate, status, and rationale. |
-| `reviewOutcome` | Review decision/status, actor, review time, rationale, evidence ids, and in v2 optional authorizing testimony provenance. |
+| `reviewOutcome` | Review decision/status, actor, review time, rationale, evidence ids, optional authorizing testimony provenance, and in v3 explicit resolution/reason/attempt evidence. |
 | `claim` | Projected claim identity, status/value, impact, evidence method, derivation links, collector, actor, and event method. |
 
-New proofs use the v2 envelope: outer `schemaVersion: 2`, inner
-`proof.schemaVersion: 2`, and `proof.packageVersion: "2"`. When present,
+New proofs use the v3 envelope: outer `schemaVersion: 3`, inner
+`proof.schemaVersion: 3`, and `proof.packageVersion: "3"`. V3 commits the
+optional `resolution`, `resolutionReason`, and sorted `attemptEvidenceIds`, so a
+could-not-confirm non-answer and its required reason are tamper-evident. When present,
 `reviewOutcome.authorizing` is validated and committed to the canonical bytes.
 The portable variants are:
 
@@ -735,17 +737,17 @@ without a selected review outcome are not anchored by `{ reviewProofs: true }`.
 
 For persisted material, call
 `verifyCanonicalReviewProofPayload(payload, expectedHash)`. The verifier accepts
-consistent v1 and v2 envelopes, validates v2 authorizing when present, and only
+consistent v1, v2, and v3 envelopes, validates authorizing when present, and only
 then compares the canonical SHA-256 value. It rejects outer/inner schema
 mismatches, schema/package-version hybrids, unsupported versions, and v1
-payloads carrying the v2-only authorizing field, even when the supplied hash
+payloads carrying fields introduced by a later version, even when the supplied hash
 matches those malformed bytes.
 
-Persisted v1 payloads remain verifiable against their original hashes without
-rebuilding them through the v2 builder. V1 did not contain or attest
-authorizing testimony. Re-projecting an authorizing-bearing review with the v2
-builder intentionally produces a new hash because the committed canonical
-material has changed. Recursive canonicalization keeps object insertion order
+Persisted v1 and v2 payloads remain verifiable against their original hashes
+without rebuilding them through the v3 builder. V1 did not contain or attest
+authorizing testimony; v1/v2 did not attest resolution details. Re-projecting a
+review with the v3 builder intentionally produces a new hash because the
+committed canonical material has changed. Recursive canonicalization keeps object insertion order
 hash-insensitive; array order retains its existing contract semantics.
 
 When the Surface projection proof option is enabled, `buildSurveyTrustBundle`
