@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.16.0](https://github.com/kontourai/survey/compare/v1.15.0...v1.16.0) (2026-07-18)
+
+
+### Features
+
+* **review:** could-not-confirm terminal outcome with required reason ([#155](https://github.com/kontourai/survey/issues/155)) ([2360f7b](https://github.com/kontourai/survey/commit/2360f7ba0a2b1f9b6612d85dacacb22845fd9f48)), closes [#147](https://github.com/kontourai/survey/issues/147)
+
+
+### Documentation
+
+* contract + decision records for 1.14/1.15 review-workbench changes ([#153](https://github.com/kontourai/survey/issues/153)) ([86afe49](https://github.com/kontourai/survey/commit/86afe49859ec4cc2c86f6b25ebe39c494936adc1))
+
 ## [1.15.0](https://github.com/kontourai/survey/compare/v1.14.0...v1.15.0) (2026-07-17)
 
 
