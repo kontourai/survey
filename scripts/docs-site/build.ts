@@ -26,6 +26,7 @@ interface NavSection {
 
 const pages: PageDef[] = [
   { src: "record-contracts.md", out: "record-contracts.html", navTitle: "Record Contracts", section: "Reference" },
+  { src: "extraction-envelope-import.md", out: "extraction-envelope-import.html", navTitle: "Extraction Import", section: "Reference" },
   { src: "adversarial-and-learning.md", out: "adversarial-and-learning.html", navTitle: "Adversarial & Learning", section: "Reference" },
   { src: "consumer-integration-guide.md", out: "consumer-integration-guide.html", navTitle: "Consumer Guide", section: "Reference" },
   { src: "upgrade-guide.md", out: "upgrade-guide.html", navTitle: "Upgrade Guide", section: "Reference" },

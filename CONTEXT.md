@@ -46,6 +46,10 @@ _Avoid_: Source reference, citation
 A value pulled from a **Raw Source** for a named target by a producer-controlled extractor. An **Extraction** is evidence of what the source material appeared to say, not a claim that the value is final or true.
 _Avoid_: Claim, verified value, parse result
 
+**Extraction Envelope**:
+A versioned JSON-safe extraction result owned by an upstream **Producer** and accepted structurally at Survey's import boundary. Survey preserves the envelope unchanged inside a durable import record, adds Survey-specific claim-target mapping at the boundary, and derives review candidates only when its prepared-artifact posture is grounded. Survey does not redefine the upstream wire format, own the artifact store, or turn extraction output into truth.
+_Avoid_: Survey-owned extraction wire format, review decision, truth assertion
+
 **Extraction Target**:
 The producer or extractor's name for the thing being pulled from a **Raw Source**. An **Extraction Target** often matches a claim's **Field or Behavior**, but it may differ when the extracted source field is only a candidate or source-specific representation.
 _Avoid_: Field or Behavior when referring to source-side extraction
