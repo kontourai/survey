@@ -10,6 +10,7 @@ Survey turns raw sources into Surface-ready trust evidence through a consistent
 | Integrate Survey into my product | [consumer-integration-guide.md](consumer-integration-guide.md) |
 | Upgrade an existing Survey integration | [upgrade-guide.md](upgrade-guide.md) |
 | Understand every record shape in the chain | [record-contracts.md](record-contracts.md) |
+| Import versioned extraction provenance for review | [extraction-envelope-import.md](extraction-envelope-import.md) |
 | Model source-authoritative review decisions | [source-authority-review-pattern.md](source-authority-review-pattern.md) |
 | Use adversarial review rounds and learning projections | [adversarial-and-learning.md](adversarial-and-learning.md) |
 | Understand the review resource envelope (UI/adapter) | [review-resource-contract.md](review-resource-contract.md) |
@@ -24,6 +25,7 @@ Survey turns raw sources into Surface-ready trust evidence through a consistent
 - [consumer-integration-guide.md](consumer-integration-guide.md) — end-to-end path for consumers integrating Survey output into Surface
 - [upgrade-guide.md](upgrade-guide.md) — version-upgrade path, the adoption-scorecard pattern, and safely consuming `decisionEffects` values
 - [record-contracts.md](record-contracts.md) — every record shape (source, extraction, candidate, review, claim) with schema and Surface projection rules
+- [extraction-envelope-import.md](extraction-envelope-import.md) — structural portable-envelope import, durable provenance, and typed unresolved diagnostics
 - [source-authority-review-pattern.md](source-authority-review-pattern.md) — producer pattern for source-context-backed candidate review and Surface evidence
 - [adversarial-and-learning.md](adversarial-and-learning.md) — adversarial review rounds and learning projection mechanics
 - [review-resource-contract.md](review-resource-contract.md) — producer-neutral review resource envelope for UI prototypes and adapter tests
