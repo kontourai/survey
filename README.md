@@ -103,6 +103,8 @@ One observation, one chain: the page it came from, what the extractor read, who 
 
 Keep producer operational state outside Survey. Queue status, reviewer form state, retries, source caches, and product policy decisions belong in the producer's own data model. Survey carries only the portable evidence chain records needed by Surface.
 
+Need Anthropic-backed `MappingProposer`/`UtteranceClaimExtractor` implementations for step 1? `@kontourai/survey/anthropic` ships production adapters as proposers-only — every output still goes through the normal review path. It's a separate subpath (not re-exported from the package root) so consumers without `@anthropic-ai/sdk` installed pay nothing.
+
 When you build an `authorized-action` authorizing block outside the workbench, pair `buildAuthorizedActionAuthorizing` with `buildPromptRef({ module, component, version?, scheme? })` — `buildPromptRef` formats a well-formed, versioned `promptRef` (bare `"review-workbench/decision-card@v1"` or scheme-prefixed `"survey://<module>/<component>@v1"`) that `buildAuthorizedActionAuthorizing` accepts directly, instead of hand-formatting the string.
 
 ## Review lifecycle
@@ -201,7 +203,7 @@ npx survey-review-mcp --session path/to/session.json
 
 Three tools: `survey_review_queue` (queue state), `survey_review_item` (item detail), and `survey_review_decide` (record a decision). Each queue and item call includes an embedded, fully self-contained review card with Accept / Hold / Reject / Could not confirm actions. See [docs/review-mcp.md](docs/review-mcp.md).
 
-At viewports ≤ 980 px, the queue panel becomes a slide-in drawer with a compact progress bar. At narrow container widths, `cqi`-based type scaling keeps candidate values from overflowing at 360 px. CSS custom properties (`--k-*`) inherit through the shadow boundary so the host can theme either mode without forking styles.
+The embedded card is a fixed-size resource (a preferred frame of 420×560) that follows the host's light/dark `prefers-color-scheme`; it does not resize its layout at other breakpoints. For a card that adapts its layout to available width — stacking the current → proposed diff vertically and growing tap targets via CSS container queries below 620px/480px, with a viewport `@media` fallback — embed the [Review Workbench](#review-workbench-embed) directly instead.
 
 Server code persisting browser-submitted review events should use `persistReviewSessionEvents`, then `deriveReviewSessionApplyResultForSnapshot` (or the composed `deriveServerReviewSessionApplyResult` from `@kontourai/survey/review-workbench/server-review-session`) before applying product policy — write results derive from pre-decision snapshots plus persisted events, never from browser-computed decisions.
 
