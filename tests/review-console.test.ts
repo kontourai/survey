@@ -55,6 +55,23 @@ describe("survey-review-console server", () => {
     assert.ok(html.includes("/api/stream"), "missing /api/stream reference in client script");
   });
 
+  test("GET / mount root carries the survey-workbench-embed scoping class", async () => {
+    // The compiled workbench stylesheet (dist/src/review-workbench/review-workbench.css)
+    // scopes nearly every rule under .survey-workbench-embed. Without this class on the
+    // mount element, the standalone console renders completely unstyled. Regression for
+    // a bug where the server-rendered <main> shell only carried class="workbench".
+    const res = await fetch(handle.url);
+    const html = await res.text();
+    const mountMatch = html.match(/<main id="review-workbench"[^>]*>/);
+    assert.ok(mountMatch, "missing #review-workbench mount element");
+    const mountTag = mountMatch![0];
+    assert.match(
+      mountTag,
+      /class="[^"]*\bsurvey-workbench-embed\b[^"]*"/,
+      `mount element missing survey-workbench-embed class: ${mountTag}`,
+    );
+  });
+
   test("GET /api/session returns 200 with session shape", async () => {
     const res = await fetch(`${handle.url}api/session`);
     assert.equal(res.status, 200);

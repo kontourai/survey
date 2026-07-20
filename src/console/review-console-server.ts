@@ -371,7 +371,7 @@ body {
     </button>
   </div>
 </header>
-<main id="review-workbench" class="workbench" data-testid="review-workbench"></main>
+<main id="review-workbench" class="workbench survey-workbench-embed" data-testid="review-workbench"></main>
 <script type="module">
 import { mountReviewWorkbench, replayReviewSessionEvents, defaultReviewSessionName, buildReviewSessionEvents } from "${workbenchJsPath}";
 
