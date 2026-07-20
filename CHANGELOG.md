@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.18.1](https://github.com/kontourai/survey/compare/v1.18.0...v1.18.1) (2026-07-20)
+
+
+### Fixes
+
+* omit undefined review session fields ([27f411c](https://github.com/kontourai/survey/commit/27f411ca230e944ec58bf38434141eb3e29c19f5))
+* omit undefined review session fields ([d8cabd2](https://github.com/kontourai/survey/commit/d8cabd28a088fae0482e428a450bf998b2da4ece))
+
 ## [1.18.0](https://github.com/kontourai/survey/compare/v1.17.0...v1.18.0) (2026-07-20)
 
 
