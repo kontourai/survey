@@ -143,14 +143,15 @@ export function buildReviewDecision(state: ReviewWorkbenchState): ReviewDecision
     reviewOutcomeId: candidate.projection?.reviewOutcomeId
       ?? `${state.item.metadata.name}:${state.decision}:review-outcome`,
   };
+  const authorizing = buildDecisionCardAuthorizing(state);
 
   const reviewDecision: ReviewDecision = {
     apiVersion: reviewResourceApiVersion,
     kind: "ReviewDecision",
     metadata: {
       name: `${state.item.metadata.name}-${state.decision}`,
-      labels: state.item.metadata.labels,
-      producer: state.item.metadata.producer,
+      ...(state.item.metadata.labels ? { labels: state.item.metadata.labels } : {}),
+      ...(state.item.metadata.producer ? { producer: state.item.metadata.producer } : {}),
     },
     spec: {
       reviewItemName: state.item.metadata.name,
@@ -168,12 +169,14 @@ export function buildReviewDecision(state: ReviewWorkbenchState): ReviewDecision
       },
       reviewedAt: state.reviewedAt,
       rationale: state.note,
-      authorizing: buildDecisionCardAuthorizing(state),
-      projection,
-      editedValue: state.decision === "accept-proposed" ? state.editedValue : undefined,
+      ...(authorizing !== undefined ? { authorizing } : {}),
+      ...(projection !== undefined ? { projection } : {}),
+      ...(state.decision === "accept-proposed" && state.editedValue !== undefined
+        ? { editedValue: state.editedValue }
+        : {}),
     },
     status: {
-      appliedToClaimIds: candidate.projection?.claimId ? [candidate.projection.claimId] : undefined,
+      ...(candidate.projection?.claimId ? { appliedToClaimIds: [candidate.projection.claimId] } : {}),
     },
   };
   assertReviewResolutionConsistency(`ReviewDecision ${reviewDecision.metadata.name}`, {
