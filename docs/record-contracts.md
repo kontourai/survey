@@ -206,6 +206,21 @@ keys, typed edge details are preserved on the projected claim at
 
 ## Review resources
 
+### Extraction-envelope imports
+
+An `ExtractionEnvelopeImport` is Survey's durable wrapper around a validated,
+upstream-owned portable extraction-result envelope. It stores the full envelope
+unchanged, plus Survey-owned source-kind and claim-target mappings, so artifact,
+snapshot, exact occurrence, field/value type and inference, provider/model/run,
+outcome, warnings, failure classes, and task/example digests survive re-import.
+
+The adapter emits `ReviewItem` candidates only for grounded imports. An
+unavailable, storage, identity, or invalid artifact state is an
+`artifact-unavailable` diagnostic; artifact digest drift is a `digest-mismatch`
+diagnostic. These are unresolved states rather than review candidates. Candidate
+ids retain proposal and field identity; source evidence ids retain artifact,
+snapshot, and locator identity. See [Extraction Envelope Import](extraction-envelope-import.md).
+
 Survey also exports producer-neutral `ReviewItem`, `ReviewCandidate`, and
 `ReviewDecision` TypeScript resource shapes for review UI and adapter examples.
 They use `apiVersion`, `kind`, `metadata`, `spec`, and `status` fields while

@@ -23,6 +23,27 @@ export type {
 } from "./types.js";
 export { SURVEY_INPUT_CONTRACT_VERSION } from "./types.js";
 export { reviewResourceApiVersion } from "./review-resource.js";
+export {
+  buildReviewItemsFromExtractionEnvelopeImport,
+  createExtractionEnvelopeResolutionIdentity,
+  exportExtractionEnvelopeImport,
+  extractionEnvelopeImportApiVersion,
+  importExtractionEnvelope,
+  portableExtractionResultFormat,
+  portableExtractionResultVersion,
+  reimportExtractionEnvelope,
+} from "./extraction-envelope.js";
+export type {
+  ExtractionEnvelopeImport,
+  ExtractionEnvelopeImportDiagnostic,
+  ExtractionEnvelopeImportOptions,
+  ExtractionEnvelopeImportResult,
+  ExtractionEnvelopeResolutionIdentity,
+  PortableExtractionOccurrence,
+  PortableExtractionProposal,
+  PortableExtractionResultEnvelope,
+  PortablePreparedArtifactState,
+} from "./extraction-envelope.js";
 export type {
   CandidateRole,
   ClaimTargetHint,

@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   buildPromptRef,
   buildReviewedLearningUpdateProposal,
+  createExtractionEnvelopeResolutionIdentity,
   candidateSetStatusFor,
   confidenceBasisForReview,
   currentProposedReviewItem,
@@ -20,6 +21,7 @@ describe("public barrel exports", () => {
     assert.equal(typeof buildPromptRef, "function");
     assert.equal(typeof currentProposedReviewItem, "function");
     assert.equal(typeof buildReviewedLearningUpdateProposal, "function");
+    assert.equal(typeof createExtractionEnvelopeResolutionIdentity, "function");
     assert.equal(SURVEY_INPUT_CONTRACT_VERSION, "1");
   });
 

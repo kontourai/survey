@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.17.0](https://github.com/kontourai/survey/compare/v1.16.0...v1.17.0) (2026-07-20)
+
+
+### Features
+
+* import portable extraction evidence ([6a60424](https://github.com/kontourai/survey/commit/6a604248653018db163045218ac2fb1c1359bd75))
+* import portable extraction evidence ([d8e409e](https://github.com/kontourai/survey/commit/d8e409e9f26d5c679e2c5ae884d4c60640cae88e))
+
 ## [1.16.0](https://github.com/kontourai/survey/compare/v1.15.0...v1.16.0) (2026-07-18)
 
 
