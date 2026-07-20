@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.18.0](https://github.com/kontourai/survey/compare/v1.17.0...v1.18.0) (2026-07-20)
+
+
+### Features
+
+* inspect extraction evidence in source ([cd92b2a](https://github.com/kontourai/survey/commit/cd92b2aec88575bc32703763b9a7e777560c8d65))
+* inspect extraction evidence in source ([66b9d76](https://github.com/kontourai/survey/commit/66b9d767074ea1d1cb11e2f4cea5e27e3e146498))
+
+
+### Fixes
+
+* omit absent review decision fields ([438ca9d](https://github.com/kontourai/survey/commit/438ca9d5b30f50d227b9db18c5b9c82ac8d5d817))
+* omit absent review decision fields ([1fa9767](https://github.com/kontourai/survey/commit/1fa97670562ec0f7a81bdbc0b1eaf14d2403c5b8))
+
 ## [1.17.0](https://github.com/kontourai/survey/compare/v1.16.0...v1.17.0) (2026-07-20)
 
 
