@@ -8,7 +8,9 @@ import {
   buildReviewItemPresentation,
   buildReviewResultPresentation,
   buildReviewWorkbenchResultsFromSession,
+  buildReviewSessionEvent,
   buildReviewSessionEvents,
+  buildReviewSessionResource,
   buildReviewWorkbenchSessionExport,
   buildReviewWorkbenchSessionExportForSnapshot,
   buildSurfaceProjectionPreview,
@@ -55,6 +57,47 @@ function assertNoOwnUndefined(value: unknown, path = "decision"): void {
 }
 
 describe("review workbench prototype", () => {
+  it("omits absent optional fields from ReviewSession resources", () => {
+    const resource = buildReviewSessionResource(initialReviewQueueSessionState());
+
+    assertNoOwnUndefined(resource, "session");
+    assert.equal(Object.hasOwn(resource.spec, "completedAt"), false);
+    assert.deepEqual(resource, JSON.parse(JSON.stringify(resource)));
+  });
+
+  it("recursively omits undefined event fields while preserving explicit JSON values", () => {
+    const sparse = new Array(1);
+    const event = buildReviewSessionEvent(initialReviewQueueSessionState(), {
+      sessionName: "json-shape",
+      sequence: 1,
+      eventType: "session-started",
+      occurredAt: "2026-06-04T00:00:00.000Z",
+      reviewItemName: undefined,
+      data: {
+        absent: undefined,
+        explicitNull: null,
+        nested: { absent: undefined, value: "present" },
+        array: [undefined, null],
+        sparse,
+        nonFinite: Number.POSITIVE_INFINITY,
+        omittedFunction: () => "not JSON",
+        timestamp: new Date("2026-06-04T00:00:00.000Z"),
+      },
+    });
+
+    assertNoOwnUndefined(event, "event");
+    assert.equal(Object.hasOwn(event.spec, "reviewItemName"), false);
+    assert.deepEqual(event.spec.data, {
+      explicitNull: null,
+      nested: { value: "present" },
+      array: [null, null],
+      sparse: [null],
+      nonFinite: null,
+      timestamp: "2026-06-04T00:00:00.000Z",
+    });
+    assert.deepEqual(event, JSON.parse(JSON.stringify(event)));
+  });
+
   const cases: Array<{
     decision: ReviewWorkbenchDecision;
     candidateId: string;

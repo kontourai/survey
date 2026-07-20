@@ -240,6 +240,14 @@ export function selectedCandidateRole(state: ReviewWorkbenchState): ReviewCandid
   return workbenchDecisionDefinitions[state.decision].candidateRole;
 }
 
+function canonicalizeJsonResource<T>(value: T): T {
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) {
+    throw new TypeError("Review session resources must be JSON-serializable.");
+  }
+  return JSON.parse(serialized) as T;
+}
+
 export function buildReviewSessionResource(
   session: ReviewQueueSessionState,
   events: readonly ReviewSessionEvent[] = [],
@@ -248,7 +256,7 @@ export function buildReviewSessionResource(
   const summary = reviewSessionSummary(session);
   const completedAt = summary.unresolved === 0 ? session.reviewedAt : undefined;
 
-  return {
+  return canonicalizeJsonResource({
     apiVersion: reviewResourceApiVersion,
     kind: "ReviewSession",
     metadata: {
@@ -267,7 +275,7 @@ export function buildReviewSessionResource(
       eventCount: events.length,
       decisionCount: Object.keys(session.decisionsByItemName).length,
     },
-  };
+  });
 }
 
 export function buildReviewSessionEvents(
@@ -489,7 +497,7 @@ export function buildReviewSessionEvent(
   session: ReviewQueueSessionState,
   spec: Omit<ReviewSessionEventSpec, "actor">,
 ): ReviewSessionEvent {
-  return {
+  return canonicalizeJsonResource({
     apiVersion: reviewResourceApiVersion,
     kind: "ReviewSessionEvent",
     metadata: {
@@ -501,7 +509,7 @@ export function buildReviewSessionEvent(
         id: session.actorId,
       },
     },
-  };
+  });
 }
 
 function workbenchDecisionFromEvent(event: ReviewSessionEvent): ReviewWorkbenchDecision | undefined {
