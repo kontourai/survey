@@ -40,6 +40,11 @@ import {
   type MountReviewWorkbenchOptions,
 } from "./review-workbench.js";
 import type { ReviewPresentationAdapter } from "./review-presentation.js";
+import {
+  buildExtractionInspectorModel,
+  mountExtractionInspector,
+  type ExtractionInspectorInput,
+} from "./extraction-inspector.js";
 import { REVIEW_WORKBENCH_CSS } from "./review-workbench-css.generated.js";
 
 /** @internal Second adopted stylesheet: host token defaults + inheritance delegation.
@@ -178,6 +183,8 @@ export class SurveyReviewWorkbenchElement extends HTMLElement {
 
   #session: ReviewQueueSessionState | ReviewWorkbenchState | null = null;
   #presentationAdapter: ReviewPresentationAdapter | undefined = undefined;
+  #extractionInspector: ExtractionInspectorInput | null = null;
+  #unmountInspector: (() => void) | undefined;
   #root: ShadowRoot;
   #mountRoot: HTMLDivElement;
   #mounted = false;
@@ -300,6 +307,15 @@ export class SurveyReviewWorkbenchElement extends HTMLElement {
     this.#mountRoot = document.createElement("div");
     this.#mountRoot.className = "workbench survey-workbench-embed";
     this.#root.appendChild(this.#mountRoot);
+    this.#mountRoot.addEventListener("survey-extraction-candidate-activate", (event) => {
+      if (!this.#session || !("items" in this.#session)) return;
+      const detail = (event as CustomEvent<{ candidateId: string; reviewItemName: string }>).detail;
+      const item = this.#session.items.find((candidate) => candidate.metadata.name === detail.reviewItemName);
+      if (!item) return;
+      if (this.#session.activeItemName !== item.metadata.name) this.#session = { ...this.#session, activeItemName: item.metadata.name };
+      this.#remount();
+      queueMicrotask(() => this.#root.querySelector<HTMLElement>(`#highlight-${CSS.escape(detail.candidateId.replace(/[^a-zA-Z0-9_-]/g, "-"))}`)?.focus());
+    });
   }
 
   /** The review queue session to display. Setting this property re-mounts the workbench. */
@@ -320,6 +336,21 @@ export class SurveyReviewWorkbenchElement extends HTMLElement {
   set presentationAdapter(value: ReviewPresentationAdapter | undefined) {
     this.#presentationAdapter = value;
     this.#remount();
+  }
+
+  /** Optional read-only source pane attached to this workbench's existing review lifecycle. */
+  get extractionInspector(): ExtractionInspectorInput | null { return this.#extractionInspector; }
+
+  set extractionInspector(value: ExtractionInspectorInput | null | undefined) {
+    const next = value ?? null;
+    try {
+      if (next) buildExtractionInspectorModel(next);
+      this.#extractionInspector = next;
+      this.#remount();
+    } catch {
+      this.#extractionInspector = null;
+      this.#renderError("Extraction inspector input is invalid and was not rendered.");
+    }
   }
 
   connectedCallback(): void {
@@ -400,6 +431,10 @@ export class SurveyReviewWorkbenchElement extends HTMLElement {
 
     this.#applyThemeClasses();
     mountReviewWorkbench(this.#mountRoot, this.#session, options);
+    this.#unmountInspector?.();
+    this.#unmountInspector = this.#extractionInspector
+      ? mountExtractionInspector(this.#mountRoot, buildExtractionInspectorModel(this.#extractionInspector))
+      : undefined;
     this.#mounted = true;
   }
 

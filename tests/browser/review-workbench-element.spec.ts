@@ -10,6 +10,7 @@
  */
 
 import { expect, test, type Page } from "@playwright/test";
+import type { ExtractionEnvelopeImportResult } from "../../src/extraction-envelope.js";
 
 const FIXTURE_PATH = "/tests/browser/fixtures/review-workbench-element.html";
 
@@ -184,6 +185,36 @@ interface ErrorCollectors {
   pageErrors: string[];
 }
 
+const INSPECTOR_DIGEST = "7de1200db09eaf5058bb3725390b544c7efab10c7380541be59b9c853497e4d7";
+const INSPECTOR_RECORD = {
+  apiVersion: "survey.kontourai.io/v1alpha1", kind: "ExtractionEnvelopeImport",
+  metadata: { name: "browser-import", producerNamespace: "browser" },
+  spec: {
+    sourceKind: "api-record",
+    claimTargets: [{ subjectType: "test", subjectId: "one", facet: "test", claimType: "test.field", fieldOrBehavior: "title", impactLevel: "low" }],
+    envelope: {
+      format: "traverse-extraction-result", version: 1, source: { ref: "fixture://browser" },
+      result: {
+        proposals: [{ fieldPath: "title", candidateValue: "Alpha", confidence: .8, extractor: "browser-extractor", inferenceType: "explicit", valueType: "string", provenance: { excerpt: "Alpha", locator: "chars:0-5", occurrence: { resolverVersion: "exact-occurrence-v1", count: 2, selected: { index: 0, start: 0, end: 5 }, selection: "source-order", hintUsed: false, ambiguous: true } } }],
+        provider: "browser-provider", model: "browser-model", runId: "traverse-extraction-run:00000000-0000-4000-8000-000000000002", raw: {}, outcome: { status: "success" }, extractedAt: "2026-07-20T00:00:00.000Z", providerCalls: 1, totalTokensUsed: 10,
+        preparedArtifact: { format: "traverse-prepared-artifact", version: 1, digest: INSPECTOR_DIGEST, ref: "traverse-prepared-artifact:v1:sha256:8d2ce0e554cd87f36177b6b024019dd7ecff30c202a50cfd5c5ceb07254ad428", preparationMode: "text", preparationVersion: "1", contentLength: 16 },
+      },
+    },
+  },
+  status: { state: "grounded", diagnostics: [] },
+};
+
+async function canonicalInspectorResult(page: Page): Promise<ExtractionEnvelopeImportResult> {
+  return page.evaluate(async (record) => {
+    // @ts-expect-error Browser fixture imports the built module served by Playwright.
+    const module = await import("/dist/src/extraction-envelope.js");
+    return module.importExtractionEnvelope(record.spec.envelope, {
+      importName: "browser-import", producerNamespace: "browser", sourceKind: "api-record",
+      claimTarget: (proposal: { fieldPath: string }) => ({ subjectType: "test", subjectId: "one", facet: "test", claimType: "test.field", fieldOrBehavior: proposal.fieldPath, impactLevel: "low" }),
+    });
+  }, INSPECTOR_RECORD) as Promise<ExtractionEnvelopeImportResult>;
+}
+
 /**
  * Navigate to the element fixture and wire error collectors.
  * consoleErrors contains all console.error / browser-network error lines.
@@ -216,6 +247,69 @@ async function assignSession(page: Page, session: unknown): Promise<void> {
   }, session);
   await page.locator(".workbench-shell").waitFor({ state: "visible" });
 }
+
+test("source inspector supports candidate-to-highlight keyboard navigation and prominent fail-closed posture", async ({ page }) => {
+  await loadFixture(page);
+  const inspectorResult = await canonicalInspectorResult(page);
+  await assignSession(page, { ...SESSION_FIXTURE, items: [...SESSION_FIXTURE.items, ...inspectorResult.reviewItems] });
+  await page.evaluate(({ importResult, actualDigest }) => {
+    const el = document.getElementById("wbe") as HTMLElement & { extractionInspector: unknown };
+    el.extractionInspector = { importResult, artifact: { status: "available", text: "Alpha Beta Alpha", actualDigest } };
+  }, { importResult: inspectorResult, actualDigest: INSPECTOR_DIGEST });
+  await expect(page.locator(".extraction-inspector")).toBeVisible();
+  const candidate = page.getByRole("button", { name: /title browser-provider/ });
+  await candidate.focus();
+  await candidate.press("Enter");
+  const highlight = page.locator('[data-highlight-candidate-id][aria-label*="Source highlight for title"]');
+  await expect(highlight).toBeFocused();
+  await expect.poll(() => page.evaluate(() => (document.getElementById("wbe") as HTMLElement & { session: { activeItemName: string } }).session.activeItemName)).toBe(inspectorResult.reviewItems[0]!.metadata.name);
+  await highlight.click();
+  await expect(candidate).toBeFocused();
+  await highlight.focus();
+  await highlight.evaluate((element) => element.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true })));
+  await expect(candidate).toBeFocused();
+  await expect(page.getByLabel("Extraction filters").getByText("Field")).toBeVisible();
+
+  await page.evaluate(() => { const element = document.getElementById("wbe")!; element.style.width = "600px"; (element.shadowRoot!.querySelector(".extraction-inspector") as HTMLElement).style.width = "600px"; });
+  await expect.poll(() => page.locator(".inspector-layout").evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length)).toBe(1);
+
+  await page.evaluate((importResult) => {
+    const malformed = structuredClone(importResult);
+    malformed.record.spec.envelope.result.proposals[0].provenance.locator = "chars:0-999";
+    (document.getElementById("wbe") as HTMLElement & { extractionInspector: unknown }).extractionInspector = { importResult: malformed, artifact: { status: "available", text: "Alpha Beta Alpha", actualDigest: "a".repeat(64) } };
+  }, inspectorResult);
+  await expect(page.locator(".workbench-error")).toContainText("invalid and was not rendered");
+
+  await page.evaluate((importResult) => {
+    const el = document.getElementById("wbe") as HTMLElement & { extractionInspector: unknown };
+    el.extractionInspector = { importResult, artifact: { status: "digest-mismatch", actualDigest: "c".repeat(64) } };
+  }, inspectorResult);
+  const posture = page.getByRole("status");
+  await expect(posture).toContainText("digest-mismatch");
+  await expect(page.getByLabel(/Prepared source for browser-import/)).toContainText("not grounded");
+});
+
+test("source inspector renders overlapping spans once with distinct accessible targets", async ({ page }) => {
+  await loadFixture(page);
+  const inspectorResult = await canonicalInspectorResult(page);
+  await assignSession(page, { ...SESSION_FIXTURE, items: [...SESSION_FIXTURE.items, ...inspectorResult.reviewItems] });
+  await page.evaluate(async ({ base, actualDigest }) => {
+    const envelope = structuredClone(base.record.spec.envelope);
+    const proposal = structuredClone(envelope.result.proposals[0]);
+    proposal.fieldPath = "alias"; proposal.provenance.excerpt = "pha Beta"; proposal.provenance.locator = "chars:2-10";
+    proposal.provenance.occurrence = { resolverVersion: "exact-occurrence-v1", count: 1, selected: { index: 0, start: 2, end: 10 }, selection: "source-order", hintUsed: false, ambiguous: false };
+    envelope.result.proposals.push(proposal);
+    // @ts-expect-error Browser fixture imports the built module served by Playwright.
+    const module = await import("/dist/src/extraction-envelope.js");
+    const overlap = module.importExtractionEnvelope(envelope, { importName: "browser-overlap", producerNamespace: "browser", sourceKind: "api-record", claimTarget: (entry: { fieldPath: string }) => ({ subjectType: "test", subjectId: "one", facet: "test", claimType: "test.field", fieldOrBehavior: entry.fieldPath, impactLevel: "low" }) });
+    const el = document.getElementById("wbe") as HTMLElement & { session: { items: unknown[] }; extractionInspector: unknown };
+    el.session = { ...el.session, items: [...el.session.items, ...overlap.reviewItems] };
+    el.extractionInspector = { importResult: overlap, artifact: { status: "available", text: "Alpha Beta Alpha", actualDigest } };
+  }, { base: inspectorResult, actualDigest: INSPECTOR_DIGEST });
+  await expect(page.locator(".inspector-source pre")).toHaveText("Alpha Beta Alpha");
+  await expect(page.locator("[data-highlight-candidate-id]")).toHaveCount(2);
+  await expect(page.locator(".inspector-source mark")).toHaveCount(3);
+});
 
 // ---------------------------------------------------------------------------
 // TEST 1: SINGLE-IMPORT BOOT
