@@ -43,6 +43,17 @@ import {
 } from "../src/review-workbench/review-workbench-data.js";
 import type { ReviewDecision, ReviewItem, ReviewSessionEvent } from "../src/review-resource.js";
 
+function assertNoOwnUndefined(value: unknown, path = "decision"): void {
+  if (value === null || typeof value !== "object") {
+    return;
+  }
+
+  for (const [key, child] of Object.entries(value)) {
+    assert.notEqual(child, undefined, `${path}.${key} must be omitted instead of set to undefined`);
+    assertNoOwnUndefined(child, `${path}.${key}`);
+  }
+}
+
 describe("review workbench prototype", () => {
   const cases: Array<{
     decision: ReviewWorkbenchDecision;
@@ -92,6 +103,8 @@ describe("review workbench prototype", () => {
       assert.ok(decision.spec.projection?.candidateId);
       assert.ok(decision.spec.projection?.claimId);
       assert.deepEqual(decision.status?.appliedToClaimIds, [decision.spec.projection?.claimId]);
+      assertNoOwnUndefined(decision);
+      assert.deepEqual(decision, JSON.parse(JSON.stringify(decision)));
     });
 
     it(`renders decision effect for ${entry.decision}`, () => {
@@ -105,6 +118,50 @@ describe("review workbench prototype", () => {
       assert.match(html, /&quot;kind&quot;: &quot;ReviewDecision&quot;/);
     });
   }
+
+  it("emits an in-memory ReviewDecision that is canonically equivalent to its JSON roundtrip", () => {
+    const itemWithoutOptionalEnvelopeFields: ReviewItem = {
+      ...publicDirectoryReviewItemExample,
+      metadata: { name: "minimal-review-item" },
+      spec: {
+        ...publicDirectoryReviewItemExample.spec,
+        candidates: publicDirectoryReviewItemExample.spec.candidates.map((candidate) => {
+          const { projection: _projection, ...candidateWithoutProjection } = candidate;
+          return candidateWithoutProjection;
+        }),
+      },
+    };
+    const decision = buildReviewDecision({
+      ...initialReviewWorkbenchState(itemWithoutOptionalEnvelopeFields),
+      decision: "accept-proposed",
+    });
+
+    assert.ok(decision);
+    assertNoOwnUndefined(decision);
+    assert.deepEqual(decision, JSON.parse(JSON.stringify(decision)));
+    assert.equal(Object.hasOwn(decision.metadata, "labels"), false);
+    assert.equal(Object.hasOwn(decision.metadata, "producer"), false);
+    assert.equal(Object.hasOwn(decision.spec, "editedValue"), false);
+    assert.equal(Object.hasOwn(decision.status ?? {}, "appliedToClaimIds"), false);
+  });
+
+  it("preserves an explicit null edited value while omitting absent edits", () => {
+    const withNullEdit = buildReviewDecision({
+      ...initialReviewWorkbenchState(),
+      decision: "accept-proposed",
+      editedValue: null,
+    });
+    const withoutEdit = buildReviewDecision({
+      ...initialReviewWorkbenchState(),
+      decision: "accept-proposed",
+    });
+
+    assert.ok(withNullEdit);
+    assert.ok(withoutEdit);
+    assert.equal(Object.hasOwn(withNullEdit.spec, "editedValue"), true);
+    assert.equal(withNullEdit.spec.editedValue, null);
+    assert.equal(Object.hasOwn(withoutEdit.spec, "editedValue"), false);
+  });
 
   it("renders candidate and evidence context from the public directory fixture", () => {
     const html = renderReviewWorkbenchHtml(initialReviewWorkbenchState());
