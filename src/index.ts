@@ -32,7 +32,25 @@ export {
   portableExtractionResultFormat,
   portableExtractionResultVersion,
   reimportExtractionEnvelope,
+  validateExtractionEnvelopeImport,
 } from "./extraction-envelope.js";
+export {
+  buildExtractionInspectorModel,
+  exportExtractionInspector,
+  filterExtractionInspectorCandidates,
+} from "./review-workbench/extraction-inspector.js";
+export type {
+  ExtractionAlignmentState,
+  ArtifactUnavailableCode,
+  ExtractionInspectorCandidate,
+  ExtractionInspectorEntry,
+  ExtractionInspectorExportOptions,
+  ExtractionInspectorFilters,
+  ExtractionInspectorInput,
+  ExtractionInspectorModel,
+  ExtractionInspectorSource,
+  ResolvedExtractionArtifact,
+} from "./review-workbench/extraction-inspector.js";
 export type {
   ExtractionEnvelopeImport,
   ExtractionEnvelopeImportDiagnostic,

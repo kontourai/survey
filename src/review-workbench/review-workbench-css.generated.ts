@@ -187,6 +187,25 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   color: var(--k-text);
 }
 
+/* Read-only evidence pane attached to the existing ReviewItem queue. */
+.survey-workbench-embed .extraction-inspector{ container-type: inline-size; margin-top: 1rem; padding: 1rem; border: 1px solid var(--k-line); border-radius: var(--k-radius); background: var(--k-panel); color: var(--k-text); }
+.survey-workbench-embed .inspector-heading, .survey-workbench-embed .inspector-layout{ display: grid; grid-template-columns: minmax(15rem, .7fr) minmax(0, 1.3fr); gap: 1rem; }
+.survey-workbench-embed .inspector-heading h2{ margin: 0; }
+.survey-workbench-embed .inspector-posture{ display: flex; flex-direction: column; padding: .75rem; border-radius: var(--k-radius-sm); background: var(--k-positive-wash); }
+.survey-workbench-embed .inspector-posture.digest-mismatch, .survey-workbench-embed .inspector-posture.artifact-unavailable, .survey-workbench-embed .inspector-posture.excerpt-mismatch{ background: var(--k-negative-wash); color: var(--k-negative); border: 2px solid currentColor; }
+.survey-workbench-embed .inspector-filters{ display: flex; flex-wrap: wrap; gap: .6rem; margin: 1rem 0; }
+.survey-workbench-embed .inspector-filters label{ display: grid; gap: .25rem; font-size: .75rem; color: var(--k-text-muted); }
+.survey-workbench-embed .inspector-filters select{ color: var(--k-text); background: var(--k-sunken); border: 1px solid var(--k-line); padding: .4rem; }
+.survey-workbench-embed .inspector-candidates{ margin: 0; padding-left: 1.5rem; }
+.survey-workbench-embed .inspector-candidate{ width: 100%; display: grid; gap: .2rem; text-align: left; padding: .65rem; color: var(--k-text); background: transparent; border: 1px solid var(--k-line); }
+.survey-workbench-embed .inspector-source pre{ white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 1rem; background: var(--k-sunken); border: 1px solid var(--k-line); min-height: 8rem; }
+.survey-workbench-embed .inspector-source mark{ background: var(--k-brand-wash); color: var(--k-text); outline: 1px solid var(--k-brand); }
+.survey-workbench-embed .inspector-candidate:focus{ outline: 3px solid var(--k-active); outline-offset: 2px; }
+.survey-workbench-embed .highlight-anchor{ display: inline-block; width: 1px; height: 1em; }
+.survey-workbench-embed .highlight-anchor:focus{ outline: 3px solid var(--k-active); }
+.survey-workbench-embed .source-unavailable{ color: var(--k-negative); font-weight: 700; }
+@container (max-width: 720px) { .inspector-heading, .inspector-layout { grid-template-columns: 1fr !important; } }
+
 /* Re-assert the base structural tokens for light mode. themes.css's \`.theme-*\`
    preset classes hardcode a dark --k-bg/--k-panel/etc (so the preset "just
    works" without requiring [data-theme] to be set), and a bare class selector

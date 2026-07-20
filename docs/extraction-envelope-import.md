@@ -67,3 +67,33 @@ failures, and configuration by design. Candidate values and excerpts remain
 intentional review data. Treat every retained field as potentially visible to a
 review host: never put credentials, tokens, private configuration, unnecessary
 personal data, or secret-bearing identifiers into an envelope.
+
+## Source-linked inspection
+
+The existing review workbench can attach a read-only inspector through the
+custom element's `extractionInspector` property or the exported inspector model
+helpers. Supply the complete `ExtractionEnvelopeImportResult` returned by
+`importExtractionEnvelope` plus a separately resolved prepared artifact;
+the resolver must provide its computed digest. Highlights appear only after the
+digest, length, and exact excerpts align. Unavailable or mismatched material is
+shown as a prominent non-grounded posture and cannot be reviewed as grounded.
+
+The pane filters by field, provider, model, attempt, explicit/inferred type
+origin, and alignment. Candidate/highlight navigation is bidirectional by
+keyboard and announced with accessible labels. It activates the matching
+existing `ReviewItem`; it does not store or apply a second decision.
+
+Pass `{ imports: [...] }` to inspect a review set spanning multiple validated
+imports. Provider, model, attempt, and optional producer-declared pass filters
+then distinguish candidates across runs. A single entry remains accepted as a
+convenience. Every record is revalidated through Survey's public import
+validation boundary, and its proposals are checked against the authoritative
+`ReviewItem.metadata.name` values before anything renders.
+
+`exportExtractionInspector` produces canonical, provider-independent read-only
+JSON. Prepared text and excerpts are redacted by default because either can
+contain confidential, personal, or regulated source material. Include them only
+after an explicit access and disclosure decision. The export never includes
+provider configuration, credentials, or raw provider responses.
+Resolver failure details are not accepted as free text: unavailable artifacts
+use a small typed code, and exports omit presentation messages entirely.

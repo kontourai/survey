@@ -209,6 +209,12 @@ Server code persisting browser-submitted review events should use `persistReview
 
 The [Consumer Integration Guide](docs/consumer-integration-guide.md) covers the full path from `ReviewItem` construction through persisted review events, exported results, Surface projection, and the full `--k-*` theming token list. Test-covered examples are under [`examples/review-workbench/`](examples/review-workbench/). To run the standalone demo locally, see [Review Workbench Prototype](docs/review-workbench-prototype.md).
 
+Portable extraction imports can also attach a source-linked, read-only inspector
+to the same workbench. It verifies resolved artifact identity before showing
+exact highlights, keeps unresolved material visibly non-grounded, and exports
+with source text and excerpts redacted by default. See
+[Extraction Envelope Import](docs/extraction-envelope-import.md#source-linked-inspection).
+
 
 ## Standalone review console
 

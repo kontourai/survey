@@ -47,6 +47,22 @@ import {
 } from "../review-resource.js";
 import { validateAuthorizing, buildAuthorizedActionAuthorizing } from "../review-authorizing.js";
 import { humanizeIdentifier } from "./review-presentation.js";
+export {
+  buildExtractionInspectorModel,
+  exportExtractionInspector,
+  filterExtractionInspectorCandidates,
+  mountExtractionInspector,
+  type ExtractionAlignmentState,
+  type ArtifactUnavailableCode,
+  type ExtractionInspectorCandidate,
+  type ExtractionInspectorEntry,
+  type ExtractionInspectorExportOptions,
+  type ExtractionInspectorFilters,
+  type ExtractionInspectorInput,
+  type ExtractionInspectorModel,
+  type ExtractionInspectorSource,
+  type ResolvedExtractionArtifact,
+} from "./extraction-inspector.js";
 
 export {
   buildReviewSessionEvents,
