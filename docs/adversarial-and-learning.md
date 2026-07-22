@@ -156,3 +156,19 @@ These projections are producer/review workflow and evaluation signals. They are
 not claims about truth or veracity, not Surface claim status, not evidence, and
 not verification events. Calling `buildSurveyLearningProjections` does not alter
 `buildSurveyTrustBundle`, trust status derivation, or escalation event projection.
+
+## Governed extraction improvements
+
+When a review identifies a reusable extraction problem, producers can emit an
+immutable `Extraction Improvement Proposal` without changing the live task.
+The proposal binds the reviewed extraction to its task, source grounding, and
+review lineage. Producers explicitly distinguish an accepted extraction (a
+grounded positive example or guidance affirmation), a bad extraction (an
+example or guidance correction), and insufficient source evidence (more or
+better source material, with no task-change claim).
+
+An approved bad-extraction proposal is still only a reversible activation
+request: it names the next task version and the exact prior task as rollback.
+The task-owning producer validates and applies it separately. Approval and
+rejection share one disposition key so a producer store can reject conflicting
+terminal outcomes. See [the record contract](./record-contracts.md#governed-extraction-improvement-proposals).
