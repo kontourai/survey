@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   approveExtractionImprovementProposal,
   buildExtractionImprovementProposal,
+  foldExtractionImprovementDispositions,
   importExtractionEnvelope,
   rejectExtractionImprovementProposal,
   type BuildExtractionImprovementProposalInput,
@@ -178,6 +179,55 @@ describe("extraction improvement proposals", () => {
     assert.equal(approval.dispositionKey, rejection.dispositionKey);
     assert.deepEqual(rejection, rejectExtractionImprovementProposal(rejectionInput), "same rejection is idempotent");
     assert.notEqual(approval.id, rejection.id, "the shared key, not unrelated record ids, identifies the conflict");
+  });
+
+  it("folds identical disposition replay idempotently", () => {
+    const approval = approve(fixture("accepted"));
+    const result = foldExtractionImprovementDispositions([approval, structuredClone(approval), approval]);
+    assert.deepEqual(result, { dispositions: [approval], conflicts: [] });
+    assert.ok(Object.isFrozen(result));
+    assert.ok(Object.isFrozen(result.dispositions));
+  });
+
+  it("returns typed conflicts for approval/rejection and distinct approvals", () => {
+    const draft = buildExtractionImprovementProposal(fixture("accepted"));
+    const approval = approveExtractionImprovementProposal({
+      draft,
+      approval: { id: "approval:a", actor: "producer", approvedAt: "2026-07-22T14:31:00.000Z", rationale: "First.", evidenceIds: [] },
+      nextTaskSpec: { version: "next-a", digest: sha("e"), exampleDigests: [...draft.lineage.taskSpec.exampleDigests, sha("f")] },
+      rollbackTaskSpec: draft.lineage.taskSpec,
+    });
+    const otherApproval = approveExtractionImprovementProposal({
+      draft,
+      approval: { id: "approval:b", actor: "producer", approvedAt: "2026-07-22T14:32:00.000Z", rationale: "Second.", evidenceIds: [] },
+      nextTaskSpec: { version: "next-b", digest: sha("d"), exampleDigests: [...draft.lineage.taskSpec.exampleDigests, sha("c")] },
+      rollbackTaskSpec: draft.lineage.taskSpec,
+    });
+    const rejection = rejectExtractionImprovementProposal({
+      draft,
+      rejection: { id: "rejection:a", actor: "producer", rejectedAt: "2026-07-22T14:33:00.000Z", rationale: "Reject.", evidenceIds: [] },
+    });
+
+    const result = foldExtractionImprovementDispositions([rejection, approval, otherApproval]);
+    assert.deepEqual(result.dispositions, []);
+    assert.equal(result.conflicts.length, 1);
+    assert.equal(result.conflicts[0]!.kind, "survey.extraction-improvement-disposition-conflict");
+    assert.equal(result.conflicts[0]!.dispositionKey, approval.dispositionKey);
+    assert.deepEqual(new Set(result.conflicts[0]!.dispositions.map(({ id }) => id)), new Set([approval.id, otherApproval.id, rejection.id]));
+  });
+
+  it("returns the same fold across input orderings", () => {
+    const accepted = approve(fixture("accepted"));
+    const rejectedDraft = buildExtractionImprovementProposal(fixture("rejected"));
+    const rejected = rejectExtractionImprovementProposal({
+      draft: rejectedDraft,
+      rejection: { id: "rejection:ordered", actor: "producer", rejectedAt: "2026-07-22T14:31:00.000Z", rationale: "Reject.", evidenceIds: [] },
+    });
+    const forward = foldExtractionImprovementDispositions([accepted, rejected]);
+    const reverse = foldExtractionImprovementDispositions([rejected, accepted]);
+    assert.deepEqual(forward, reverse);
+    assert.deepEqual(forward.dispositions.map(({ dispositionKey }) => dispositionKey),
+      [...forward.dispositions.map(({ dispositionKey }) => dispositionKey)].sort());
   });
 
   it("requires task changes to match the explicit example and guidance remedies", () => {

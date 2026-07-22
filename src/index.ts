@@ -129,6 +129,7 @@ export type {
 export {
   approveExtractionImprovementProposal,
   buildExtractionImprovementProposal,
+  foldExtractionImprovementDispositions,
   rejectExtractionImprovementProposal,
 } from "./extraction-improvement-proposal.js";
 export type {
@@ -139,12 +140,14 @@ export type {
   ExtractionImprovementActivationRequest,
   ExtractionImprovementDiagnosis,
   ExtractionImprovementDisposition,
+  ExtractionImprovementDispositionConflict,
   ExtractionImprovementDraft,
   ExtractionImprovementLineage,
   ExtractionImprovementRejection,
   ExtractionImprovementRecordDigests,
   ExtractionImprovementReview,
   ExtractionTaskSpecReference,
+  FoldExtractionImprovementDispositionsResult,
   InsufficientSourceEvidenceDiagnosis,
   ProducerApproval,
   RejectExtractionImprovementProposalInput,

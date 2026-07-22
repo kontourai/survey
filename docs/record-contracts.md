@@ -533,9 +533,14 @@ must still create, validate, and apply the executable task; Survey does not.
 
 Approval and rejection both expose the same deterministic `dispositionKey`
 derived only from the draft identity. Producer stores must enforce at most one
-disposition per key: an idempotent replay of the same disposition is safe, while
-an approval/rejection mismatch is a detectable conflict and must not silently
-coexist. `rejectExtractionImprovementProposal` remains terminal and inert.
+disposition per key. Producers can
+call `foldExtractionImprovementDispositions` before persistence to collapse
+identical replay and receive deterministic typed conflicts when distinct
+records share a key. The helper performs no I/O, chooses no winner, and leaves
+storage and transaction ownership with the producer.
+An idempotent replay of the same disposition is safe, while an
+approval/rejection mismatch must not silently coexist.
+`rejectExtractionImprovementProposal` remains terminal and inert.
 
 
 ## Repeated observations
