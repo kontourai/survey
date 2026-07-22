@@ -253,4 +253,93 @@ describe("orthogonal provenance", () => {
       assert.deepEqual(axis.events.map(({ id }) => id), legacy.events.map(({ id }) => id));
     }
   });
+
+  it("scopes evidence and event ids to a caller-owned projection context", () => {
+    const input = inputForShape(conformanceShapes[0]!);
+    const first = buildSurveyTrustBundle(input, { projectionContextId: "review-session-1" });
+    const second = buildSurveyTrustBundle(input, { projectionContextId: "review-session-2" });
+    const legacy = buildSurveyTrustBundle(input);
+
+    assert.deepEqual(first.claims.map(({ id }) => id), second.claims.map(({ id }) => id));
+    assert.notDeepEqual(first.evidence.map(({ id }) => id), second.evidence.map(({ id }) => id));
+    assert.notDeepEqual(first.events.map(({ id }) => id), second.events.map(({ id }) => id));
+    assert.match(first.evidence[0]?.id ?? "", /^survey\.projection\.v1\.[a-f0-9]{64}\.evidence\.source$/);
+    assert.match(first.events[0]?.id ?? "", /^survey\.projection\.v1\.[a-f0-9]{64}\.event\.proposed$/);
+    assert.deepEqual(first.events[0]?.evidenceIds, [first.evidence[0]?.id]);
+    assert.equal(legacy.evidence[0]?.id, `${legacy.claims[0]?.id}.evidence.source`);
+    assert.equal(legacy.events[0]?.id, `${legacy.claims[0]?.id}.event.proposed`);
+  });
+
+  it("rejects empty or non-portable projection context ids", () => {
+    const input = inputForShape(conformanceShapes[0]!);
+    assert.throws(() => buildSurveyTrustBundle(input, { projectionContextId: "" }), /projectionContextId/);
+    assert.throws(() => buildSurveyTrustBundle(input, { projectionContextId: "review/session/1" }), /projectionContextId/);
+    assert.throws(
+      () => buildSurveyTrustBundle(input, { projectionContextId: null } as unknown as Parameters<typeof buildSurveyTrustBundle>[1]),
+      /projectionContextId/,
+    );
+    assert.throws(
+      () => buildSurveyTrustBundle(input, { projectionContextId: 123 } as unknown as Parameters<typeof buildSurveyTrustBundle>[1]),
+      /projectionContextId/,
+    );
+  });
+
+  it("keeps scoped tuple identities disjoint from ambiguous tuples and legacy ids", () => {
+    const firstInput = inputForShape(conformanceShapes[0]!);
+    firstInput.claims[0]!.id = "claim.alpha.context.beta";
+    const secondInput = inputForShape(conformanceShapes[0]!);
+    secondInput.claims[0]!.id = "claim.alpha";
+    const scopedFirst = buildSurveyTrustBundle(firstInput, { projectionContextId: "gamma" });
+    const scopedSecond = buildSurveyTrustBundle(secondInput, { projectionContextId: "beta.context.gamma" });
+    const legacy = buildSurveyTrustBundle(firstInput);
+
+    assert.notEqual(scopedFirst.evidence[0]?.id, scopedSecond.evidence[0]?.id);
+    assert.notEqual(scopedFirst.events[0]?.id, scopedSecond.events[0]?.id);
+    assert.notEqual(scopedSecond.evidence[0]?.id, legacy.evidence[0]?.id);
+    assert.notEqual(scopedSecond.events[0]?.id, legacy.events[0]?.id);
+  });
+
+  it("scopes interpretation and escalation records while preserving references", () => {
+    const input = inputForShape(conformanceShapes[0]!);
+    const claimId = input.claims[0]!.id;
+    const policySource = policyStandardSource({
+      id: "source.policy.context-test",
+      sourceRef: "policy://context-test",
+      observedAt,
+      inlineText: "A scoped interpretation.",
+      standardVersion: "1",
+    });
+    input.rawSources.push(policySource);
+    input.interpretations = [{
+      id: "interpretation.context-test",
+      appliesToClaimId: claimId,
+      anchorsToSourceId: policySource.id,
+      ruleLocator: "text:paragraph=1",
+      reading: "The rule applies.",
+      actor: "operator",
+      recordedAt: observedAt,
+    }];
+    input.escalations = [{
+      id: "escalation.context-test",
+      target: "recordedValue",
+      dimension: "citation",
+      reason: "Confirm the source anchor.",
+      raisedBy: "adversary",
+      raisedAt: observedAt,
+      attachToClaimId: claimId,
+    }];
+
+    const first = buildSurveyTrustBundle(input, { projectionContextId: "review-1" });
+    const second = buildSurveyTrustBundle(input, { projectionContextId: "review-2" });
+    const interpretationEvidence = first.evidence.find(({ method }) => method === "anchoring")!;
+    const interpretationEvent = first.events.find(({ method }) => method === "survey-interpretation")!;
+    const escalationEvent = first.events.find(({ method }) => method === "candidate-escalation")!;
+
+    assert.deepEqual(interpretationEvent.evidenceIds, [interpretationEvidence.id]);
+    assert.match(interpretationEvidence.id, /^survey\.projection\.v1\.[a-f0-9]{64}\.evidence\.anchor$/);
+    assert.match(interpretationEvent.id, /^survey\.projection\.v1\.[a-f0-9]{64}\.event$/);
+    assert.match(escalationEvent.id, /^survey\.projection\.v1\.[a-f0-9]{64}\.event$/);
+    assert.notDeepEqual(first.evidence.map(({ id }) => id), second.evidence.map(({ id }) => id));
+    assert.notDeepEqual(first.events.map(({ id }) => id), second.events.map(({ id }) => id));
+  });
 });

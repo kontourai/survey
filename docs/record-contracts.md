@@ -772,6 +772,26 @@ will attach the same kind of anchor to the projected reviewed claim:
 const trustBundle = buildSurveyTrustBundle(surveyInput, { reviewProofs: true });
 ```
 
+### Repeated projection identity
+
+`buildSurveyTrustBundle` preserves legacy generated ids by default. A producer
+that persists more than one resolution of the same claim into an append-only
+store must supply a stable `projectionContextId` for each projection context:
+
+```ts
+const trustBundle = buildSurveyTrustBundle(surveyInput, {
+  projectionContextId: "review-session-2026-07-22",
+});
+```
+
+Survey folds this caller-owned id into generated `Evidence.id` and
+`VerificationEvent.id` values while leaving `Claim.id` unchanged. The context
+can name a review session, proposal, resolution, or another producer-owned
+record; Survey does not prescribe that workflow. Reusing the same context id
+replays the same generated ids. Omitting it retains byte-compatible legacy
+ids, so consumers that persist repeated resolutions must either supply the
+context or deliberately re-key before storage.
+
 The proof provides hash-only tamper evidence for the Survey review/provenance
 trail in the canonical payload. Authorizing is portable provenance, not review
 policy or an authorization decision made by Survey. Neither the proof nor its

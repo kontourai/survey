@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Claim, Evidence, TrustBundle, TrustStatus, VerificationEvent } from "@kontourai/surface";
 import { buildReviewProofAnchor } from "./review-proof.js";
 import { assertReviewOutcomeDiscipline } from "./producer-discipline.js";
@@ -43,6 +44,17 @@ export interface SurveyCalibrationOptions {
 export interface BuildSurveyTrustBundleOptions {
   reviewProofs?: boolean;
   /**
+   * Caller-owned identity for one projection or resolution context, such as a
+   * review-session, proposal, or append-only persistence record id. When set,
+   * Survey folds it into generated Evidence and VerificationEvent ids so
+   * repeated projections of the same Claim cannot collide. Claim ids and all
+   * legacy output remain unchanged when omitted.
+   *
+   * Use a portable resource-name fragment: ASCII letters, digits, `.`, `_`,
+   * `:`, or `-`, beginning with a letter or digit.
+   */
+  projectionContextId?: string;
+  /**
    * Populate `conclusionConfidence.value` from empirical review calibration —
    * "how often this extractor's proposals at this confidence were affirmed by a
    * human reviewer" (the produce side of the confidence loop; see #114/#137).
@@ -57,6 +69,7 @@ export interface BuildSurveyTrustBundleOptions {
 }
 
 export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyTrustBundleOptions = {}): TrustBundle {
+  const projectionContextId = validateProjectionContextId(options.projectionContextId);
   const rawSources = indexById(input.rawSources, "raw source");
   const extractions = indexById(input.extractions, "extraction");
   const candidateSets = indexById(input.candidateSets, "candidate set");
@@ -92,7 +105,7 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
     const claimValue = projection.value ?? candidate.value;
     const createdAt = projection.createdAt ?? extraction.extractedAt;
     const updatedAt = projection.updatedAt ?? projectionReview?.reviewedAt ?? input.generatedAt;
-    const evidenceId = `${projection.id}.evidence.source`;
+    const evidenceId = projectionRecordId(projection.id, projectionContextId, "claim-evidence", "evidence.source");
 
     const claim: Claim = {
       id: projection.id,
@@ -209,7 +222,7 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
 
     const rationale = projectionReview?.rationale ?? candidateSet.rationale;
     events.push({
-      id: `${projection.id}.event.${status}`,
+      id: projectionRecordId(projection.id, projectionContextId, "claim-event", `event.${status}`),
       claimId: projection.id,
       status,
       actor: projection.actor ?? projectionReview?.actor ?? projection.collectedBy,
@@ -221,7 +234,7 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
     });
   }
 
-  projectInterpretations({ input, rawSources, claims, evidence, events });
+  projectInterpretations({ input, rawSources, claims, evidence, events, projectionContextId });
 
   if (input.escalations) {
     const claimIds = new Set(claims.map((c) => c.id));
@@ -232,7 +245,7 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
         throw new Error(`Escalation ${escalation.id} references unknown claim ${escalation.attachToClaimId}`);
       }
       events.push({
-        id: `${escalation.id}.event`,
+        id: projectionRecordId(escalation.id, projectionContextId, "escalation-event", "event"),
         claimId: escalation.attachToClaimId,
         status: "disputed",
         actor: escalation.raisedBy,
@@ -254,12 +267,29 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
   };
 }
 
+function validateProjectionContextId(contextId: string | undefined): string | undefined {
+  if (contextId === undefined) return undefined;
+  if (typeof contextId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(contextId)) {
+    throw new Error("projectionContextId must be a non-empty portable resource-name fragment");
+  }
+  return contextId;
+}
+
+function projectionRecordId(ownerId: string, contextId: string | undefined, recordKind: string, legacySuffix: string): string {
+  if (!contextId) return `${ownerId}.${legacySuffix}`;
+  const digest = createHash("sha256")
+    .update(JSON.stringify(["survey-projection-context-v1", recordKind, ownerId, contextId]))
+    .digest("hex");
+  return `survey.projection.v1.${digest}.${legacySuffix}`;
+}
+
 function projectInterpretations(input: {
   input: SurveyInput;
   rawSources: Map<string, RawSource>;
   claims: Claim[];
   evidence: Evidence[];
   events: VerificationEvent[];
+  projectionContextId: string | undefined;
 }): void {
   const interpretations = input.input.interpretations
     ? [...indexById(input.input.interpretations, "interpretation").values()]
@@ -274,6 +304,7 @@ function projectInterpretations(input: {
       claims: input.claims,
       claimsById,
       input: input.input,
+      projectionContextId: input.projectionContextId,
     });
     input.evidence.push(projection.evidence);
     input.events.push(projection.event);
@@ -292,6 +323,7 @@ function buildInterpretationProjection(input: {
   claims: Claim[];
   claimsById: Map<string, Claim>;
   input: SurveyInput;
+  projectionContextId: string | undefined;
 }): {
   claim: Claim;
   anchorSource: RawSource;
@@ -310,6 +342,7 @@ function buildInterpretationProjection(input: {
     claim,
     anchorSource,
     policyStandard,
+    projectionContextId: input.projectionContextId,
   });
   return {
     claim,
@@ -319,6 +352,7 @@ function buildInterpretationProjection(input: {
       interpretation: input.interpretation,
       claim,
       evidenceId: evidence.id,
+      projectionContextId: input.projectionContextId,
     }),
   };
 }
@@ -338,9 +372,10 @@ function createInterpretationAnchorEvidence(input: {
   claim: Claim;
   anchorSource: RawSource;
   policyStandard?: PolicyStandardFields;
+  projectionContextId: string | undefined;
 }): Evidence {
   return {
-    id: `${input.interpretation.id}.evidence.anchor`,
+    id: projectionRecordId(input.interpretation.id, input.projectionContextId, "interpretation-evidence", "evidence.anchor"),
     claimId: input.claim.id,
     evidenceType: "policy_rule",
     method: "anchoring",
@@ -367,9 +402,10 @@ function createInterpretationEvent(input: {
   interpretation: Interpretation;
   claim: Claim;
   evidenceId: string;
+  projectionContextId: string | undefined;
 }): VerificationEvent {
   return {
-    id: `${input.interpretation.id}.event`,
+    id: projectionRecordId(input.interpretation.id, input.projectionContextId, "interpretation-event", "event"),
     claimId: input.claim.id,
     status: input.claim.status ?? "proposed",
     actor: input.interpretation.actor,
