@@ -4,6 +4,7 @@ import {
   buildPromptRef,
   approveExtractionImprovementProposal,
   buildExtractionImprovementProposal,
+  foldExtractionImprovementDispositions,
   buildReviewedLearningUpdateProposal,
   createExtractionEnvelopeResolutionIdentity,
   candidateSetStatusFor,
@@ -25,6 +26,7 @@ describe("public barrel exports", () => {
     assert.equal(typeof currentProposedReviewItem, "function");
     assert.equal(typeof buildReviewedLearningUpdateProposal, "function");
     assert.equal(typeof buildExtractionImprovementProposal, "function");
+    assert.equal(typeof foldExtractionImprovementDispositions, "function");
     assert.equal(typeof approveExtractionImprovementProposal, "function");
     assert.equal(typeof rejectExtractionImprovementProposal, "function");
     assert.equal(typeof createExtractionEnvelopeResolutionIdentity, "function");

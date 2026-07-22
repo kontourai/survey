@@ -142,6 +142,57 @@ export interface RejectExtractionImprovementProposalInput {
 /** One producer/store disposition is allowed for each shared dispositionKey. */
 export type ExtractionImprovementDisposition = ExtractionImprovementActivationRequest | ExtractionImprovementRejection;
 
+export interface ExtractionImprovementDispositionConflict {
+  kind: "survey.extraction-improvement-disposition-conflict";
+  dispositionKey: string;
+  /** Canonically ordered distinct records. The fold never selects a winner. */
+  dispositions: readonly ExtractionImprovementDisposition[];
+}
+
+export interface FoldExtractionImprovementDispositionsResult {
+  /** One canonically ordered record for each uncontested disposition key. */
+  dispositions: readonly ExtractionImprovementDisposition[];
+  /** Canonically ordered conflicts for keys with more than one distinct record. */
+  conflicts: readonly ExtractionImprovementDispositionConflict[];
+}
+
+/**
+ * Folds producer-owned disposition records without performing I/O or selecting
+ * between conflicting decisions. Byte-equivalent replay is idempotent.
+ */
+export function foldExtractionImprovementDispositions(
+  input: readonly ExtractionImprovementDisposition[],
+): FoldExtractionImprovementDispositionsResult {
+  const byKey = new Map<string, Map<string, ExtractionImprovementDisposition>>();
+  for (const disposition of input) {
+    const records = byKey.get(disposition.dispositionKey) ?? new Map<string, ExtractionImprovementDisposition>();
+    records.set(canonicalJson(disposition), disposition);
+    byKey.set(disposition.dispositionKey, records);
+  }
+
+  const dispositions: ExtractionImprovementDisposition[] = [];
+  const conflicts: ExtractionImprovementDispositionConflict[] = [];
+  for (const dispositionKey of [...byKey.keys()].sort()) {
+    const records = [...byKey.get(dispositionKey)!.entries()]
+      .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+      .map(([, disposition]) => disposition);
+    if (records.length === 1) {
+      dispositions.push(records[0]!);
+    } else {
+      conflicts.push(Object.freeze({
+        kind: "survey.extraction-improvement-disposition-conflict" as const,
+        dispositionKey,
+        dispositions: Object.freeze(records),
+      }));
+    }
+  }
+
+  return Object.freeze({
+    dispositions: Object.freeze(dispositions),
+    conflicts: Object.freeze(conflicts),
+  });
+}
+
 /** Builds a frozen draft from validated canonical records. Performs no I/O. */
 export function buildExtractionImprovementProposal(input: BuildExtractionImprovementProposalInput): ExtractionImprovementDraft {
   const diagnosis = normalizeDiagnosis(input.diagnosis);
