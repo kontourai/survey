@@ -491,6 +491,52 @@ Survey does not interpret `applicability.target` as a domain path and does not
 change external state. Consumers own target checks, evidence materialization,
 supersede-never-rewrite policy, and storage in their own systems.
 
+## Governed extraction improvement proposals
+
+`buildExtractionImprovementProposal` records a producer-owned, data-only draft
+for improving an upstream extraction task after a review. It intentionally
+stores references to the upstream task rather than copying an extraction task
+schema into Survey. The builder accepts a canonical `ExtractionEnvelopeImport`,
+its canonically regenerated `ReviewItem`, a joining `ReviewDecision`, and the
+concrete `ReviewOutcome` in a `SurveyInput`. It verifies import-to-item,
+item-to-decision, and decision-to-outcome relationships before deriving any
+lineage identifiers. The output binds prior task version, import-carried task
+digest and example digests; derived extraction and proposal identities; review
+item, decision, and outcome identities; source snapshot, prepared-artifact, and
+excerpt-locator anchors; explicit rationale; review evidence; attempt evidence;
+and domain-separated digests of each canonical input record. Caller-supplied,
+unjoined lineage identifiers are not accepted.
+
+The caller supplies, rather than Survey infers, one of three diagnoses:
+
+- `accepted-extraction` requires an accepted verified or assumed outcome and
+  requests `grounded-positive-example`, `guidance-affirmation`, or both.
+- `bad-extraction` requests one or both of `example-addition` and
+  `guidance-update`, and requires a rejected outcome.
+- `insufficient-source-evidence` requests source remediation and requires a
+  `could_not_confirm` review resolution. It cannot create a task-change request.
+
+All identifier arrays are rejected when ambiguous (including duplicates), then
+canonically sorted for the immutable output. Calling the builder, approval, or
+rejection helpers performs no I/O, does not mutate the input, stores nothing,
+and does not activate any behavior. Proposal, approval, and rejection times must
+use the canonical `Date.prototype.toISOString()` representation.
+
+For accepted-extraction and bad-extraction remedies,
+`approveExtractionImprovementProposal` emits an `approved` activation request.
+The request links the immutable draft to a separate producer approval, a new
+task-spec version/digest/example-digest reference, and the exact prior task
+reference as its rollback target. An example remedy requires the next example
+digests to be a strict superset of the prior set. A guidance remedy requires an
+explicit SHA-256 change-proof digest. The producer that owns the task-spec store
+must still create, validate, and apply the executable task; Survey does not.
+
+Approval and rejection both expose the same deterministic `dispositionKey`
+derived only from the draft identity. Producer stores must enforce at most one
+disposition per key: an idempotent replay of the same disposition is safe, while
+an approval/rejection mismatch is a detectable conflict and must not silently
+coexist. `rejectExtractionImprovementProposal` remains terminal and inert.
+
 
 ## Repeated observations
 

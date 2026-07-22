@@ -2,12 +2,15 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildPromptRef,
+  approveExtractionImprovementProposal,
+  buildExtractionImprovementProposal,
   buildReviewedLearningUpdateProposal,
   createExtractionEnvelopeResolutionIdentity,
   candidateSetStatusFor,
   confidenceBasisForReview,
   currentProposedReviewItem,
   defineProductVocabulary,
+  rejectExtractionImprovementProposal,
   stableId,
   SURVEY_INPUT_CONTRACT_VERSION,
 } from "../src/index.js";
@@ -21,6 +24,9 @@ describe("public barrel exports", () => {
     assert.equal(typeof buildPromptRef, "function");
     assert.equal(typeof currentProposedReviewItem, "function");
     assert.equal(typeof buildReviewedLearningUpdateProposal, "function");
+    assert.equal(typeof buildExtractionImprovementProposal, "function");
+    assert.equal(typeof approveExtractionImprovementProposal, "function");
+    assert.equal(typeof rejectExtractionImprovementProposal, "function");
     assert.equal(typeof createExtractionEnvelopeResolutionIdentity, "function");
     assert.equal(SURVEY_INPUT_CONTRACT_VERSION, "1");
   });
