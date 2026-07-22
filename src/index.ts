@@ -127,6 +127,29 @@ export type {
   ReviewProofReference,
 } from "./learning-update-proposal.js";
 export {
+  approveExtractionImprovementProposal,
+  buildExtractionImprovementProposal,
+  rejectExtractionImprovementProposal,
+} from "./extraction-improvement-proposal.js";
+export type {
+  ApproveExtractionImprovementProposalInput,
+  AcceptedExtractionDiagnosis,
+  BadExtractionDiagnosis,
+  BuildExtractionImprovementProposalInput,
+  ExtractionImprovementActivationRequest,
+  ExtractionImprovementDiagnosis,
+  ExtractionImprovementDisposition,
+  ExtractionImprovementDraft,
+  ExtractionImprovementLineage,
+  ExtractionImprovementRejection,
+  ExtractionImprovementRecordDigests,
+  ExtractionImprovementReview,
+  ExtractionTaskSpecReference,
+  InsufficientSourceEvidenceDiagnosis,
+  ProducerApproval,
+  RejectExtractionImprovementProposalInput,
+} from "./extraction-improvement-proposal.js";
+export {
   buildCanonicalReviewProofPayload,
   buildReviewProofAnchor,
   canonicalReviewProofJson,

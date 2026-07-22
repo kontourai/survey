@@ -86,6 +86,19 @@ _Avoid_: Encoding uncertainty only in rationale text, using a low-confidence ext
 A Survey-local `learning.*` record derived from structured Survey producer/review data for workflow routing, evaluation, and producer feedback. A **Learning Projection** is separate from Surface `TrustInput`: it is not a truth or veracity assertion, not a **Claim**, not **Evidence**, not a **Verification Event**, and not a claim status. Use `learning.rejected-candidate` for ordinary rejected **Candidate** feedback, `learning.comfort-zone` for structured comfort-zone review signals, `learning.could-not-confirm` for review rounds that ended without a confirmable answer, and `learning.escalation` for unresolved **Escalation Records**, including unattached escalations that producer tooling can route even when Surface cannot attach an event to a claim.
 _Avoid_: Treating `learning.*` as Surface state, hiding learning signals in verification event notes, adding product-specific routing names to Survey
 
+**Extraction Improvement Proposal**:
+An immutable, producer-facing request that binds a reviewed extraction problem to
+the exact task, extraction/import, proposal, review, source snapshot, prepared
+artifact, and excerpt locator that produced it. A proposal records an explicit
+producer diagnosis: a **Bad Extraction** may request an example or guidance
+change; an **Accepted Extraction** may request a grounded positive example or
+guidance affirmation; and **Insufficient Source Evidence** requests source
+remediation without claiming a task change. Survey derives lineage from joined
+canonical import, review-resource, and review-outcome records. It may emit an
+approval request for a new, reversible task-spec version, but it never stores or
+activates that task.
+_Avoid_: Treating a review decision as a live task mutation, inferring a diagnosis from rationale text, duplicating an upstream task specification
+
 **Rejected Candidate Learning**:
 A producer-learning signal for an ordinary rejected **Candidate**, usually because a reviewer selected a different candidate, kept the current value, or decided an extraction did not support the proposed value. Rejected candidate feedback is not the same as a **Comfort Zone Flag**. A rejected candidate can be a confident reviewer decision, while `withinComfortZone: false` means the reviewer recorded that a different authority or domain specialist should confirm the conclusion. Survey carries rejected-candidate reasons as candidate/review provenance and emits first-class `learning.rejected-candidate` projections from explicit rejection data such as a non-empty `Candidate.rejectionReason` or a matching candidate-specific rejected **Review Outcome**. Producers must not set `withinComfortZone: false` just to get ordinary rejection learning.
 _Avoid_: Modeling every rejected candidate as `learning.comfort-zone`, treating rejection as proof the current value is true, using product-specific feedback tags as Survey vocabulary
