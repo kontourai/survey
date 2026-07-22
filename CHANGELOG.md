@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.18.2](https://github.com/kontourai/survey/compare/v1.18.1...v1.18.2) (2026-07-22)
+
+
+### Fixes
+
+* scope repeated survey projection ids ([#171](https://github.com/kontourai/survey/issues/171)) ([91e25df](https://github.com/kontourai/survey/commit/91e25df782df2e68e4117c903b9490e65ec15ef4))
+
 ## [1.18.1](https://github.com/kontourai/survey/compare/v1.18.0...v1.18.1) (2026-07-20)
 
 
