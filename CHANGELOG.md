@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.19.0](https://github.com/kontourai/survey/compare/v1.18.1...v1.19.0) (2026-07-22)
+
+
+### Features
+
+* govern extraction-improvement drafts, dispositions, and reversible activation requests ([#174](https://github.com/kontourai/survey/pull/174)) ([efb2cff](https://github.com/kontourai/survey/commit/efb2cff68fd9363d42e119061d3793309c9a7882))
+
+
+### Fixes
+
+* scope repeated survey projection ids ([#171](https://github.com/kontourai/survey/issues/171)) ([91e25df](https://github.com/kontourai/survey/commit/91e25df782df2e68e4117c903b9490e65ec15ef4))
+* align advisory Trust Verify behavior with its documented missing-evidence policy ([#174](https://github.com/kontourai/survey/pull/174)) ([efb2cff](https://github.com/kontourai/survey/commit/efb2cff68fd9363d42e119061d3793309c9a7882))
+
 ## [1.18.1](https://github.com/kontourai/survey/compare/v1.18.0...v1.18.1) (2026-07-20)
 
 
