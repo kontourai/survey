@@ -35,7 +35,12 @@ Individual checks by change type:
 
 - library/types changes: `npm test`
 - workbench UI or embed changes: `npm run check:review-workbench` and `npm run test:browser`
+- browser-harness changes: `npm run test:browser:concurrent` (runs two isolated Playwright servers in parallel)
 - docs or docs-site changes: `npm run docs:check`
+
+Local browser runs derive a process-specific port and never reuse an existing
+server. CI stays on deterministic port `4180`. Set `SURVEY_PLAYWRIGHT_PORT` to
+an available port when a harness or debugging session needs an explicit value.
 
 ## PR Expectations
 
