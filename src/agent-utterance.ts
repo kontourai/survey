@@ -117,17 +117,16 @@ export interface UtteranceStatementRecords {
 /**
  * The Candidate Conflict comparison key for an utterance-proposed value.
  *
- * Neither extractor (the reference extractor below, nor the Anthropic-backed
- * one in `./anthropic.js`) normalizes `value` before it reaches
+ * Extractors do not normalize `value` before it reaches
  * `ExtractedStatement` — case and internal formatting are preserved
  * verbatim. String values are the only case where "representation noise"
  * (leading/trailing whitespace from excerpt boundaries, incidental case
- * differences like "Healthy" vs "healthy") is plausible given the two
- * extractors' actual output, so this key trims + lowercases STRING values
+ * differences like "Healthy" vs "healthy") is plausible in producer output,
+ * so this key trims + lowercases STRING values
  * in the COMPARISON KEY ONLY — the stored `Candidate.value`/`Extraction.value`
  * stay byte-for-byte verbatim; this function only feeds `equivalenceKey`,
  * never `value`. Non-string values (number, boolean, null — the other types
- * the Anthropic tool schema permits) compare via exact canonical
+ * supported by the portable record contract) compare via exact canonical
  * `JSON.stringify`, so there is no cross-type coercion that could silently
  * equate e.g. "5" and 5, or lose a genuine numeric disagreement (5 vs 6 is
  * never noise). This mirrors the Producer Profile core's established
