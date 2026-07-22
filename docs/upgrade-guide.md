@@ -62,6 +62,7 @@ decision, not just the outcome:
 | `defineProductVocabulary` | Yes | Discoverable, frozen vocabulary beats scattered top-level constants; no runtime behavior change to reconcile. |
 | `confidenceBasisForReview` | **No — kept our own mapping** | See worked example below. |
 | `deriveCalibration` / `buildSurveyTrustBundle({ calibration })` (1.10.0) | Optional | Opt-in. Turns your review outcomes into an empirical calibration curve and, when enabled, produces `conclusionConfidence.value` on affirmed claims. Backward-compatible: omit it and behavior is unchanged. Adopt it to ground auto-accept thresholds and emit calibrated confidence; the `suggestedThreshold` it computes is advisory input to your policy's `minConfidence`, never a decision. See [record-contracts.md](record-contracts.md#confidence-calibration). |
+| `buildSurveyTrustBundle({ projectionContextId })` | Required for repeated append-only projections | Supply one stable producer-owned context id per review session, proposal, or resolution when the same claim can be projected more than once. It scopes generated evidence/event ids without changing claim identity; omission preserves legacy ids. See [record-contracts.md](record-contracts.md#repeated-projection-identity). |
 
 ### Worked example: when *not* to adopt `confidenceBasisForReview`
 
