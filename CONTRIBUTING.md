@@ -8,7 +8,7 @@ This file is the footnote for people developing the product itself.
 ## Development Rules
 
 - Survey is the producer-side contract: source → extraction → candidate → review → claim, projected into Surface TrustInput — it never decides whether a real-world value is true
-- the Anthropic adapter stays behind the `/anthropic` subpath and must never be re-exported from the index — core must keep zero AI dependencies
+- keep Survey free of AI runtime and provider dependencies; model-backed producers belong to their owning product and inject normalized results through Survey's framework-neutral interfaces
 - keep the tracked `.veritas/`-style dogfooding config current (when present), but do not commit generated artifacts
 - never bypass pre-push hooks — use a clean worktree when local `node_modules` do not match a branch
 - keep `CONTEXT.md` current with the domain vocabulary when the producer-side contract changes

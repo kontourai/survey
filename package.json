@@ -18,10 +18,6 @@
   },
   "exports": {
     ".": "./dist/src/index.js",
-    "./anthropic": {
-      "types": "./dist/src/anthropic.d.ts",
-      "default": "./dist/src/anthropic.js"
-    },
     "./review-workbench": {
       "types": "./dist/src/review-workbench/review-workbench.d.ts",
       "default": "./dist/src/review-workbench/review-workbench.js"
@@ -74,19 +70,14 @@
     "@kontourai/surface": "^2.9.0"
   },
   "peerDependencies": {
-    "@anthropic-ai/sdk": ">=0.20.0",
     "typescript": ">=5.0.0"
   },
   "peerDependenciesMeta": {
-    "@anthropic-ai/sdk": {
-      "optional": true
-    },
     "typescript": {
       "optional": true
     }
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "^0.54.0",
     "@kontourai/traverse": "^0.19.0",
     "@kontourai/ui": "^1.1.0",
     "@playwright/test": "^1.60.0",

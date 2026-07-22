@@ -103,7 +103,7 @@ One observation, one chain: the page it came from, what the extractor read, who 
 
 Keep producer operational state outside Survey. Queue status, reviewer form state, retries, source caches, and product policy decisions belong in the producer's own data model. Survey carries only the portable evidence chain records needed by Surface.
 
-Need Anthropic-backed `MappingProposer`/`UtteranceClaimExtractor` implementations for step 1? `@kontourai/survey/anthropic` ships production adapters as proposers-only — every output still goes through the normal review path. It's a separate subpath (not re-exported from the package root) so consumers without `@anthropic-ai/sdk` installed pay nothing.
+Model-backed producers implement `MappingProposer` or `UtteranceClaimExtractor` in the product that owns the prompt, parsing, runtime policy, and domain mapping. Survey accepts their normalized proposals through the same framework-neutral interfaces and review path; it does not acquire credentials or depend on an AI runtime.
 
 When you build an `authorized-action` authorizing block outside the workbench, pair `buildAuthorizedActionAuthorizing` with `buildPromptRef({ module, component, version?, scheme? })` — `buildPromptRef` formats a well-formed, versioned `promptRef` (bare `"review-workbench/decision-card@v1"` or scheme-prefixed `"survey://<module>/<component>@v1"`) that `buildAuthorizedActionAuthorizing` accepts directly, instead of hand-formatting the string.
 

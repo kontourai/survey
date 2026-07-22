@@ -5,7 +5,7 @@ Survey is the producer-side contract: source → extraction → candidate → re
 ## Source Of Truth
 
 - Vocabulary: `CONTEXT.md`; deep record reference: [docs/record-contracts.md](docs/record-contracts.md).
-- Library source in `src/` (CJS-style TS); the Anthropic adapter stays behind the `/anthropic` subpath and is never re-exported from the index (core must keep zero AI deps).
+- Library source in `src/` (CJS-style TS); Survey keeps zero AI runtime dependencies. Model-backed producers live in their owning product and inject normalized results through Survey's framework-neutral interfaces.
 - `dist/` and `site/` are generated; the review-workbench demo assets sync via `npm run check:review-workbench-assets`.
 
 ## Pull More Context When Needed

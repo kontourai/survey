@@ -33,3 +33,16 @@ Before this decision, inquiry-mapping's `applyAutoAcceptPolicy` and schema-mappi
 **Stays per-profile** (not drift, not unified): the `InquiryMapping` record vs. the inline `ReviewOutcome` record, their id templates, and schema-mapping's candidate-selection algorithm (`candidates[0]`, first-proposal-wins within a non-conflicting group) — this decision only unifies the auto-accept *policy* mechanics above, not selection or output record shape (different products, not drift).
 
 Auto-accept still only ever yields `"assumed"` (never `"verified"`) with `withinComfortZone: true`; conflicting proposals are never auto-accepted (ADR 0003 §4 preserved).
+
+## Model-runtime ownership (2026-07-22)
+
+Survey owns the framework-neutral `MappingProposer`, `SchemaMappingExtractor`,
+and `UtteranceClaimExtractor` contracts plus proposal projection and review. A
+product that produces model-backed proposals owns its prompts, schemas, parsing,
+runtime selection, credentials, and routing policy, then injects normalized
+records through those contracts. Survey does not ship provider or model-runtime
+adapters. This preserves the proposals-only rule while preventing producer
+execution policy from accumulating in the review contract package.
+
+Evidence: [issue #178](https://github.com/kontourai/survey/issues/178), Flow
+Agents [PR #848](https://github.com/kontourai/flow-agents/pull/848).
