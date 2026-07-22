@@ -1,5 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { resolvePlaywrightRuntime } from "./scripts/playwright-runtime.js";
+
+const runtime = resolvePlaywrightRuntime(process.env, process.pid);
+// Playwright reevaluates this config in worker processes. Pin the coordinator's
+// choice in the inherited environment so every worker uses the same server.
+process.env.SURVEY_PLAYWRIGHT_PORT = String(runtime.port);
+
 export default defineConfig({
   testDir: "./tests/browser",
   fullyParallel: false,
@@ -8,13 +15,13 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",
   use: {
-    baseURL: "http://127.0.0.1:4180",
+    baseURL: runtime.baseURL,
     trace: "on-first-retry",
   },
   webServer: {
-    command: "npm run build && python3 -m http.server 4180 --bind 127.0.0.1",
-    url: "http://127.0.0.1:4180/examples/review-workbench/index.html",
-    reuseExistingServer: !process.env.CI,
+    command: `${runtime.buildCommand}python3 -m http.server ${runtime.port} --bind 127.0.0.1`,
+    url: `${runtime.baseURL}/examples/review-workbench/index.html`,
+    reuseExistingServer: false,
     timeout: 120_000,
   },
   projects: [
