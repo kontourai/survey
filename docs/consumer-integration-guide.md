@@ -937,6 +937,14 @@ Review resources are not a second Surface projection path. When a producer is
 ready to expose trust state, it should emit normal Survey observations or claim
 records and then call `buildSurveyTrustBundle`.
 
+When those records come directly from a successful `applyReviewSession`, prefer
+`buildCanonicalReviewedTrustInput`. It derives the complete `SurveyInput` from
+the server-owned items and applied results, and returns the stable
+`projectionContextId` to pass to `buildSurveyTrustBundle`. This avoids a second
+consumer-maintained mapping where status, edited values, or provenance could
+drift from the canonical review. See
+[Canonical reviewed TrustInput](review-resource-contract.md#canonical-reviewed-trustinput).
+
 ```ts
 import {
   buildSurveyTrustBundle,

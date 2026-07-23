@@ -109,6 +109,47 @@ Adapters should emit normal `SurveyInput` records and then call
 `buildSurveyTrustBundle`. Review resources are a durable neutral contract for
 review payloads, not a second Surface projection path.
 
+### Canonical reviewed TrustInput
+
+After `applyReviewSession` returns `ok: true`, a producer can project its
+server-owned snapshot and derived results without maintaining a second,
+hand-written field mapper:
+
+```ts
+import {
+  buildCanonicalReviewedTrustInput,
+  buildSurveyTrustBundle,
+} from "@kontourai/survey";
+
+const reviewed = buildCanonicalReviewedTrustInput({
+  source: "example-producer/review-session-42",
+  generatedAt: new Date().toISOString(),
+  projectionContextId: "review-session-42",
+  items: applied.replayedSession.items,
+  results: applied.results,
+});
+
+const trustBundle = buildSurveyTrustBundle(reviewed.surveyInput, {
+  projectionContextId: reviewed.projectionContextId,
+});
+```
+
+Only pass results from the successful server apply boundary, never a
+browser-computed result. The helper treats the canonical `ReviewItem` and
+`ReviewWorkbenchResult` as authoritative and derives status, the effective
+edited value, target and claim identity, all candidate/source/extraction
+provenance, reviewer timing and rationale, evidence references, comfort-zone
+posture, authorizing evidence, and projection identifiers. It rejects missing
+results, duplicate identities with different content, and any selected or
+unselected candidate data that differs from the canonical item. Consumers do
+not supply an override `SurveyInput`, so a claim status or provenance field
+cannot silently contradict the applied review.
+
+`projectionContextId` is returned beside `surveyInput` rather than added to the
+existing `SurveyInput` wire shape. Passing it to `buildSurveyTrustBundle`
+preserves repeated-projection identity while omission of this new helper leaves
+all existing `buildSurveyTrustBundle` behavior unchanged.
+
 Rejected candidates and comfort-zone review posture are separate signals.
 Ordinary rejected-candidate feedback should stay on the candidate/review record
 and, when Survey supports it, project as rejected-candidate learning. It should

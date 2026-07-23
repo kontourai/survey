@@ -110,6 +110,11 @@ export type {
 } from "./reviewed-current-proposed-resolution.js";
 export { buildSurveyTrustBundle } from "./to-surface.js";
 export type { BuildSurveyTrustBundleOptions } from "./to-surface.js";
+export { buildCanonicalReviewedTrustInput } from "./canonical-reviewed-trust-input.js";
+export type {
+  BuildCanonicalReviewedTrustInputOptions,
+  CanonicalReviewedTrustInput,
+} from "./canonical-reviewed-trust-input.js";
 export { buildSurveyLearningProjections } from "./learning-projections.js";
 export type {
   LearningProjection,
