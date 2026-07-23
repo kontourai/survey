@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.0.0](https://github.com/kontourai/survey/compare/v1.19.0...v2.0.0) (2026-07-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove model-provider adapters ([#180](https://github.com/kontourai/survey/issues/180))
+
+### Features
+
+* fold extraction improvement dispositions ([#176](https://github.com/kontourai/survey/issues/176)) ([57eabb0](https://github.com/kontourai/survey/commit/57eabb03d8367401d474fe9b86b12b6d7800f09e))
+* project canonical reviewed trust input ([dafaf1d](https://github.com/kontourai/survey/commit/dafaf1d5e9a02a30c4324183f82f4caa0136c1e4))
+* project canonical reviewed trust input ([#183](https://github.com/kontourai/survey/issues/183)) ([4b9c4a7](https://github.com/kontourai/survey/commit/4b9c4a7009ad5015a95079173f890186e283bd1a))
+* remove model-provider adapters ([#180](https://github.com/kontourai/survey/issues/180)) ([9f31487](https://github.com/kontourai/survey/commit/9f31487a6285cd1f2d58b11fab34fc6af101cdf7))
+
+
+### Fixes
+
+* isolate concurrent Playwright servers ([#181](https://github.com/kontourai/survey/issues/181)) ([55c9a03](https://github.com/kontourai/survey/commit/55c9a03abc4868c437793eaf36c8608b35cf9140))
+
 ## [1.19.0](https://github.com/kontourai/survey/compare/v1.18.1...v1.19.0) (2026-07-22)
 
 
