@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildPromptRef,
+  buildCanonicalReviewedTrustInput,
   approveExtractionImprovementProposal,
   buildExtractionImprovementProposal,
   foldExtractionImprovementDispositions,
@@ -23,6 +24,7 @@ describe("public barrel exports", () => {
     assert.equal(typeof confidenceBasisForReview, "function");
     assert.equal(typeof candidateSetStatusFor, "function");
     assert.equal(typeof buildPromptRef, "function");
+    assert.equal(typeof buildCanonicalReviewedTrustInput, "function");
     assert.equal(typeof currentProposedReviewItem, "function");
     assert.equal(typeof buildReviewedLearningUpdateProposal, "function");
     assert.equal(typeof buildExtractionImprovementProposal, "function");
