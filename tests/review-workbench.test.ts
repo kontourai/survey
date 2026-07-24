@@ -4,6 +4,7 @@ import { publicDirectoryReviewItemExample } from "../example-data/public-directo
 import { reviewResourceApiVersion } from "../src/index.js";
 import {
   buildReviewDecision,
+  buildReviewQueueWindow,
   buildReviewDecisionsFromSession,
   buildReviewItemPresentation,
   buildReviewResultPresentation,
@@ -57,6 +58,32 @@ function assertNoOwnUndefined(value: unknown, path = "decision"): void {
 }
 
 describe("review workbench prototype", () => {
+  it("bounds and filters high-cardinality review queues without changing canonical session state", () => {
+    const seed = initialReviewQueueSessionState();
+    const template = seed.items[0]!;
+    const items = Array.from({ length: 1_005 }, (_, index): ReviewItem => ({
+      ...structuredClone(template),
+      metadata: { ...structuredClone(template.metadata), name: `field-${String(index).padStart(4, "0")}` },
+      spec: {
+        ...structuredClone(template.spec),
+        target: index === 1_004 ? "needle-field" : `field.${index}`,
+      },
+    }));
+    const session = { ...seed, items };
+    const first = buildReviewQueueWindow(session, { pageSize: 100 });
+    const last = buildReviewQueueWindow(session, { page: 10, pageSize: 100 });
+    const found = buildReviewQueueWindow(session, { query: "needle", pageSize: 100 });
+
+    assert.equal(first.items.length, 100);
+    assert.equal(first.totalMatching, 1_005);
+    assert.equal(first.pageCount, 11);
+    assert.equal(last.items.length, 5);
+    assert.equal(last.start, 1_000);
+    assert.deepEqual(found.items.map(item => item.spec.target), ["needle-field"]);
+    assert.equal(session.items.length, 1_005);
+    assert.equal(Object.keys(session.decisionsByItemName).length, 0);
+  });
+
   it("omits absent optional fields from ReviewSession resources", () => {
     const resource = buildReviewSessionResource(initialReviewQueueSessionState());
 

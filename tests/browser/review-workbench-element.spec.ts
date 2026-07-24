@@ -248,6 +248,32 @@ async function assignSession(page: Page, session: unknown): Promise<void> {
   await page.locator(".workbench-shell").waitFor({ state: "visible" });
 }
 
+test("bounds, searches, and pages a thousand-field review queue", async ({ page }) => {
+  await loadFixture(page);
+  const template = SESSION_FIXTURE.items[0]!;
+  const items = Array.from({ length: 1_005 }, (_, index) => ({
+    ...structuredClone(template),
+    metadata: {
+      ...structuredClone(template.metadata),
+      name: `large-field-${String(index).padStart(4, "0")}`,
+    },
+    spec: {
+      ...structuredClone(template.spec),
+      target: index === 1_004 ? "needle-field" : `large.field.${index}`,
+    },
+  }));
+  await assignSession(page, { ...SESSION_FIXTURE, items });
+
+  await expect(page.getByTestId("review-field")).toHaveCount(50);
+  await expect(page.getByText("1–50 of 1005")).toBeVisible();
+  await page.getByTestId("queue-next").click();
+  await expect(page.getByText("51–100 of 1005")).toBeVisible();
+  await page.getByTestId("queue-search").fill("needle");
+  await expect(page.getByTestId("review-field")).toHaveCount(1);
+  await expect(page.getByText("1–1 of 1")).toBeVisible();
+  await expect(page.locator('[data-field="needle-field"]')).toBeVisible();
+});
+
 test("source inspector supports candidate-to-highlight keyboard navigation and prominent fail-closed posture", async ({ page }) => {
   await loadFixture(page);
   const inspectorResult = await canonicalInspectorResult(page);

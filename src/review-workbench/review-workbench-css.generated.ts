@@ -195,7 +195,11 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 .survey-workbench-embed .inspector-posture.digest-mismatch, .survey-workbench-embed .inspector-posture.artifact-unavailable, .survey-workbench-embed .inspector-posture.excerpt-mismatch{ background: var(--k-negative-wash); color: var(--k-negative); border: 2px solid currentColor; }
 .survey-workbench-embed .inspector-filters{ display: flex; flex-wrap: wrap; gap: .6rem; margin: 1rem 0; }
 .survey-workbench-embed .inspector-filters label{ display: grid; gap: .25rem; font-size: .75rem; color: var(--k-text-muted); }
-.survey-workbench-embed .inspector-filters select{ color: var(--k-text); background: var(--k-sunken); border: 1px solid var(--k-line); padding: .4rem; }
+.survey-workbench-embed .inspector-filters select, .survey-workbench-embed .inspector-filters input{ color: var(--k-text); background: var(--k-sunken); border: 1px solid var(--k-line); padding: .4rem; }
+.survey-workbench-embed .inspector-pager, .survey-workbench-embed .queue-controls, .survey-workbench-embed .queue-pager{ display: flex; align-items: end; flex-wrap: wrap; gap: .6rem; }
+.survey-workbench-embed .inspector-pager{ justify-content: flex-end; margin: 0 0 .75rem; }
+.survey-workbench-embed .inspector-pager button, .survey-workbench-embed .queue-pager button{ color: var(--k-text); background: var(--k-raised); border: 1px solid var(--k-line-strong); border-radius: var(--k-radius-sm); padding: .45rem .7rem; }
+.survey-workbench-embed .inspector-pager button:disabled, .survey-workbench-embed .queue-pager button:disabled{ opacity: .45; }
 .survey-workbench-embed .inspector-candidates{ margin: 0; padding-left: 1.5rem; }
 .survey-workbench-embed .inspector-candidate{ width: 100%; display: grid; gap: .2rem; text-align: left; padding: .65rem; color: var(--k-text); background: transparent; border: 1px solid var(--k-line); }
 .survey-workbench-embed .inspector-source pre{ white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 1rem; background: var(--k-sunken); border: 1px solid var(--k-line); min-height: 8rem; }
@@ -205,6 +209,12 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 .survey-workbench-embed .highlight-anchor:focus{ outline: 3px solid var(--k-active); }
 .survey-workbench-embed .source-unavailable{ color: var(--k-negative); font-weight: 700; }
 @container (max-width: 720px) { .inspector-heading, .inspector-layout { grid-template-columns: 1fr !important; } }
+
+.survey-workbench-embed .queue-controls{ padding: 1rem; border-bottom: 1px solid var(--k-line); background: var(--k-panel); }
+.survey-workbench-embed .queue-controls label{ display: grid; gap: .25rem; color: var(--k-muted); font-size: .75rem; }
+.survey-workbench-embed .queue-controls input, .survey-workbench-embed .queue-controls select{ min-height: 2.25rem; color: var(--k-text); background: var(--k-sunken); border: 1px solid var(--k-line); border-radius: var(--k-radius-sm); padding: .4rem .55rem; }
+.survey-workbench-embed .queue-result-count{ margin-left: auto; color: var(--k-muted); }
+.survey-workbench-embed .queue-empty{ padding: 2rem; color: var(--k-muted); text-align: center; }
 
 /* Re-assert the base structural tokens for light mode. themes.css's \`.theme-*\`
    preset classes hardcode a dark --k-bg/--k-panel/etc (so the preset "just

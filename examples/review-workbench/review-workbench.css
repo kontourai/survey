@@ -41,7 +41,11 @@
 .inspector-posture.digest-mismatch, .inspector-posture.artifact-unavailable, .inspector-posture.excerpt-mismatch { background: var(--k-negative-wash); color: var(--k-negative); border: 2px solid currentColor; }
 .inspector-filters { display: flex; flex-wrap: wrap; gap: .6rem; margin: 1rem 0; }
 .inspector-filters label { display: grid; gap: .25rem; font-size: .75rem; color: var(--k-text-muted); }
-.inspector-filters select { color: var(--k-text); background: var(--k-sunken); border: 1px solid var(--k-line); padding: .4rem; }
+.inspector-filters select, .inspector-filters input { color: var(--k-text); background: var(--k-sunken); border: 1px solid var(--k-line); padding: .4rem; }
+.inspector-pager, .queue-controls, .queue-pager { display: flex; align-items: end; flex-wrap: wrap; gap: .6rem; }
+.inspector-pager { justify-content: flex-end; margin: 0 0 .75rem; }
+.inspector-pager button, .queue-pager button { color: var(--k-text); background: var(--k-raised); border: 1px solid var(--k-line-strong); border-radius: var(--k-radius-sm); padding: .45rem .7rem; }
+.inspector-pager button:disabled, .queue-pager button:disabled { opacity: .45; }
 .inspector-candidates { margin: 0; padding-left: 1.5rem; }
 .inspector-candidate { width: 100%; display: grid; gap: .2rem; text-align: left; padding: .65rem; color: var(--k-text); background: transparent; border: 1px solid var(--k-line); }
 .inspector-source pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 1rem; background: var(--k-sunken); border: 1px solid var(--k-line); min-height: 8rem; }
@@ -51,6 +55,12 @@
 .highlight-anchor:focus { outline: 3px solid var(--k-active); }
 .source-unavailable { color: var(--k-negative); font-weight: 700; }
 @container (max-width: 720px) { .inspector-heading, .inspector-layout { grid-template-columns: 1fr !important; } }
+
+.queue-controls { padding: 1rem; border-bottom: 1px solid var(--k-line); background: var(--k-panel); }
+.queue-controls label { display: grid; gap: .25rem; color: var(--k-muted); font-size: .75rem; }
+.queue-controls input, .queue-controls select { min-height: 2.25rem; color: var(--k-text); background: var(--k-sunken); border: 1px solid var(--k-line); border-radius: var(--k-radius-sm); padding: .4rem .55rem; }
+.queue-result-count { margin-left: auto; color: var(--k-muted); }
+.queue-empty { padding: 2rem; color: var(--k-muted); text-align: center; }
 
 /* Re-assert the base structural tokens for light mode. themes.css's `.theme-*`
    preset classes hardcode a dark --k-bg/--k-panel/etc (so the preset "just

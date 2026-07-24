@@ -40,3 +40,11 @@ new value is that the light-DOM embed is now equally host-overridable.
 preset. Survey ships no host-brand theme of its own — the host owns its palette
 and type; Survey owns only that its token defaults are overridable. The
 "Theme it as your own brand" recipe is in the [README](../../README.md).
+
+## Large queues use bounded presentation windows (2026-07-23)
+
+The workbench renders a searchable, disposition-filtered window over the
+complete canonical review session. It mounts 50 review cards by default;
+`mountReviewWorkbench` accepts a `pageSize` override capped at 250. Paging and
+filtering are presentation state only: decisions, reviewer notes, event order,
+session exports, and apply semantics continue to use the complete session.
