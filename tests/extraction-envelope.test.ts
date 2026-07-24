@@ -10,6 +10,7 @@ import {
   importExtractionEnvelope,
   reimportExtractionEnvelope,
   type ExtractionEnvelopeImportOptions,
+  type PortablePdfLayout,
   type PortableExtractionProposal,
   type PortableExtractionResultEnvelope,
 } from "../src/index.js";
@@ -167,6 +168,36 @@ describe("portable extraction envelope import", () => {
     await assertBothReject((e) => { e.result.partial!.tokenOvershoot = 0; });
   });
 
+  it("preserves owner-valid PDF layout and fails closed for malformed regions", async () => {
+    const valid = await fixture();
+    valid.result.pdfPageOffsets = [0, 11];
+    valid.result.pdfLayout = pdfLayout();
+    assert.equal(validatePortableExtractionResultEnvelope(valid).status, "valid");
+    const imported = importExtractionEnvelope(valid, options());
+    assert.deepEqual(imported.record.spec.envelope.result.pdfLayout, pdfLayout());
+
+    const changed = structuredClone(valid);
+    changed.result.pdfLayout!.elements[0]!.pageNumber = 2;
+    const baseline = imported.reviewItems[0]!;
+    const rebound = importExtractionEnvelope(changed, options()).reviewItems[0]!;
+    assert.notEqual(rebound.metadata.name, baseline.metadata.name);
+    assert.notEqual(evidenceId(rebound), evidenceId(baseline));
+
+    await assertBothReject((envelope) => {
+      envelope.result.pdfLayout = pdfLayout();
+      envelope.result.pdfLayout.elements[0]!.range.end = 17;
+    });
+    await assertBothReject((envelope) => {
+      envelope.result.pdfLayout = pdfLayout();
+      envelope.result.pdfLayout.pages![0]!.width = 20;
+      envelope.result.pdfLayout.elements[0]!.bounds!.width = 21;
+    });
+    const unknown = await fixture();
+    unknown.result.pdfLayout = pdfLayout();
+    (unknown.result.pdfLayout.elements[0] as PortablePdfLayout["elements"][number] & { rawText?: string }).rawText = "private";
+    assert.throws(() => importExtractionEnvelope(unknown, options()), /rawText is unexpected/);
+  });
+
   it("matches owner privacy and prepared-state relationship validation", async () => {
     for (const mutate of [
       (e: PortableExtractionResultEnvelope) => { e.source.ref = "https://user:password@example.test/source"; },
@@ -219,3 +250,20 @@ function evidenceId(item: ReturnType<typeof importExtractionEnvelope>["reviewIte
 function rebindArtifact(envelope: PortableExtractionResultEnvelope): void { const artifact = envelope.result.preparedArtifact!; const binding = { format: artifact.format, version: artifact.version, digest: artifact.digest, preparationMode: artifact.preparationMode, preparationVersion: artifact.preparationVersion, contentLength: artifact.contentLength, sourceSnapshotRef: artifact.sourceSnapshotRef ?? null }; artifact.ref = `traverse-prepared-artifact:v1:sha256:${createHash("sha256").update(JSON.stringify(binding)).digest("hex")}`; }
 async function assertBothReject(mutate: (envelope: PortableExtractionResultEnvelope) => void): Promise<void> { const envelope = await fixture(); mutate(envelope); assert.equal(validatePortableExtractionResultEnvelope(envelope).status, "invalid"); assert.throws(() => importExtractionEnvelope(envelope, options())); }
 function resolutionBase(id: string): string { return id.replace(/\.[0-9a-f-]{36}$/, ""); }
+function pdfLayout(): PortablePdfLayout {
+  return {
+    pages: [
+      { pageNumber: 1, width: 612, height: 792, unit: "points" },
+      { pageNumber: 2, width: 612, height: 792, unit: "points", rotation: 0 },
+    ],
+    elements: [
+      { kind: "heading", pageNumber: 1, range: { start: 0, end: 5 }, bounds: { x: 10, y: 20, width: 80, height: 12 } },
+      { kind: "table-cell", providerType: "cell", pageNumber: 2, range: { start: 11, end: 16 }, bounds: { x: 30, y: 40, width: 90, height: 14 } },
+    ],
+    tables: [{
+      pageNumber: 2,
+      bounds: { x: 20, y: 30, width: 200, height: 100 },
+      cells: [{ rowIndex: 0, columnIndex: 0, range: { start: 11, end: 16 }, bounds: { x: 30, y: 40, width: 90, height: 14 } }],
+    }],
+  };
+}

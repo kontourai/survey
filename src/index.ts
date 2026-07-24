@@ -39,6 +39,17 @@ export {
   exportExtractionInspector,
   filterExtractionInspectorCandidates,
 } from "./review-workbench/extraction-inspector.js";
+export { resolvePortablePdfRegion } from "./pdf-layout.js";
+export type {
+  PortablePdfBoundingBox,
+  PortablePdfLayout,
+  PortablePdfPageGeometry,
+  PortablePdfRegionContext,
+  PortablePdfTable,
+  PortablePdfTableCell,
+  PortablePdfTextElement,
+  PortablePdfTextRange,
+} from "./pdf-layout.js";
 export type {
   ExtractionAlignmentState,
   ArtifactUnavailableCode,

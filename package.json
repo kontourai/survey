@@ -79,7 +79,7 @@
     }
   },
   "devDependencies": {
-    "@kontourai/traverse": "^0.19.0",
+    "@kontourai/traverse": "^0.22.0",
     "@kontourai/ui": "^1.1.0",
     "@playwright/test": "^1.60.0",
     "@types/node": "^25.6.0",

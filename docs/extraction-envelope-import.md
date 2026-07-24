@@ -35,7 +35,7 @@ The `ExtractionEnvelopeImport` record preserves the validated envelope without
 dropping source/snapshot references, prepared-artifact identity, exact locator
 and occurrence resolution, value/type inference, provider/model/run identity,
 usage and attempt context, outcome, warning classifications, provider failures,
-and task/example digests. Existing Survey producers can continue creating
+task/example digests, PDF page/layout context, and OCR-derived posture. Existing Survey producers can continue creating
 records directly; this adapter is additive.
 
 ## Grounding and identity
@@ -45,8 +45,8 @@ An absent or `available` prepared-artifact state is grounded. `unavailable`,
 `artifact-unavailable` diagnostics. `digest-mismatch` becomes a typed diagnostic
 with expected and actual digests. Unresolved imports produce no `ReviewItem`.
 
-Candidate, extraction, and resolution identity includes producer/import
-namespace, source and snapshot, prepared artifact, run, proposal index, and the
+Candidate, extraction, evidence, and resolution identity includes producer/import
+namespace, source and snapshot, prepared artifact, PDF layout, run, proposal index, and the
 complete proposal semantics: field, value, confidence, extractor, type/inference,
 path indices, excerpt, locator, and exact-occurrence record. Same values at
 different spans therefore remain distinct. Evidence identity binds the complete
@@ -59,7 +59,8 @@ evidence. Each resolution call adds a fresh UUID-backed evidence/event identity.
 The boundary validates the complete v1 shape and rejects unexpected properties,
 malformed enums and outcome/state relationships, incoherent UTF-16 spans and
 occurrence metadata, authorization-bearing references or credential-shaped
-identities, non-ascending PDF page offsets, non-finite or negative-zero numbers, sparse arrays,
+identities, non-ascending PDF page offsets, malformed or out-of-range PDF page
+geometry/elements/table cells, non-finite or negative-zero numbers, sparse arrays,
 accessors, symbols, cycles, and other non-lossless JSON object inputs.
 
 The portable format excludes prepared text, raw provider responses, native
@@ -82,6 +83,12 @@ The pane filters by field, provider, model, attempt, explicit/inferred type
 origin, and alignment. Candidate/highlight navigation is bidirectional by
 keyboard and announced with accessible labels. It activates the matching
 existing `ReviewItem`; it does not store or apply a second decision.
+
+When a validated PDF layout is present, each exact candidate span is resolved
+to overlapping page elements and table cells. The candidate announces its page
+and region context while the prepared-text highlight remains the authoritative
+locator. OCR-derived candidates are labeled explicitly. Survey never infers PDF
+geometry or treats OCR text as source truth.
 
 Pass `{ imports: [...] }` to inspect a review set spanning multiple validated
 imports. Provider, model, attempt, and optional producer-declared pass filters

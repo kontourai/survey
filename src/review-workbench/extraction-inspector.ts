@@ -1,6 +1,11 @@
 import { buildReviewItemsFromExtractionEnvelopeImport, validateExtractionEnvelopeImport, type ExtractionEnvelopeImport, type ExtractionEnvelopeImportResult, type PortableExtractionProposal } from "../extraction-envelope.js";
 import { canonicalJson } from "./canonical.js";
 import { sha256Hex } from "../sha256.js";
+import {
+  resolvePortablePdfRegion,
+  type PortablePdfLayout,
+  type PortablePdfRegionContext,
+} from "../pdf-layout.js";
 
 export type ExtractionAlignmentState = "aligned" | "excerpt-mismatch" | "artifact-unavailable" | "digest-mismatch";
 export type ArtifactUnavailableCode = "not-found" | "storage-error" | "access-denied" | "invalid-artifact" | "unknown";
@@ -36,6 +41,8 @@ export interface ExtractionInspectorCandidate {
   end: number;
   excerpt: string;
   alignment: ExtractionAlignmentState;
+  pdfRegion?: PortablePdfRegionContext;
+  ocrDerived?: true;
 }
 
 export interface ExtractionInspectorSource {
@@ -45,6 +52,7 @@ export interface ExtractionInspectorSource {
   expectedDigest?: string;
   actualDigest?: string;
   artifactText?: string;
+  ocrDerived?: true;
   alignment: ExtractionAlignmentState;
   message: string;
 }
@@ -85,13 +93,32 @@ export function buildExtractionInspectorModel(input: ExtractionInspectorInput): 
     const sourceKey = `${record.metadata.producerNamespace}:${record.metadata.name}:${entryIndex}`;
     if (sourceKeys.has(sourceKey)) throw new Error("Extraction inspector source identity collision.");
     sourceKeys.add(sourceKey);
-    const source = sourceModel(sourceKey, record.metadata.name, prepared, record.status.state, entry.artifact);
+    const source = sourceModel(
+      sourceKey,
+      record.metadata.name,
+      prepared,
+      record.status.state,
+      entry.artifact,
+      envelope.result.ocrDerived,
+    );
     sources.push(source);
     const candidateStart = candidates.length;
     envelope.result.proposals.forEach((proposal, proposalIndex) => {
       const item = entry.importResult.reviewItems[proposalIndex];
       if (!item) return; // unresolved imports legitimately produce no ReviewItems
-      candidates.push(candidateModel(source, item.metadata.name, proposal, proposalIndex, envelope.result.provider, envelope.result.model, envelope.result.runId, entry.pass));
+      candidates.push(candidateModel(
+        source,
+        item.metadata.name,
+        proposal,
+        proposalIndex,
+        envelope.result.provider,
+        envelope.result.model,
+        envelope.result.runId,
+        entry.pass,
+        envelope.result.pdfPageOffsets,
+        envelope.result.pdfLayout,
+        envelope.result.ocrDerived,
+      ));
     });
     if (source.alignment === "excerpt-mismatch") {
       delete source.artifactText;
@@ -136,7 +163,14 @@ function assertImportedResult(result: ExtractionEnvelopeImportResult, record: Ex
   });
 }
 
-function sourceModel(key: string, importName: string, prepared: ExtractionEnvelopeImportResult["record"]["spec"]["envelope"]["result"]["preparedArtifact"], state: string, artifact: ResolvedExtractionArtifact): ExtractionInspectorSource {
+function sourceModel(
+  key: string,
+  importName: string,
+  prepared: ExtractionEnvelopeImportResult["record"]["spec"]["envelope"]["result"]["preparedArtifact"],
+  state: string,
+  artifact: ResolvedExtractionArtifact,
+  ocrDerived: true | undefined,
+): ExtractionInspectorSource {
   let alignment: ExtractionAlignmentState;
   let message: string;
   if (state !== "grounded" || artifact.status === "unavailable") {
@@ -147,22 +181,52 @@ function sourceModel(key: string, importName: string, prepared: ExtractionEnvelo
   } else if (artifact.text.length !== prepared.contentLength) {
     alignment = "artifact-unavailable"; message = "Prepared artifact content has the wrong length. Candidates are not grounded.";
   } else {
-    alignment = "aligned"; message = "Prepared artifact identity verified. Exact source spans are available.";
+    alignment = "aligned"; message = `Prepared artifact identity verified. Exact source spans are available.${ocrDerived ? " Prepared text is OCR-derived." : ""}`;
   }
-  return { key, importName, ...(prepared?.ref ? { artifactRef: prepared.ref } : {}), ...(prepared?.digest ? { expectedDigest: prepared.digest } : {}), ...("actualDigest" in artifact ? { actualDigest: artifact.actualDigest } : {}), ...(alignment === "aligned" && artifact.status === "available" ? { artifactText: artifact.text } : {}), alignment, message };
+  return { key, importName, ...(prepared?.ref ? { artifactRef: prepared.ref } : {}), ...(prepared?.digest ? { expectedDigest: prepared.digest } : {}), ...("actualDigest" in artifact ? { actualDigest: artifact.actualDigest } : {}), ...(alignment === "aligned" && artifact.status === "available" ? { artifactText: artifact.text } : {}), ...(ocrDerived ? { ocrDerived: true as const } : {}), alignment, message };
 }
 
-function candidateModel(source: ExtractionInspectorSource, reviewItemName: string, proposal: PortableExtractionProposal, index: number, provider: string, model: string | undefined, attempt: string, pass: string | undefined): ExtractionInspectorCandidate {
+function candidateModel(
+  source: ExtractionInspectorSource,
+  reviewItemName: string,
+  proposal: PortableExtractionProposal,
+  index: number,
+  provider: string,
+  model: string | undefined,
+  attempt: string,
+  pass: string | undefined,
+  pdfPageOffsets: number[] | undefined,
+  pdfLayout: PortablePdfLayout | undefined,
+  ocrDerived: true | undefined,
+): ExtractionInspectorCandidate {
   const match = /^chars:(\d+)-(\d+)$/.exec(proposal.provenance.locator);
   if (!match) throw new Error(`Extraction proposal ${index} has an invalid text span.`);
   const start = Number(match[1]), end = Number(match[2]);
   if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start) throw new Error(`Extraction proposal ${index} has an invalid text span.`);
   const alignment = source.alignment === "aligned" && source.artifactText!.slice(start, end) !== proposal.provenance.excerpt ? "excerpt-mismatch" : source.alignment;
   if (alignment === "excerpt-mismatch") { source.alignment = alignment; source.message = "One or more source spans do not match their recorded excerpts. Affected candidates are not grounded."; }
-  return { id: `${source.key}:proposal:${index}`, sourceKey: source.key, reviewItemName, proposalIndex: index, field: proposal.fieldPath, provider, ...(model ? { model } : {}), attempt, ...(pass ? { pass } : {}), valueType: proposal.valueType ?? inferValueType(proposal.candidateValue), inferenceType: proposal.inferenceType ?? "inferred", start, end, excerpt: proposal.provenance.excerpt, alignment };
+  let pdfRegion = pdfLayout ? resolvePortablePdfRegion(pdfLayout, proposal.provenance.locator) : undefined;
+  const page = resolvePdfPage(pdfPageOffsets, start);
+  if (page !== undefined) {
+    pdfRegion = {
+      pages: [...new Set([...(pdfRegion?.pages ?? []), page])].sort((left, right) => left - right),
+      elements: pdfRegion?.elements ?? [],
+      tableCells: pdfRegion?.tableCells ?? [],
+    };
+  }
+  return { id: `${source.key}:proposal:${index}`, sourceKey: source.key, reviewItemName, proposalIndex: index, field: proposal.fieldPath, provider, ...(model ? { model } : {}), attempt, ...(pass ? { pass } : {}), valueType: proposal.valueType ?? inferValueType(proposal.candidateValue), inferenceType: proposal.inferenceType ?? "inferred", start, end, excerpt: proposal.provenance.excerpt, alignment, ...(pdfRegion ? { pdfRegion } : {}), ...(ocrDerived ? { ocrDerived: true as const } : {}) };
 }
 
 function inferValueType(value: unknown): string { if (Array.isArray(value)) return "array"; if (value !== null && typeof value === "object") return "object"; return typeof value === "number" ? "number" : typeof value === "boolean" ? "boolean" : "string"; }
+function resolvePdfPage(offsets: number[] | undefined, start: number): number | undefined {
+  if (!offsets || offsets.length === 0) return undefined;
+  let page: number | undefined;
+  for (let index = 0; index < offsets.length; index += 1) {
+    if (offsets[index]! > start) break;
+    page = index + 1;
+  }
+  return page;
+}
 
 export function filterExtractionInspectorCandidates(model: ExtractionInspectorModel, filters: ExtractionInspectorFilters): ExtractionInspectorCandidate[] {
   return model.candidates.filter((c) => (!filters.field || c.field === filters.field) && (!filters.provider || c.provider === filters.provider) && (!filters.model || c.model === filters.model) && (!filters.attempt || c.attempt === filters.attempt) && (!filters.pass || c.pass === filters.pass) && (!filters.inferenceType || c.inferenceType === filters.inferenceType) && (!filters.alignment || c.alignment === filters.alignment));
@@ -185,7 +249,7 @@ export function mountExtractionInspector(container: HTMLElement, model: Extracti
   const filters: ExtractionInspectorFilters = {};
   const render = () => {
     const visible = filterExtractionInspectorCandidates(model, filters);
-    list.innerHTML = visible.map(c => `<li><button type="button" class="inspector-candidate" id="candidate-${safeId(c.id)}" data-candidate-id="${escapeHtml(c.id)}" aria-controls="highlight-${safeId(c.id)}"><strong>${escapeHtml(c.field)}</strong><span>${escapeHtml(c.provider)}${c.model ? ` / ${escapeHtml(c.model)}` : ""}</span><span>${escapeHtml(c.inferenceType)} ${escapeHtml(c.valueType)} · ${escapeHtml(c.alignment)}</span></button></li>`).join("") || "<li>No candidates match these filters.</li>";
+    list.innerHTML = visible.map(c => `<li><button type="button" class="inspector-candidate" id="candidate-${safeId(c.id)}" data-candidate-id="${escapeHtml(c.id)}" aria-controls="highlight-${safeId(c.id)}"><strong>${escapeHtml(c.field)}</strong><span>${escapeHtml(c.provider)}${c.model ? ` / ${escapeHtml(c.model)}` : ""}</span><span>${escapeHtml(c.inferenceType)} ${escapeHtml(c.valueType)} · ${escapeHtml(c.alignment)}</span>${formatContext(c)}</button></li>`).join("") || "<li>No candidates match these filters.</li>";
     postures.innerHTML = model.sources.map(s => `<div class="inspector-posture ${s.alignment}" role="status"><strong>${escapeHtml(s.importName)}: ${escapeHtml(s.alignment)}</strong><span>${escapeHtml(s.message)}</span></div>`).join("");
     sourcesRoot.innerHTML = model.sources.map(s => { const candidates = visible.filter(c => c.sourceKey === s.key); return `<div class="inspector-source" aria-label="Prepared source for ${escapeHtml(s.importName)}"><h3>${escapeHtml(s.importName)}</h3><pre tabindex="0">${s.artifactText === undefined ? `<span class="source-unavailable">${escapeHtml(s.message)}</span>` : renderSource(s.artifactText, candidates)}</pre></div>`; }).join("");
   };
@@ -202,6 +266,16 @@ function renderSource(text: string, candidates: ExtractionInspectorCandidate[]):
   const starts = new Map<number, ExtractionInspectorCandidate[]>(); candidates.forEach(c => starts.set(c.start, [...(starts.get(c.start) ?? []), c]));
   for (let i=0; i<points.length-1; i++) { const start=points[i]!, end=points[i+1]!; for (const c of starts.get(start) ?? []) html += `<button type="button" class="highlight-anchor" id="highlight-${safeId(c.id)}" data-highlight-candidate-id="${escapeHtml(c.id)}" aria-label="Source highlight for ${escapeHtml(c.field)}; activate to return to candidate"></button>`; const segment=escapeHtml(text.slice(start,end)); const active=candidates.filter(c => c.start < end && c.end > start); html += active.length ? `<mark aria-label="Highlighted for ${active.map(c => escapeHtml(c.field)).join(", ")}">${segment}</mark>` : segment; }
   return html;
+}
+function formatContext(candidate: ExtractionInspectorCandidate): string {
+  const context: string[] = [];
+  if (candidate.pdfRegion) {
+    if (candidate.pdfRegion.pages.length > 0) context.push(`PDF page${candidate.pdfRegion.pages.length === 1 ? "" : "s"} ${candidate.pdfRegion.pages.join(", ")}`);
+    if (candidate.pdfRegion.elements.length > 0) context.push(`${candidate.pdfRegion.elements.length} layout element${candidate.pdfRegion.elements.length === 1 ? "" : "s"}`);
+    if (candidate.pdfRegion.tableCells.length > 0) context.push(`${candidate.pdfRegion.tableCells.length} table cell${candidate.pdfRegion.tableCells.length === 1 ? "" : "s"}`);
+  }
+  if (candidate.ocrDerived) context.push("OCR-derived");
+  return context.length > 0 ? `<span class="inspector-format-context">${escapeHtml(context.join(" · "))}</span>` : "";
 }
 function filterSelect(key:string,label:string,choices:string):string { return `<label>${escapeHtml(label)}<select data-filter="${key}"><option value="">All</option>${choices}</select></label>`; }
 function safeId(value:string):string { return value.replace(/[^a-zA-Z0-9_-]/g,"-"); }

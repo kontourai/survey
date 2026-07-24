@@ -311,6 +311,42 @@ test("source inspector renders overlapping spans once with distinct accessible t
   await expect(page.locator(".inspector-source mark")).toHaveCount(3);
 });
 
+test("source inspector renders exact PDF page and region context accessibly", async ({ page }) => {
+  await loadFixture(page);
+  const base = await canonicalInspectorResult(page);
+  const pdfResult = await page.evaluate(async (importResult) => {
+    const envelope = structuredClone(importResult.record.spec.envelope);
+    envelope.result.pdfPageOffsets = [0, 11];
+    envelope.result.pdfLayout = {
+      pages: [
+        { pageNumber: 1, width: 612, height: 792, unit: "points" },
+        { pageNumber: 2, width: 612, height: 792, unit: "points" },
+      ],
+      elements: [
+        { kind: "heading", pageNumber: 1, range: { start: 0, end: 5 }, bounds: { x: 10, y: 20, width: 80, height: 12 } },
+        { kind: "table-cell", pageNumber: 2, range: { start: 11, end: 16 }, bounds: { x: 30, y: 40, width: 90, height: 14 } },
+      ],
+      tables: [{ pageNumber: 2, cells: [{ rowIndex: 0, columnIndex: 0, range: { start: 11, end: 16 } }] }],
+    };
+    // @ts-expect-error Browser fixture imports the built module served by Playwright.
+    const module = await import("/dist/src/extraction-envelope.js");
+    return module.importExtractionEnvelope(envelope, {
+      importName: "browser-pdf",
+      producerNamespace: "browser",
+      sourceKind: "uploaded-document",
+      claimTarget: (proposal: { fieldPath: string }) => ({ subjectType: "test", subjectId: "one", facet: "test", claimType: "test.field", fieldOrBehavior: proposal.fieldPath, impactLevel: "low" }),
+    });
+  }, base);
+  await assignSession(page, { ...SESSION_FIXTURE, items: [...SESSION_FIXTURE.items, ...pdfResult.reviewItems] });
+  await page.evaluate(({ importResult, actualDigest }) => {
+    const el = document.getElementById("wbe") as HTMLElement & { extractionInspector: unknown };
+    el.extractionInspector = { importResult, artifact: { status: "available", text: "Alpha Beta Alpha", actualDigest } };
+  }, { importResult: pdfResult, actualDigest: INSPECTOR_DIGEST });
+
+  await expect(page.getByRole("button", { name: /title browser-provider.*PDF page 1.*1 layout element/ })).toBeVisible();
+  await expect(page.locator(".inspector-format-context")).toHaveText("PDF page 1 · 1 layout element");
+});
+
 // ---------------------------------------------------------------------------
 // TEST 1: SINGLE-IMPORT BOOT
 // ---------------------------------------------------------------------------
