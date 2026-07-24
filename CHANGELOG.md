@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.0](https://github.com/kontourai/survey/compare/v2.1.0...v2.2.0) (2026-07-24)
+
+
+### Features
+
+* scale extraction review navigation ([#194](https://github.com/kontourai/survey/issues/194)) ([6a593c3](https://github.com/kontourai/survey/commit/6a593c3c3a14faa04cde29755eb71457f24f8aab))
+
 ## [2.1.0](https://github.com/kontourai/survey/compare/v2.0.0...v2.1.0) (2026-07-24)
 
 
