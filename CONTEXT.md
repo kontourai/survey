@@ -40,6 +40,9 @@ _Avoid_: Locator, source
 
 **Source Locator**:
 A precise pointer inside a **Raw Source** where an **Extraction** came from, such as a PDF page region, HTML field, text span, or structured field path.
+For prepared PDF evidence, the exact `chars:` span remains authoritative while
+a validated layout sidecar can map that span to page geometry, elements, and
+table cells for inspection. Survey does not infer geometry from flattened text.
 _Avoid_: Source reference, citation
 
 **Extraction**:
@@ -48,6 +51,8 @@ _Avoid_: Claim, verified value, parse result
 
 **Extraction Envelope**:
 A versioned JSON-safe extraction result owned by an upstream **Producer** and accepted structurally at Survey's import boundary. Survey preserves the envelope unchanged inside a durable import record, adds Survey-specific claim-target mapping at the boundary, and derives review candidates only when its prepared-artifact posture is grounded. Survey does not redefine the upstream wire format, own the artifact store, or turn extraction output into truth.
+Optional PDF layout and OCR-derived posture are preserved as evidence context;
+they do not replace the exact prepared-text locator or imply source correctness.
 _Avoid_: Survey-owned extraction wire format, review decision, truth assertion
 
 **Extraction Target**:

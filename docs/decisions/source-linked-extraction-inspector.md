@@ -23,6 +23,11 @@ Survey provides an optional read-only inspector pane for the existing review wor
 
 Candidate activation selects the corresponding existing ReviewItem through its import name and proposal index. The inspector owns no decisions, mutations, provider calls, artifact resolution, or review policy. Repeated occurrences and multiple candidates sharing one span retain distinct candidate and accessible navigation identities.
 
+For a validated PDF layout sidecar, the inspector resolves the existing exact
+`chars:` span to overlapping page elements and table cells and presents that
+context accessibly. It does not infer geometry or introduce another locator.
+OCR-derived prepared text is labeled explicitly.
+
 Filters cover field, provider, model, attempt, optional producer-declared pass, explicit/inferred origin, and alignment across the full review set. The self-contained export is canonical, read-only JSON with prepared text and excerpts redacted by default. Hosts must opt in separately to either disclosure; unrestricted resolver failure text is neither accepted nor exported.
 
 ## Consequences
@@ -30,4 +35,5 @@ Filters cover field, provider, model, attempt, optional producer-declared pass, 
 - Artifact unavailability, digest mismatch, length mismatch, and excerpt mismatch remain prominent non-grounded states.
 - The browser never receives provider credentials or configuration and never needs a provider SDK.
 - Source text and excerpts are potentially sensitive review data; default exports omit them.
+- Page/region context remains safe structured provenance in the default export; raw source bytes remain absent.
 - Hosts remain responsible for resolving artifacts and enforcing access controls around source disclosure.

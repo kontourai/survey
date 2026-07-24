@@ -26,15 +26,20 @@ non-grounded prepared-artifact state remains a typed diagnostic and projects no
 candidate.
 
 Candidate, extraction, and resolution identities commit the producer/import
-namespace, source snapshot, complete prepared artifact, run, claim target, and
+namespace, source snapshot, complete prepared artifact, optional PDF layout, run, claim target, and
 every proposal semantic input. Evidence identity commits complete source
-grounding, excerpt, and occurrence selection while excluding field/value
+grounding, optional PDF layout, excerpt, and occurrence selection while excluding field/value
 semantics, so same-span/different-field proposals remain separate candidates
 sharing one visible evidence identity. Resolution attempts add collision-resistant IDs.
 
 The adapter rejects malformed or non-lossless representations before grounding,
 and documentation treats all retained proposal values, excerpts, and identities
 as potentially review-host-visible.
+
+Validated parser-neutral PDF layout and OCR-derived posture are preserved
+without changing the exact prepared-text locator. PDF layout requires a prepared
+artifact and fails closed when page geometry, ranges, elements, or table cells
+are malformed or out of range.
 
 ## Compatibility
 

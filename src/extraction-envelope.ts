@@ -3,6 +3,7 @@ import type { RawSource } from "./types.js";
 import type { ClaimTargetHint, ReviewCandidate, ReviewItem, ReviewValueType } from "./review-resource.js";
 import { reviewResourceApiVersion } from "./review-resource.js";
 import { canonicalJson } from "./review-workbench/canonical.js";
+import { validatePortablePdfLayout, type PortablePdfLayout } from "./pdf-layout.js";
 
 /** The upstream-owned portable extraction-result wire identifiers accepted by this adapter. */
 export const portableExtractionResultFormat = "traverse-extraction-result";
@@ -59,6 +60,7 @@ export interface PortableExtractionResultEnvelope {
     taskDigest?: string;
     exampleDigests?: string[];
     pdfPageOffsets?: number[];
+    pdfLayout?: PortablePdfLayout;
     ocrDerived?: true;
     preparedArtifact?: {
       format: "traverse-prepared-artifact";
@@ -206,12 +208,14 @@ function buildReviewItem(record: ExtractionEnvelopeImport, proposal: PortableExt
 
 function identityInputs(record: ExtractionEnvelopeImport, proposal: PortableExtractionProposal, index: number): unknown {
   return { producerNamespace: record.metadata.producerNamespace, importName: record.metadata.name, source: record.spec.envelope.source,
-    preparedArtifact: record.spec.envelope.result.preparedArtifact, runId: record.spec.envelope.result.runId,
+    preparedArtifact: record.spec.envelope.result.preparedArtifact, pdfLayout: record.spec.envelope.result.pdfLayout,
+    runId: record.spec.envelope.result.runId,
     proposalIndex: index, proposal, claimTarget: record.spec.claimTargets[index] };
 }
 function evidenceInputs(record: ExtractionEnvelopeImport, proposal: PortableExtractionProposal): unknown {
   return { producerNamespace: record.metadata.producerNamespace, importName: record.metadata.name, source: record.spec.envelope.source,
     sourceKind: record.spec.sourceKind, preparedArtifact: record.spec.envelope.result.preparedArtifact,
+    pdfLayout: record.spec.envelope.result.pdfLayout,
     extractedAt: record.spec.envelope.result.extractedAt,
     provenance: proposal.provenance };
 }
@@ -255,7 +259,7 @@ function validateEnvelope(input: unknown): PortableExtractionResultEnvelope {
   if (e.format !== portableExtractionResultFormat || e.version !== portableExtractionResultVersion) throw new Error("Unsupported portable extraction envelope format or version.");
   const source = obj(e.source, "source"); exact(source, ["ref"], "source", ["snapshotRef"]); safeReference(source.ref, "source.ref"); if (source.snapshotRef !== undefined) safeReference(source.snapshotRef, "source.snapshotRef");
   const r = obj(e.result, "result");
-  exact(r, ["proposals", "provider", "runId", "raw", "outcome", "extractedAt", "providerCalls", "totalTokensUsed"], "result", ["model", "warningClassifications", "partial", "providerFailures", "taskDigest", "exampleDigests", "pdfPageOffsets", "ocrDerived", "preparedArtifact", "preparedArtifactState"]);
+  exact(r, ["proposals", "provider", "runId", "raw", "outcome", "extractedAt", "providerCalls", "totalTokensUsed"], "result", ["model", "warningClassifications", "partial", "providerFailures", "taskDigest", "exampleDigests", "pdfPageOffsets", "pdfLayout", "ocrDerived", "preparedArtifact", "preparedArtifactState"]);
   stableIdentity(r.provider, "result.provider"); if (r.model !== undefined) stableIdentity(r.model, "result.model"); if (typeof r.runId !== "string" || !RUN_ID.test(r.runId)) throw new Error("result.runId is invalid."); wireNonEmpty(r.extractedAt, "result.extractedAt"); integer(r.providerCalls, "result.providerCalls"); integer(r.totalTokensUsed, "result.totalTokensUsed");
   const raw = obj(r.raw, "result.raw"); exact(raw, [], "result.raw", ["tokensUsed"]); if (raw.tokensUsed !== undefined) integer(raw.tokensUsed, "result.raw.tokensUsed");
   validateOutcome(r.outcome, r.partial);
@@ -265,10 +269,15 @@ function validateEnvelope(input: unknown): PortableExtractionResultEnvelope {
   if (r.pdfPageOffsets !== undefined) { const offsets = array(r.pdfPageOffsets, "pdfPageOffsets"); offsets.forEach((v) => integer(v, "pageOffset")); if (offsets.some((v, i) => i > 0 && (v as number) <= (offsets[i - 1] as number))) throw new Error("pdfPageOffsets must ascend strictly."); }
   if (r.ocrDerived !== undefined && r.ocrDerived !== true) throw new Error("result.ocrDerived must be true.");
   const artifact = r.preparedArtifact === undefined ? undefined : validateArtifact(r.preparedArtifact);
+  const pdfLayout = r.pdfLayout === undefined
+    ? undefined
+    : artifact === undefined
+      ? (() => { throw new Error("result.pdfLayout requires result.preparedArtifact."); })()
+      : validatePortablePdfLayout(r.pdfLayout, artifact.contentLength);
   const state = r.preparedArtifactState === undefined ? undefined : validateArtifactState(r.preparedArtifactState, artifact);
   if (source.snapshotRef !== undefined && artifact?.sourceSnapshotRef !== undefined && source.snapshotRef !== artifact.sourceSnapshotRef) throw new Error("Source snapshot identity mismatch.");
   const proposals = array(r.proposals, "result.proposals").map((p, i) => validateProposal(p, i, artifact?.contentLength));
-  return cloneJson({ ...e, source, result: { ...r, proposals, ...(artifact ? { preparedArtifact: artifact } : {}), ...(state ? { preparedArtifactState: state } : {}) } }) as PortableExtractionResultEnvelope;
+  return cloneJson({ ...e, source, result: { ...r, proposals, ...(pdfLayout ? { pdfLayout } : {}), ...(artifact ? { preparedArtifact: artifact } : {}), ...(state ? { preparedArtifactState: state } : {}) } }) as PortableExtractionResultEnvelope;
 }
 
 function validateProposal(input: unknown, index: number, contentLength?: number): PortableExtractionProposal {
