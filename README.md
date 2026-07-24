@@ -212,7 +212,9 @@ The [Consumer Integration Guide](docs/consumer-integration-guide.md) covers the 
 Portable extraction imports can also attach a source-linked, read-only inspector
 to the same workbench. It verifies resolved artifact identity before showing
 exact highlights, keeps unresolved material visibly non-grounded, and exports
-with source text and excerpts redacted by default. See
+with source text and excerpts redacted by default. Review queues and inspector
+candidates use bounded, searchable paging so large validated result sets remain
+navigable without changing canonical review events or exports. See
 [Extraction Envelope Import](docs/extraction-envelope-import.md#source-linked-inspection).
 
 

@@ -30,6 +30,11 @@ OCR-derived prepared text is labeled explicitly.
 
 Filters cover field, provider, model, attempt, optional producer-declared pass, explicit/inferred origin, and alignment across the full review set. The self-contained export is canonical, read-only JSON with prepared text and excerpts redacted by default. Hosts must opt in separately to either disclosure; unrestricted resolver failure text is neither accepted nor exported.
 
+Candidate rendering is bounded to 100 rows and highlights by default, with an
+optional page size capped at 500. Search, filters, previous/next paging, and
+arrow-key row navigation operate on the complete validated model without
+changing exports or ReviewItem identities.
+
 ## Consequences
 
 - Artifact unavailability, digest mismatch, length mismatch, and excerpt mismatch remain prominent non-grounded states.

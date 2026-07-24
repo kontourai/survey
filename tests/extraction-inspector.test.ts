@@ -52,6 +52,10 @@ describe("source-linked extraction inspector", () => {
     assert.equal(filterExtractionInspectorCandidates(model, { field: "alias", provider: "portable-fixture", model: "generic-model", attempt: model.candidates[0]!.attempt, pass: "primary", inferenceType: "inferred", alignment: "aligned" }).length, 1);
     assert.equal(filterExtractionInspectorCandidates(model, { inferenceType: "explicit" })[0]!.field, "title");
     assert.equal(filterExtractionInspectorCandidates(model, { pass: "adversarial" }).length, 2);
+    assert.deepEqual(
+      filterExtractionInspectorCandidates(model, { query: "alias" }).map(candidate => candidate.field),
+      ["alias", "alias"],
+    );
   });
 
   it("fails closed for unavailable, digest-mismatched, and excerpt-mismatched artifacts", async () => {

@@ -59,6 +59,7 @@ export {
   type ExtractionInspectorExportOptions,
   type ExtractionInspectorFilters,
   type ExtractionInspectorInput,
+  type ExtractionInspectorMountOptions,
   type ExtractionInspectorModel,
   type ExtractionInspectorSource,
   type ResolvedExtractionArtifact,
@@ -352,6 +353,32 @@ export interface PersistentReviewSessionEventStoreOptions {
 export interface MountReviewWorkbenchOptions {
   readonly eventStore?: ReviewSessionEventStore;
   readonly presentationAdapter?: ReviewPresentationAdapter;
+  /** Maximum review cards mounted at once. Defaults to 50 and is capped at 250. */
+  readonly pageSize?: number;
+}
+
+export type ReviewQueueDisposition =
+  | "all"
+  | "unresolved"
+  | "accepted"
+  | "kept"
+  | "rejected"
+  | "could-not-confirm";
+
+export interface ReviewQueueView {
+  readonly query: string;
+  readonly disposition: ReviewQueueDisposition;
+  readonly page: number;
+  readonly pageSize: number;
+}
+
+export interface ReviewQueueWindow {
+  readonly items: readonly ReviewItem[];
+  readonly totalMatching: number;
+  readonly page: number;
+  readonly pageCount: number;
+  readonly start: number;
+  readonly end: number;
 }
 
 export interface BrowserReviewWorkbenchConfig {
@@ -852,10 +879,17 @@ export function createPersistentReviewSessionEventStore(
 export function renderReviewWorkbenchHtml(
   state: ReviewWorkbenchState | ReviewQueueSessionState,
   _events?: readonly ReviewSessionEvent[],
-  options: { readonly presentationAdapter?: ReviewPresentationAdapter } = {},
+  options: {
+    readonly presentationAdapter?: ReviewPresentationAdapter;
+    readonly queueView?: Partial<ReviewQueueView>;
+  } = {},
 ): string {
   const session = queueSessionFromStartState(state);
-  return renderReviewQueueSessionHtml(session, options.presentationAdapter);
+  return renderReviewQueueSessionHtml(
+    session,
+    options.presentationAdapter,
+    normalizeReviewQueueView(options.queueView),
+  );
 }
 
 type FieldCardState = "review" | "accepted" | "kept" | "rejected" | "could-not-confirm";
@@ -884,6 +918,54 @@ function chipLabel(state: FieldCardState): string {
   }
 }
 
+const DEFAULT_REVIEW_QUEUE_PAGE_SIZE = 50;
+
+function normalizeReviewQueueView(view: Partial<ReviewQueueView> | undefined): ReviewQueueView {
+  const pageSize = Number.isSafeInteger(view?.pageSize) && Number(view?.pageSize) > 0
+    ? Math.min(Number(view?.pageSize), 250)
+    : DEFAULT_REVIEW_QUEUE_PAGE_SIZE;
+  return {
+    query: view?.query?.trim() ?? "",
+    disposition: view?.disposition ?? "all",
+    page: Number.isSafeInteger(view?.page) && Number(view?.page) >= 0 ? Number(view?.page) : 0,
+    pageSize,
+  };
+}
+
+export function buildReviewQueueWindow(
+  session: ReviewQueueSessionState,
+  view: Partial<ReviewQueueView> = {},
+): ReviewQueueWindow {
+  const normalized = normalizeReviewQueueView(view);
+  const query = normalized.query.toLocaleLowerCase();
+  const matching = session.items.filter((item) => {
+    const state = fieldCardState(item, session.decisionsByItemName[item.metadata.name]);
+    const dispositionMatches = normalized.disposition === "all"
+      || (normalized.disposition === "unresolved" ? state === "review" : state === normalized.disposition);
+    if (!dispositionMatches) return false;
+    if (!query) return true;
+    const producerDisplayName = item.metadata.producer?.displayName;
+    return [
+      item.metadata.name,
+      item.spec.target,
+      typeof producerDisplayName === "string" ? producerDisplayName : "",
+      ...item.spec.candidates.map((candidate) => formatValue(candidate.value)),
+    ].some((value) => value.toLocaleLowerCase().includes(query));
+  });
+  const pageCount = Math.max(1, Math.ceil(matching.length / normalized.pageSize));
+  const page = Math.min(normalized.page, pageCount - 1);
+  const start = page * normalized.pageSize;
+  const end = Math.min(start + normalized.pageSize, matching.length);
+  return {
+    items: matching.slice(start, end),
+    totalMatching: matching.length,
+    page,
+    pageCount,
+    start,
+    end,
+  };
+}
+
 function isEmptyValue(value: unknown): boolean {
   return value === undefined || value === null || value === "";
 }
@@ -894,6 +976,7 @@ const WARNING_SVG = "<svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=
 function renderReviewQueueSessionHtml(
   session: ReviewQueueSessionState,
   presentationAdapter: ReviewPresentationAdapter | undefined,
+  queueView: ReviewQueueView,
 ): string {
   const totalCount = session.items.length;
   const decidedCount = session.items.filter((item) => session.decisionsByItemName[item.metadata.name] !== undefined
@@ -902,6 +985,7 @@ function renderReviewQueueSessionHtml(
   const headerItem = session.items[0];
   const producerName = headerItem?.metadata.producer?.displayName;
   const headerTitle = typeof producerName === "string" && producerName.length > 0 ? producerName : "Review queue";
+  const window = buildReviewQueueWindow(session, queueView);
 
   return `
     <section class="workbench-shell review" data-testid="review-workbench-shell" aria-label="Survey review workbench">
@@ -921,12 +1005,44 @@ function renderReviewQueueSessionHtml(
           <button class="apply" type="button" data-testid="apply-button"${decidedCount === 0 ? " disabled" : ""}>Apply ${decidedCount} decision${decidedCount === 1 ? "" : "s"}</button>
         </div>
       </header>
+      <nav class="queue-controls" aria-label="Review queue navigation">
+        <label>
+          <span>Find fields</span>
+          <input type="search" data-testid="queue-search" value="${escapeHtml(queueView.query)}" placeholder="Field or value">
+        </label>
+        <label>
+          <span>Disposition</span>
+          <select data-testid="queue-disposition">${queueDispositionOptions(queueView.disposition)}</select>
+        </label>
+        <span class="queue-result-count" aria-live="polite">
+          ${window.totalMatching === 0 ? "No matching fields" : `${window.start + 1}–${window.end} of ${window.totalMatching}`}
+        </span>
+        <div class="queue-pager">
+          <button type="button" data-testid="queue-previous"${window.page === 0 ? " disabled" : ""}>Previous</button>
+          <span>Page ${window.page + 1} of ${window.pageCount}</span>
+          <button type="button" data-testid="queue-next"${window.page >= window.pageCount - 1 ? " disabled" : ""}>Next</button>
+        </div>
+      </nav>
       <div class="fields" data-testid="review-fields">
-        ${session.items.map((item) => renderFieldCard(item, session, presentationAdapter)).join("")}
+        ${window.items.map((item) => renderFieldCard(item, session, presentationAdapter)).join("")
+          || '<p class="queue-empty">No review fields match the current search and disposition.</p>'}
       </div>
       ${renderFooterTally(session)}
     </section>
   `;
+}
+
+function queueDispositionOptions(selected: ReviewQueueDisposition): string {
+  const options: ReadonlyArray<readonly [ReviewQueueDisposition, string]> = [
+    ["all", "All fields"],
+    ["unresolved", "Needs review"],
+    ["accepted", "Accepted"],
+    ["kept", "Kept current"],
+    ["rejected", "Flagged wrong"],
+    ["could-not-confirm", "Could not confirm"],
+  ];
+  return options.map(([value, label]) =>
+    `<option value="${value}"${selected === value ? " selected" : ""}>${label}</option>`).join("");
 }
 
 function renderFieldCard(
@@ -1475,6 +1591,7 @@ interface ReviewWorkbenchControllerBindings extends ReviewWorkbenchController {
   setDecision(itemName: string, decision: ReviewWorkbenchDecision, rawEditedValue?: string): void;
   clearDecision(itemName: string): void;
   updateReviewerNote(itemName: string, note: string): void;
+  updateQueueView(update: Partial<ReviewQueueView>): void;
 }
 
 function createReviewWorkbenchController(
@@ -1486,6 +1603,7 @@ function createReviewWorkbenchController(
   const eventStore = options.eventStore ?? browserReviewSessionEventStore();
   let events = eventStore?.load(baseSession) ?? [];
   let session = events.length > 0 ? replayReviewSessionEvents(baseSession, events) : baseSession;
+  let queueView = normalizeReviewQueueView({ pageSize: options.pageSize });
 
   const persistEvents = (): void => {
     eventStore?.save(session, events);
@@ -1603,10 +1721,13 @@ function createReviewWorkbenchController(
   const controller: ReviewWorkbenchControllerBindings = {
     currentSession: () => session,
     currentSessionExport: () => buildReviewWorkbenchSessionExport(session, events),
-    renderCurrentState: () => renderCurrentState(root, session, controller, options.presentationAdapter),
+    renderCurrentState: () => renderCurrentState(root, session, controller, options.presentationAdapter, queueView),
     setDecision,
     clearDecision,
     updateReviewerNote,
+    updateQueueView: (update) => {
+      queueView = normalizeReviewQueueView({ ...queueView, ...update });
+    },
   };
 
   return controller;
@@ -1630,12 +1751,45 @@ function renderCurrentState(
   session: ReviewQueueSessionState,
   controller: ReviewWorkbenchControllerBindings,
   presentationAdapter?: ReviewPresentationAdapter,
+  queueView?: ReviewQueueView,
 ): void {
-  root.innerHTML = renderReviewWorkbenchHtml(session, undefined, { presentationAdapter });
+  root.innerHTML = renderReviewWorkbenchHtml(session, undefined, { presentationAdapter, queueView });
   bindFieldCardInteractions(root, controller);
   bindApplyButton(root, controller);
   bindClampToggles(root);
   bindHistoryExpanders(root);
+  bindQueueControls(root, controller, queueView ?? normalizeReviewQueueView(undefined));
+}
+
+function bindQueueControls(
+  root: HTMLElement,
+  controller: ReviewWorkbenchControllerBindings,
+  queueView: ReviewQueueView,
+): void {
+  const search = root.querySelector<HTMLInputElement>('[data-testid="queue-search"]');
+  search?.addEventListener("input", () => {
+    const query = search.value;
+    controller.updateQueueView({ query, page: 0 });
+    controller.renderCurrentState();
+    const nextSearch = root.querySelector<HTMLInputElement>('[data-testid="queue-search"]');
+    nextSearch?.focus();
+    nextSearch?.setSelectionRange(query.length, query.length);
+  });
+  root.querySelector<HTMLSelectElement>('[data-testid="queue-disposition"]')?.addEventListener("change", (event) => {
+    controller.updateQueueView({
+      disposition: (event.currentTarget as HTMLSelectElement).value as ReviewQueueDisposition,
+      page: 0,
+    });
+    controller.renderCurrentState();
+  });
+  root.querySelector<HTMLButtonElement>('[data-testid="queue-previous"]')?.addEventListener("click", () => {
+    controller.updateQueueView({ page: Math.max(0, queueView.page - 1) });
+    controller.renderCurrentState();
+  });
+  root.querySelector<HTMLButtonElement>('[data-testid="queue-next"]')?.addEventListener("click", () => {
+    controller.updateQueueView({ page: queueView.page + 1 });
+    controller.renderCurrentState();
+  });
 }
 
 function queueSessionFromStartState(

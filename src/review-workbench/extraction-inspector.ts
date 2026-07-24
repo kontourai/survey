@@ -65,11 +65,17 @@ export interface ExtractionInspectorModel {
 export interface ExtractionInspectorFilters {
   field?: string; provider?: string; model?: string; attempt?: string; pass?: string;
   inferenceType?: "explicit" | "inferred"; alignment?: ExtractionAlignmentState;
+  query?: string;
 }
 
 export interface ExtractionInspectorExportOptions {
   includePreparedText?: boolean;
   includeExcerpts?: boolean;
+}
+
+export interface ExtractionInspectorMountOptions {
+  /** Maximum candidate rows and source highlights mounted at once. Defaults to 100 and is capped at 500. */
+  pageSize?: number;
 }
 
 /**
@@ -229,7 +235,16 @@ function resolvePdfPage(offsets: number[] | undefined, start: number): number | 
 }
 
 export function filterExtractionInspectorCandidates(model: ExtractionInspectorModel, filters: ExtractionInspectorFilters): ExtractionInspectorCandidate[] {
-  return model.candidates.filter((c) => (!filters.field || c.field === filters.field) && (!filters.provider || c.provider === filters.provider) && (!filters.model || c.model === filters.model) && (!filters.attempt || c.attempt === filters.attempt) && (!filters.pass || c.pass === filters.pass) && (!filters.inferenceType || c.inferenceType === filters.inferenceType) && (!filters.alignment || c.alignment === filters.alignment));
+  const query = filters.query?.trim().toLocaleLowerCase();
+  return model.candidates.filter((c) => (!filters.field || c.field === filters.field)
+    && (!filters.provider || c.provider === filters.provider)
+    && (!filters.model || c.model === filters.model)
+    && (!filters.attempt || c.attempt === filters.attempt)
+    && (!filters.pass || c.pass === filters.pass)
+    && (!filters.inferenceType || c.inferenceType === filters.inferenceType)
+    && (!filters.alignment || c.alignment === filters.alignment)
+    && (!query || [c.field, c.excerpt, c.reviewItemName, c.provider, c.model ?? "", c.pass ?? ""]
+      .some(value => value.toLocaleLowerCase().includes(query))));
 }
 
 export function exportExtractionInspector(model: ExtractionInspectorModel, options: ExtractionInspectorExportOptions = {}): string {
@@ -240,23 +255,44 @@ export function exportExtractionInspector(model: ExtractionInspectorModel, optio
   } });
 }
 
-export function mountExtractionInspector(container: HTMLElement, model: ExtractionInspectorModel): () => void {
+export function mountExtractionInspector(
+  container: HTMLElement,
+  model: ExtractionInspectorModel,
+  options: ExtractionInspectorMountOptions = {},
+): () => void {
+  const pageSize = Number.isSafeInteger(options.pageSize) && Number(options.pageSize) > 0
+    ? Math.min(Number(options.pageSize), 500)
+    : 100;
+  let page = 0;
   const root = document.createElement("section"); root.className = "extraction-inspector"; root.setAttribute("aria-label", "Source-linked extraction inspector");
-  const options = (values: Array<string | undefined>) => [...new Set(values.filter((v): v is string => Boolean(v)))].map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
-  root.innerHTML = `<div class="inspector-heading"><div><p class="eyebrow">Source inspector</p><h2>Extraction evidence</h2></div><div class="inspector-postures" aria-live="polite"></div></div><div class="inspector-filters" aria-label="Extraction filters">${filterSelect("field", "Field", options(model.candidates.map(c => c.field)))}${filterSelect("provider", "Provider", options(model.candidates.map(c => c.provider)))}${filterSelect("model", "Model", options(model.candidates.map(c => c.model)))}${filterSelect("attempt", "Attempt", options(model.candidates.map(c => c.attempt)))}${filterSelect("pass", "Pass", options(model.candidates.map(c => c.pass)))}${filterSelect("inferenceType", "Type origin", '<option value="explicit">explicit</option><option value="inferred">inferred</option>')}${filterSelect("alignment", "Alignment", options(model.candidates.map(c => c.alignment)))}</div><div class="inspector-layout"><ol class="inspector-candidates" aria-label="Extraction candidates"></ol><div class="inspector-sources"></div></div>`;
+  const choiceOptions = (values: Array<string | undefined>) => [...new Set(values.filter((v): v is string => Boolean(v)))].map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+  root.innerHTML = `<div class="inspector-heading"><div><p class="eyebrow">Source inspector</p><h2>Extraction evidence</h2></div><div class="inspector-postures" aria-live="polite"></div></div><div class="inspector-filters" aria-label="Extraction filters"><label>Find candidates<input type="search" data-filter="query" placeholder="Field or excerpt"></label>${filterSelect("field", "Field", choiceOptions(model.candidates.map(c => c.field)))}${filterSelect("provider", "Provider", choiceOptions(model.candidates.map(c => c.provider)))}${filterSelect("model", "Model", choiceOptions(model.candidates.map(c => c.model)))}${filterSelect("attempt", "Attempt", choiceOptions(model.candidates.map(c => c.attempt)))}${filterSelect("pass", "Pass", choiceOptions(model.candidates.map(c => c.pass)))}${filterSelect("inferenceType", "Type origin", '<option value="explicit">explicit</option><option value="inferred">inferred</option>')}${filterSelect("alignment", "Alignment", choiceOptions(model.candidates.map(c => c.alignment)))}</div><nav class="inspector-pager" aria-label="Extraction candidate navigation"><span class="inspector-result-count" aria-live="polite"></span><button type="button" data-page="previous">Previous</button><span class="inspector-page"></span><button type="button" data-page="next">Next</button></nav><div class="inspector-layout"><ol class="inspector-candidates" aria-label="Extraction candidates"></ol><div class="inspector-sources"></div></div>`;
   container.appendChild(root);
   const list = root.querySelector("ol")!, sourcesRoot = root.querySelector<HTMLElement>(".inspector-sources")!, postures = root.querySelector<HTMLElement>(".inspector-postures")!;
+  const resultCount = root.querySelector<HTMLElement>(".inspector-result-count")!, pageLabel = root.querySelector<HTMLElement>(".inspector-page")!;
+  const previous = root.querySelector<HTMLButtonElement>('[data-page="previous"]')!, next = root.querySelector<HTMLButtonElement>('[data-page="next"]')!;
   const filters: ExtractionInspectorFilters = {};
   const render = () => {
-    const visible = filterExtractionInspectorCandidates(model, filters);
+    const matching = filterExtractionInspectorCandidates(model, filters);
+    const pageCount = Math.max(1, Math.ceil(matching.length / pageSize));
+    page = Math.min(page, pageCount - 1);
+    const start = page * pageSize;
+    const visible = matching.slice(start, start + pageSize);
     list.innerHTML = visible.map(c => `<li><button type="button" class="inspector-candidate" id="candidate-${safeId(c.id)}" data-candidate-id="${escapeHtml(c.id)}" aria-controls="highlight-${safeId(c.id)}"><strong>${escapeHtml(c.field)}</strong><span>${escapeHtml(c.provider)}${c.model ? ` / ${escapeHtml(c.model)}` : ""}</span><span>${escapeHtml(c.inferenceType)} ${escapeHtml(c.valueType)} · ${escapeHtml(c.alignment)}</span>${formatContext(c)}</button></li>`).join("") || "<li>No candidates match these filters.</li>";
+    resultCount.textContent = matching.length === 0 ? "No matching candidates" : `${start + 1}–${Math.min(start + pageSize, matching.length)} of ${matching.length}`;
+    pageLabel.textContent = `Page ${page + 1} of ${pageCount}`;
+    previous.disabled = page === 0;
+    next.disabled = page >= pageCount - 1;
     postures.innerHTML = model.sources.map(s => `<div class="inspector-posture ${s.alignment}" role="status"><strong>${escapeHtml(s.importName)}: ${escapeHtml(s.alignment)}</strong><span>${escapeHtml(s.message)}</span></div>`).join("");
     sourcesRoot.innerHTML = model.sources.map(s => { const candidates = visible.filter(c => c.sourceKey === s.key); return `<div class="inspector-source" aria-label="Prepared source for ${escapeHtml(s.importName)}"><h3>${escapeHtml(s.importName)}</h3><pre tabindex="0">${s.artifactText === undefined ? `<span class="source-unavailable">${escapeHtml(s.message)}</span>` : renderSource(s.artifactText, candidates)}</pre></div>`; }).join("");
   };
-  root.querySelectorAll<HTMLSelectElement>("select").forEach(select => select.addEventListener("change", event => { event.stopPropagation(); const key = select.dataset.filter as keyof ExtractionInspectorFilters; if (select.value) (filters as Record<string,string>)[key] = select.value; else delete (filters as Record<string,string>)[key]; render(); }));
+  root.querySelectorAll<HTMLSelectElement>("select").forEach(select => select.addEventListener("change", event => { event.stopPropagation(); const key = select.dataset.filter as keyof ExtractionInspectorFilters; if (select.value) (filters as Record<string,string>)[key] = select.value; else delete (filters as Record<string,string>)[key]; page = 0; render(); }));
+  root.querySelector<HTMLInputElement>('input[data-filter="query"]')?.addEventListener("input", event => { event.stopPropagation(); const input = event.currentTarget as HTMLInputElement; if (input.value) filters.query = input.value; else delete filters.query; page = 0; render(); });
+  previous.addEventListener("click", () => { page = Math.max(0, page - 1); render(); list.querySelector<HTMLButtonElement>("button")?.focus(); });
+  next.addEventListener("click", () => { page += 1; render(); list.querySelector<HTMLButtonElement>("button")?.focus(); });
   const activateCandidate = (id: string) => { const candidate = model.candidates.find(c => c.id === id); if (!candidate) return; root.dispatchEvent(new CustomEvent("survey-extraction-candidate-activate", { bubbles: true, composed: true, detail: { candidateId: id, reviewItemName: candidate.reviewItemName } })); };
   root.addEventListener("click", event => { const candidate = (event.target as Element).closest<HTMLButtonElement>("button[data-candidate-id]"); if (candidate) { event.preventDefault(); event.stopPropagation(); activateCandidate(candidate.dataset.candidateId!); return; } const highlight = (event.target as Element).closest<HTMLButtonElement>("button[data-highlight-candidate-id]"); if (highlight) { event.preventDefault(); event.stopPropagation(); root.querySelector<HTMLElement>(`#candidate-${CSS.escape(safeId(highlight.dataset.highlightCandidateId!))}`)?.focus(); } });
-  root.addEventListener("keydown", event => { const button = (event.target as Element).closest<HTMLButtonElement>("button[data-candidate-id]"); if (button && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); event.stopPropagation(); activateCandidate(button.dataset.candidateId!); } });
+  root.addEventListener("keydown", event => { const button = (event.target as Element).closest<HTMLButtonElement>("button[data-candidate-id]"); if (!button) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); activateCandidate(button.dataset.candidateId!); return; } if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); const buttons = [...list.querySelectorAll<HTMLButtonElement>("button[data-candidate-id]")]; const index = buttons.indexOf(button); buttons[event.key === "ArrowDown" ? Math.min(index + 1, buttons.length - 1) : Math.max(index - 1, 0)]?.focus(); } });
   render(); return () => root.remove();
 }
 
