@@ -281,6 +281,9 @@ export function mountExtractionInspector(
     list.innerHTML = visible.map(c => `<li><button type="button" class="inspector-candidate" id="candidate-${safeId(c.id)}" data-candidate-id="${escapeHtml(c.id)}" aria-controls="highlight-${safeId(c.id)}"><strong>${escapeHtml(c.field)}</strong><span>${escapeHtml(c.provider)}${c.model ? ` / ${escapeHtml(c.model)}` : ""}</span><span>${escapeHtml(c.inferenceType)} ${escapeHtml(c.valueType)} · ${escapeHtml(c.alignment)}</span>${formatContext(c)}</button></li>`).join("") || "<li>No candidates match these filters.</li>";
     resultCount.textContent = matching.length === 0 ? "No matching candidates" : `${start + 1}–${Math.min(start + pageSize, matching.length)} of ${matching.length}`;
     pageLabel.textContent = `Page ${page + 1} of ${pageCount}`;
+    pageLabel.hidden = pageCount === 1;
+    previous.hidden = pageCount === 1;
+    next.hidden = pageCount === 1;
     previous.disabled = page === 0;
     next.disabled = page >= pageCount - 1;
     postures.innerHTML = model.sources.map(s => `<div class="inspector-posture ${s.alignment}" role="status"><strong>${escapeHtml(s.importName)}: ${escapeHtml(s.alignment)}</strong><span>${escapeHtml(s.message)}</span></div>`).join("");

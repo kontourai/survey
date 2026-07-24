@@ -266,6 +266,7 @@ test("bounds, searches, and pages a thousand-field review queue", async ({ page 
 
   await expect(page.getByTestId("review-field")).toHaveCount(50);
   await expect(page.getByText("1–50 of 1005")).toBeVisible();
+  await expect(page.getByTestId("queue-next")).toBeVisible();
   await page.getByTestId("queue-next").click();
   await expect(page.getByText("51–100 of 1005")).toBeVisible();
   await page.getByTestId("queue-search").fill("needle");
@@ -283,6 +284,9 @@ test("source inspector supports candidate-to-highlight keyboard navigation and p
     el.extractionInspector = { importResult, artifact: { status: "available", text: "Alpha Beta Alpha", actualDigest } };
   }, { importResult: inspectorResult, actualDigest: INSPECTOR_DIGEST });
   await expect(page.locator(".extraction-inspector")).toBeVisible();
+  await expect(page.getByTestId("queue-next")).toHaveCount(0);
+  await expect(page.locator('.inspector-pager button[data-page="previous"]')).toBeHidden();
+  await expect(page.locator('.inspector-pager button[data-page="next"]')).toBeHidden();
   const candidate = page.getByRole("button", { name: /title browser-provider/ });
   await candidate.focus();
   await candidate.press("Enter");

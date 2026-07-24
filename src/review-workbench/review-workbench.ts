@@ -1017,11 +1017,11 @@ function renderReviewQueueSessionHtml(
         <span class="queue-result-count" aria-live="polite">
           ${window.totalMatching === 0 ? "No matching fields" : `${window.start + 1}–${window.end} of ${window.totalMatching}`}
         </span>
-        <div class="queue-pager">
+        ${window.pageCount > 1 ? `<div class="queue-pager">
           <button type="button" data-testid="queue-previous"${window.page === 0 ? " disabled" : ""}>Previous</button>
           <span>Page ${window.page + 1} of ${window.pageCount}</span>
           <button type="button" data-testid="queue-next"${window.page >= window.pageCount - 1 ? " disabled" : ""}>Next</button>
-        </div>
+        </div>` : ""}
       </nav>
       <div class="fields" data-testid="review-fields">
         ${window.items.map((item) => renderFieldCard(item, session, presentationAdapter)).join("")
