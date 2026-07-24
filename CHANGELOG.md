@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.1](https://github.com/kontourai/survey/compare/v2.2.0...v2.2.1) (2026-07-24)
+
+
+### Fixes
+
+* hide inert single-page navigation ([#197](https://github.com/kontourai/survey/issues/197)) ([6f6c0a2](https://github.com/kontourai/survey/commit/6f6c0a24d63ddd72e59e856a385b38b45e970d5e))
+
 ## [2.2.0](https://github.com/kontourai/survey/compare/v2.1.0...v2.2.0) (2026-07-24)
 
 
