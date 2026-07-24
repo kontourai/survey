@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.1.0](https://github.com/kontourai/survey/compare/v2.0.0...v2.1.0) (2026-07-24)
+
+
+### Features
+
+* **inspector:** preserve PDF layout provenance ([#190](https://github.com/kontourai/survey/issues/190)) ([13620b2](https://github.com/kontourai/survey/commit/13620b2c80f8f84d78f59da8e5875bf2a1baa09f))
+
+
+### Fixes
+
+* scan untracked public content ([#184](https://github.com/kontourai/survey/issues/184)) ([ee82ad1](https://github.com/kontourai/survey/commit/ee82ad1bbeffe847b2721f011f97c2c5280a728d))
+* **test:** isolate foreign Git fixture environment ([#192](https://github.com/kontourai/survey/issues/192)) ([7e1f432](https://github.com/kontourai/survey/commit/7e1f4325d9329e15f7b9de7fe36e3cabbac60a50))
+
 ## [2.0.0](https://github.com/kontourai/survey/compare/v1.19.0...v2.0.0) (2026-07-23)
 
 
