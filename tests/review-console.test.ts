@@ -10,6 +10,8 @@ import {
   defaultReviewSessionName,
   type ReviewQueueSessionState,
 } from "../src/review-workbench/review-workbench.js";
+import { reviewWorkbenchQueueExamples } from "../src/review-workbench/review-workbench-data.js";
+import type { ReviewItem } from "../src/review-resource.js";
 
 const SAMPLE_SESSION = "example-data/mcp-review-session.json";
 
@@ -282,5 +284,34 @@ describe("survey-review-console server", () => {
     assert.equal(res.status, 200);
     const body = await res.json() as Record<string, unknown>;
     assert.equal(body.ok, true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: shipped session fixture stays bound to the canonical examples
+// ---------------------------------------------------------------------------
+
+describe("bundled example session fixture", () => {
+  test("snapshot items match the canonical review workbench fixtures", async () => {
+    const raw = await readFile(SAMPLE_SESSION, "utf8");
+    const parsed = JSON.parse(raw) as {
+      session: { spec: { reviewItemNames: string[] } };
+      snapshot: { items: ReviewItem[] };
+    };
+
+    const expected = parsed.session.spec.reviewItemNames.map((name) => {
+      const item = reviewWorkbenchQueueExamples.find((entry) => entry.metadata.name === name);
+      assert.ok(item, `Missing canonical fixture for ${name}`);
+      return item;
+    });
+
+    // The session file is the artifact the console (and every marketing
+    // capture) actually renders. Copying it by hand let the fixtures drift:
+    // its evidence excerpts stayed bound to an unrelated field. Keep it a
+    // faithful serialization of the canonical fixtures instead.
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(parsed.snapshot.items)),
+      JSON.parse(JSON.stringify(expected)),
+    );
   });
 });

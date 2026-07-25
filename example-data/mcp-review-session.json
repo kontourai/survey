@@ -61,8 +61,8 @@
               },
               "locator": {
                 "scheme": "html",
-                "locator": "html:field=availabilityStatus",
-                "excerpt": "Availability is open for the example program."
+                "locator": "html:field=hours",
+                "excerpt": "Program hours: Weekdays 9am-5pm. Closed weekends and public holidays."
               },
               "extraction": {
                 "extractionId": "public-directory-hours:extraction:current",
@@ -75,7 +75,7 @@
                 "claimId": "public-field.entity-123.hours.current",
                 "subjectType": "public-record.entity",
                 "subjectId": "entity-123",
-                "surface": "public-record.profile",
+                "facet": "public-record.profile",
                 "claimType": "public-data.field",
                 "fieldOrBehavior": "hours",
                 "impactLevel": "medium",
@@ -92,7 +92,7 @@
                 "sourceAuthority": {
                   "authorityClass": "public-directory-listing",
                   "declaredBy": "Example Program public directory",
-                  "scope": "availabilityStatus field on entity-123"
+                  "scope": "hours field on entity-123"
                 }
               }
             },
@@ -111,21 +111,22 @@
               },
               "locator": {
                 "scheme": "html",
-                "locator": "html:field=availabilityStatus",
-                "excerpt": "Join the waitlist for this listing."
+                "locator": "html:field=hours",
+                "excerpt": "Extended schedule for the fall term — program hours are now Weekdays 8am-6pm."
               },
               "extraction": {
                 "extractionId": "public-directory-hours:extraction:proposed",
                 "target": "hours",
                 "confidence": 0.82,
                 "extractor": "example-crawl",
+                "model": "example-extraction-model-2026-05",
                 "extractedAt": "2026-05-31T15:00:00.000Z"
               },
               "claimTarget": {
                 "claimId": "public-field.entity-123.hours.proposed",
                 "subjectType": "public-record.entity",
                 "subjectId": "entity-123",
-                "surface": "public-record.profile",
+                "facet": "public-record.profile",
                 "claimType": "public-data.field-candidate",
                 "fieldOrBehavior": "hours",
                 "impactLevel": "medium",
@@ -139,12 +140,12 @@
                 "claimId": "public-field.entity-123.hours.proposed"
               },
               "producer": {
-                "proposalId": "proposal-456",
-                "oldValue": "AVAILABLE",
+                "proposalId": "proposal-451",
+                "oldValue": "Weekdays 9am-5pm",
                 "sourceAuthority": {
                   "authorityClass": "public-directory-listing",
                   "declaredBy": "Example Program public directory crawler",
-                  "scope": "availabilityStatus field on entity-123"
+                  "scope": "hours field on entity-123"
                 }
               }
             }
@@ -195,8 +196,8 @@
               },
               "locator": {
                 "scheme": "html",
-                "locator": "html:field=availabilityStatus",
-                "excerpt": "Availability is open for the example program."
+                "locator": "html:field=phoneNumber",
+                "excerpt": "Questions? Call the main office at +1-555-0100."
               },
               "extraction": {
                 "extractionId": "public-directory-phone:extraction:current",
@@ -209,7 +210,7 @@
                 "claimId": "public-field.entity-123.phoneNumber.current",
                 "subjectType": "public-record.entity",
                 "subjectId": "entity-123",
-                "surface": "public-record.profile",
+                "facet": "public-record.profile",
                 "claimType": "public-data.field",
                 "fieldOrBehavior": "phoneNumber",
                 "impactLevel": "medium",
@@ -226,7 +227,7 @@
                 "sourceAuthority": {
                   "authorityClass": "public-directory-listing",
                   "declaredBy": "Example Program public directory",
-                  "scope": "availabilityStatus field on entity-123"
+                  "scope": "phoneNumber field on entity-123"
                 }
               }
             },
@@ -245,21 +246,22 @@
               },
               "locator": {
                 "scheme": "html",
-                "locator": "html:field=availabilityStatus",
-                "excerpt": "Join the waitlist for this listing."
+                "locator": "html:field=phoneNumber",
+                "excerpt": "Our enrollment line has moved. Call +1-555-0199 to reach the office."
               },
               "extraction": {
                 "extractionId": "public-directory-phone:extraction:proposed",
                 "target": "phoneNumber",
                 "confidence": 0.82,
                 "extractor": "example-crawl",
+                "model": "example-extraction-model-2026-05",
                 "extractedAt": "2026-05-31T15:00:00.000Z"
               },
               "claimTarget": {
                 "claimId": "public-field.entity-123.phoneNumber.proposed",
                 "subjectType": "public-record.entity",
                 "subjectId": "entity-123",
-                "surface": "public-record.profile",
+                "facet": "public-record.profile",
                 "claimType": "public-data.field-candidate",
                 "fieldOrBehavior": "phoneNumber",
                 "impactLevel": "medium",
@@ -273,12 +275,12 @@
                 "claimId": "public-field.entity-123.phoneNumber.proposed"
               },
               "producer": {
-                "proposalId": "proposal-456",
-                "oldValue": "AVAILABLE",
+                "proposalId": "proposal-452",
+                "oldValue": "+1-555-0100",
                 "sourceAuthority": {
                   "authorityClass": "public-directory-listing",
                   "declaredBy": "Example Program public directory crawler",
-                  "scope": "availabilityStatus field on entity-123"
+                  "scope": "phoneNumber field on entity-123"
                 }
               }
             }
@@ -343,7 +345,7 @@
                 "claimId": "public-field.entity-123.availability-status.current",
                 "subjectType": "public-record.entity",
                 "subjectId": "entity-123",
-                "surface": "public-record.profile",
+                "facet": "public-record.profile",
                 "claimType": "public-data.field",
                 "fieldOrBehavior": "availabilityStatus",
                 "impactLevel": "medium",
@@ -388,13 +390,14 @@
                 "target": "availabilityStatus",
                 "confidence": 0.82,
                 "extractor": "example-crawl",
+                "model": "example-extraction-model-2026-05",
                 "extractedAt": "2026-05-31T15:00:00.000Z"
               },
               "claimTarget": {
                 "claimId": "public-field.entity-123.availability-status.proposal-456",
                 "subjectType": "public-record.entity",
                 "subjectId": "entity-123",
-                "surface": "public-record.profile",
+                "facet": "public-record.profile",
                 "claimType": "public-data.field-candidate",
                 "fieldOrBehavior": "availabilityStatus",
                 "impactLevel": "medium",
@@ -459,8 +462,8 @@
               },
               "locator": {
                 "scheme": "html",
-                "locator": "html:field=availabilityStatus",
-                "excerpt": "Availability is open for the example program."
+                "locator": "html:field=streetAddress",
+                "excerpt": "Find us at 100 Main Street, Example City."
               },
               "extraction": {
                 "extractionId": "public-directory-address:extraction:current",
@@ -473,7 +476,7 @@
                 "claimId": "public-field.entity-123.streetAddress.current",
                 "subjectType": "public-record.entity",
                 "subjectId": "entity-123",
-                "surface": "public-record.profile",
+                "facet": "public-record.profile",
                 "claimType": "public-data.field",
                 "fieldOrBehavior": "streetAddress",
                 "impactLevel": "medium",
@@ -490,7 +493,7 @@
                 "sourceAuthority": {
                   "authorityClass": "public-directory-listing",
                   "declaredBy": "Example Program public directory",
-                  "scope": "availabilityStatus field on entity-123"
+                  "scope": "streetAddress field on entity-123"
                 }
               }
             },
@@ -509,21 +512,22 @@
               },
               "locator": {
                 "scheme": "html",
-                "locator": "html:field=availabilityStatus",
-                "excerpt": "Join the waitlist for this listing."
+                "locator": "html:field=streetAddress",
+                "excerpt": "We have moved one door down to 102 Main Street, Example City."
               },
               "extraction": {
                 "extractionId": "public-directory-address:extraction:proposed",
                 "target": "streetAddress",
                 "confidence": 0.82,
                 "extractor": "example-crawl",
+                "model": "example-extraction-model-2026-05",
                 "extractedAt": "2026-05-31T15:00:00.000Z"
               },
               "claimTarget": {
                 "claimId": "public-field.entity-123.streetAddress.proposed",
                 "subjectType": "public-record.entity",
                 "subjectId": "entity-123",
-                "surface": "public-record.profile",
+                "facet": "public-record.profile",
                 "claimType": "public-data.field-candidate",
                 "fieldOrBehavior": "streetAddress",
                 "impactLevel": "medium",
@@ -537,12 +541,12 @@
                 "claimId": "public-field.entity-123.streetAddress.proposed"
               },
               "producer": {
-                "proposalId": "proposal-456",
-                "oldValue": "AVAILABLE",
+                "proposalId": "proposal-453",
+                "oldValue": "100 Main Street",
                 "sourceAuthority": {
                   "authorityClass": "public-directory-listing",
                   "declaredBy": "Example Program public directory crawler",
-                  "scope": "availabilityStatus field on entity-123"
+                  "scope": "streetAddress field on entity-123"
                 }
               }
             }
@@ -593,8 +597,8 @@
               },
               "locator": {
                 "scheme": "html",
-                "locator": "html:field=availabilityStatus",
-                "excerpt": "Availability is open for the example program."
+                "locator": "html:field=licenseStatus",
+                "excerpt": "Operating license status: ACTIVE (renewed 2025-06-01)."
               },
               "extraction": {
                 "extractionId": "public-directory-license:extraction:current",
@@ -607,7 +611,7 @@
                 "claimId": "public-field.entity-123.licenseStatus.current",
                 "subjectType": "public-record.entity",
                 "subjectId": "entity-123",
-                "surface": "public-record.profile",
+                "facet": "public-record.profile",
                 "claimType": "public-data.field",
                 "fieldOrBehavior": "licenseStatus",
                 "impactLevel": "medium",
@@ -624,7 +628,7 @@
                 "sourceAuthority": {
                   "authorityClass": "public-directory-listing",
                   "declaredBy": "Example Program public directory",
-                  "scope": "availabilityStatus field on entity-123"
+                  "scope": "licenseStatus field on entity-123"
                 }
               }
             },
@@ -643,21 +647,22 @@
               },
               "locator": {
                 "scheme": "html",
-                "locator": "html:field=availabilityStatus",
-                "excerpt": "Join the waitlist for this listing."
+                "locator": "html:field=licenseStatus",
+                "excerpt": "Operating license status: EXPIRED as of 2026-05-31. Renewal not yet filed."
               },
               "extraction": {
                 "extractionId": "public-directory-license:extraction:proposed",
                 "target": "licenseStatus",
                 "confidence": 0.82,
                 "extractor": "example-crawl",
+                "model": "example-extraction-model-2026-05",
                 "extractedAt": "2026-05-31T15:00:00.000Z"
               },
               "claimTarget": {
                 "claimId": "public-field.entity-123.licenseStatus.proposed",
                 "subjectType": "public-record.entity",
                 "subjectId": "entity-123",
-                "surface": "public-record.profile",
+                "facet": "public-record.profile",
                 "claimType": "public-data.field-candidate",
                 "fieldOrBehavior": "licenseStatus",
                 "impactLevel": "medium",
@@ -671,12 +676,12 @@
                 "claimId": "public-field.entity-123.licenseStatus.proposed"
               },
               "producer": {
-                "proposalId": "proposal-456",
-                "oldValue": "AVAILABLE",
+                "proposalId": "proposal-454",
+                "oldValue": "ACTIVE",
                 "sourceAuthority": {
                   "authorityClass": "public-directory-listing",
                   "declaredBy": "Example Program public directory crawler",
-                  "scope": "availabilityStatus field on entity-123"
+                  "scope": "licenseStatus field on entity-123"
                 }
               }
             }
@@ -752,7 +757,7 @@
                 "claimId": "regulated-rule.example-jurisdiction.2026.standard-threshold.current",
                 "subjectType": "regulated-rule-source",
                 "subjectId": "example-jurisdiction:2026:standardThreshold",
-                "surface": "regulated.rules",
+                "facet": "regulated.rules",
                 "claimType": "regulated.rule-source-value",
                 "fieldOrBehavior": "standardThreshold",
                 "impactLevel": "high",
@@ -800,7 +805,7 @@
                 "claimId": "regulated-rule.example-jurisdiction.2026.standard-threshold.proposed",
                 "subjectType": "regulated-rule-source",
                 "subjectId": "example-jurisdiction:2026:standardThreshold",
-                "surface": "regulated.rules",
+                "facet": "regulated.rules",
                 "claimType": "regulated.rule-source-value",
                 "fieldOrBehavior": "standardThreshold",
                 "impactLevel": "high",
