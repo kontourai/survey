@@ -45,6 +45,28 @@ test("console page: workbench renders the review queue", async ({ page }) => {
   expect(consoleErrors).toEqual([]);
 });
 
+test("console page: the bundled embed stylesheet's design tokens resolve", async ({ page }) => {
+  // The console serves the packaged embed stylesheet into a .survey-workbench-embed
+  // mount, so it shipped with the same dead-token defect as any other embedder
+  // (kontourai/survey#202): tokens declared against themselves are a cycle, and
+  // every declaration that reads one is dropped at computed-value time.
+  await gotoConsole(page);
+
+  const tokens = await page.evaluate(() => {
+    const embed = document.querySelector<HTMLElement>(".survey-workbench-embed")!;
+    const computed = window.getComputedStyle(embed);
+    return {
+      brand: computed.getPropertyValue("--k-brand").trim(),
+      panel: computed.getPropertyValue("--k-panel").trim(),
+      backgroundColor: computed.backgroundColor,
+    };
+  });
+
+  expect(tokens.brand).not.toBe("");
+  expect(tokens.panel).not.toBe("");
+  expect(tokens.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+});
+
 test("console page: make a decision and assert it persists (reload shows resolved)", async ({ page }) => {
   const consoleErrors: string[] = [];
   page.on("console", (msg) => {

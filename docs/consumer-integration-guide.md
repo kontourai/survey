@@ -757,6 +757,37 @@ The same layout, class names, and interactions render — only the tokens
 change. This is the same technique the approved redesign mockup uses to prove
 a Survey-default palette and a distinct host palette from one shared markup.
 
+**Where the override has to go (light DOM vs. shadow DOM)**
+
+The two mount paths differ in one way that matters:
+
+- `<survey-review-workbench>` keeps its defaults on the shadow `:host`, so a
+  `--k-*` token set on the element **or any ancestor** — including a token layer
+  your page already publishes at `:root` — inherits through the shadow boundary
+  and wins.
+- `mountReviewWorkbench` into a plain `.survey-workbench-embed` container has no
+  shadow boundary. The bundled stylesheet declares literal token defaults on that
+  container, and a declaration on an element always beats a value inherited from
+  an ancestor — so an ancestor's `--k-*` does **not** reach the embed. Declare the
+  tokens on the embed element itself (a rule matching `.survey-workbench-embed`,
+  or an inline `style`), which is what the example above does.
+
+  To make a host token layer flow in unchanged, restate it once on the embed:
+
+  ```css
+  .survey-workbench-embed[class][class] {
+    --k-brand: var(--acme-brand);
+    --k-bg: var(--acme-bg);
+    /* …only the tokens you want to hand over */
+  }
+  ```
+
+  A plain `.survey-workbench-embed` rule (0,1,0) is enough when the embed carries
+  no preset class and no `data-theme`. The bundled preset rules go up to
+  `.survey-workbench-embed[data-theme="light"].theme-console` (0,3,0), so the
+  repeated `[class]` above lifts the host rule to (0,3,0) — and adding one more
+  `[class]` clears them outright regardless of stylesheet order.
+
 ## Mount The Workbench
 
 The workbench accepts a queue-shaped session. The producer owns how items are

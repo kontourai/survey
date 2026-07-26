@@ -2,6 +2,7 @@ import { canonicalJson } from "./canonical.js";
 import { assertReviewResolutionConsistency } from "../producer-discipline.js";
 import {
   candidateForDecision,
+  keepActionDecision,
   buildReviewSessionEvent,
   buildReviewSessionEvents,
   buildReviewSessionResource,
@@ -70,6 +71,7 @@ export {
   buildReviewSessionEvent,
   buildReviewSessionResource,
   candidateForDecision,
+  keepActionDecision,
   currentReviewItem,
   currentReviewWorkbenchState,
   defaultReviewSessionName,
@@ -908,11 +910,19 @@ function fieldCardState(item: ReviewItem, decision: ReviewWorkbenchDecision | un
   return "review";
 }
 
-function chipLabel(state: FieldCardState): string {
+/**
+ * The chip copy for a decided field. An item with no current value has nothing
+ * to "keep": both the kept and rejected outcomes leave it unset, and for such an
+ * item the recorded decision genuinely does not distinguish "leave unset" from
+ * "leave unset, and the suggestion was wrong" (both are `reject-proposed` — see
+ * {@link keepActionDecision}). Saying "Kept — flagged wrong" there would claim a
+ * distinction the record does not hold, so the chip states only what happened.
+ */
+function chipLabel(state: FieldCardState, hasCurrentValue: boolean): string {
   switch (state) {
     case "accepted": return "Accepted";
-    case "kept": return "Kept current";
-    case "rejected": return "Kept — flagged wrong";
+    case "kept": return hasCurrentValue ? "Kept current" : "Left unset";
+    case "rejected": return hasCurrentValue ? "Kept — flagged wrong" : "Left unset";
     case "could-not-confirm": return "Could not confirm";
     default: return "Needs review";
   }
@@ -1059,6 +1069,11 @@ function renderFieldCard(
   const hasCurrentValue = current !== undefined && !isEmptyValue(current.value);
   const kind = hasCurrentValue ? "Update" : "New";
   const keepLabel = hasCurrentValue ? "Keep current" : "Leave unset";
+  // Only render controls whose decision this item can actually record. Every
+  // decision resolves to a candidate role, so a control routed at a role the
+  // item does not carry cannot emit anything — it used to throw mid-click and
+  // leave the queue unrenderable (kontourai/survey#203).
+  const keepDecision = keepActionDecision(item, false);
   const editedValue = session.editedValuesByItemName?.[item.metadata.name];
   const proposedPresentationText = proposed
     ? buildReviewCandidatePresentation(item, proposed, presentationAdapter, presentation.targetLabel).valueText
@@ -1085,23 +1100,23 @@ function renderFieldCard(
         <div class="frow1">
           <span class="fname">${escapeHtml(presentation.targetLabel)}</span>
           <span class="fkind">${kind}</span>
-          <span class="chip ${state} push" data-testid="field-chip">${chipLabel(state)}</span>
+          <span class="chip ${state} push" data-testid="field-chip">${chipLabel(state, hasCurrentValue)}</span>
         </div>
         ${proposed
           ? renderDiffRow(item, current, proposed, presentation.targetLabel, decided, effectiveProposedText, currentPresentationText)
           : "<p class=\"field-value\">No proposed value is available for this field.</p>"}
         ${proposed ? renderProvenanceRow(item, proposed, presentationAdapter) : ""}
         <div class="decide">
-          <button class="btn keep" type="button" data-testid="keep-current" data-item-name="${escapeHtml(item.metadata.name)}">${keepLabel}</button>
-          <button class="btn use" type="button" data-testid="use-proposed" data-item-name="${escapeHtml(item.metadata.name)}">Use proposed</button>
+          ${keepDecision === undefined ? "" : `<button class="btn keep" type="button" data-testid="keep-current" data-item-name="${escapeHtml(item.metadata.name)}">${keepLabel}</button>`}
+          ${proposed ? `<button class="btn use" type="button" data-testid="use-proposed" data-item-name="${escapeHtml(item.metadata.name)}">Use proposed</button>
           <label class="wrong">
             <input type="checkbox" class="wrongbox" data-testid="wrong-toggle" data-item-name="${escapeHtml(item.metadata.name)}">
             Suggestion was wrong
           </label>
-          <button class="btn unconfirmed" type="button" data-testid="could-not-confirm" data-item-name="${escapeHtml(item.metadata.name)}">Could not confirm</button>
+          <button class="btn unconfirmed" type="button" data-testid="could-not-confirm" data-item-name="${escapeHtml(item.metadata.name)}">Could not confirm</button>` : ""}
         </div>
         <div class="decided">
-          <span class="chip ${state}" data-testid="decided-chip">${chipLabel(state)}</span>
+          <span class="chip ${state}" data-testid="decided-chip">${chipLabel(state, hasCurrentValue)}</span>
           <button class="undo" type="button" data-testid="undo-decision" data-item-name="${escapeHtml(item.metadata.name)}">Change</button>
         </div>
         ${renderAuditDetails(item, current, proposed, session, presentationAdapter)}
@@ -1609,11 +1624,21 @@ function createReviewWorkbenchController(
     eventStore?.save(session, events);
   };
 
-  const appendEvent = (
+  /**
+   * Builds the session event for a state WITHOUT committing anything. Callers
+   * that also mutate the session build the event first and commit only once it
+   * exists: a decision the item cannot represent must leave the workbench
+   * exactly as it was, not half-applied and unrenderable (kontourai/survey#203).
+   */
+  const buildEventForSession = (
+    sessionForEvent: ReviewQueueSessionState,
     eventType: ReviewSessionEvent["spec"]["eventType"],
     itemName: string | undefined,
     dataOverride?: Record<string, unknown>,
-  ): void => {
+  ): ReviewSessionEvent => {
+    // Shadow the controller's mutable `session` so this builder can only read
+    // the state it was handed.
+    const session = sessionForEvent;
     const item = itemName ? session.items.find((entry) => entry.metadata.name === itemName) : undefined;
     const decision = itemName ? session.decisionsByItemName[itemName] : undefined;
     const candidate = item && decision ? candidateForDecision(item, decision) : undefined;
@@ -1633,89 +1658,86 @@ function createReviewWorkbenchController(
         : { workbenchDecision: decision, ...(attemptEvidenceIds?.length ? { attemptEvidenceIds } : {}) })
       : undefined;
 
-    events = [
-      ...events,
-      buildReviewSessionEvent(session, {
-        sessionName: defaultReviewSessionName,
-        sequence: events.length + 1,
-        eventType,
-        occurredAt: session.reviewedAt,
-        reviewItemName: itemName,
-        reviewDecisionName: item && decision ? `${item.metadata.name}-${decision}` : undefined,
-        candidateId: candidate?.id,
-        status: definition?.status,
-        ...(decision === "could-not-confirm"
-          ? {
-              resolution: "could_not_confirm" as const,
-              resolutionReason: note?.trim(),
-              ...(attemptEvidenceIds ? { attemptEvidenceIds: [...attemptEvidenceIds] } : {}),
-            }
-          : {}),
-        rationale: note,
-        data: dataOverride ?? defaultData,
-      }),
-    ];
+    return buildReviewSessionEvent(session, {
+      sessionName: defaultReviewSessionName,
+      sequence: events.length + 1,
+      eventType,
+      occurredAt: session.reviewedAt,
+      reviewItemName: itemName,
+      reviewDecisionName: item && decision ? `${item.metadata.name}-${decision}` : undefined,
+      candidateId: candidate?.id,
+      status: definition?.status,
+      ...(decision === "could-not-confirm"
+        ? {
+            resolution: "could_not_confirm" as const,
+            resolutionReason: note?.trim(),
+            ...(attemptEvidenceIds ? { attemptEvidenceIds: [...attemptEvidenceIds] } : {}),
+          }
+        : {}),
+      rationale: note,
+      data: dataOverride ?? defaultData,
+    });
   };
 
-  const applySessionUpdate = (update: (current: ReviewQueueSessionState) => ReviewQueueSessionState): void => {
-    session = update(session);
+  /** Commits a session update and its event together, or neither. */
+  const commitSessionUpdate = (
+    nextSession: ReviewQueueSessionState,
+    eventType: ReviewSessionEvent["spec"]["eventType"],
+    itemName: string,
+    dataOverride?: Record<string, unknown>,
+  ): void => {
+    const event = buildEventForSession(nextSession, eventType, itemName, dataOverride);
+    session = nextSession;
+    events = [...events, event];
+    persistEvents();
   };
 
   const setDecision = (itemName: string, decision: ReviewWorkbenchDecision, rawEditedValue?: string): void => {
     if (decision === "could-not-confirm" && !session.notesByItemName[itemName]?.trim()) {
       throw new Error("Could not confirm requires a non-empty reason.");
     }
-    applySessionUpdate((current) => {
-      const item = current.items.find((entry) => entry.metadata.name === itemName);
-      const proposed = item?.spec.candidates.find((candidate) => candidate.role === "proposed");
-      const originalText = proposed ? formatValue(proposed.value) : undefined;
-      const nextEditedValuesByItemName: Record<string, unknown> = { ...current.editedValuesByItemName };
+    const item = session.items.find((entry) => entry.metadata.name === itemName);
+    const proposed = item?.spec.candidates.find((candidate) => candidate.role === "proposed");
+    const originalText = proposed ? formatValue(proposed.value) : undefined;
+    const nextEditedValuesByItemName: Record<string, unknown> = { ...session.editedValuesByItemName };
 
-      if (decision === "accept-proposed" && rawEditedValue !== undefined && rawEditedValue !== originalText) {
-        nextEditedValuesByItemName[itemName] = rawEditedValue;
-      } else {
-        delete nextEditedValuesByItemName[itemName];
-      }
+    if (decision === "accept-proposed" && rawEditedValue !== undefined && rawEditedValue !== originalText) {
+      nextEditedValuesByItemName[itemName] = rawEditedValue;
+    } else {
+      delete nextEditedValuesByItemName[itemName];
+    }
 
-      return {
-        ...current,
-        activeItemName: itemName,
-        decisionsByItemName: { ...current.decisionsByItemName, [itemName]: decision },
-        editedValuesByItemName: nextEditedValuesByItemName,
-      };
-    });
-    appendEvent("decision-changed", itemName);
-    persistEvents();
+    commitSessionUpdate({
+      ...session,
+      activeItemName: itemName,
+      decisionsByItemName: { ...session.decisionsByItemName, [itemName]: decision },
+      editedValuesByItemName: nextEditedValuesByItemName,
+    }, "decision-changed", itemName);
   };
 
   const clearDecision = (itemName: string): void => {
-    applySessionUpdate((current) => {
-      const remainingDecisions = { ...current.decisionsByItemName };
-      delete remainingDecisions[itemName];
-      const remainingEdits: Record<string, unknown> = { ...current.editedValuesByItemName };
-      delete remainingEdits[itemName];
-      const remainingAttemptEvidenceIds = { ...current.attemptEvidenceIdsByItemName };
-      delete remainingAttemptEvidenceIds[itemName];
+    const remainingDecisions = { ...session.decisionsByItemName };
+    delete remainingDecisions[itemName];
+    const remainingEdits: Record<string, unknown> = { ...session.editedValuesByItemName };
+    delete remainingEdits[itemName];
+    const remainingAttemptEvidenceIds = { ...session.attemptEvidenceIdsByItemName };
+    delete remainingAttemptEvidenceIds[itemName];
 
-      return {
-        ...current,
-        activeItemName: itemName,
-        decisionsByItemName: remainingDecisions,
-        editedValuesByItemName: remainingEdits,
-        attemptEvidenceIdsByItemName: remainingAttemptEvidenceIds,
-      };
-    });
-    appendEvent("decision-changed", itemName, { workbenchDecision: null });
-    persistEvents();
+    commitSessionUpdate({
+      ...session,
+      activeItemName: itemName,
+      decisionsByItemName: remainingDecisions,
+      editedValuesByItemName: remainingEdits,
+      attemptEvidenceIdsByItemName: remainingAttemptEvidenceIds,
+    }, "decision-changed", itemName, { workbenchDecision: null });
   };
 
   const updateReviewerNote = (itemName: string, note: string): void => {
-    applySessionUpdate((current) => ({
-      ...current,
-      notesByItemName: { ...current.notesByItemName, [itemName]: note },
-    }));
-    appendEvent("note-changed", itemName);
-    persistEvents();
+    commitSessionUpdate(
+      { ...session, notesByItemName: { ...session.notesByItemName, [itemName]: note } },
+      "note-changed",
+      itemName,
+    );
   };
 
   const controller: ReviewWorkbenchControllerBindings = {
@@ -1824,7 +1846,13 @@ function bindFieldCardInteractions(root: HTMLElement, controller: ReviewWorkbenc
       const descriptor = controller
         .currentSession()
         .items.find((entry) => entry.metadata.name === itemName)?.spec.valueDescriptor;
-      const error = validateProposedValue(descriptor, input?.value ?? "");
+      // Validate the reviewer's edit only when there IS an editor to have edited.
+      // A non-editable item (`spec.editable === false`, e.g. every envelope-imported
+      // item) renders no editor, so there is no reviewer input to check — validating
+      // the absent editor's "" value blocked the decision on every typed field, and
+      // wrote the reason into an error slot inside the suppressed editor, so the
+      // reviewer saw nothing at all (kontourai/survey#201).
+      const error = input ? validateProposedValue(descriptor, input.value) : undefined;
       const errorEl = field?.querySelector<HTMLElement>("[data-testid='value-error']");
       if (error) {
         // Block the decision and surface the reason inline; the transient DOM
@@ -1850,7 +1878,15 @@ function bindFieldCardInteractions(root: HTMLElement, controller: ReviewWorkbenc
       const itemName = button.dataset.itemName ?? "";
       const field = button.closest<HTMLElement>("[data-testid='review-field']");
       const wrong = field?.querySelector<HTMLInputElement>("[data-testid='wrong-toggle']");
-      const decision: ReviewWorkbenchDecision = wrong?.checked ? "reject-proposed" : "keep-current";
+      const item = controller.currentSession().items.find((entry) => entry.metadata.name === itemName);
+      // Route by what this item can record, not by the button's identity: on an
+      // item with no current candidate this control reads "Leave unset", and
+      // "keep the current candidate" is not a decision it can carry
+      // (kontourai/survey#203).
+      const decision = item ? keepActionDecision(item, wrong?.checked ?? false) : undefined;
+      if (!decision) {
+        return;
+      }
       controller.setDecision(itemName, decision);
       controller.renderCurrentState();
     });

@@ -32,19 +32,27 @@ describe("review-workbench-element", () => {
       /survey-workbench-embed/,
       "generated CSS must include the embed scope class",
     );
-    // Token defaults must be host-overridable: emitted as `var(--k-x, default)`
-    // so a host's ancestor/inline --k-* propagates in without a specificity war.
-    // A bare `--k-brand: <color>;` default would mean that path is dormant.
+    // Token defaults must be literal values. Emitting them as `var(--k-x, default)`
+    // declares each custom property against ITSELF, which is a cycle: the property
+    // is invalid at computed-value time, the fallback is never reached, and every
+    // token dies inside .survey-workbench-embed — the grounded-source highlight
+    // rendered with no fill and no outline for every embedder (kontourai/survey#202).
+    // A host cannot be given an ancestor-override path here in any case: a
+    // declaration on the embed root always beats an inherited value. Ancestor
+    // inheritance is the custom element's job (its shadow :host carries the
+    // defaults); the light-DOM embed is themed by declaring --k-* ON the embed.
     assert.match(
       source,
-      /--k-brand:\s*var\(--k-brand,/,
-      "token defaults must be emitted in the host-overridable var(--k-*, default) form",
+      /--k-brand:\s*#5ce0c6;/,
+      "token defaults must be emitted as literal values",
     );
-    assert.doesNotMatch(
-      source,
-      /--k-brand:\s*#[0-9a-fA-F]/,
-      "token defaults must not be bare colors (the host-override path would be dormant)",
-    );
+    for (const [, property, value] of source.matchAll(/(--k-[\w-]+)\s*:\s*([^;}]+)/g)) {
+      assert.doesNotMatch(
+        value,
+        new RegExp(`var\\(\\s*${property}(?![\\w-])`),
+        `${property} is declared against itself, which is invalid at computed-value time`,
+      );
+    }
   });
 
   it("review-workbench-element imports the generated CSS module directly", async () => {

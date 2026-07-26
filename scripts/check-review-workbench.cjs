@@ -80,6 +80,11 @@ async function main() {
   assertIncludes(embedCss, ".survey-workbench-embed .review{");
   assertIncludes(embedCss, "position: absolute;");
   assertEquals((embedCss.match(/^@import /gm) ?? []).length, 0);
+  // kontourai/survey#202: a token declared against itself (`--k-brand: var(--k-brand, …)`)
+  // is a custom-property cycle — invalid at computed-value time, so the fallback is
+  // never reached and every token dies inside the embed. Token defaults must stay literal.
+  assertNoSelfReferentialTokens(embedCss);
+  assertIncludes(embedCss, "--k-brand: #5ce0c6;");
   assertExcludes(embedCss, "position: fixed;");
   assertExcludes(embedCss, "\nbody {");
   assertExcludes(embedCss, "\n:root {");
@@ -149,6 +154,21 @@ async function assertBrowserDataMatchesCanonicalExample() {
     throw new Error(
       "Review workbench browser-safe example drifted from example-data/public-directory-review-resource.ts. " +
         "Update examples/review-workbench/review-workbench-data.ts to match the canonical ReviewItem example.",
+    );
+  }
+}
+
+function assertNoSelfReferentialTokens(cssText) {
+  const cycles = [];
+  for (const [, property, value] of cssText.matchAll(/(--k-[\w-]+)\s*:\s*([^;}]+)/g)) {
+    if (new RegExp(`var\\(\\s*${property}(?![\\w-])`).test(value)) {
+      cycles.push(`${property}: ${value.trim()}`);
+    }
+  }
+  if (cycles.length > 0) {
+    throw new Error(
+      "Embedded workbench CSS declares custom properties against themselves, which is invalid at "
+        + `computed-value time and kills every token inside .survey-workbench-embed:\n  ${cycles.join("\n  ")}`,
     );
   }
 }
