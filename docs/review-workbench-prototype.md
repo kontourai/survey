@@ -81,7 +81,7 @@ candidate produce different previews because the selected canonical claim,
 source evidence, candidate history, and review event are derived from the
 decision candidate.
 
-The preview is intentionally small and labelled. It shows:
+The preview is intentionally small and labeled. It shows:
 
 - Selected canonical claim: candidate id, claim id, selected value, and review
   status.
