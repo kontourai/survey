@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.3](https://github.com/kontourai/survey/compare/v2.2.2...v2.2.3) (2026-07-26)
+
+
+### Fixes
+
+* **review-workbench:** repair the embedded workbench's dead tokens and undecidable items ([#204](https://github.com/kontourai/survey/issues/204)) ([506f9db](https://github.com/kontourai/survey/commit/506f9dbe304a925ddd6a16b34974962a83fd4877)), closes [#201](https://github.com/kontourai/survey/issues/201) [#202](https://github.com/kontourai/survey/issues/202) [#203](https://github.com/kontourai/survey/issues/203)
+
 ## [2.2.2](https://github.com/kontourai/survey/compare/v2.2.1...v2.2.2) (2026-07-26)
 
 
