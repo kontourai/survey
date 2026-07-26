@@ -169,12 +169,20 @@ The embedded stylesheet is scoped to `.survey-workbench-embed` and bundles Conso
 
 ### Theme it as your own brand
 
-The bundled `--k-*` token defaults are emitted in overridable form
-(`--k-brand: var(--k-brand, <default>)`), so a host brand is authoritative: set
-any `--k-*` token on an ancestor of the embed (or inline on the embed element,
-or the host element of the web component) and it propagates in — no need to
-out-specificity the embed's own selectors. Unset tokens keep their default, so
-you only declare what you re-brand.
+The bundled stylesheet carries a literal default for every `--k-*` token on the
+embed element itself, so the workbench looks right in a host that declares no
+tokens at all. To re-brand it, declare the tokens you want **on the embed
+element** — a rule matching `.survey-workbench-embed`, or an inline `style`
+attribute. Tokens you leave alone keep their default, so you only declare what
+you re-brand.
+
+Setting `--k-*` on an *ancestor* of the embed does not reach it: the embed
+declares those tokens on its own root, and a declaration on an element always
+beats a value inherited from an ancestor. If you want the embed to inherit a
+token layer your page already publishes at `:root`, use the web component
+(`<survey-review-workbench>`) — its defaults sit on the shadow `:host`, so host
+tokens and inline styles propagate through — or restate the tokens on the embed
+element as below.
 
 ```css
 /* Your app's own palette drives the workbench — no Kontour branding. */

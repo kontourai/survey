@@ -61,14 +61,21 @@ async function buildEmbeddedWorkbenchCss() {
 
   return [
     "/* Bundled, scoped Survey Review Workbench styles for downstream embeds. Font loading is left to the host app. */",
-    // Make the --k-* token DEFAULTS overridable: a `--k-x: <value>` default is
-    // emitted as `--k-x: var(--k-x, <value>)`, so a host that sets any --k-*
-    // token on an ancestor (or inline on the embed element) has it propagate in
-    // WITHOUT out-specificity-ing the embed's own token selectors. Absent a host
-    // override the fallback keeps the default appearance, so this is invisible
-    // to consumers that do not theme. Component styles below are untouched.
-    makeTokensInheritable(scopeCssForEmbeddedWorkbench(tokensCss)),
-    makeTokensInheritable(scopeCssForEmbeddedWorkbench(themesCss)),
+    // Token defaults are emitted VERBATIM (literal values), only re-scoped from
+    // :root to .survey-workbench-embed. They must never be rewritten to
+    // `--k-x: var(--k-x, <default>)`: a custom property whose value references
+    // itself is a cycle, which is invalid at computed-value time — the property
+    // resolves to the guaranteed-invalid value, the fallback is never reached,
+    // and EVERY token dies inside the embed (kontourai/survey#202). A
+    // declaration on the embed root also always beats a value inherited from a
+    // host ancestor, so no self-reference can express "use the host's value if
+    // it set one"; hosts theme the light-DOM embed by declaring --k-* on the
+    // embed element itself, or by using <survey-review-workbench>, whose shadow
+    // :host defaults are genuinely inheritable. Keeping the emitted cascade
+    // byte-identical to the standalone stylesheet also keeps the embed's
+    // internal tie-breaks (theme presets vs. [data-theme="light"]) intact.
+    scopeCssForEmbeddedWorkbench(tokensCss),
+    scopeCssForEmbeddedWorkbench(themesCss),
     scopedWorkbenchCss,
     [
       ".survey-workbench-embed {",
@@ -76,30 +83,6 @@ async function buildEmbeddedWorkbenchCss() {
       "}",
     ].join("\n"),
   ].join("\n");
-}
-
-/**
- * Post-process scoped token CSS so that `--k-xxx: <value>` declarations become
- * `--k-xxx: var(--k-xxx, <value>)`.  This allows host-element inline styles (or
- * any ancestor's custom properties) to propagate through the shadow boundary:
- * when no override is present the fallback value keeps the default appearance.
- *
- * Only transforms bare --k-* declarations (not ones that already contain var()).
- * Declarations that themselves reference another --k-* token are left unchanged
- * because they will resolve transitively once the root tokens are overridable.
- */
-function makeTokensInheritable(css) {
-  // Transform `--k-xxx: <value>;` to `--k-xxx: var(--k-xxx, <value>);` so that
-  // host-element inline styles propagate through the shadow boundary via CSS
-  // custom-property inheritance.  Values that already contain a var() reference
-  // are left unchanged to avoid self-referential cycles (e.g. --k-positive-soft).
-  return css.replace(
-    /([ \t]*)(--k-[\w-]+):\s*([^;]+);/g,
-    (match, indent, prop, value) => {
-      if (value.includes('var(')) return match;
-      return `${indent}${prop}: var(${prop}, ${value.trim()});`;
-    },
-  );
 }
 
 /**

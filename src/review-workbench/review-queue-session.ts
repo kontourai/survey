@@ -204,6 +204,33 @@ export function reviewSessionSummary(session: ReviewQueueSessionState): ReviewSe
   });
 }
 
+/**
+ * The decision the field card's "keep" control records for a ReviewItem, or
+ * `undefined` when the item cannot represent that action at all.
+ *
+ * Every workbench decision resolves to a candidate role (see
+ * {@link workbenchDecisionDefinitions}), so a decision whose role the item does
+ * not carry is not recordable — `keep-current` on an item that has no `current`
+ * candidate is the case that matters, because that is exactly how an
+ * envelope-imported item is modelled (one `proposed` candidate, nothing prior).
+ * The card already labels that control "Leave unset" rather than "Keep current";
+ * this returns the decision that means the same thing and IS representable:
+ * `reject-proposed` — the proposed value is not applied and nothing is set.
+ *
+ * Deliberately NOT solved by synthesising an empty `current` candidate: that
+ * would invent a prior value, with provenance, that the source never had.
+ */
+export function keepActionDecision(item: ReviewItem, flaggedWrong: boolean): ReviewWorkbenchDecision | undefined {
+  const hasRole = (role: ReviewCandidate["role"]): boolean =>
+    item.spec.candidates.some((candidate) => candidate.role === role);
+
+  if (flaggedWrong || !hasRole("current")) {
+    return hasRole("proposed") ? "reject-proposed" : undefined;
+  }
+
+  return "keep-current";
+}
+
 export function candidateForDecision(item: ReviewItem, decision: ReviewWorkbenchDecision): ReviewCandidate {
   const definition = workbenchDecisionDefinitions[decision];
   const candidate = item.spec.candidates.find((entry) => entry.role === definition.candidateRole);

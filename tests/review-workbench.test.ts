@@ -1775,17 +1775,35 @@ class ReviewWorkbenchTestRoot {
 
   querySelectorAll<T>(selector: string): T[] {
     const scopes = [...this.#fieldsByItemName.values()];
-    if (selector === "[data-testid='use-proposed']") return scopes.map((scope) => scope.useButton) as T[];
-    if (selector === "[data-testid='keep-current']") return scopes.map((scope) => scope.keepButton) as T[];
+    // Only hand back the controls the card actually RENDERED: a control the
+    // renderer suppressed must not receive a click listener, or the harness
+    // would exercise a button the reviewer never sees.
+    if (selector === "[data-testid='use-proposed']") {
+      return scopes.filter((scope) => scope.controls.use).map((scope) => scope.useButton) as T[];
+    }
+    if (selector === "[data-testid='keep-current']") {
+      return scopes.filter((scope) => scope.controls.keep).map((scope) => scope.keepButton) as T[];
+    }
+    if (selector === "[data-testid='could-not-confirm']") {
+      return scopes.filter((scope) => scope.controls.couldNotConfirm).map((scope) => scope.couldNotConfirmButton) as T[];
+    }
     if (selector === "[data-testid='undo-decision']") return scopes.map((scope) => scope.undoButton) as T[];
     if (selector === "[data-testid='reviewer-note']") return scopes.map((scope) => scope.noteTextarea) as T[];
     return [];
   }
 }
 
+interface TestFieldControls {
+  readonly keep: boolean;
+  readonly use: boolean;
+  readonly wrong: boolean;
+  readonly couldNotConfirm: boolean;
+}
+
 class TestFieldScope {
   readonly useButton: TestFieldButtonElement;
   readonly keepButton: TestFieldButtonElement;
+  readonly couldNotConfirmButton: TestFieldButtonElement;
   readonly undoButton: TestFieldButtonElement;
   readonly noteTextarea: TestTextAreaElement;
   readonly wrongbox = new TestCheckboxElement();
@@ -1793,9 +1811,17 @@ class TestFieldScope {
   readonly valueError = new TestValueErrorElement();
   readonly #payload: TestPreElement;
 
-  constructor(itemName: string, editValue: string | undefined, noteValue: string, payloadText: string) {
+  constructor(
+    itemName: string,
+    editValue: string | undefined,
+    noteValue: string,
+    payloadText: string,
+    readonly controls: TestFieldControls = { keep: true, use: true, wrong: true, couldNotConfirm: true },
+    readonly chipText: string = "",
+  ) {
     this.useButton = new TestFieldButtonElement(itemName, this);
     this.keepButton = new TestFieldButtonElement(itemName, this);
+    this.couldNotConfirmButton = new TestFieldButtonElement(itemName, this);
     this.undoButton = new TestFieldButtonElement(itemName, this);
     this.noteTextarea = new TestTextAreaElement(noteValue, this, itemName);
     this.editInput = editValue === undefined ? null : new TestInputElement(editValue);
@@ -1808,8 +1834,8 @@ class TestFieldScope {
 
   querySelector<T>(selector: string): T | null {
     if (selector === "[data-testid='edit-proposed-value']") return this.editInput as T;
-    if (selector === "[data-testid='wrong-toggle']") return this.wrongbox as T;
-    if (selector === "[data-testid='value-error']") return this.valueError as T;
+    if (selector === "[data-testid='wrong-toggle']") return (this.controls.wrong ? this.wrongbox : null) as T;
+    if (selector === "[data-testid='value-error']") return (this.editInput ? this.valueError : null) as T;
     if (selector === "[data-testid='decision-payload']") return this.#payload as T;
     return null;
   }
@@ -1902,11 +1928,19 @@ function parseFieldScopes(html: string): Map<string, TestFieldScope> {
     const editValue = fragment.match(/data-testid="edit-proposed-value"[^>]*value="([^"]*)"/)?.[1];
     const noteValue = fragment.match(/<textarea[^>]*data-testid="reviewer-note"[^>]*>([\s\S]*?)<\/textarea>/)?.[1] ?? "";
     const payloadText = fragment.match(/<pre[^>]*data-testid="decision-payload"[^>]*>([\s\S]*?)<\/pre>/)?.[1] ?? "";
+    const chipText = fragment.match(/data-testid="field-chip"[^>]*>([\s\S]*?)<\/span>/)?.[1] ?? "";
     scopes.set(itemName, new TestFieldScope(
       itemName,
       editValue === undefined ? undefined : unescapeHtml(editValue),
       unescapeHtml(noteValue),
       unescapeHtml(payloadText),
+      {
+        keep: fragment.includes('data-testid="keep-current"'),
+        use: fragment.includes('data-testid="use-proposed"'),
+        wrong: fragment.includes('data-testid="wrong-toggle"'),
+        couldNotConfirm: fragment.includes('data-testid="could-not-confirm"'),
+      },
+      unescapeHtml(chipText.trim()),
     ));
   });
 
@@ -2242,5 +2276,109 @@ describe("review queue fixture evidence integrity", () => {
         `${item.metadata.name}:${candidate.role ?? "candidate"} authority scope "${scope}" does not reference target "${item.spec.target}"`,
       );
     }
+  });
+});
+
+// ── envelope-imported review queues ──────────────────────────────────────────
+//
+// Regression cover for the defects found by driving the embedded workbench in a
+// real browser against an envelope-imported queue (kontourai/survey#201, #203).
+// Envelope-imported items are a THINNER shape than the workbench's field-diff
+// mental model: one `proposed` candidate, no `current`, `editable: false`, and a
+// `valueDescriptor`. Both defects were controls routed at something that shape
+// does not have — an editor that is never rendered, and a candidate role the
+// item never carries.
+
+import { buildEnvelopeImportFixture, envelopeQueueSeeds } from "./envelope-review-fixture.js";
+
+function envelopeImportedReviewItems(): ReviewItem[] {
+  return buildEnvelopeImportFixture().reviewItems;
+}
+
+describe("review workbench: envelope-imported items", () => {
+  it("imports items with no current candidate, no editor, and a declared value type", () => {
+    const items = envelopeImportedReviewItems();
+
+    assert.equal(items.length, envelopeQueueSeeds.length);
+    for (const item of items) {
+      assert.equal(item.spec.editable, false);
+      assert.ok(item.spec.valueDescriptor, "envelope-imported items carry a value descriptor");
+      assert.deepEqual(item.spec.candidates.map((candidate) => candidate.role), ["proposed"]);
+    }
+  });
+
+  it("accepts a typed, non-editable proposed value instead of validating an editor that is not rendered", () => {
+    // kontourai/survey#201: `Use proposed` validated `input?.value ?? ""` against
+    // spec.valueDescriptor even though a non-editable item renders no editor, so
+    // number/date/boolean items were permanently undecidable — and the reason was
+    // written into an error slot inside the suppressed editor, so nothing showed.
+    const items = envelopeImportedReviewItems();
+    const root = new ReviewWorkbenchTestRoot();
+    mountReviewWorkbench(root as unknown as HTMLElement, initialReviewQueueSessionState(items));
+
+    for (const item of items) {
+      const itemName = item.metadata.name;
+      assert.equal(root.field(itemName).editInput, null, `${item.spec.target} must render no editor`);
+
+      root.field(itemName).useButton.click();
+
+      const decided = root.field(itemName);
+      assert.equal(decided.chipText, "Accepted", `${item.spec.target} (${item.spec.valueDescriptor?.type}) was not decided`);
+      assert.match(decided.payloadText, /"status": "verified"/);
+      assert.doesNotMatch(decided.payloadText, /"editedValue"/);
+    }
+  });
+
+  it("records Leave unset as the decision it can actually carry, and keeps the queue renderable", () => {
+    // kontourai/survey#203: the keep control is labelled "Leave unset" for an item
+    // with no current value, but still routed at `keep-current`, whose candidate
+    // role the item does not carry. It threw mid-click AFTER the session had been
+    // mutated, so every later render of the queue threw too.
+    const items = envelopeImportedReviewItems();
+    const [first, second] = items;
+    assert.ok(first && second);
+    const root = new ReviewWorkbenchTestRoot();
+    mountReviewWorkbench(root as unknown as HTMLElement, initialReviewQueueSessionState(items));
+
+    root.field(first.metadata.name).keepButton.click();
+
+    const decided = root.field(first.metadata.name);
+    assert.equal(decided.chipText, "Left unset");
+    assert.match(root.html, new RegExp(`data-item-name="${first.metadata.name}"[\\s\\S]*?data-decision="reject-proposed"`));
+    assert.match(decided.payloadText, /"status": "rejected"/);
+    // The candidate the decision points at is the real proposed candidate — no
+    // prior value was invented to satisfy the control.
+    assert.match(decided.payloadText, new RegExp(`"candidateId": "${first.spec.candidates[0]?.id}"`));
+
+    // The rest of the queue still updates: a throw used to leave the session
+    // holding a decision it could not render, freezing every other card.
+    root.field(second.metadata.name).useButton.click();
+    assert.equal(root.field(second.metadata.name).chipText, "Accepted");
+    assert.equal(root.field(first.metadata.name).chipText, "Left unset");
+  });
+
+  it("does not offer proposal-dependent controls on an item with no proposed candidate", () => {
+    // Same defect shape as #203: could-not-confirm and reject-proposed both resolve
+    // to the `proposed` role, so on an item that carries only a current candidate
+    // those controls could only ever throw.
+    const currentOnlyItem: ReviewItem = {
+      ...publicDirectoryReviewItemExample,
+      metadata: { ...publicDirectoryReviewItemExample.metadata, name: "current-only-item" },
+      spec: {
+        ...publicDirectoryReviewItemExample.spec,
+        candidates: publicDirectoryReviewItemExample.spec.candidates.filter((candidate) => candidate.role === "current"),
+      },
+    };
+    const root = new ReviewWorkbenchTestRoot();
+    mountReviewWorkbench(root as unknown as HTMLElement, initialReviewQueueSessionState([currentOnlyItem]));
+
+    const field = root.field("current-only-item");
+    assert.equal(field.controls.use, false);
+    assert.equal(field.controls.wrong, false);
+    assert.equal(field.controls.couldNotConfirm, false);
+    assert.equal(field.controls.keep, true);
+
+    field.keepButton.click();
+    assert.equal(root.field("current-only-item").chipText, "Kept current");
   });
 });

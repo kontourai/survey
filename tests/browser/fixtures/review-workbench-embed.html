@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Survey Review Workbench embed fixture</title>
+    <!-- The PACKAGED embed stylesheet, exactly as a downstream host links it
+         (@kontourai/survey/review-workbench.css). No token layer is loaded on
+         the host page: an embed that carries no working defaults renders dead. -->
+    <link rel="stylesheet" href="/dist/src/review-workbench/review-workbench.css">
+    <style>
+      body { margin: 0; background: #ffffff; }
+      #embed { min-height: 100vh; }
+    </style>
+  </head>
+  <body>
+    <div id="embed" class="workbench survey-workbench-embed theme-survey" data-testid="embed">
+      <div id="queue"></div>
+      <div id="inspector"></div>
+    </div>
+    <script type="module">
+      import { mountReviewWorkbench } from "/dist/src/review-workbench/review-workbench.js";
+      import {
+        buildExtractionInspectorModel,
+        mountExtractionInspector,
+      } from "/dist/src/review-workbench/extraction-inspector.js";
+
+      const fixture = window.__surveyEmbedFixture;
+      mountReviewWorkbench(document.getElementById("queue"), fixture.session);
+      mountExtractionInspector(
+        document.getElementById("inspector"),
+        buildExtractionInspectorModel(fixture.inspectorEntry),
+      );
+      document.body.dataset.embedReady = "1";
+    </script>
+  </body>
+</html>
