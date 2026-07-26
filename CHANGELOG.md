@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.2](https://github.com/kontourai/survey/compare/v2.2.1...v2.2.2) (2026-07-26)
+
+
+### Fixes
+
+* bind example review evidence to the field it supports ([#199](https://github.com/kontourai/survey/issues/199)) ([8b9df14](https://github.com/kontourai/survey/commit/8b9df1447cc83adb5f7ac0d0349fe9bcc8229efd))
+
 ## [2.2.1](https://github.com/kontourai/survey/compare/v2.2.0...v2.2.1) (2026-07-24)
 
 
