@@ -913,7 +913,7 @@ import {
 } from "@kontourai/survey";
 import type { TrustBundle, DerivationRule } from "@kontourai/surface";
 
-// 1. Normalise — deterministic, exact-text memoization (not semantic matching)
+// 1. Normalize — deterministic, exact-text memoization (not semantic matching)
 const normalized = normalizeQuestion("Is entity-1 ACTIVE?");
 // → "is entity-1 active"
 

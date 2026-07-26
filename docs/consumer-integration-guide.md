@@ -677,7 +677,7 @@ by overriding tokens; no markup or class-name changes are needed.
 | `--k-text-faint` (alias `--k-faint`) | Tertiary / label text |
 | `--k-line` | Subtle borders |
 | `--k-line-strong` | Visible borders |
-| `--k-brand` | Accent / brand colour (Apply button, "Needs review" chip, links) |
+| `--k-brand` | Accent / brand color (Apply button, "Needs review" chip, links) |
 | `--k-brand-contrast` (alias `--k-brand-ink`) | Text color on a brand-colored background |
 | `--k-brand-wash` | Brand tint wash (behind the "Needs review" chip) |
 | `--k-positive` | Accept / verified indicator |
