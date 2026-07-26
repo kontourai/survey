@@ -427,14 +427,33 @@ export const facilityCredentialReviewItemExample = {
   },
 } satisfies ReviewItem;
 
-function queueFixture(
-  name: string,
-  target: string,
-  currentValue: string,
-  proposedValue: string,
-  candidateSetStatus: ReviewItem["spec"]["candidateSetStatus"],
-  feedbackTags: string[],
-): ReviewItem {
+interface QueueFixtureOptions {
+  readonly name: string;
+  readonly target: string;
+  readonly currentValue: string;
+  readonly proposedValue: string;
+  readonly candidateSetStatus: ReviewItem["spec"]["candidateSetStatus"];
+  readonly feedbackTags: string[];
+  /** Producer proposal identifier for the proposed candidate. */
+  readonly proposalId: string;
+  /**
+   * Source text backing each candidate. Every excerpt must actually contain the
+   * value it is offered as evidence for — the workbench shows these verbatim
+   * next to the value, so a generic excerpt reads as unsupported evidence.
+   */
+  readonly excerpts: { readonly current: string; readonly proposed: string };
+}
+
+function queueFixture({
+  name,
+  target,
+  currentValue,
+  proposedValue,
+  candidateSetStatus,
+  feedbackTags,
+  proposalId,
+  excerpts,
+}: QueueFixtureOptions): ReviewItem {
   return {
     ...publicDirectoryReviewItemExample,
     metadata: {
@@ -462,6 +481,11 @@ function queueFixture(
             ...candidate.source,
             sourceId: `${name}:source:${role}`,
           },
+          locator: {
+            ...candidate.locator,
+            locator: `html:field=${target}`,
+            excerpt: role === "proposed" ? excerpts.proposed : excerpts.current,
+          },
           extraction: {
             ...candidate.extraction,
             extractionId: `${name}:extraction:${role}`,
@@ -483,6 +507,15 @@ function queueFixture(
           },
           producer: {
             ...candidate.producer,
+            ...(role === "proposed" ? { proposalId, oldValue: currentValue } : {}),
+            ...(candidate.producer?.sourceAuthority
+              ? {
+                  sourceAuthority: {
+                    ...candidate.producer.sourceAuthority,
+                    scope: `${target} field on entity-123`,
+                  },
+                }
+              : {}),
           },
         };
       }),
@@ -667,40 +700,60 @@ const dailyHoursNoSourceReviewItemExample: ReviewItem = {
 };
 
 export const reviewWorkbenchQueueExamples = [
-  queueFixture(
-    "public-directory-hours",
-    "hours",
-    "Weekdays 9am-5pm",
-    "Weekdays 8am-6pm",
-    "needs-review",
-    ["hours-change", "crawler-suggested"],
-  ),
-  queueFixture(
-    "public-directory-phone",
-    "phoneNumber",
-    "+1-555-0100",
-    "+1-555-0199",
-    "needs-review",
-    ["contact-field", "source-conflict"],
-  ),
+  queueFixture({
+    name: "public-directory-hours",
+    target: "hours",
+    currentValue: "Weekdays 9am-5pm",
+    proposedValue: "Weekdays 8am-6pm",
+    candidateSetStatus: "needs-review",
+    feedbackTags: ["hours-change", "crawler-suggested"],
+    proposalId: "proposal-451",
+    excerpts: {
+      current: "Program hours: Weekdays 9am-5pm. Closed weekends and public holidays.",
+      proposed: "Extended schedule for the fall term — program hours are now Weekdays 8am-6pm.",
+    },
+  }),
+  queueFixture({
+    name: "public-directory-phone",
+    target: "phoneNumber",
+    currentValue: "+1-555-0100",
+    proposedValue: "+1-555-0199",
+    candidateSetStatus: "needs-review",
+    feedbackTags: ["contact-field", "source-conflict"],
+    proposalId: "proposal-452",
+    excerpts: {
+      current: "Questions? Call the main office at +1-555-0100.",
+      proposed: "Our enrollment line has moved. Call +1-555-0199 to reach the office.",
+    },
+  }),
   dropInPriceReviewItemExample,
   dailyHoursNoSourceReviewItemExample,
   publicDirectoryReviewItemExample,
-  queueFixture(
-    "public-directory-address",
-    "streetAddress",
-    "100 Main Street",
-    "102 Main Street",
-    "needs-review",
-    ["address-change", "producer-escalation-candidate"],
-  ),
-  queueFixture(
-    "public-directory-license",
-    "licenseStatus",
-    "ACTIVE",
-    "EXPIRED",
-    "escalated",
-    ["licensing", "manual-review-required"],
-  ),
+  queueFixture({
+    name: "public-directory-address",
+    target: "streetAddress",
+    currentValue: "100 Main Street",
+    proposedValue: "102 Main Street",
+    candidateSetStatus: "needs-review",
+    feedbackTags: ["address-change", "producer-escalation-candidate"],
+    proposalId: "proposal-453",
+    excerpts: {
+      current: "Find us at 100 Main Street, Example City.",
+      proposed: "We have moved one door down to 102 Main Street, Example City.",
+    },
+  }),
+  queueFixture({
+    name: "public-directory-license",
+    target: "licenseStatus",
+    currentValue: "ACTIVE",
+    proposedValue: "EXPIRED",
+    candidateSetStatus: "escalated",
+    feedbackTags: ["licensing", "manual-review-required"],
+    proposalId: "proposal-454",
+    excerpts: {
+      current: "Operating license status: ACTIVE (renewed 2025-06-01).",
+      proposed: "Operating license status: EXPIRED as of 2026-05-31. Renewal not yet filed.",
+    },
+  }),
   regulatedRuleConflictReviewItemExample,
 ] satisfies ReviewItem[];

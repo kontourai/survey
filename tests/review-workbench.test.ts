@@ -2179,3 +2179,68 @@ describe("buildAuthorizedActionAuthorizing helper", () => {
     );
   });
 });
+
+describe("review queue fixture evidence integrity", () => {
+  // These fixtures are what a bare `survey-review-console --session
+  // example-data/mcp-review-session.json` renders, and what the marketing
+  // screenshots capture. A shipped example whose evidence does not match the
+  // value it is offered for undermines the whole point of the surface, so the
+  // fixtures are asserted, not just eyeballed.
+  const candidates = reviewWorkbenchQueueExamples.flatMap((item) =>
+    item.spec.candidates.map((candidate) => ({ item, candidate })),
+  );
+
+  it("never reuses one source excerpt across candidates", () => {
+    const seen = new Map<string, string>();
+
+    for (const { item, candidate } of candidates) {
+      const excerpt = candidate.locator?.excerpt;
+      if (!excerpt) continue;
+      const owner = `${item.metadata.name}:${candidate.role ?? "candidate"}`;
+      const previous = seen.get(excerpt);
+      assert.equal(
+        previous,
+        undefined,
+        `excerpt reused by ${previous} and ${owner}: ${excerpt}`,
+      );
+      seen.set(excerpt, owner);
+    }
+  });
+
+  it("points every locator at the field its ReviewItem targets", () => {
+    for (const { item, candidate } of candidates) {
+      const locator = candidate.locator?.locator;
+      if (!locator) continue;
+      assert.ok(
+        locator.includes(item.spec.target),
+        `${item.metadata.name}:${candidate.role ?? "candidate"} locator "${locator}" does not reference target "${item.spec.target}"`,
+      );
+    }
+  });
+
+  it("keeps producer proposal metadata consistent with the candidate values", () => {
+    for (const { item, candidate } of candidates) {
+      if (candidate.role !== "proposed") continue;
+      const oldValue = (candidate.producer as { oldValue?: unknown } | undefined)?.oldValue;
+      if (oldValue === undefined) continue;
+      const current = item.spec.candidates.find((entry) => entry.role === "current");
+      assert.deepEqual(
+        oldValue,
+        current?.value,
+        `${item.metadata.name} proposed.producer.oldValue does not match the current candidate value`,
+      );
+    }
+  });
+
+  it("scopes declared source authority to the reviewed field", () => {
+    for (const { item, candidate } of candidates) {
+      const scope = (candidate.producer as { sourceAuthority?: { scope?: string } } | undefined)
+        ?.sourceAuthority?.scope;
+      if (!scope) continue;
+      assert.ok(
+        scope.includes(item.spec.target),
+        `${item.metadata.name}:${candidate.role ?? "candidate"} authority scope "${scope}" does not reference target "${item.spec.target}"`,
+      );
+    }
+  });
+});
