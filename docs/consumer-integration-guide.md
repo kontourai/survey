@@ -855,11 +855,22 @@ Keys are additive: a key may be added, and a row may stop being emitted when it
 becomes a duplicate or a constant, but a key is never renamed or repointed at a
 different fact.
 
-**Survey does its own deduplication.** The audit surface prints a card's
-identifiers and provenance in several places (the ID stack, Raw Source, each
-section's "IDs and trace links"). Where two placements report the **same
-property of the same record**, the workbench prints it once — the first,
-highest-context placement wins.
+**Survey does its own deduplication, for four rows.** The audit surface prints a
+card's identifiers and provenance in several places (the ID stack, Raw Source,
+each section's "IDs and trace links"), and where two of those placements report
+the **same property of the same record**, the workbench prints it once — the
+first, highest-context placement wins. In practice that is `raw-source-id`,
+`extractor`, `extraction-id` and `excerpt`: the placements that actually
+coincide.
+
+One repeat is deliberately left in place. The Unselected candidate history's
+"IDs and trace links" prints `candidate-id`, which on a two-candidate item is
+the same id the ID stack already showed as `Current candidate ID` or `Proposed
+candidate ID`. It stays because it is the only row naming *which* unselected
+candidate a value belongs to, it stops being a repeat as soon as there is a
+third candidate, and suppressing it made that section's disclosure appear and
+disappear with the candidate count — structure a host would then have to key on.
+Hide it with `[data-audit-row="candidate-id"]` if your surface does not want it.
 
 Suppression is keyed on the fact, never on the rendered string. Two rows showing
 the same text are not necessarily the same fact: a candidate's

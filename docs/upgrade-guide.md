@@ -278,9 +278,12 @@ for (const row of host.querySelectorAll(".audit-body .kv")) {
 
 Delete the stamping; keep the selector.
 
-**If you prune duplicated audit rows, delete those rules.** Survey no longer
-prints the same property of the same record twice, so the duplicates a host was
-suppressing are gone. Keeping a rule that hides one of them now hides the only
+**If you prune duplicated audit rows, re-check those rules — most are now
+redundant.** Survey deduplicates four rows: `raw-source-id`, `extractor`,
+`extraction-id` and `excerpt`. A rule suppressing one of those is now hiding the
+only copy. One repeat is deliberately kept — the Unselected candidate history's
+`candidate-id`, which on a two-candidate item repeats the ID stack — so a rule
+against that one is still doing something. Keeping a rule that hides one of them now hides the only
 copy. Rules that reflect a *host* decision — you promote the locator onto your
 own card face, you keep identifiers out of the UI entirely — are still
 legitimate; re-point them at `data-audit-row` keys.
