@@ -27,6 +27,26 @@ export type ExtractionInspectorInput = ExtractionInspectorEntry | { imports: Ext
 
 export interface ExtractionInspectorCandidate {
   id: string;
+  /**
+   * PUBLIC CONTRACT — the element id of the source-highlight anchor that
+   * {@link mountExtractionInspector} renders for this candidate.
+   *
+   * A host that wants to link a fact back to the sentence it came from uses this
+   * value directly (`href="#" + highlightElementId`, or
+   * `document.getElementById(highlightElementId)`); it must never re-derive an id
+   * from {@link ExtractionInspectorCandidate.id}. The renderer reads this same
+   * field, so the value a host reads and the id in the DOM cannot drift apart.
+   *
+   * Guaranteed unique across every candidate in one
+   * {@link ExtractionInspectorModel}, and a valid CSS/HTML identifier.
+   *
+   * The reverse lookup — DOM node to candidate — is the equally public
+   * `data-highlight-candidate-id="<candidate.id>"` attribute on the same anchor.
+   *
+   * Deliberately omitted from {@link exportExtractionInspector}: the canonical
+   * export records extraction evidence, and a DOM binding is not evidence.
+   */
+  highlightElementId: string;
   sourceKey: string;
   reviewItemName: string;
   proposalIndex: number;
@@ -87,7 +107,7 @@ export function buildExtractionInspectorModel(input: ExtractionInspectorInput): 
   const entries = "imports" in input ? input.imports : [input];
   if (!Array.isArray(entries) || entries.length === 0) throw new Error("Extraction inspector requires at least one validated import result.");
   const sources: ExtractionInspectorSource[] = [];
-  const candidates: ExtractionInspectorCandidate[] = [];
+  const candidates: UnboundInspectorCandidate[] = [];
   const sourceKeys = new Set<string>();
   for (const [entryIndex, entry] of entries.entries()) {
     if (!entry.importResult || typeof entry.importResult !== "object") throw new Error("Invalid extraction import result.");
@@ -131,7 +151,41 @@ export function buildExtractionInspectorModel(input: ExtractionInspectorInput): 
       for (let index = candidateStart; index < candidates.length; index += 1) candidates[index]!.alignment = "excerpt-mismatch";
     }
   }
-  return { sources, candidates };
+  return { sources, candidates: bindHighlightElementIds(candidates) };
+}
+
+/** A candidate before its DOM binding is assigned; see {@link bindHighlightElementIds}. */
+type UnboundInspectorCandidate = Omit<ExtractionInspectorCandidate, "highlightElementId">;
+
+const HIGHLIGHT_ID_PREFIX = "highlight-";
+
+/**
+ * Assigns every candidate the element id its source highlight will carry.
+ *
+ * Done here, over the whole model, rather than by a pure per-id derivation:
+ * sanitizing a candidate id to an HTML identifier is lossy (`a:b.c` and `a:b-c`
+ * both reduce to `a-b-c`), and two anchors sharing an id silently resolve a
+ * host's link to the wrong sentence. Today's candidate-id scheme happens not to
+ * produce that collision — the entry index always separates two sources — so
+ * the disambiguating suffix is defensive rather than a fix for a reachable bug.
+ * It is here because uniqueness is now a published promise
+ * ({@link ExtractionInspectorCandidate.highlightElementId}) that must survive a
+ * later change to the key scheme rather than depend on one.
+ */
+function bindHighlightElementIds(candidates: UnboundInspectorCandidate[]): ExtractionInspectorCandidate[] {
+  const used = new Set<string>();
+  return candidates.map((candidate) => {
+    const base = safeId(candidate.id);
+    let token = base;
+    for (let suffix = 2; used.has(token); suffix += 1) token = `${base}-${suffix}`;
+    used.add(token);
+    return { ...candidate, highlightElementId: `${HIGHLIGHT_ID_PREFIX}${token}` };
+  });
+}
+
+/** The inspector's own candidate-list id, paired 1:1 with a highlight anchor. Not public. */
+function candidateElementId(candidate: ExtractionInspectorCandidate): string {
+  return `candidate-${candidate.highlightElementId.slice(HIGHLIGHT_ID_PREFIX.length)}`;
 }
 
 function assertResolvedArtifact(artifact: ResolvedExtractionArtifact): void {
@@ -204,7 +258,7 @@ function candidateModel(
   pdfPageOffsets: number[] | undefined,
   pdfLayout: PortablePdfLayout | undefined,
   ocrDerived: true | undefined,
-): ExtractionInspectorCandidate {
+): UnboundInspectorCandidate {
   const match = /^chars:(\d+)-(\d+)$/.exec(proposal.provenance.locator);
   if (!match) throw new Error(`Extraction proposal ${index} has an invalid text span.`);
   const start = Number(match[1]), end = Number(match[2]);
@@ -251,7 +305,9 @@ export function exportExtractionInspector(model: ExtractionInspectorModel, optio
   return canonicalJson({ apiVersion: "survey.kontourai.io/v1alpha1", kind: "ExtractionInspectorExport", spec: {
     redaction: { preparedTextIncluded: options.includePreparedText === true, excerptsIncluded: options.includeExcerpts === true },
     sources: model.sources.map(({ artifactText, message: _message, ...source }) => ({ ...source, preparedText: options.includePreparedText ? artifactText ?? null : "[redacted]" })),
-    candidates: model.candidates.map((candidate) => ({ ...candidate, excerpt: options.includeExcerpts ? candidate.excerpt : "[redacted]" })),
+    // highlightElementId is a DOM binding for a live inspector, not extraction
+    // evidence — it stays out of the canonical export (and out of its digest).
+    candidates: model.candidates.map(({ highlightElementId: _highlightElementId, ...candidate }) => ({ ...candidate, excerpt: options.includeExcerpts ? candidate.excerpt : "[redacted]" })),
   } });
 }
 
@@ -278,7 +334,7 @@ export function mountExtractionInspector(
     page = Math.min(page, pageCount - 1);
     const start = page * pageSize;
     const visible = matching.slice(start, start + pageSize);
-    list.innerHTML = visible.map(c => `<li><button type="button" class="inspector-candidate" id="candidate-${safeId(c.id)}" data-candidate-id="${escapeHtml(c.id)}" aria-controls="highlight-${safeId(c.id)}"><strong>${escapeHtml(c.field)}</strong><span>${escapeHtml(c.provider)}${c.model ? ` / ${escapeHtml(c.model)}` : ""}</span><span>${escapeHtml(c.inferenceType)} ${escapeHtml(c.valueType)} · ${escapeHtml(c.alignment)}</span>${formatContext(c)}</button></li>`).join("") || "<li>No candidates match these filters.</li>";
+    list.innerHTML = visible.map(c => `<li><button type="button" class="inspector-candidate" id="${escapeHtml(candidateElementId(c))}" data-candidate-id="${escapeHtml(c.id)}" aria-controls="${escapeHtml(c.highlightElementId)}"><strong>${escapeHtml(c.field)}</strong><span>${escapeHtml(c.provider)}${c.model ? ` / ${escapeHtml(c.model)}` : ""}</span><span>${escapeHtml(c.inferenceType)} ${escapeHtml(c.valueType)} · ${escapeHtml(c.alignment)}</span>${formatContext(c)}</button></li>`).join("") || "<li>No candidates match these filters.</li>";
     resultCount.textContent = matching.length === 0 ? "No matching candidates" : `${start + 1}–${Math.min(start + pageSize, matching.length)} of ${matching.length}`;
     pageLabel.textContent = `Page ${page + 1} of ${pageCount}`;
     pageLabel.hidden = pageCount === 1;
@@ -294,7 +350,7 @@ export function mountExtractionInspector(
   previous.addEventListener("click", () => { page = Math.max(0, page - 1); render(); list.querySelector<HTMLButtonElement>("button")?.focus(); });
   next.addEventListener("click", () => { page += 1; render(); list.querySelector<HTMLButtonElement>("button")?.focus(); });
   const activateCandidate = (id: string) => { const candidate = model.candidates.find(c => c.id === id); if (!candidate) return; root.dispatchEvent(new CustomEvent("survey-extraction-candidate-activate", { bubbles: true, composed: true, detail: { candidateId: id, reviewItemName: candidate.reviewItemName } })); };
-  root.addEventListener("click", event => { const candidate = (event.target as Element).closest<HTMLButtonElement>("button[data-candidate-id]"); if (candidate) { event.preventDefault(); event.stopPropagation(); activateCandidate(candidate.dataset.candidateId!); return; } const highlight = (event.target as Element).closest<HTMLButtonElement>("button[data-highlight-candidate-id]"); if (highlight) { event.preventDefault(); event.stopPropagation(); root.querySelector<HTMLElement>(`#candidate-${CSS.escape(safeId(highlight.dataset.highlightCandidateId!))}`)?.focus(); } });
+  root.addEventListener("click", event => { const candidate = (event.target as Element).closest<HTMLButtonElement>("button[data-candidate-id]"); if (candidate) { event.preventDefault(); event.stopPropagation(); activateCandidate(candidate.dataset.candidateId!); return; } const highlight = (event.target as Element).closest<HTMLButtonElement>("button[data-highlight-candidate-id]"); if (highlight) { event.preventDefault(); event.stopPropagation(); const target = model.candidates.find(c => c.id === highlight.dataset.highlightCandidateId); if (target) root.querySelector<HTMLElement>(`#${CSS.escape(candidateElementId(target))}`)?.focus(); } });
   root.addEventListener("keydown", event => { const button = (event.target as Element).closest<HTMLButtonElement>("button[data-candidate-id]"); if (!button) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); activateCandidate(button.dataset.candidateId!); return; } if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); const buttons = [...list.querySelectorAll<HTMLButtonElement>("button[data-candidate-id]")]; const index = buttons.indexOf(button); buttons[event.key === "ArrowDown" ? Math.min(index + 1, buttons.length - 1) : Math.max(index - 1, 0)]?.focus(); } });
   render(); return () => root.remove();
 }
@@ -303,7 +359,7 @@ function renderSource(text: string, candidates: ExtractionInspectorCandidate[]):
   const boundaries = new Set([0, text.length]); candidates.forEach(c => { boundaries.add(c.start); boundaries.add(c.end); }); const points = [...boundaries].sort((a,b) => a-b);
   let html = "";
   const starts = new Map<number, ExtractionInspectorCandidate[]>(); candidates.forEach(c => starts.set(c.start, [...(starts.get(c.start) ?? []), c]));
-  for (let i=0; i<points.length-1; i++) { const start=points[i]!, end=points[i+1]!; for (const c of starts.get(start) ?? []) html += `<button type="button" class="highlight-anchor" id="highlight-${safeId(c.id)}" data-highlight-candidate-id="${escapeHtml(c.id)}" aria-label="Source highlight for ${escapeHtml(c.field)}; activate to return to candidate"></button>`; const segment=escapeHtml(text.slice(start,end)); const active=candidates.filter(c => c.start < end && c.end > start); html += active.length ? `<mark aria-label="Highlighted for ${active.map(c => escapeHtml(c.field)).join(", ")}">${segment}</mark>` : segment; }
+  for (let i=0; i<points.length-1; i++) { const start=points[i]!, end=points[i+1]!; for (const c of starts.get(start) ?? []) html += `<button type="button" class="highlight-anchor" id="${escapeHtml(c.highlightElementId)}" data-highlight-candidate-id="${escapeHtml(c.id)}" aria-label="Source highlight for ${escapeHtml(c.field)}; activate to return to candidate"></button>`; const segment=escapeHtml(text.slice(start,end)); const active=candidates.filter(c => c.start < end && c.end > start); html += active.length ? `<mark aria-label="Highlighted for ${active.map(c => escapeHtml(c.field)).join(", ")}">${segment}</mark>` : segment; }
   return html;
 }
 function formatContext(candidate: ExtractionInspectorCandidate): string {

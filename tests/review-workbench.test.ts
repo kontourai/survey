@@ -1383,7 +1383,7 @@ describe("review workbench prototype", () => {
     assert.equal(preview.reviewEvent?.reviewOutcomeId, "public-directory-availability:accept-proposed:review-outcome");
   });
 
-  it("AC4 labels empty authorityTrace neutrally and keeps sourceAuthority separate", () => {
+  it("AC4 keeps an empty authorityTrace off the card and keeps sourceAuthority separate", () => {
     const state = {
       ...initialReviewWorkbenchState(),
       decision: "accept-proposed" as const,
@@ -1397,10 +1397,15 @@ describe("review workbench prototype", () => {
     assert.match(preview.authorityTrace.detail, /SourceAuthority metadata is shown with Raw Source and Source Reference posture/);
     assert.match(preview.postureDisclaimer, /does not validate real-world truth/);
 
+    // The absence is a fact of the data, not a row on every card: two lines
+    // saying no portable authority trace was supplied said the same thing on
+    // every card of every queue. The posture statement they repeated is the
+    // footer disclaimer, and the data stays on the preview for hosts that
+    // project it themselves.
     const html = renderReviewWorkbenchHtml(state);
-    assert.match(html, /data-testid="surface-authority-trace"/);
-    assert.match(html, /Empty \/ not provided/);
-    assert.match(html, /is-neutral/);
+    assert.doesNotMatch(html, /data-testid="surface-authority-trace"/);
+    assert.doesNotMatch(html, /Empty \/ not provided/);
+    assert.doesNotMatch(html, /is-neutral/);
     assert.match(html, /Survey records Raw Source, Source Reference, and review posture/);
     assert.match(html, /does not validate real-world truth/);
   });

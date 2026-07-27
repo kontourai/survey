@@ -826,6 +826,45 @@ a save when another reviewer has already written events for the same review
 queue. Survey queues saves and reports persistence status, but the producer
 owns the database, conflict response, and retry UX.
 
+## Audit Details Rows
+
+Every row inside a field card's AUDIT DETAILS carries a stable machine name:
+
+```html
+<div class="kv" data-audit-row="raw-source-id">
+  <dt class="field-label">Raw Source ID</dt>
+  <dd class="field-value">…</dd>
+</div>
+```
+
+`reviewAuditRowKeys` (exported from `@kontourai/survey/review-workbench`) is the
+complete set of keys Survey emits, and `ReviewAuditRowKey` is its type. Row
+**labels** are display copy and will change; the keys will not. A host that
+needs to address one row — restyle it, reorder it, or hide it on its own
+surface — selects on the key:
+
+```css
+/* This host promotes the locator onto the face of its own card. */
+.my-shell .survey-workbench-embed [data-audit-row="locator"] { display: none; }
+```
+
+Deriving a selector by slugging label text is not a supported way to address a
+row, and this attribute exists so that nobody has to.
+
+Keys are additive: a key may be added, and a row may stop being emitted when it
+becomes a duplicate or a constant, but a key is never renamed or repointed at a
+different fact.
+
+**Survey does its own deduplication.** The audit surface prints a card's
+identifiers and provenance in several places (the ID stack, Raw Source, each
+section's "IDs and trace links"), and where those coincide the workbench prints
+the value once — the first, highest-context placement wins. Sections left with
+nothing but a constant reporting an absence (an empty portable authority trace,
+a card with no unselected candidates, an "IDs and trace links" list whose every
+id was already shown) are not rendered at all. Hosts should not need to prune
+duplicates; if you find yourself doing so, that is a defect to report upstream
+rather than to style around.
+
 ## Export Results
 
 Use `buildReviewWorkbenchResultsFromSession` when the producer wants a compact

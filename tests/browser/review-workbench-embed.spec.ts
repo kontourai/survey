@@ -83,6 +83,45 @@ test.describe("embedded workbench: design tokens", () => {
   });
 });
 
+test.describe("embedded workbench: source-highlight references", () => {
+  test("every candidate's published highlightElementId resolves to its own highlight anchor", async ({ page }) => {
+    const { pageErrors } = await loadEmbed(page);
+
+    // The supported way for a host to link a fact to the sentence it came from.
+    // A consumer that had to reconstruct these ids from Survey's private id
+    // sanitizer shipped a copy of it and a test to catch it drifting
+    // (kontourai/fieldwork#58); the id is published on the model instead, and
+    // the renderer reads the same field, so the two cannot disagree.
+    const resolution = await page.evaluate(() => {
+      const model = (window as unknown as {
+        __surveyInspectorModel: { candidates: Array<{ id: string; highlightElementId: string }> };
+      }).__surveyInspectorModel;
+
+      return model.candidates.map((candidate) => {
+        const matches = document.querySelectorAll(`[id="${candidate.highlightElementId}"]`);
+        const anchor = matches[0] as HTMLElement | undefined;
+        return {
+          candidateId: candidate.id,
+          highlightElementId: candidate.highlightElementId,
+          matchCount: matches.length,
+          boundTo: anchor?.dataset.highlightCandidateId ?? null,
+          isHighlightAnchor: anchor?.classList.contains("highlight-anchor") ?? false,
+        };
+      });
+    });
+
+    expect(resolution.length).toBeGreaterThan(0);
+    for (const entry of resolution) {
+      expect(entry.matchCount, `${entry.highlightElementId} must resolve to exactly one element`).toBe(1);
+      expect(entry.isHighlightAnchor).toBe(true);
+      // Resolving is not enough: it has to be THIS candidate's sentence.
+      expect(entry.boundTo).toBe(entry.candidateId);
+    }
+
+    expect(pageErrors).toEqual([]);
+  });
+});
+
 test.describe("embedded workbench: host theming", () => {
   test("a host re-brands the embed by declaring tokens on the embed element", async ({ page }) => {
     const { pageErrors } = await loadEmbed(page);

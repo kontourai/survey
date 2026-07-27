@@ -91,6 +91,44 @@ describe("source-linked extraction inspector", () => {
     assert.doesNotMatch(disclosed, /apiKey|providerConfig|rawResponse/);
   });
 
+  it("publishes a resolvable, unique highlight element id per candidate instead of a derivation to mirror", async () => {
+    const source = await input();
+    const model = buildExtractionInspectorModel(source);
+
+    // The contract is the value, not the recipe: a host reads this and never
+    // re-derives an id from candidate.id (kontourai/fieldwork#58's mirror of
+    // Survey's private safeId, the coupling this replaces).
+    for (const candidate of model.candidates) {
+      assert.equal(typeof candidate.highlightElementId, "string");
+      assert.ok(candidate.highlightElementId.length > 0);
+      // Usable verbatim as an HTML id and a CSS fragment identifier.
+      assert.match(candidate.highlightElementId, /^[A-Za-z][A-Za-z0-9_-]*$/);
+    }
+    const ids = model.candidates.map((candidate) => candidate.highlightElementId);
+    assert.equal(new Set(ids).size, ids.length);
+  });
+
+  it("keeps highlight element ids unique across every import in one model", async () => {
+    const first = await input("inspector-one");
+    const second = await input("inspector-two");
+    const model = buildExtractionInspectorModel({ imports: [first, second] });
+
+    const ids = model.candidates.map((candidate) => candidate.highlightElementId);
+    assert.equal(ids.length, model.candidates.length);
+    assert.equal(new Set(ids).size, ids.length);
+  });
+
+  it("keeps the highlight element id out of the canonical export", async () => {
+    const source = await input();
+    const model = buildExtractionInspectorModel(source);
+
+    // A DOM binding for a live inspector is not extraction evidence, and must
+    // not move the export's digest.
+    const exported = exportExtractionInspector(model, { includePreparedText: true, includeExcerpts: true });
+    assert.doesNotMatch(exported, /highlightElementId/);
+    assert.ok(model.candidates.every((candidate) => Boolean(candidate.highlightElementId)));
+  });
+
   it("resolves exact PDF regions and preserves an explicit OCR posture", async () => {
     const source = await input();
     const pdfEnvelope = structuredClone(source.importResult.record.spec.envelope);

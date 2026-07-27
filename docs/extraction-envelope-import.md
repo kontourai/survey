@@ -97,6 +97,46 @@ convenience. Every record is revalidated through Survey's public import
 validation boundary, and its proposals are checked against the authoritative
 `ReviewItem.metadata.name` values before anything renders.
 
+### Linking a decision back to the sentence it came from
+
+A host that renders the queue and the inspector side by side usually wants each
+fact on a review card to link to the highlighted span it was extracted from.
+`ExtractionInspectorCandidate.highlightElementId` is the supported way to build
+that link: it is the element id of the candidate's highlight anchor, published
+on the model the host already holds.
+
+```ts
+const model = buildExtractionInspectorModel(entry);
+mountExtractionInspector(inspectorHost, model);
+
+const byItem = new Map(model.candidates.map((c) => [c.reviewItemName, c]));
+
+const presentationAdapter: ReviewPresentationAdapter = {
+  linkForSource: (sourceRef, { item, candidate }) => {
+    if (candidate.role !== "proposed") return undefined;
+    const inspected = byItem.get(item.metadata.name);
+    return inspected ? { label: sourceRef, href: `#${inspected.highlightElementId}` } : undefined;
+  },
+};
+```
+
+The renderer reads the same field, so the id a host links to and the id in the
+DOM cannot drift apart. Two guarantees hold: the value is a valid HTML/CSS
+identifier usable verbatim, and it is unique across every candidate in one
+model.
+
+Do **not** reconstruct these ids from `candidate.id`. The sanitizing step is
+private, lossy, and not a contract; a consumer that mirrored it shipped a copy
+of Survey's internals and a test to catch that copy drifting.
+
+For the reverse direction — finding the candidate behind a DOM node — every
+highlight anchor also carries `data-highlight-candidate-id="<candidate.id>"`.
+That attribute is public for the same reason.
+
+`highlightElementId` is deliberately absent from `exportExtractionInspector`
+output: it is a binding to a live inspector, not extraction evidence, and must
+not move the export's digest.
+
 `exportExtractionInspector` produces canonical, provider-independent read-only
 JSON. Prepared text and excerpts are redacted by default because either can
 contain confidential, personal, or regulated source material. Include them only

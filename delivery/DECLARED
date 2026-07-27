@@ -1,0 +1,8 @@
+[
+  {
+    "scope": "author:briananderson1222 branch-prefix:feat/embed-consumer-hooks",
+    "reason": "Consumer-contract work on this branch is delivered without a Flow Agents trust bundle, so Step 2 bundle reconciliation has nothing to reconcile. Step 1 (fresh verify) is unaffected and still runs: npm run verify covers the library tests, the workbench static/asset checks, and both Playwright browser projects. Paired with author: because branch-prefix alone matches GITHUB_HEAD_REF, which is pusher-chosen on a fork PR and therefore self-service for exactly the actor this anchor exists to constrain (kontourai/flow-agents#1015, ADR 0022 2026-07-03 addendum).",
+    "approved_by": "briananderson1222 (repository owner; scoped to this branch only, not a standing exemption)",
+    "declared_at": "2026-07-26T00:00:00Z"
+  }
+]

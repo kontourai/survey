@@ -639,6 +639,22 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   display: none;
 }
 
+/* Why a decision was refused, next to the button that refused it. The input
+   that satisfies the precondition can be inside the collapsed audit accordion,
+   so the message cannot live only with the input (kontourai/survey#208). */
+.survey-workbench-embed .derr{
+  display: block;
+  margin-top: 6px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--k-negative);
+}
+
+.survey-workbench-embed .derr[hidden]{
+  display: none;
+}
+
 /* confidence + provenance */
 
 .survey-workbench-embed .prov{
@@ -1078,14 +1094,6 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-}
-
-.survey-workbench-embed .preview-section.is-neutral{
-  background: var(--k-raised);
-}
-
-.survey-workbench-embed .preview-section.is-neutral h3{
-  color: var(--k-faint);
 }
 
 .survey-workbench-embed .reference-details{

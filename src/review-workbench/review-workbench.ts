@@ -48,6 +48,13 @@ import {
 } from "../review-resource.js";
 import { validateAuthorizing, buildAuthorizedActionAuthorizing } from "../review-authorizing.js";
 import { humanizeIdentifier } from "./review-presentation.js";
+import {
+  createAuditRowTrace,
+  reviewAuditRowKeys,
+  type AuditRowTrace,
+  type ReviewAuditRowKey,
+} from "./audit-rows.js";
+export { reviewAuditRowKeys, type ReviewAuditRowKey } from "./audit-rows.js";
 export {
   buildExtractionInspectorModel,
   exportExtractionInspector,
@@ -1115,6 +1122,14 @@ function renderFieldCard(
           </label>
           <button class="btn unconfirmed" type="button" data-testid="could-not-confirm" data-item-name="${escapeHtml(item.metadata.name)}">Could not confirm</button>` : ""}
         </div>
+        <!--
+          A control's precondition message belongs where the control is. The
+          reason "Could not confirm" needs lives in the collapsed audit
+          accordion, so writing the failure only into that textarea's validation
+          bubble put it somewhere the reviewer could not see at the moment they
+          clicked, and the button read as permanently dead (kontourai/survey#208).
+        -->
+        <span class="derr" data-testid="decision-error" role="alert" hidden></span>
         <div class="decided">
           <span class="chip ${state}" data-testid="decided-chip">${chipLabel(state, hasCurrentValue)}</span>
           <button class="undo" type="button" data-testid="undo-decision" data-item-name="${escapeHtml(item.metadata.name)}">Change</button>
@@ -1372,6 +1387,10 @@ function renderAuditDetails(
   };
   const reviewDecisionPayload = buildReviewDecision(state);
   const preview = buildSurfaceProjectionPreview(item, reviewDecisionPayload, presentationAdapter);
+  // Seeded with what the card face already shows, so the audit surface never
+  // reprints it. Passed down through every section: the sections render in DOM
+  // order, so "first printing wins" is also "highest-context printing wins".
+  const trace = createAuditRowTrace([proposed?.locator?.excerpt]);
 
   return `
     <details class="audit-details" data-testid="audit-details">
@@ -1384,17 +1403,17 @@ function renderAuditDetails(
         ${definition ? `<p class="field-value"><span class="field-label">Decision effect</span> ${escapeHtml(definition.effect)}</p>` : ""}
         ${renderProducerFeedbackTags(item)}
         <dl class="field-stack compact">
-          ${current ? fieldItem("Current candidate ID", current.id) : ""}
-          ${proposed ? fieldItem("Proposed candidate ID", proposed.id) : ""}
-          ${proposed ? fieldItem("Claim ID", proposed.claimTarget.claimId ?? proposed.claimTarget.fieldOrBehavior) : ""}
-          ${proposed ? fieldItem("Raw Source ID", proposed.source.sourceId ?? proposed.source.sourceRef) : ""}
-          ${proposed?.locator ? fieldItem("Locator", proposed.locator.locator ?? proposed.locator.scheme) : ""}
-          ${proposed?.extraction.model ? fieldItem("Model", proposed.extraction.model) : ""}
-          ${proposed ? fieldItem("Extractor", proposed.extraction.extractor ?? "unknown") : ""}
-          ${proposed ? fieldItem("Extracted at", proposed.extraction.extractedAt ?? "unknown") : ""}
+          ${current ? tracedItem(trace, "current-candidate-id", "Current candidate ID", current.id) : ""}
+          ${proposed ? tracedItem(trace, "proposed-candidate-id", "Proposed candidate ID", proposed.id) : ""}
+          ${proposed ? tracedItem(trace, "claim-id", "Claim ID", proposed.claimTarget.claimId ?? proposed.claimTarget.fieldOrBehavior) : ""}
+          ${proposed ? tracedItem(trace, "raw-source-id", "Raw Source ID", proposed.source.sourceId ?? proposed.source.sourceRef) : ""}
+          ${proposed?.locator ? tracedItem(trace, "locator", "Locator", proposed.locator.locator ?? proposed.locator.scheme) : ""}
+          ${proposed?.extraction.model ? tracedItem(trace, "model", "Model", proposed.extraction.model) : ""}
+          ${proposed ? tracedItem(trace, "extractor", "Extractor", proposed.extraction.extractor ?? "unknown") : ""}
+          ${proposed ? tracedItem(trace, "extracted-at", "Extracted at", proposed.extraction.extractedAt ?? "unknown") : ""}
         </dl>
         ${preview
-          ? `<div class="preview-section-grid">${renderSurfacePreviewSections(preview)}</div><p class="preview-disclaimer preview-disclaimer-footer">${escapeHtml(preview.postureDisclaimer)}</p>`
+          ? `<div class="preview-section-grid">${renderSurfacePreviewSections(preview, trace)}</div><p class="preview-disclaimer preview-disclaimer-footer">${escapeHtml(preview.postureDisclaimer)}</p>`
           : "<p class=\"preview-disclaimer\">No decision recorded yet — pick an option above to preview the saved record.</p>"}
         ${reviewDecisionPayload
           ? `<details class="reference-details">
@@ -1441,51 +1460,67 @@ function renderFooterTally(session: ReviewQueueSessionState): string {
   `;
 }
 
-function renderSurfacePreviewSections(preview: SurfaceProjectionPreview): string {
+function renderSurfacePreviewSections(preview: SurfaceProjectionPreview, trace: AuditRowTrace): string {
   return [
-    renderCandidateHistory(preview),
-    renderSourceEvidence(preview),
+    renderCandidateHistory(preview, trace),
+    renderSourceEvidence(preview, trace),
     renderReviewEvent(preview),
-    renderIntegrityPosture(preview),
+    renderIntegrityPosture(preview, trace),
     renderAuthorityTrace(preview),
   ].join("");
 }
 
 function renderReviewEvent(preview: SurfaceProjectionPreview): string {
+  // A could-not-confirm resolution projects no review event; five rows reading
+  // "unknown / not recorded / pending / not provided" report an absence the
+  // decided chip on the card face already states (kontourai/survey#207).
+  if (!preview.reviewEvent) {
+    return "";
+  }
+
   return `
     <section class="preview-section" data-testid="surface-review-event">
       <h3>${escapeHtml("Review event")}</h3>
       <dl class="field-stack compact">
-        ${fieldItem("Actor", preview.reviewEvent?.actor ?? "unknown")}
-        ${fieldItem("Reviewed at", preview.reviewEvent?.reviewedAt ?? "not recorded")}
-        ${fieldItem("Status", preview.reviewEvent?.status ?? "pending")}
-        ${fieldItem("Rationale", preview.reviewEvent?.rationale ?? "No reviewer rationale provided.", "rationale-clamp")}
-        ${fieldItem("Outcome", preview.reviewEvent?.reviewOutcomeId ?? "not provided")}
+        ${fieldItem("actor", "Actor", preview.reviewEvent.actor)}
+        ${fieldItem("reviewed-at", "Reviewed at", preview.reviewEvent.reviewedAt)}
+        ${fieldItem("status", "Status", preview.reviewEvent.status)}
+        ${fieldItem("rationale", "Rationale", preview.reviewEvent.rationale, "rationale-clamp")}
+        ${fieldItem("outcome", "Outcome", preview.reviewEvent.reviewOutcomeId)}
       </dl>
     </section>
   `;
 }
 
-function renderIntegrityPosture(preview: SurfaceProjectionPreview): string {
+function renderIntegrityPosture(preview: SurfaceProjectionPreview, trace: AuditRowTrace): string {
   return renderPreviewSection("Integrity posture", "surface-integrity-posture", [
-    ["Checksum", preview.integrityPosture.checksum],
-  ], undefined, [
-    ["Candidate set ID", preview.integrityPosture.candidateSetId],
-    ["Raw source ID", preview.integrityPosture.rawSourceId],
-    ["Extraction ID", preview.integrityPosture.extractionId],
+    ["checksum", "Checksum", preview.integrityPosture.checksum],
+  ], trace, [
+    ["candidate-set-id", "Candidate set ID", preview.integrityPosture.candidateSetId],
+    ["raw-source-id", "Raw source ID", preview.integrityPosture.rawSourceId],
+    ["extraction-id", "Extraction ID", preview.integrityPosture.extractionId],
   ]);
 }
 
 function renderAuthorityTrace(preview: SurfaceProjectionPreview): string {
+  // An absent portable authority trace is the common case, and the two rows
+  // that said so were the same sentence on every card of every queue. The
+  // posture statement it repeated lives in the footer disclaimer; the data
+  // stays on SurfaceProjectionPreview for hosts that project it.
+  if (preview.authorityTrace.status === "empty") {
+    return "";
+  }
+
   return renderPreviewSection("Authority trace", "surface-authority-trace", [
-    ["Status", preview.authorityTrace.label],
-    ["Detail", preview.authorityTrace.detail],
-  ], preview.authorityTrace.status === "empty" ? " is-neutral" : "");
+    ["authority-trace-status", "Status", preview.authorityTrace.label],
+    ["authority-trace-detail", "Detail", preview.authorityTrace.detail],
+  ]);
 }
 
-function renderCandidateHistory(preview: SurfaceProjectionPreview): string {
+function renderCandidateHistory(preview: SurfaceProjectionPreview, trace: AuditRowTrace): string {
+  // Nothing unselected is not history; the row that said so carried no fact.
   if (preview.candidateHistory.length === 0) {
-    return renderPreviewSection("Unselected candidate history", "surface-candidate-history", [["History", "No unselected candidates."]], undefined, []);
+    return "";
   }
 
   const VISIBLE_COUNT = 3;
@@ -1493,14 +1528,15 @@ function renderCandidateHistory(preview: SurfaceProjectionPreview): string {
   const visibleCandidates = preview.candidateHistory.slice(0, VISIBLE_COUNT);
   const overflowCandidates = preview.candidateHistory.slice(VISIBLE_COUNT);
 
+  // `historyLabel` is the section's own heading, so a "History: Unselected
+  // candidate history" row above every value restated the <h3> once per
+  // candidate. The label stays on PreviewCandidateHistory for hosts that
+  // project it without a heading of their own.
   const renderHistoryRows = (candidates: typeof preview.candidateHistory): string =>
-    candidates.flatMap((candidate) => [
-      fieldItem("History", candidate.historyLabel),
-      fieldItem("Value", candidate.value),
-    ]).join("");
+    candidates.map((candidate) => fieldItem("history-value", "Value", candidate.value)).join("");
 
   const referenceRows = preview.candidateHistory.map((candidate) =>
-    fieldItem("Candidate ID", candidate.candidateId),
+    tracedItem(trace, "candidate-id", "Candidate ID", candidate.candidateId),
   ).join("");
 
   const overflowHtml = overflowCandidates.length > 0
@@ -1524,7 +1560,7 @@ function renderCandidateHistory(preview: SurfaceProjectionPreview): string {
         </dl>
         ${expanderHtml}
       </div>
-      ${preview.candidateHistory.length > 0 ? `<details class="reference-details">
+      ${referenceRows.trim() ? `<details class="reference-details">
         <summary>IDs and trace links</summary>
         <dl class="field-stack compact">${referenceRows}</dl>
       </details>` : ""}
@@ -1532,55 +1568,77 @@ function renderCandidateHistory(preview: SurfaceProjectionPreview): string {
   `;
 }
 
-function renderSourceEvidence(preview: SurfaceProjectionPreview): string {
-  const clampedExcerptHtml = fieldItemClamped("Excerpt", preview.sourceEvidence.excerpt, "excerpt");
+function renderSourceEvidence(preview: SurfaceProjectionPreview, trace: AuditRowTrace): string {
+  // The excerpt is quoted on the card face for the proposed candidate; only a
+  // decision that selected some OTHER candidate has an excerpt to add here.
+  const clampedExcerptHtml = trace.isRepeat(preview.sourceEvidence.excerpt)
+    ? ""
+    : fieldItemClamped("excerpt", "Excerpt", preview.sourceEvidence.excerpt, "excerpt");
 
   return `
     <section class="preview-section" data-testid="surface-source-evidence">
       <h3>${escapeHtml("Raw Source")}</h3>
       <dl class="field-stack compact">
-        ${fieldItem("Source Reference", preview.sourceEvidence.sourceRef)}
+        ${tracedItem(trace, "source-reference", "Source Reference", preview.sourceEvidence.sourceRef)}
         ${clampedExcerptHtml}
-        ${fieldItem("Extractor", preview.sourceEvidence.extractor)}
-        ${fieldItem("Observed", preview.sourceEvidence.observedAt)}
+        ${tracedItem(trace, "extractor", "Extractor", preview.sourceEvidence.extractor)}
+        ${tracedItem(trace, "observed", "Observed", preview.sourceEvidence.observedAt)}
         ${preview.sourceEvidence.sourceAuthority ? [
-          fieldItem("Source authority class", preview.sourceEvidence.sourceAuthority.authorityClass),
-          fieldItem("Declared by", preview.sourceEvidence.sourceAuthority.declaredBy),
-          fieldItem("Authority scope", preview.sourceEvidence.sourceAuthority.scope),
+          fieldItem("source-authority-class", "Source authority class", preview.sourceEvidence.sourceAuthority.authorityClass),
+          fieldItem("declared-by", "Declared by", preview.sourceEvidence.sourceAuthority.declaredBy),
+          fieldItem("authority-scope", "Authority scope", preview.sourceEvidence.sourceAuthority.scope),
         ].join("") : ""}
       </dl>
       ${renderReferenceDetails([
-        ["Raw Source ID", preview.sourceEvidence.sourceId],
-        ["Extraction ID", preview.sourceEvidence.extractionId],
-      ])}
+        ["raw-source-id", "Raw Source ID", preview.sourceEvidence.sourceId],
+        ["extraction-id", "Extraction ID", preview.sourceEvidence.extractionId],
+      ], trace)}
     </section>
   `;
 }
+
+type PreviewRow = readonly [ReviewAuditRowKey, string, string];
 
 function renderPreviewSection(
   title: string,
   testId: string,
-  rows: ReadonlyArray<readonly [string, string]>,
-  extraClass = "",
-  references: ReadonlyArray<readonly [string, string]> = [],
+  rows: ReadonlyArray<PreviewRow>,
+  trace?: AuditRowTrace,
+  references: ReadonlyArray<PreviewRow> = [],
 ): string {
+  const rowHtml = rows
+    .map(([key, label, value]) => (trace ? tracedItem(trace, key, label, value) : fieldItem(key, label, value)))
+    .join("");
+
   return `
-    <section class="preview-section${extraClass}" data-testid="${testId}">
+    <section class="preview-section" data-testid="${testId}">
       <h3>${escapeHtml(title)}</h3>
       <dl class="field-stack compact">
-        ${rows.map(([label, value]) => fieldItem(label, value)).join("")}
+        ${rowHtml}
       </dl>
-      ${references.length > 0 ? renderReferenceDetails(references) : ""}
+      ${references.length > 0 ? renderReferenceDetails(references, trace) : ""}
     </section>
   `;
 }
 
-function renderReferenceDetails(references: ReadonlyArray<readonly [string, string]>): string {
+/**
+ * The per-section "IDs and trace links" list. Rendered only when at least one
+ * reference survives deduplication — an empty disclosure triangle promising ids
+ * and then showing none is worse than no triangle.
+ */
+function renderReferenceDetails(references: ReadonlyArray<PreviewRow>, trace?: AuditRowTrace): string {
+  const rows = references
+    .map(([key, label, value]) => (trace ? tracedItem(trace, key, label, value) : fieldItem(key, label, value)))
+    .join("");
+  if (!rows.trim()) {
+    return "";
+  }
+
   return `
     <details class="reference-details">
       <summary>IDs and trace links</summary>
       <dl class="field-stack compact">
-        ${references.map(([label, value]) => fieldItem(label, value)).join("")}
+        ${rows}
       </dl>
     </details>
   `;
@@ -1837,6 +1895,26 @@ function queueSessionFromStartState(
   };
 }
 
+const COULD_NOT_CONFIRM_REASON_REQUIRED = "A reason is required when you could not confirm.";
+
+/**
+ * Opens every collapsed region between `control` and the card before anything
+ * tries to focus it or anchor a validation bubble on it.
+ *
+ * The browser will not show a validation message on, or move focus into, a
+ * control inside a closed `<details>` — the call silently does nothing. Any
+ * decision path that blocks on an input the reviewer cannot currently see must
+ * go through here, or the control it guards reads as dead (kontourai/survey#208,
+ * after #201 and #203 in the same family).
+ */
+function revealControl(control: HTMLElement | null | undefined): void {
+  let ancestor = control?.parentElement?.closest?.("details") ?? null;
+  while (ancestor) {
+    ancestor.open = true;
+    ancestor = ancestor.parentElement?.closest?.("details") ?? null;
+  }
+}
+
 function bindFieldCardInteractions(root: HTMLElement, controller: ReviewWorkbenchControllerBindings): void {
   root.querySelectorAll<HTMLButtonElement>("[data-testid='use-proposed']").forEach((button) => {
     button.addEventListener("click", () => {
@@ -1898,11 +1976,24 @@ function bindFieldCardInteractions(root: HTMLElement, controller: ReviewWorkbenc
       const note = controller.currentSession().notesByItemName[itemName]?.trim() ?? "";
       const field = button.closest<HTMLElement>("[data-testid='review-field']");
       const textarea = field?.querySelector<HTMLTextAreaElement>("[data-testid='reviewer-note']");
+      const errorEl = field?.querySelector<HTMLElement>("[data-testid='decision-error']");
       if (!note) {
-        textarea?.setCustomValidity?.("A reason is required when you could not confirm.");
-        textarea?.reportValidity?.();
+        // Say it where the button is, then open the way to the input that
+        // satisfies it. Focusing (and validating) a control inside a collapsed
+        // <details> is a no-op the reviewer never sees (kontourai/survey#208).
+        if (errorEl) {
+          errorEl.textContent = COULD_NOT_CONFIRM_REASON_REQUIRED;
+          errorEl.hidden = false;
+        }
+        textarea?.setCustomValidity?.(COULD_NOT_CONFIRM_REASON_REQUIRED);
+        revealControl(textarea);
         textarea?.focus();
+        textarea?.reportValidity?.();
         return;
+      }
+      if (errorEl) {
+        errorEl.textContent = "";
+        errorEl.hidden = true;
       }
       textarea?.setCustomValidity?.("");
       controller.setDecision(itemName, "could-not-confirm");
@@ -1920,6 +2011,13 @@ function bindFieldCardInteractions(root: HTMLElement, controller: ReviewWorkbenc
   root.querySelectorAll<HTMLTextAreaElement>("[data-testid='reviewer-note']").forEach((textarea) => {
     textarea.addEventListener("input", () => {
       textarea.setCustomValidity?.("");
+      const decisionError = textarea
+        .closest<HTMLElement>("[data-testid='review-field']")
+        ?.querySelector<HTMLElement>("[data-testid='decision-error']");
+      if (decisionError) {
+        decisionError.textContent = "";
+        decisionError.hidden = true;
+      }
       const itemName = textarea.dataset.itemName ?? "";
       controller.updateReviewerNote(itemName, textarea.value);
       refreshAuditPayloadForItem(textarea, controller, itemName);
@@ -2001,9 +2099,9 @@ function bindHistoryExpanders(root: HTMLElement): void {
   });
 }
 
-function fieldItemClamped(label: string, value: unknown, extraClass = ""): string {
+function fieldItemClamped(key: ReviewAuditRowKey, label: string, value: unknown, extraClass = ""): string {
   return `
-    <div class="kv ${extraClass}">
+    <div class="kv ${extraClass}" data-audit-row="${key}">
       <dt class="field-label">${escapeHtml(label)}</dt>
       <div class="excerpt-clamp" data-clamp>
         <dd class="field-value">${escapeHtml(value)}</dd>
@@ -2013,13 +2111,27 @@ function fieldItemClamped(label: string, value: unknown, extraClass = ""): strin
   `;
 }
 
-function fieldItem(label: string, value: unknown, extraClass = ""): string {
+function fieldItem(key: ReviewAuditRowKey, label: string, value: unknown, extraClass = ""): string {
   return `
-    <div class="kv ${extraClass}">
+    <div class="kv ${extraClass}" data-audit-row="${key}">
       <dt class="field-label">${escapeHtml(label)}</dt>
       <dd class="field-value">${escapeHtml(value)}</dd>
     </div>
   `;
+}
+
+/**
+ * A row whose content is an identifier or a provenance scalar: rendered only if
+ * this card has not already printed the same value under some other label.
+ */
+function tracedItem(
+  trace: AuditRowTrace,
+  key: ReviewAuditRowKey,
+  label: string,
+  value: unknown,
+  extraClass = "",
+): string {
+  return trace.isRepeat(value) ? "" : fieldItem(key, label, value, extraClass);
 }
 
 function escapeHtml(value: unknown): string {
