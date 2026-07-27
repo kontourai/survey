@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.0](https://github.com/kontourai/survey/compare/v2.2.4...v2.3.0) (2026-07-27)
+
+
+### Features
+
+* **review-workbench:** publish the highlight and audit-row hooks consumers were reaching past ([#209](https://github.com/kontourai/survey/issues/209)) ([d69d681](https://github.com/kontourai/survey/commit/d69d6817d2debdd7261536d8334f6a8ae9caf7bc))
+
 ## [2.2.4](https://github.com/kontourai/survey/compare/v2.2.3...v2.2.4) (2026-07-27)
 
 
