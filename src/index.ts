@@ -39,6 +39,25 @@ export {
   exportExtractionInspector,
   filterExtractionInspectorCandidates,
 } from "./review-workbench/extraction-inspector.js";
+export {
+  assertReviewQueueAgainstExtractionImport,
+  assertReviewQueueBinding,
+  bindReviewQueue,
+  hashReviewQueueSnapshot,
+  UnattestedExtractionQueueError,
+  UnattestedReviewQueueError,
+  validateReviewQueueAgainstExtractionImport,
+  validateReviewQueueBinding,
+} from "./review-workbench/queue-binding.js";
+export type {
+  BindReviewQueueOptions,
+  ReviewQueueBinding,
+  ReviewQueueBindingIssue,
+  ReviewQueueBindingIssueCode,
+  ReviewQueueExtractionIssue,
+  ReviewQueueExtractionIssueCode,
+  ValidateReviewQueueBindingOptions,
+} from "./review-workbench/queue-binding.js";
 export { resolvePortablePdfRegion } from "./pdf-layout.js";
 export type {
   PortablePdfBoundingBox,

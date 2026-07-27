@@ -55,6 +55,7 @@
     "verify": "npm run check:content-boundary && npm run check:decisions && npm run typecheck && npm test && npm run check:review-workbench-assets && npm run check:review-workbench && npm run test:browser && npm run test:browser:concurrent",
     "check:content-boundary": "node --test tests/content-boundary-script.test.cjs && node scripts/check-content-boundary.cjs",
     "check:decisions": "node scripts/check-decisions.cjs check",
+    "check:guards": "node scripts/check-guards.mjs",
     "gen:decisions-index": "node scripts/check-decisions.cjs gen-index",
     "freeze:adrs": "node scripts/freeze-adrs.mjs",
     "sync:review-workbench-assets": "node scripts/sync-review-workbench-assets.cjs",

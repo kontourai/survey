@@ -826,6 +826,120 @@ a save when another reviewer has already written events for the same review
 queue. Survey queues saves and reports persistence status, but the producer
 owns the database, conflict response, and retry UX.
 
+## Queue-Binding Attestation
+
+A decision is only projectable against the exact queue bytes it was recorded
+against. `createServerReviewSessionRecord` cannot enforce that by itself: it
+computes `snapshotHash` from whatever snapshot it is handed, so a record rebuilt
+from a mutated snapshot carries a hash of the mutated bytes and agrees with
+itself. A digest a writer recomputes as it saves attests nothing. That exact
+tautology shipped in a consuming application and let a post-decision edit export
+a substituted value; it took four rounds of adversarial review to close
+(kontourai/fieldwork#60), which is why the rule now lives here
+(kontourai/survey#213).
+
+The binding is the digest with an *origin*: taken once, when the round opens,
+and carried unchanged by every later write.
+
+```ts
+import {
+  assertReviewQueueAgainstExtractionImport,
+  bindReviewQueue,
+} from "@kontourai/survey/review-workbench";
+import {
+  deriveServerReviewSessionApplyResult,
+} from "@kontourai/survey/review-workbench/server-review-session";
+
+// WHEN THE ROUND OPENS — once. Persist the binding beside the queue.
+const binding = bindReviewQueue(snapshot, { sessionName });
+await storage.save({ snapshot, binding, events: [] });
+
+// ON EVERY LATER SERVE OR APPLY — the binding comes from storage, never
+// recomputed. Passing a binding makes the derivation refuse a queue whose
+// bytes or item set moved after the round opened.
+const applyResult = deriveServerReviewSessionApplyResult({
+  record,
+  events: storedEvents,
+  binding: stored.binding,
+  requiredResolvedItems: "all",
+});
+
+// AT EXPORT, for a queue imported from an extraction envelope: check the
+// stored queue is exactly what the stored import record derives. This attests
+// queue-to-record consistency; the record's own integrity is your storage's
+// job (see "What neither side catches" below).
+assertReviewQueueAgainstExtractionImport(stored.snapshot.items, importResult);
+```
+
+**What each side catches.** The binding (`assertReviewQueueBinding`, or the
+`binding` option above) refuses a one-sided edit: changed bytes
+(`snapshot-hash-mismatch`), a removed item (`item-removed`), an added item
+(`item-added`), an emptied queue (`empty-queue`) — set membership is checked in
+both directions, because walking only the items present can never notice one
+was removed. The binding **cannot** catch a writer who edits the queue and
+re-binds; hashing mutated bytes yields a self-consistent pair. For queues whose
+items all come from one `importExtractionEnvelope` result,
+`assertReviewQueueAgainstExtractionImport` narrows that hole to the record: it
+re-derives the canonical items through the public import boundary — which
+revalidates the record, so a forged `grounded` status throws before anything is
+compared — and requires the stored queue to be the same set, byte-identical per
+item, in both directions. A queue edited independently of its record fails
+(`item-diverges-from-extraction`, `item-missing-from-queue`,
+`item-not-in-extraction`).
+
+**What neither side catches.** The cross-check attests queue-to-record
+*consistency*, not record *integrity*. The portable envelope carries the
+prepared artifact's **digest**, never its bytes, so Survey — handed only the
+record — cannot verify a proposal's bytes against the digested artifact. A
+writer who edits the stored record's proposals (say, a `candidateValue`) and
+re-derives the queue from the edited record presents a self-consistent pair
+that passes the binding *and* the cross-check, while
+`result.preparedArtifact.digest` still names the honest bytes. That pass is
+pinned as a boundary test and by `npm run check:guards`, so the limit cannot
+drift silently. Keeping the stored record equal to the record you originally
+imported is **your storage obligation** — and be precise about what does and
+does not meet it. Validating your stored prepared bytes against
+`result.preparedArtifact.digest` protects **artifact integrity only**: the
+digest covers the prepared bytes, not the proposals, so it stays green
+through the coordinated rewrite above. No single artifact-digest check closes
+this. Preserving record integrity requires one of:
+
+- a digest or MAC over the **record itself**, anchored somewhere the record's
+  writer cannot reach (a separate trust domain, an append-only log, a signer);
+- immutable or authenticated record storage, so the record cannot be
+  rewritten in place; or
+- independently re-deriving the proposals from trusted prepared bytes and
+  comparing them to the stored record's proposals.
+
+Survey enforces none of these — it cannot see your storage — which is why
+this paragraph names them instead of claiming them.
+
+**The consumer's half of the contract.** Survey cannot see your storage. The
+binding attests the queue only if you (1) call `bindReviewQueue` at queue
+construction and never again for that round, (2) persist it beside the queue,
+and (3) pass the *stored* binding to validation. Calling `bindReviewQueue` at
+save time reintroduces the tautology this exists to remove.
+
+**What stays yours.** Storage layout, transport validation, and any round
+semantics the extraction cannot attest. A recheck round mixing items from a
+prior observation is the consumer's dispatch: deciding which attestation applies
+to which item from a single mutable label was one of fieldwork#60's bypasses,
+and the data that can cross-check the label lives with you, not here.
+`bindReviewQueue` refuses an empty queue and duplicate item names outright — a
+binding over nothing attests nothing, and an ambiguous name would let two items
+answer for one membership.
+
+Every refusal above is fault-injected by `npm run check:guards`, which removes
+each guard in turn and requires the suite covering it to fail — a guard no test
+fails without is decoration. Compilation is judged separately: an injection
+that fails to compile is a matrix failure (the "catch" would belong to the
+compiler, not a test), so a reported catch always means a test went red. The
+matrix also pins the documented boundary: the
+coordinated record rewrite that the cross-check blesses is asserted as a pass
+by a dedicated test, and check:guards fails if that test is removed or stops
+observing the pass, so this section cannot quietly claim more than the module
+enforces.
+
 ## Audit Details Rows
 
 Every row inside a field card's AUDIT DETAILS carries a stable machine name:
