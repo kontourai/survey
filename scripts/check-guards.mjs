@@ -119,10 +119,14 @@ const injections = [
     to: "  if (false) {",
   },
   {
+    // The whole block is replaced, not just its first line: leaving the inner
+    // currentSnapshot call unbanged fails tsc (options.binding no longer
+    // narrows), and a guard "caught" by the compiler instead of the suite is
+    // exactly the decorative attribution this matrix exists to rule out.
     label: "derive ignores the supplied binding",
     file: SESSION,
-    from: "  if (options.binding) {\n    assertReviewQueueBinding(options.binding, options.record.snapshot, { sessionName: options.record.sessionName });",
-    to: "  if (false as boolean) {\n    assertReviewQueueBinding(options.binding!, options.record.snapshot, { sessionName: options.record.sessionName });",
+    from: "  if (options.binding) {\n    assertReviewQueueBinding(options.binding, options.record.snapshot, { sessionName: options.record.sessionName });\n    if (options.currentSnapshot) {\n      assertReviewQueueBinding(options.binding, options.currentSnapshot, { sessionName: options.record.sessionName });\n    }\n  }",
+    to: "  if (false as boolean) {\n    assertReviewQueueBinding(options.binding!, options.record.snapshot, { sessionName: options.record.sessionName });\n    if (options.currentSnapshot) {\n      assertReviewQueueBinding(options.binding!, options.currentSnapshot, { sessionName: options.record.sessionName });\n    }\n  }",
   },
   {
     label: "derive checks the record's snapshot but not the caller's current one",
