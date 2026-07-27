@@ -826,6 +826,82 @@ a save when another reviewer has already written events for the same review
 queue. Survey queues saves and reports persistence status, but the producer
 owns the database, conflict response, and retry UX.
 
+## Queue-Binding Attestation
+
+A decision is only projectable against the exact queue bytes it was recorded
+against. `createServerReviewSessionRecord` cannot enforce that by itself: it
+computes `snapshotHash` from whatever snapshot it is handed, so a record rebuilt
+from a mutated snapshot carries a hash of the mutated bytes and agrees with
+itself. A digest a writer recomputes as it saves attests nothing. That exact
+tautology shipped in a consuming application and let a post-decision edit export
+a substituted value; it took four rounds of adversarial review to close
+(kontourai/fieldwork#60), which is why the rule now lives here
+(kontourai/survey#213).
+
+The binding is the digest with an *origin*: taken once, when the round opens,
+and carried unchanged by every later write.
+
+```ts
+import {
+  assertReviewQueueAgainstExtractionImport,
+  bindReviewQueue,
+} from "@kontourai/survey/review-workbench";
+import {
+  deriveServerReviewSessionApplyResult,
+} from "@kontourai/survey/review-workbench/server-review-session";
+
+// WHEN THE ROUND OPENS — once. Persist the binding beside the queue.
+const binding = bindReviewQueue(snapshot, { sessionName });
+await storage.save({ snapshot, binding, events: [] });
+
+// ON EVERY LATER SERVE OR APPLY — the binding comes from storage, never
+// recomputed. Passing a binding makes the derivation refuse a queue whose
+// bytes or item set moved after the round opened.
+const applyResult = deriveServerReviewSessionApplyResult({
+  record,
+  events: storedEvents,
+  binding: stored.binding,
+  requiredResolvedItems: "all",
+});
+
+// AT EXPORT, for a queue imported from an extraction envelope: check it
+// against the artifact it was NOT derived from.
+assertReviewQueueAgainstExtractionImport(stored.snapshot.items, importResult);
+```
+
+**What each side catches.** The binding (`assertReviewQueueBinding`, or the
+`binding` option above) refuses a one-sided edit: changed bytes
+(`snapshot-hash-mismatch`), a removed item (`item-removed`), an added item
+(`item-added`), an emptied queue (`empty-queue`) — set membership is checked in
+both directions, because walking only the items present can never notice one
+was removed. The binding **cannot** catch a writer who edits the queue and
+re-binds; hashing mutated bytes yields a self-consistent pair. For queues whose
+items all come from one `importExtractionEnvelope` result,
+`assertReviewQueueAgainstExtractionImport` closes that: it re-derives the
+canonical items through the public import boundary — which revalidates the
+record, so a forged `grounded` status throws before anything is compared — and
+requires the stored queue to be the same set, byte-identical per item, in both
+directions.
+
+**The consumer's half of the contract.** Survey cannot see your storage. The
+binding attests the queue only if you (1) call `bindReviewQueue` at queue
+construction and never again for that round, (2) persist it beside the queue,
+and (3) pass the *stored* binding to validation. Calling `bindReviewQueue` at
+save time reintroduces the tautology this exists to remove.
+
+**What stays yours.** Storage layout, transport validation, and any round
+semantics the extraction cannot attest. A recheck round mixing items from a
+prior observation is the consumer's dispatch: deciding which attestation applies
+to which item from a single mutable label was one of fieldwork#60's bypasses,
+and the data that can cross-check the label lives with you, not here.
+`bindReviewQueue` refuses an empty queue and duplicate item names outright — a
+binding over nothing attests nothing, and an ambiguous name would let two items
+answer for one membership.
+
+Every refusal above is fault-injected by `npm run check:guards`, which removes
+each guard in turn and requires the suite covering it to fail — a guard no test
+fails without is decoration.
+
 ## Audit Details Rows
 
 Every row inside a field card's AUDIT DETAILS carries a stable machine name:

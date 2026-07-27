@@ -58,6 +58,23 @@ import {
 } from "./audit-rows.js";
 export { reviewAuditRowKeys, type ReviewAuditRowKey } from "./audit-rows.js";
 export {
+  assertReviewQueueAgainstExtractionImport,
+  assertReviewQueueBinding,
+  bindReviewQueue,
+  hashReviewQueueSnapshot,
+  UnattestedExtractionQueueError,
+  UnattestedReviewQueueError,
+  validateReviewQueueAgainstExtractionImport,
+  validateReviewQueueBinding,
+  type BindReviewQueueOptions,
+  type ReviewQueueBinding,
+  type ReviewQueueBindingIssue,
+  type ReviewQueueBindingIssueCode,
+  type ReviewQueueExtractionIssue,
+  type ReviewQueueExtractionIssueCode,
+  type ValidateReviewQueueBindingOptions,
+} from "./queue-binding.js";
+export {
   buildExtractionInspectorModel,
   exportExtractionInspector,
   filterExtractionInspectorCandidates,

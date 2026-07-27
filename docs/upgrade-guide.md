@@ -338,6 +338,40 @@ you patched around "Could not confirm" doing nothing (kontourai/survey#208),
 that patch is now redundant; the workbench states the requirement next to the
 button and opens the accordion holding the input.
 
+## 2.4.0 — queue-binding attestation
+
+`2.4.0` is a minor release: everything below is additive, and no existing API
+changes shape or behavior unless you pass the new inputs.
+
+**What is new.** `bindReviewQueue`, `validateReviewQueueBinding` /
+`assertReviewQueueBinding`, `validateReviewQueueAgainstExtractionImport` /
+`assertReviewQueueAgainstExtractionImport`, `hashReviewQueueSnapshot`, and the
+`ReviewQueueBinding` record type, exported from the package root and
+`@kontourai/survey/review-workbench`. `deriveServerReviewSessionApplyResult`
+accepts an optional `binding`. See the consumer integration guide's
+"Queue-Binding Attestation" section for the contract.
+
+**Nothing existing breaks.** `deriveServerReviewSessionApplyResult` without a
+`binding` behaves exactly as in 2.3.x — the new assertion runs only inside
+`if (options.binding)`. `hashReviewQueueSnapshot` is byte-identical to
+`hashReviewSessionSnapshot` (pinned by test), so digests you already persist
+remain valid; adopting the binding does not invalidate stored state.
+
+**What passing a `binding` changes.** The derivation throws
+`UnattestedReviewQueueError` when the record's snapshot — or `currentSnapshot`,
+when you supply one — no longer matches the bound bytes or the bound item set,
+in either direction. It does not validate your storage, and it cannot tell a
+stored binding from a freshly computed one: a binding recomputed at call time
+from the snapshot being checked passes by construction. Bind at queue
+construction, persist, and pass the stored record — that half of the contract
+is yours.
+
+**Empty queues and duplicate names are refused, not warned about.**
+`bindReviewQueue` throws on both; `validateReviewQueueBinding` reports
+`empty-queue` and `ambiguous-item-identity` as issues and
+`assertReviewQueueBinding` throws on any issue. A malformed binding fails
+closed with `binding-malformed` rather than skipping the checks it cannot run.
+
 ## See also
 
 - [consumer-integration-guide.md](consumer-integration-guide.md) — first-time

@@ -153,6 +153,53 @@ export function buildEnvelopeImportFixture(seeds: readonly EnvelopeProposalSeed[
   });
 }
 
+/**
+ * An import that genuinely failed to ground: the prepared artifact reports a
+ * digest mismatch, so the boundary records diagnostics and emits no
+ * ReviewItems. Built through the real importer — a hand-flipped status is
+ * rejected by `validateExtractionEnvelopeImport` before anything reads it.
+ */
+export function ungroundedEnvelopeImportFixture(
+  seeds: readonly EnvelopeProposalSeed[] = envelopeQueueSeeds,
+) {
+  const text = envelopeArtifactText(seeds);
+  const preparedArtifact = buildPreparedArtifact(text);
+  return importExtractionEnvelope({
+    format: "traverse-extraction-result",
+    version: 1,
+    source: { ref: SOURCE_REF, snapshotRef: SNAPSHOT_REF },
+    result: {
+      proposals: buildProposals(seeds),
+      provider: "envelope-fixture",
+      model: "envelope-fixture-model",
+      runId: RUN_ID,
+      raw: { tokensUsed: 12 },
+      outcome: { status: "success" },
+      extractedAt: "2026-06-04T00:00:00.000Z",
+      providerCalls: 1,
+      totalTokensUsed: 12,
+      preparedArtifact,
+      preparedArtifactState: {
+        status: "digest-mismatch",
+        requestedRef: preparedArtifact.ref,
+        canonicalRef: preparedArtifact.ref,
+        actualDigest: "c".repeat(64),
+        actualContentLength: 17,
+      },
+    },
+  }, {
+    sourceKind: "uploaded-document",
+    claimTarget: (proposal) => ({
+      subjectType: "vendor.entity",
+      subjectId: "vendor-1",
+      facet: "vendor.contract",
+      claimType: "vendor.field-candidate",
+      fieldOrBehavior: proposal.fieldPath,
+      impactLevel: "medium",
+    }),
+  });
+}
+
 export function envelopeReviewQueueSession(
   seeds: readonly EnvelopeProposalSeed[] = envelopeQueueSeeds,
 ): ReviewQueueSessionState {

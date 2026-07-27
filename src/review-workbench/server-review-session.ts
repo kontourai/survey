@@ -20,6 +20,7 @@ import {
   type ReviewSessionReplayIssue,
 } from "./review-session-replay.js";
 import type { ReviewDecision, ReviewSessionEvent } from "../review-resource.js";
+import { assertReviewQueueBinding, type ReviewQueueBinding } from "./queue-binding.js";
 import { replayReviewSessionEvents, type ReviewQueueSessionState } from "./review-queue-session.js";
 import { canonicalJson } from "./canonical.js";
 
@@ -99,6 +100,19 @@ export interface DeriveServerReviewSessionApplyResultOptions {
   readonly currentSnapshot?: ReviewQueueSessionState;
   readonly currentEventCount?: number;
   readonly requiredResolvedItems?: ReviewSessionApplyResolutionRequirement;
+  /**
+   * The queue binding taken when this session opened (see
+   * ./queue-binding.ts). When present, the apply derivation refuses unless the
+   * record's snapshot — and the caller's current snapshot, when supplied —
+   * still matches the bound bytes and the bound item set, both directions.
+   *
+   * This is the check the record's own `snapshotHash` cannot provide: a record
+   * rebuilt from a mutated snapshot carries a hash of the mutated bytes and
+   * agrees with itself. The binding's authority is that it was written earlier,
+   * at queue construction, and carried unchanged — so it MUST come from the
+   * consumer's storage, not be recomputed at call time.
+   */
+  readonly binding?: ReviewQueueBinding;
 }
 
 export function createServerReviewSessionRecord(
@@ -201,6 +215,12 @@ export function assertServerReviewSessionEvents(
 export function deriveServerReviewSessionApplyResult(
   options: DeriveServerReviewSessionApplyResultOptions,
 ): DeriveReviewSessionApplyResultForSnapshotResult {
+  if (options.binding) {
+    assertReviewQueueBinding(options.binding, options.record.snapshot, { sessionName: options.record.sessionName });
+    if (options.currentSnapshot) {
+      assertReviewQueueBinding(options.binding, options.currentSnapshot, { sessionName: options.record.sessionName });
+    }
+  }
   assertServerReviewSessionFreshness(options.record, options.record.snapshot);
   if (options.currentSnapshot) {
     assertServerReviewSessionFreshness(options.record, options.currentSnapshot, options.currentEventCount);
