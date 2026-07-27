@@ -228,23 +228,51 @@ lifetime.
 
 ## 2.3.0 — embedded workbench DOM
 
-`2.3.0` is a minor release: nothing in Survey's *supported* API is removed or
-repointed, and it adds two extension points. But if you embed the review
-workbench and reach into its DOM, the markup underneath you changed, and a host
-that was compensating for a Survey defect can end up hiding real data. Migrate
-before or with the bump rather than after.
+`2.3.0` is a minor release: it adds two extension points, and no supported API
+is removed, renamed, or repointed at a different meaning. Two things still
+deserve your attention before you bump.
+
+**At the type level it is additive, but only just.**
+`ExtractionInspectorCandidate` gains an optional `highlightElementId`, and
+`buildExtractionInspectorModel` now returns the narrower
+`BuiltExtractionInspectorModel`, where that field is required. If you assemble
+an `ExtractionInspectorModel` yourself rather than taking one from the builder —
+a supported thing to do — your code keeps compiling, because the field is
+optional on the shape you author and `mountExtractionInspector` resolves an id
+for any candidate that arrives without one. Making it required outright would
+have broken that authoring path, which is a major-release change, not a minor
+one. If you *read* `highlightElementId`, take the builder's return type and it
+is a plain `string`.
+
+**At the DOM level it is genuinely breaking for embedders.** If you reach into
+the review workbench's markup, what is underneath you changed, and a host that
+was compensating for a Survey defect can end up hiding real data. Migrate before
+or with the bump rather than after.
 
 **If you slug row labels to build selectors, stop.** Every AUDIT DETAILS row now
 carries `data-audit-row="<key>"`, and `reviewAuditRowKeys` (exported from
 `@kontourai/survey/review-workbench`) is the complete set. Keys are stable
 across label copy changes; slugs are not.
 
+There was nothing on a row to select, so a host had to stamp its own attribute
+from the label text in JavaScript and then style that:
+
+```js
+// before — a slug derived from display copy, in the host's MutationObserver
+for (const row of host.querySelectorAll(".audit-body .kv")) {
+  row.dataset.auditRow = row.querySelector(".field-label")
+    ?.textContent?.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-") ?? "";
+}
+```
+
 ```css
 /* before — breaks the day someone edits a label */
-[data-testid="review-field"] .kv:has(.field-label:contains("Raw Source ID"))
-/* after */
+[data-audit-row="raw-source-id"] /* ...stamped by the snippet above */
+/* after — Survey stamps it, and the key is the contract */
 [data-audit-row="raw-source-id"]
 ```
+
+Delete the stamping; keep the selector.
 
 **If you prune duplicated audit rows, delete those rules.** Survey no longer
 prints the same property of the same record twice, so the duplicates a host was
@@ -265,10 +293,11 @@ that can never be suppressed, so the disclosure does not blink in and out — bu
 this is the class of coupling worth re-reading rather than assuming.
 
 **If you reconstruct source-highlight element ids, delete that code.**
-`ExtractionInspectorCandidate.highlightElementId` publishes the id, resolvable
-for every candidate whatever page or filter the inspector is on. Re-deriving one
-from `candidate.id` was never supported and the private sanitizer behind it can
-change.
+`buildExtractionInspectorModel` publishes the id on each candidate, resolvable
+for every candidate whatever page or filter the inspector is on, and in the
+non-grounded postures where there is no highlighted span to land on. Re-deriving
+one from `candidate.id` was never supported and the private sanitizer behind it
+can change.
 
 **A required input inside a collapsed region no longer kills its control.** If
 you patched around "Could not confirm" doing nothing (kontourai/survey#208),

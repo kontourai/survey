@@ -205,7 +205,22 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 .survey-workbench-embed .inspector-source pre{ white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 1rem; background: var(--k-sunken); border: 1px solid var(--k-line); min-height: 8rem; }
 .survey-workbench-embed .inspector-source mark{ background: var(--k-brand-wash); color: var(--k-text); outline: 1px solid var(--k-brand); }
 .survey-workbench-embed .inspector-candidate:focus{ outline: 3px solid var(--k-active); outline-offset: 2px; }
-.survey-workbench-embed .highlight-anchor{ display: inline-block; width: 1px; height: 1em; }
+/* A keyboard return target, not a control: sized to a sliver and stripped of
+   user-agent button chrome, which otherwise paints a ~16x13 outset-grey box
+   inline in the source text. Invisible until focused, and there is one per
+   candidate — including in the non-grounded postures, where several sit
+   together ahead of the posture message. */
+.survey-workbench-embed .highlight-anchor{
+  appearance: none;
+  display: inline-block;
+  width: 1px;
+  height: 1em;
+  padding: 0;
+  border: 0;
+  background: none;
+  vertical-align: baseline;
+}
+
 .survey-workbench-embed .highlight-anchor:focus{ outline: 3px solid var(--k-active); }
 .survey-workbench-embed .source-unavailable{ color: var(--k-negative); font-weight: 700; }
 @container (max-width: 720px) { .inspector-heading, .inspector-layout { grid-template-columns: 1fr !important; } }

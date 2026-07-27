@@ -63,6 +63,8 @@ export {
   mountExtractionInspector,
   type ExtractionAlignmentState,
   type ArtifactUnavailableCode,
+  type BuiltExtractionInspectorCandidate,
+  type BuiltExtractionInspectorModel,
   type ExtractionInspectorCandidate,
   type ExtractionInspectorEntry,
   type ExtractionInspectorExportOptions,

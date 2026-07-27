@@ -106,6 +106,7 @@ that link: it is the element id of the candidate's highlight anchor, published
 on the model the host already holds.
 
 ```ts
+// BuiltExtractionInspectorModel: highlightElementId is `string`, not optional.
 const model = buildExtractionInspectorModel(entry);
 mountExtractionInspector(inspectorHost, model);
 
@@ -123,17 +124,39 @@ const presentationAdapter: ReviewPresentationAdapter = {
 The renderer reads the same field, so the id a host links to and the id in the
 DOM cannot drift apart. Three guarantees hold: the value is a valid HTML/CSS
 identifier usable verbatim; it is unique across every candidate in one model;
-and it resolves for **every** candidate for as long as the inspector is mounted.
+and it resolves for **every** candidate, in every posture, for as long as the
+inspector is mounted.
 
-That last one is deliberate. `mountExtractionInspector` pages the candidate list
-(`pageSize`, default 100) and filters it, but highlight anchors are exempt from
-both — a 204-candidate model mounts 204 anchors on page one, and typing in the
-filter box does not take any of them away. A link that dies because the reviewer
-paged or filtered is the same broken promise as an id that drifted. Only the
-candidate rows and the painted `<mark>` highlights follow the page.
+That last one is deliberate, and it has three parts.
+`mountExtractionInspector` pages the candidate list (`pageSize`, default 100)
+and filters it, but highlight anchors are exempt from both — a 204-candidate
+model mounts 204 anchors on page one, and typing in the filter box does not take
+any of them away. Anchors are also rendered when the source is **not grounded**
+(the prepared artifact is unavailable, its digest does not match, or an excerpt
+does not match its span): there is no highlighted span to land on then, so the
+anchor sits with the posture message explaining why, which is more use to a
+reviewer than a link that goes nowhere. Only the candidate rows and the painted
+`<mark>` highlights follow the page. A link that dies because a reviewer paged,
+filtered, or opened a source that failed verification is the same broken promise
+as an id that drifted.
 
 Activating a highlight whose candidate row is off-page or filtered out navigates
 the list to that candidate rather than silently failing to focus it.
+
+### Which type carries the guarantee
+
+`buildExtractionInspectorModel` returns a `BuiltExtractionInspectorModel`, whose
+candidates are `BuiltExtractionInspectorCandidate` — `highlightElementId` is
+`string` there, so a host that links never null-checks the thing it was told to
+rely on.
+
+On the wider `ExtractionInspectorCandidate` the field is optional, because that
+type is also the shape a caller may assemble by hand and pass to
+`mountExtractionInspector`, `exportExtractionInspector`, or
+`filterExtractionInspectorCandidates`. Mount resolves an id for any candidate
+that arrives without one, so a hand-authored model still renders; it simply has
+no published id to link against. A built model is assignable everywhere the
+wider one is accepted, so the split costs callers nothing.
 
 Do **not** reconstruct these ids from `candidate.id`. The sanitizing step is
 private, lossy, and not a contract; a consumer that mirrored it shipped a copy

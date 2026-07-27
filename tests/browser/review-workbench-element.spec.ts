@@ -293,7 +293,14 @@ test("source inspector supports candidate-to-highlight keyboard navigation and p
   const highlight = page.locator('[data-highlight-candidate-id][aria-label*="Source highlight for title"]');
   await expect(highlight).toBeFocused();
   await expect.poll(() => page.evaluate(() => (document.getElementById("wbe") as HTMLElement & { session: { activeItemName: string } }).session.activeItemName)).toBe(inspectorResult.reviewItems[0]!.metadata.name);
-  await highlight.click();
+  // Activated by keyboard, which is what this anchor is: a 1px return target in
+  // the tab order, labelled "activate to return to candidate". It used to be
+  // reliably clickable with a pointer only because it kept its user-agent button
+  // chrome and painted a ~16x13 grey box inline in the source text — a rendering
+  // defect a consumer was stripping host-side, now fixed upstream. The synthetic
+  // click below still covers the click-handler path.
+  await highlight.focus();
+  await page.keyboard.press("Enter");
   await expect(candidate).toBeFocused();
   await highlight.focus();
   await highlight.evaluate((element) => element.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true })));

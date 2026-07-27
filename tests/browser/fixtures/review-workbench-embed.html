@@ -27,7 +27,15 @@
 
       const fixture = window.__surveyEmbedFixture;
       mountReviewWorkbench(document.getElementById("queue"), fixture.session);
-      const inspectorModel = buildExtractionInspectorModel(fixture.inspectorEntry);
+      let inspectorModel = buildExtractionInspectorModel(fixture.inspectorEntry);
+      if (fixture.stripPublishedHighlightIds) {
+        // The pre-2.3.0 authoring shape: a model a caller assembled themselves,
+        // with no DOM binding on it. Mount has to render it anyway.
+        inspectorModel = {
+          sources: inspectorModel.sources,
+          candidates: inspectorModel.candidates.map(({ highlightElementId, ...candidate }) => candidate),
+        };
+      }
       // A host holds the model it mounted; the highlight-anchor contract is a
       // field on it. Exposed here so the spec can resolve every published id
       // against the live DOM the way a consumer does.

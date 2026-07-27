@@ -87,13 +87,19 @@ export interface AuditFactId {
  * Values that report a fact as missing rather than carrying one. Two placements
  * both reading "not provided" are not one fact printed twice, so a placeholder
  * never suppresses a later placement and is never suppressed by an earlier one.
+ *
+ * Deliberately only the literals the workbench itself substitutes for an absent
+ * field, not a general vocabulary of nullish-looking words. Producer data is not
+ * ours to interpret: an extractor genuinely named "none" would be misread as an
+ * absence. "unknown" is the one string on both sides of that line — Survey emits
+ * it for a missing extractor or timestamp, and a producer could conceivably use
+ * it as a real name. The cost of getting that wrong is a duplicate row, never a
+ * dropped one, so it stays.
  */
 const ABSENCE_VALUES: ReadonlySet<string> = new Set([
   "not provided",
   "not recorded",
   "unknown",
-  "none",
-  "n/a",
 ]);
 
 /** Per-card record of which facts have already been printed, and as what. */

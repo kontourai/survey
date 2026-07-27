@@ -37,14 +37,26 @@ export interface ExtractionInspectorCandidate {
    * from {@link ExtractionInspectorCandidate.id}. The renderer reads this same
    * field, so the value a host reads and the id in the DOM cannot drift apart.
    *
+   * Optional **here** only because this type is also the shape a caller may hand
+   * to {@link mountExtractionInspector} directly; a model that came from
+   * {@link buildExtractionInspectorModel} is a
+   * {@link BuiltExtractionInspectorModel}, where it is always present. Take the
+   * builder's type if you want to link, and the guarantees below are yours.
+   * Mount fills in an id for any candidate that arrives without one, so a
+   * hand-authored model still renders — it just has nothing published to link to.
+   *
    * Resolvable for **every** candidate in the model for as long as the inspector
-   * is mounted — anchors are deliberately exempt from the candidate list's
-   * paging and filtering (see {@link ExtractionInspectorMountOptions.pageSize}),
-   * because a link that dies when a reviewer pages or filters is the same broken
-   * promise as an id that drifted.
+   * is mounted, in every posture. Anchors are deliberately exempt from the
+   * candidate list's paging and filtering (see
+   * {@link ExtractionInspectorMountOptions.pageSize}), and are rendered even when
+   * the prepared artifact is unavailable, digest-mismatched, or excerpt-
+   * mismatched — there is no highlighted span to land on then, so the anchor sits
+   * with the non-grounded posture message that explains why. A link that dies
+   * when a reviewer pages, filters, or opens a source that failed verification is
+   * the same broken promise as an id that drifted.
    *
    * Guaranteed unique across every candidate in one
-   * {@link ExtractionInspectorModel}, and a valid CSS/HTML identifier.
+   * {@link BuiltExtractionInspectorModel}, and a valid CSS/HTML identifier.
    *
    * The reverse lookup — DOM node to candidate — is the equally public
    * `data-highlight-candidate-id="<candidate.id>"` attribute on the same anchor.
@@ -52,7 +64,7 @@ export interface ExtractionInspectorCandidate {
    * Deliberately omitted from {@link exportExtractionInspector}: the canonical
    * export records extraction evidence, and a DOM binding is not evidence.
    */
-  highlightElementId: string;
+  highlightElementId?: string;
   sourceKey: string;
   reviewItemName: string;
   proposalIndex: number;
@@ -88,6 +100,25 @@ export interface ExtractionInspectorModel {
   candidates: ExtractionInspectorCandidate[];
 }
 
+/**
+ * A candidate from {@link buildExtractionInspectorModel}, where the DOM binding
+ * is resolved rather than optional.
+ *
+ * The split exists so the linking guarantee can be unconditional without making
+ * the *input* shape unbuildable by hand. `ExtractionInspectorModel` stays what a
+ * caller may author and pass to mount; this is what the builder hands back, and
+ * only the builder can promise the id is present, unique, and the one the
+ * renderer will use.
+ */
+export interface BuiltExtractionInspectorCandidate extends ExtractionInspectorCandidate {
+  highlightElementId: string;
+}
+
+/** The model {@link buildExtractionInspectorModel} returns. Assignable anywhere an {@link ExtractionInspectorModel} is accepted. */
+export interface BuiltExtractionInspectorModel extends ExtractionInspectorModel {
+  candidates: BuiltExtractionInspectorCandidate[];
+}
+
 export interface ExtractionInspectorFilters {
   field?: string; provider?: string; model?: string; attempt?: string; pass?: string;
   inferenceType?: "explicit" | "inferred"; alignment?: ExtractionAlignmentState;
@@ -119,7 +150,7 @@ export interface ExtractionInspectorMountOptions {
  * public import boundary. The function rechecks the result/ReviewItem binding
  * and fails closed if mutable caller data has drifted since import.
  */
-export function buildExtractionInspectorModel(input: ExtractionInspectorInput): ExtractionInspectorModel {
+export function buildExtractionInspectorModel(input: ExtractionInspectorInput): BuiltExtractionInspectorModel {
   const entries = "imports" in input ? input.imports : [input];
   if (!Array.isArray(entries) || entries.length === 0) throw new Error("Extraction inspector requires at least one validated import result.");
   const sources: ExtractionInspectorSource[] = [];
@@ -173,6 +204,7 @@ export function buildExtractionInspectorModel(input: ExtractionInspectorInput): 
 /** A candidate before its DOM binding is assigned; see {@link bindHighlightElementIds}. */
 type UnboundInspectorCandidate = Omit<ExtractionInspectorCandidate, "highlightElementId">;
 
+
 const HIGHLIGHT_ID_PREFIX = "highlight-";
 
 /**
@@ -188,20 +220,46 @@ const HIGHLIGHT_ID_PREFIX = "highlight-";
  * ({@link ExtractionInspectorCandidate.highlightElementId}) that must survive a
  * later change to the key scheme rather than depend on one.
  */
-function bindHighlightElementIds(candidates: UnboundInspectorCandidate[]): ExtractionInspectorCandidate[] {
+function bindHighlightElementIds(candidates: UnboundInspectorCandidate[]): BuiltExtractionInspectorCandidate[] {
   const used = new Set<string>();
-  return candidates.map((candidate) => {
-    const base = safeId(candidate.id);
-    let token = base;
-    for (let suffix = 2; used.has(token); suffix += 1) token = `${base}-${suffix}`;
-    used.add(token);
-    return { ...candidate, highlightElementId: `${HIGHLIGHT_ID_PREFIX}${token}` };
-  });
+  return candidates.map((candidate) => ({
+    ...candidate,
+    highlightElementId: `${HIGHLIGHT_ID_PREFIX}${uniqueToken(safeId(candidate.id), used)}`,
+  }));
+}
+
+function uniqueToken(base: string, used: Set<string>): string {
+  let token = base;
+  for (let suffix = 2; used.has(token); suffix += 1) token = `${base}-${suffix}`;
+  used.add(token);
+  return token;
 }
 
 /** The inspector's own candidate-list id, paired 1:1 with a highlight anchor. Not public. */
-function candidateElementId(candidate: ExtractionInspectorCandidate): string {
-  return `candidate-${candidate.highlightElementId.slice(HIGHLIGHT_ID_PREFIX.length)}`;
+function candidateElementId(highlightElementId: string): string {
+  return `candidate-${highlightElementId.slice(HIGHLIGHT_ID_PREFIX.length)}`;
+}
+
+/**
+ * The element id each candidate's anchor will carry, for one mount.
+ *
+ * A model from {@link buildExtractionInspectorModel} already carries one per
+ * candidate and it is used verbatim — rewriting a published id is precisely the
+ * drift this contract exists to prevent. A hand-authored model may omit some or
+ * all of them; those get an id derived here, seeded with the published ones so a
+ * derived id can never collide with one a host is already linking to.
+ */
+function resolveHighlightElementIds(model: ExtractionInspectorModel): Map<string, string> {
+  const used = new Set<string>();
+  for (const candidate of model.candidates) if (candidate.highlightElementId) used.add(candidate.highlightElementId);
+  const resolved = new Map<string, string>();
+  for (const candidate of model.candidates) {
+    resolved.set(
+      candidate.id,
+      candidate.highlightElementId ?? `${HIGHLIGHT_ID_PREFIX}${uniqueToken(safeId(candidate.id), used)}`,
+    );
+  }
+  return resolved;
 }
 
 function assertResolvedArtifact(artifact: ResolvedExtractionArtifact): void {
@@ -336,6 +394,8 @@ export function mountExtractionInspector(
     ? Math.min(Number(options.pageSize), 500)
     : 100;
   let page = 0;
+  const highlightIds = resolveHighlightElementIds(model);
+  const highlightIdFor = (candidate: ExtractionInspectorCandidate) => highlightIds.get(candidate.id)!;
   const root = document.createElement("section"); root.className = "extraction-inspector"; root.setAttribute("aria-label", "Source-linked extraction inspector");
   const choiceOptions = (values: Array<string | undefined>) => [...new Set(values.filter((v): v is string => Boolean(v)))].map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
   root.innerHTML = `<div class="inspector-heading"><div><p class="eyebrow">Source inspector</p><h2>Extraction evidence</h2></div><div class="inspector-postures" aria-live="polite"></div></div><div class="inspector-filters" aria-label="Extraction filters"><label>Find candidates<input type="search" data-filter="query" placeholder="Field or excerpt"></label>${filterSelect("field", "Field", choiceOptions(model.candidates.map(c => c.field)))}${filterSelect("provider", "Provider", choiceOptions(model.candidates.map(c => c.provider)))}${filterSelect("model", "Model", choiceOptions(model.candidates.map(c => c.model)))}${filterSelect("attempt", "Attempt", choiceOptions(model.candidates.map(c => c.attempt)))}${filterSelect("pass", "Pass", choiceOptions(model.candidates.map(c => c.pass)))}${filterSelect("inferenceType", "Type origin", '<option value="explicit">explicit</option><option value="inferred">inferred</option>')}${filterSelect("alignment", "Alignment", choiceOptions(model.candidates.map(c => c.alignment)))}</div><nav class="inspector-pager" aria-label="Extraction candidate navigation"><span class="inspector-result-count" aria-live="polite"></span><button type="button" data-page="previous">Previous</button><span class="inspector-page"></span><button type="button" data-page="next">Next</button></nav><div class="inspector-layout"><ol class="inspector-candidates" aria-label="Extraction candidates"></ol><div class="inspector-sources"></div></div>`;
@@ -350,7 +410,7 @@ export function mountExtractionInspector(
     page = Math.min(page, pageCount - 1);
     const start = page * pageSize;
     const visible = matching.slice(start, start + pageSize);
-    list.innerHTML = visible.map(c => `<li><button type="button" class="inspector-candidate" id="${escapeHtml(candidateElementId(c))}" data-candidate-id="${escapeHtml(c.id)}" aria-controls="${escapeHtml(c.highlightElementId)}"><strong>${escapeHtml(c.field)}</strong><span>${escapeHtml(c.provider)}${c.model ? ` / ${escapeHtml(c.model)}` : ""}</span><span>${escapeHtml(c.inferenceType)} ${escapeHtml(c.valueType)} · ${escapeHtml(c.alignment)}</span>${formatContext(c)}</button></li>`).join("") || "<li>No candidates match these filters.</li>";
+    list.innerHTML = visible.map(c => `<li><button type="button" class="inspector-candidate" id="${escapeHtml(candidateElementId(highlightIdFor(c)))}" data-candidate-id="${escapeHtml(c.id)}" aria-controls="${escapeHtml(highlightIdFor(c))}"><strong>${escapeHtml(c.field)}</strong><span>${escapeHtml(c.provider)}${c.model ? ` / ${escapeHtml(c.model)}` : ""}</span><span>${escapeHtml(c.inferenceType)} ${escapeHtml(c.valueType)} · ${escapeHtml(c.alignment)}</span>${formatContext(c)}</button></li>`).join("") || "<li>No candidates match these filters.</li>";
     resultCount.textContent = matching.length === 0 ? "No matching candidates" : `${start + 1}–${Math.min(start + pageSize, matching.length)} of ${matching.length}`;
     pageLabel.textContent = `Page ${page + 1} of ${pageCount}`;
     pageLabel.hidden = pageCount === 1;
@@ -359,7 +419,7 @@ export function mountExtractionInspector(
     previous.disabled = page === 0;
     next.disabled = page >= pageCount - 1;
     postures.innerHTML = model.sources.map(s => `<div class="inspector-posture ${s.alignment}" role="status"><strong>${escapeHtml(s.importName)}: ${escapeHtml(s.alignment)}</strong><span>${escapeHtml(s.message)}</span></div>`).join("");
-    sourcesRoot.innerHTML = model.sources.map(s => { const anchored = model.candidates.filter(c => c.sourceKey === s.key); const marked = visible.filter(c => c.sourceKey === s.key); return `<div class="inspector-source" aria-label="Prepared source for ${escapeHtml(s.importName)}"><h3>${escapeHtml(s.importName)}</h3><pre tabindex="0">${s.artifactText === undefined ? `<span class="source-unavailable">${escapeHtml(s.message)}</span>` : renderSource(s.artifactText, anchored, marked)}</pre></div>`; }).join("");
+    sourcesRoot.innerHTML = model.sources.map(s => { const anchored = model.candidates.filter(c => c.sourceKey === s.key); const marked = visible.filter(c => c.sourceKey === s.key); return `<div class="inspector-source" aria-label="Prepared source for ${escapeHtml(s.importName)}"><h3>${escapeHtml(s.importName)}</h3><pre tabindex="0">${s.artifactText === undefined ? `${anchored.map(c => anchorHtml(c, highlightIdFor(c), s.message)).join("")}<span class="source-unavailable">${escapeHtml(s.message)}</span>` : renderSource(s.artifactText, anchored, marked, highlightIdFor)}</pre></div>`; }).join("");
   };
   root.querySelectorAll<HTMLSelectElement>("select").forEach(select => select.addEventListener("change", event => { event.stopPropagation(); const key = select.dataset.filter as keyof ExtractionInspectorFilters; if (select.value) (filters as Record<string,string>)[key] = select.value; else delete (filters as Record<string,string>)[key]; page = 0; render(); }));
   root.querySelector<HTMLInputElement>('input[data-filter="query"]')?.addEventListener("input", event => { event.stopPropagation(); const input = event.currentTarget as HTMLInputElement; if (input.value) filters.query = input.value; else delete filters.query; page = 0; render(); });
@@ -390,7 +450,7 @@ export function mountExtractionInspector(
     render();
     return candidate;
   };
-  root.addEventListener("click", event => { const candidate = (event.target as Element).closest<HTMLButtonElement>("button[data-candidate-id]"); if (candidate) { event.preventDefault(); event.stopPropagation(); activateCandidate(candidate.dataset.candidateId!); return; } const highlight = (event.target as Element).closest<HTMLButtonElement>("button[data-highlight-candidate-id]"); if (highlight) { event.preventDefault(); event.stopPropagation(); const target = revealCandidateRow(highlight.dataset.highlightCandidateId!); if (target) root.querySelector<HTMLElement>(`#${CSS.escape(candidateElementId(target))}`)?.focus(); } });
+  root.addEventListener("click", event => { const candidate = (event.target as Element).closest<HTMLButtonElement>("button[data-candidate-id]"); if (candidate) { event.preventDefault(); event.stopPropagation(); activateCandidate(candidate.dataset.candidateId!); return; } const highlight = (event.target as Element).closest<HTMLButtonElement>("button[data-highlight-candidate-id]"); if (highlight) { event.preventDefault(); event.stopPropagation(); const target = revealCandidateRow(highlight.dataset.highlightCandidateId!); if (target) root.querySelector<HTMLElement>(`#${CSS.escape(candidateElementId(highlightIdFor(target)))}`)?.focus(); } });
   root.addEventListener("keydown", event => { const button = (event.target as Element).closest<HTMLButtonElement>("button[data-candidate-id]"); if (!button) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); activateCandidate(button.dataset.candidateId!); return; } if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); const buttons = [...list.querySelectorAll<HTMLButtonElement>("button[data-candidate-id]")]; const index = buttons.indexOf(button); buttons[event.key === "ArrowDown" ? Math.min(index + 1, buttons.length - 1) : Math.max(index - 1, 0)]?.focus(); } });
   render(); return () => root.remove();
 }
@@ -406,7 +466,7 @@ export function mountExtractionInspector(
  * whatever they have typed into the filter box — the anchors carry the contract,
  * the marks carry the view.
  */
-function renderSource(text: string, anchored: ExtractionInspectorCandidate[], marked: ExtractionInspectorCandidate[]): string {
+function renderSource(text: string, anchored: ExtractionInspectorCandidate[], marked: ExtractionInspectorCandidate[], highlightIdFor: (candidate: ExtractionInspectorCandidate) => string): string {
   const boundaries = new Set([0, text.length]);
   anchored.forEach(c => boundaries.add(c.start));
   marked.forEach(c => { boundaries.add(c.start); boundaries.add(c.end); });
@@ -414,15 +474,24 @@ function renderSource(text: string, anchored: ExtractionInspectorCandidate[], ma
   let html = "";
   const starts = new Map<number, ExtractionInspectorCandidate[]>(); anchored.forEach(c => starts.set(c.start, [...(starts.get(c.start) ?? []), c]));
   const emitted = new Set<ExtractionInspectorCandidate>();
-  for (let i=0; i<points.length-1; i++) { const start=points[i]!, end=points[i+1]!; for (const c of starts.get(start) ?? []) { emitted.add(c); html += anchorHtml(c); } const segment=escapeHtml(text.slice(start,end)); const active=marked.filter(c => c.start < end && c.end > start); html += active.length ? `<mark aria-label="Highlighted for ${active.map(c => escapeHtml(c.field)).join(", ")}">${segment}</mark>` : segment; }
+  for (let i=0; i<points.length-1; i++) { const start=points[i]!, end=points[i+1]!; for (const c of starts.get(start) ?? []) { emitted.add(c); html += anchorHtml(c, highlightIdFor(c)); } const segment=escapeHtml(text.slice(start,end)); const active=marked.filter(c => c.start < end && c.end > start); html += active.length ? `<mark aria-label="Highlighted for ${active.map(c => escapeHtml(c.field)).join(", ")}">${segment}</mark>` : segment; }
   // A span starting at or past the end of the prepared text has no segment to
   // lead; its anchor still has to exist, or its published id resolves nowhere.
-  for (const c of anchored) if (!emitted.has(c)) html += anchorHtml(c);
+  for (const c of anchored) if (!emitted.has(c)) html += anchorHtml(c, highlightIdFor(c));
   return html;
 }
 
-function anchorHtml(candidate: ExtractionInspectorCandidate): string {
-  return `<button type="button" class="highlight-anchor" id="${escapeHtml(candidate.highlightElementId)}" data-highlight-candidate-id="${escapeHtml(candidate.id)}" aria-label="Source highlight for ${escapeHtml(candidate.field)}; activate to return to candidate"></button>`;
+/**
+ * @param nonGroundedMessage present when the source has no prepared text to
+ *   highlight. The anchor still exists — a published id that resolves nowhere is
+ *   a dead link on the host's card — but it says what it actually is, which is a
+ *   marker sitting next to the reason there is no highlight to show.
+ */
+function anchorHtml(candidate: ExtractionInspectorCandidate, highlightElementId: string, nonGroundedMessage?: string): string {
+  const label = nonGroundedMessage === undefined
+    ? `Source highlight for ${escapeHtml(candidate.field)}; activate to return to candidate`
+    : `Source for ${escapeHtml(candidate.field)} is not grounded: ${escapeHtml(nonGroundedMessage)} Activate to return to candidate.`;
+  return `<button type="button" class="highlight-anchor" id="${escapeHtml(highlightElementId)}" data-highlight-candidate-id="${escapeHtml(candidate.id)}" aria-label="${label}"></button>`;
 }
 function formatContext(candidate: ExtractionInspectorCandidate): string {
   const context: string[] = [];

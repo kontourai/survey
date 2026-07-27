@@ -53,6 +53,8 @@ export type {
 export type {
   ExtractionAlignmentState,
   ArtifactUnavailableCode,
+  BuiltExtractionInspectorCandidate,
+  BuiltExtractionInspectorModel,
   ExtractionInspectorCandidate,
   ExtractionInspectorEntry,
   ExtractionInspectorExportOptions,

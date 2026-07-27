@@ -27,6 +27,10 @@ interface EmbedOptions {
   /** Seed count and page size, to mount a queue that actually paginates. */
   readonly candidates?: number;
   readonly pageSize?: number;
+  /** Overrides the resolved artifact, to mount a non-grounded posture. */
+  readonly artifact?: unknown;
+  /** Mounts the pre-2.3.0 authoring shape: a model carrying no DOM bindings. */
+  readonly stripPublishedHighlightIds?: boolean;
 }
 
 async function loadEmbed(page: Page, options: EmbedOptions = {}): Promise<LoadedEmbed> {
@@ -38,10 +42,12 @@ async function loadEmbed(page: Page, options: EmbedOptions = {}): Promise<Loaded
   });
 
   const seeds = options.candidates ? paginatingEnvelopeSeeds(options.candidates) : undefined;
+  const inspectorEntry = seeds ? envelopeInspectorEntry(seeds) : envelopeInspectorEntry();
   const fixture = {
     session: JSON.parse(JSON.stringify(seeds ? envelopeReviewQueueSession(seeds) : envelopeReviewQueueSession())),
-    inspectorEntry: JSON.parse(JSON.stringify(seeds ? envelopeInspectorEntry(seeds) : envelopeInspectorEntry())),
+    inspectorEntry: JSON.parse(JSON.stringify(options.artifact ? { ...inspectorEntry, artifact: options.artifact } : inspectorEntry)),
     ...(options.pageSize ? { inspectorPageSize: options.pageSize } : {}),
+    ...(options.stripPublishedHighlightIds ? { stripPublishedHighlightIds: true } : {}),
   };
   await page.addInitScript((value) => {
     (window as unknown as Record<string, unknown>).__surveyEmbedFixture = value;
@@ -164,6 +170,80 @@ test.describe("embedded workbench: source-highlight references", () => {
     expect(pageErrors).toEqual([]);
   });
 
+  // The postures where there is no prepared text to highlight. The model still
+  // publishes an id for every candidate, so the anchor has to exist or the
+  // host's href lands nowhere — the same defect as paging them away, in the one
+  // place a reviewer most needs to be told WHY there is nothing to see. Node
+  // cover for these postures existed at model level only, which is how the
+  // mounted case survived.
+  const NON_GROUNDED = [
+    { name: "an unavailable prepared artifact", artifact: { status: "unavailable", code: "storage-error" } },
+    { name: "a digest-mismatched prepared artifact", artifact: { status: "digest-mismatch", actualDigest: "0".repeat(64) } },
+    { name: "a tampered prepared artifact", artifact: { status: "available", text: "tampered beyond recognition", actualDigest: "0".repeat(64) } },
+  ];
+
+  for (const posture of NON_GROUNDED) {
+    test(`published ids still resolve with ${posture.name}`, async ({ page }) => {
+      const { pageErrors } = await loadEmbed(page, { artifact: posture.artifact });
+
+      // The posture itself must actually be non-grounded, or this proves nothing.
+      await expect(page.locator(".source-unavailable")).toHaveCount(1);
+      await expect(page.locator(".inspector-source mark")).toHaveCount(0);
+
+      expectAllResolve(await resolvePublishedIds(page), 4);
+
+      // And the anchor says what it is rather than promising a highlight.
+      const label = await page.locator(".highlight-anchor").first().getAttribute("aria-label");
+      expect(label).toMatch(/not grounded/i);
+
+      expect(pageErrors).toEqual([]);
+    });
+  }
+
+  test("return anchors paint nothing until focused, even where several sit together", async ({ page }) => {
+    // The anchor is a keyboard return target, not a control. Left with its
+    // user-agent chrome it paints a ~16x13 outset-grey box inline in the source
+    // text — a consumer was stripping that host-side. It matters more now that
+    // there is one per candidate and the non-grounded postures stack them all
+    // ahead of the message.
+    const { pageErrors } = await loadEmbed(page, { artifact: { status: "unavailable", code: "storage-error" } });
+
+    const painted = await page.locator(".highlight-anchor").first().evaluate((node) => {
+      const computed = window.getComputedStyle(node);
+      return {
+        borderTopWidth: computed.borderTopWidth,
+        backgroundImage: computed.backgroundImage,
+        backgroundColor: computed.backgroundColor,
+        paddingTop: computed.paddingTop,
+        width: computed.width,
+      };
+    });
+    expect(painted.borderTopWidth).toBe("0px");
+    expect(painted.paddingTop).toBe("0px");
+    expect(painted.backgroundImage).toBe("none");
+    expect(["rgba(0, 0, 0, 0)", "transparent"]).toContain(painted.backgroundColor);
+    expect(painted.width).toBe("1px");
+
+    expect(pageErrors).toEqual([]);
+  });
+
+  test("a hand-authored model with no published ids still mounts, with anchors resolved for it", async ({ page }) => {
+    // `ExtractionInspectorModel` is also the shape a caller may assemble and
+    // pass to mount, which is why the binding is optional there and required
+    // only on what the builder returns. Mount fills in what is missing instead
+    // of refusing to render — the alternative was type-breaking that authoring
+    // path on a minor release.
+    const { pageErrors } = await loadEmbed(page, { stripPublishedHighlightIds: true });
+
+    const anchors = page.locator(".highlight-anchor");
+    await expect(anchors).toHaveCount(4);
+    const ids = await anchors.evaluateAll((nodes) => nodes.map((node) => node.id));
+    expect(ids.filter(Boolean)).toHaveLength(4);
+    expect(new Set(ids).size).toBe(4);
+
+    expect(pageErrors).toEqual([]);
+  });
+
   test("activating an off-page highlight brings its candidate row back into view", async ({ page }) => {
     const { pageErrors } = await loadEmbed(page, { candidates: 12, pageSize: 5 });
 
@@ -180,7 +260,13 @@ test.describe("embedded workbench: source-highlight references", () => {
       return model.candidates.find((candidate) => candidate.field === "line.item09")!;
     });
 
-    await page.locator(`[id="${offPage.highlightElementId}"]`).click();
+    // Activated the way it is actually reached. The anchor is a 1px keyboard
+    // return target in the tab order, not a mouse-sized control, so focus it and
+    // press Enter rather than aiming a pointer at a sliver.
+    const anchor = page.locator(`[id="${offPage.highlightElementId}"]`);
+    await anchor.focus();
+    await expect(anchor).toBeFocused();
+    await page.keyboard.press("Enter");
 
     const focused = await page.evaluate(() => {
       const active = document.activeElement as HTMLElement | null;
