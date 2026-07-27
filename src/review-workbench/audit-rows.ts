@@ -89,17 +89,25 @@ export interface AuditFactId {
  * never suppresses a later placement and is never suppressed by an earlier one.
  *
  * Deliberately only the literals the workbench itself substitutes for an absent
- * field, not a general vocabulary of nullish-looking words. Producer data is not
- * ours to interpret: an extractor genuinely named "none" would be misread as an
- * absence. "unknown" is the one string on both sides of that line — Survey emits
- * it for a missing extractor or timestamp, and a producer could conceivably use
- * it as a real name. The cost of getting that wrong is a duplicate row, never a
- * dropped one, so it stays.
+ * field — every one of them, and nothing else. Producer data is not ours to
+ * interpret: an extractor genuinely named "none" would be misread as an absence,
+ * so a general vocabulary of nullish-looking words does not belong here.
+ * "unknown" is the one string on both sides of that line: Survey emits it for a
+ * missing extractor or timestamp, and a producer could conceivably use it as a
+ * real name. The cost of getting that wrong is a duplicate row, never a dropped
+ * one, so it stays.
+ *
+ * Keep this in step with the `?? "…"` substitutions in review-surface-preview.ts
+ * and the ID-stack rows in review-workbench.ts. The last two entries are not
+ * reachable through today's traced placements; they are here so the set means
+ * what it says rather than what it currently needs to.
  */
 const ABSENCE_VALUES: ReadonlySet<string> = new Set([
   "not provided",
   "not recorded",
   "unknown",
+  "no source excerpt provided.",
+  "no reviewer rationale provided.",
 ]);
 
 /** Per-card record of which facts have already been printed, and as what. */
