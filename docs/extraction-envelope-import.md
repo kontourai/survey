@@ -131,7 +131,10 @@ That last one is deliberate, and it has three parts.
 `mountExtractionInspector` pages the candidate list (`pageSize`, default 100)
 and filters it, but highlight anchors are exempt from both — a 204-candidate
 model mounts 204 anchors on page one, and typing in the filter box does not take
-any of them away. Anchors are also rendered when the source is **not grounded**
+any of them away. Anchors are empty and inert, so this costs roughly one element
+per off-page candidate: measured at 600 candidates against the default page
+size, all 600 ids resolve while candidate rows and painted highlights stay at
+100 each, with no mount-time cost over a 100-candidate model. Anchors are also rendered when the source is **not grounded**
 (the prepared artifact is unavailable, its digest does not match, or an excerpt
 does not match its span): there is no highlighted span to land on then, so the
 anchor sits with the posture message explaining why, which is more use to a

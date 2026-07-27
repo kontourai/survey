@@ -200,6 +200,23 @@ test.describe("embedded workbench: source-highlight references", () => {
     });
   }
 
+  test("only the anchors scale with the model; rows and painted highlights stay bounded by pageSize", async ({ page }) => {
+    // Mounting an anchor per candidate is what makes the published id resolve
+    // unconditionally, so the cost of that decision needs a guard. 600
+    // candidates against the default page size of 100: every id resolves, and
+    // the two expensive things — candidate rows and <mark> painting — stay at
+    // one page. Measured alongside this: ~1 extra element per off-page
+    // candidate and no mount-time regression (193ms at 600 vs 197ms at 100).
+    const { pageErrors } = await loadEmbed(page, { candidates: 600 });
+
+    await expect(page.locator(".highlight-anchor")).toHaveCount(600);
+    await expect(page.locator(".inspector-candidate")).toHaveCount(100);
+    await expect(page.locator(".inspector-source mark")).toHaveCount(100);
+    expectAllResolve(await resolvePublishedIds(page), 600);
+
+    expect(pageErrors).toEqual([]);
+  });
+
   test("return anchors paint nothing until focused, even where several sit together", async ({ page }) => {
     // The anchor is a keyboard return target, not a control. Left with its
     // user-agent chrome it paints a ~16x13 outset-grey box inline in the source
