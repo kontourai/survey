@@ -1410,57 +1410,81 @@ describe("review workbench prototype", () => {
     assert.match(html, /does not validate real-world truth/);
   });
 
-  it("prints one row, labelled Extractor, when a producer sets model and extractor to the same string", () => {
-    // A common producer shape, and the one a consumer found in the field: two
-    // adjacent rows, byte-identical values, different labels. The row that
-    // survives names what ran, not the model.
-    const item: ReviewItem = structuredClone(publicDirectoryReviewItemExample) as ReviewItem;
-    for (const candidate of item.spec.candidates as Array<ReviewItem["spec"]["candidates"][number]>) {
-      (candidate as unknown as Record<string, unknown>).extraction = {
-        ...candidate.extraction,
-        extractor: "example-crawl",
-        model: "example-crawl",
-      };
-    }
-
-    const html = renderReviewWorkbenchHtml({
-      ...initialReviewWorkbenchState(item),
+  it("keeps distinct facts that happen to share a value: extracted-at does not suppress observed", () => {
+    // The stock fixture's shape — extraction.extractedAt equals
+    // source.observedAt. Matching on the rendered string would drop `Observed`
+    // and leave an auditor unable to tell the field had ever existed.
+    const state = {
+      ...initialReviewWorkbenchState(),
       decision: "accept-proposed" as const,
-    });
+    };
+    const item = state.item;
+    const proposed = item.spec.candidates.find((candidate) => candidate.role === "proposed")!;
+    assert.equal(proposed.extraction.extractedAt, proposed.source.observedAt);
 
-    assert.match(html, /data-audit-row="extractor"/);
-    assert.doesNotMatch(html, /data-audit-row="model"/);
-    assert.equal(html.match(/example-crawl/g)?.length, 1);
+    const html = renderReviewWorkbenchHtml(state);
+
+    assert.deepEqual(auditRowValues(html, "extracted-at"), [proposed.extraction.extractedAt]);
+    assert.deepEqual(auditRowValues(html, "observed"), [proposed.source.observedAt]);
   });
 
-  it("emits no empty 'IDs and trace links' disclosure when every reference was already printed", () => {
-    // A producer that reuses one identifier across source, extraction, and
-    // candidate set leaves each reference list with nothing new to disclose.
-    // A triangle promising ids and then showing none is worse than no triangle.
-    const shared = "one-id-for-everything";
+  it("suppresses a later placement only when it is the same property of the same candidate", () => {
+    const state = {
+      ...initialReviewWorkbenchState(),
+      decision: "accept-proposed" as const,
+    };
+    const proposed = state.item.spec.candidates.find((candidate) => candidate.role === "proposed")!;
+    const html = renderReviewWorkbenchHtml(state);
+
+    // Accepting the proposal makes the ID stack and the projection preview
+    // describe the SAME candidate, so its source id prints once, not three
+    // times under "Raw Source ID" / "Raw Source ID" / "Raw source ID".
+    const rows = auditRows(html);
+    assert.equal(rows.filter(([, value]) => value === proposed.source.sourceId).length, 1);
+    assert.equal(rows.filter(([, value]) => value === proposed.extraction.extractor).length, 1);
+  });
+
+  it("keeps every placement when the decision selected a different candidate than the ID stack describes", () => {
+    // Keeping the current value makes the preview describe the CURRENT
+    // candidate while the ID stack still describes the proposed one. Different
+    // records, so nothing is a repeat placement and every row renders.
+    const state = {
+      ...initialReviewWorkbenchState(),
+      decision: "keep-current" as const,
+      note: "Kept current source posture.",
+    };
+    const current = state.item.spec.candidates.find((candidate) => candidate.role === "current")!;
+    const proposed = state.item.spec.candidates.find((candidate) => candidate.role === "proposed")!;
+    const html = renderReviewWorkbenchHtml(state);
+
+    const values = auditRows(html).map(([, value]) => value);
+    assert.ok(values.includes(current.source.sourceId!), "current candidate's source id");
+    assert.ok(values.includes(proposed.source.sourceId!), "proposed candidate's source id");
+    assert.ok(values.includes(current.extraction.extractor!), "current candidate's extractor");
+    assert.ok(values.includes(proposed.extraction.extractor!), "proposed candidate's extractor");
+    // The current candidate's excerpt is not on the card face, so it renders.
+    assert.ok(values.includes(current.locator!.excerpt!), "current candidate's excerpt");
+  });
+
+  it("still prints a later placement whose value diverges from the first reading", () => {
+    // Same nominal property, resolved through a different fallback chain: the
+    // projection overrides the raw source id. Identity matches, value does not,
+    // and the divergence is exactly what an auditor needs to see.
     const item: ReviewItem = structuredClone(publicDirectoryReviewItemExample) as ReviewItem;
-    for (const candidate of item.spec.candidates as Array<ReviewItem["spec"]["candidates"][number]>) {
-      const mutable = candidate as unknown as Record<string, unknown>;
-      mutable.source = { ...candidate.source, sourceId: shared };
-      mutable.extraction = { ...candidate.extraction, extractionId: shared };
-      mutable.projection = {
-        ...candidate.projection,
-        rawSourceId: shared,
-        extractionId: shared,
-        candidateSetId: shared,
-      };
-    }
+    const proposed = item.spec.candidates.find((candidate) => candidate.role === "proposed")!;
+    (proposed as unknown as Record<string, unknown>).projection = {
+      ...proposed.projection,
+      rawSourceId: "projection-overrode-the-raw-source-id",
+    };
 
     const html = renderReviewWorkbenchHtml({
       ...initialReviewWorkbenchState(item),
       decision: "accept-proposed" as const,
     });
 
-    const rowLists = html.match(/<details class="reference-details">[\s\S]*?<\/details>/g) ?? [];
-    for (const list of rowLists) {
-      if (!list.includes("<dl")) continue; // the saved-record JSON shares the class
-      assert.match(list, /data-audit-row=/, `empty reference list rendered: ${list}`);
-    }
+    const values = auditRows(html).map(([, value]) => value);
+    assert.ok(values.includes(proposed.source.sourceId!), "the candidate's own raw source id");
+    assert.ok(values.includes("projection-overrode-the-raw-source-id"), "the projection's override");
   });
 
   it("renders a regulated rule conflict ReviewItem without product-specific workbench branches", () => {
@@ -2440,3 +2464,22 @@ describe("review workbench: envelope-imported items", () => {
     assert.equal(root.field("current-only-item").chipText, "Kept current");
   });
 });
+
+/**
+ * The `data-audit-row` rows a card renders, as [key, value] pairs. Assertions
+ * about what the audit surface *shows* have to read the rows: the saved-record
+ * JSON below them serializes the whole decision, so a bare substring count over
+ * the HTML also counts the payload.
+ */
+function auditRows(html: string): Array<[string, string]> {
+  const rows: Array<[string, string]> = [];
+  const pattern = /data-audit-row="([^"]+)"[\s\S]*?<dd class="field-value">([\s\S]*?)<\/dd>/g;
+  for (const match of html.matchAll(pattern)) {
+    rows.push([match[1]!, match[2]!.trim()]);
+  }
+  return rows;
+}
+
+function auditRowValues(html: string, key: string): string[] {
+  return auditRows(html).filter(([rowKey]) => rowKey === key).map(([, value]) => value);
+}

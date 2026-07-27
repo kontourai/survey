@@ -857,13 +857,30 @@ different fact.
 
 **Survey does its own deduplication.** The audit surface prints a card's
 identifiers and provenance in several places (the ID stack, Raw Source, each
-section's "IDs and trace links"), and where those coincide the workbench prints
-the value once — the first, highest-context placement wins. Sections left with
-nothing but a constant reporting an absence (an empty portable authority trace,
-a card with no unselected candidates, an "IDs and trace links" list whose every
-id was already shown) are not rendered at all. Hosts should not need to prune
-duplicates; if you find yourself doing so, that is a defect to report upstream
-rather than to style around.
+section's "IDs and trace links"). Where two placements report the **same
+property of the same record**, the workbench prints it once — the first,
+highest-context placement wins.
+
+Suppression is keyed on the fact, never on the rendered string. Two rows showing
+the same text are not necessarily the same fact: a candidate's
+`extraction.extractedAt` and its `source.observedAt` are frequently the same
+timestamp, and both rows render. A value can only remove a *later* printing of
+the property it came from, and only when that printing agrees with it — a
+placement that resolves differently (a projection override versus the
+candidate's own field) still renders, because the divergence is the interesting
+part. In practice this affects four rows: `raw-source-id`, `extractor`,
+`extraction-id`, and `excerpt`. Deciding to keep the current value makes the
+projection preview describe a different candidate from the ID stack above it, so
+nothing is suppressed and every row renders.
+
+Sections holding only a constant that reports an absence are not rendered at
+all: an empty portable authority trace, a card with no unselected candidates,
+and the review event of a resolution that projects none. Every "IDs and trace
+links" disclosure keeps at least one reference that can never be suppressed, so
+the disclosure itself does not appear and disappear with the data.
+
+Hosts should not need to prune duplicates; if you find yourself doing so, that is
+a defect to report upstream rather than to style around.
 
 ## Export Results
 

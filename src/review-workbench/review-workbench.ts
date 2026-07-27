@@ -49,9 +49,10 @@ import {
 import { validateAuthorizing, buildAuthorizedActionAuthorizing } from "../review-authorizing.js";
 import { humanizeIdentifier } from "./review-presentation.js";
 import {
-  createAuditRowTrace,
+  createAuditFactTrace,
   reviewAuditRowKeys,
-  type AuditRowTrace,
+  type AuditFactId,
+  type AuditFactTrace,
   type ReviewAuditRowKey,
 } from "./audit-rows.js";
 export { reviewAuditRowKeys, type ReviewAuditRowKey } from "./audit-rows.js";
@@ -1389,8 +1390,10 @@ function renderAuditDetails(
   const preview = buildSurfaceProjectionPreview(item, reviewDecisionPayload, presentationAdapter);
   // Seeded with what the card face already shows, so the audit surface never
   // reprints it. Passed down through every section: the sections render in DOM
-  // order, so "first printing wins" is also "highest-context printing wins".
-  const trace = createAuditRowTrace([proposed?.locator?.excerpt]);
+  // order, so "first placement wins" is also "highest-context placement wins".
+  const trace = createAuditFactTrace(
+    proposed ? [{ of: proposed.id, property: "locator.excerpt", value: proposed.locator?.excerpt }] : [],
+  );
 
   return `
     <details class="audit-details" data-testid="audit-details">
@@ -1403,17 +1406,14 @@ function renderAuditDetails(
         ${definition ? `<p class="field-value"><span class="field-label">Decision effect</span> ${escapeHtml(definition.effect)}</p>` : ""}
         ${renderProducerFeedbackTags(item)}
         <dl class="field-stack compact">
-          ${current ? tracedItem(trace, "current-candidate-id", "Current candidate ID", current.id) : ""}
-          ${proposed ? tracedItem(trace, "proposed-candidate-id", "Proposed candidate ID", proposed.id) : ""}
-          ${proposed ? tracedItem(trace, "claim-id", "Claim ID", proposed.claimTarget.claimId ?? proposed.claimTarget.fieldOrBehavior) : ""}
-          ${proposed ? tracedItem(trace, "raw-source-id", "Raw Source ID", proposed.source.sourceId ?? proposed.source.sourceRef) : ""}
-          ${proposed?.locator ? tracedItem(trace, "locator", "Locator", proposed.locator.locator ?? proposed.locator.scheme) : ""}
-          ${/* Extractor before Model: producers commonly set both to the same
-                string, and when they do the row that survives should be the one
-                that names what ran, not the one that names the model. */""}
-          ${proposed ? tracedItem(trace, "extractor", "Extractor", proposed.extraction.extractor ?? "unknown") : ""}
-          ${proposed?.extraction.model ? tracedItem(trace, "model", "Model", proposed.extraction.model) : ""}
-          ${proposed ? tracedItem(trace, "extracted-at", "Extracted at", proposed.extraction.extractedAt ?? "unknown") : ""}
+          ${current ? fieldItem("current-candidate-id", "Current candidate ID", current.id) : ""}
+          ${proposed ? fieldItem("proposed-candidate-id", "Proposed candidate ID", proposed.id) : ""}
+          ${proposed ? fieldItem("claim-id", "Claim ID", proposed.claimTarget.claimId ?? proposed.claimTarget.fieldOrBehavior) : ""}
+          ${proposed ? placementItem(trace, { of: proposed.id, property: "source.sourceId" }, "raw-source-id", "Raw Source ID", proposed.source.sourceId ?? proposed.source.sourceRef) : ""}
+          ${proposed?.locator ? fieldItem("locator", "Locator", proposed.locator.locator ?? proposed.locator.scheme) : ""}
+          ${proposed?.extraction.model ? fieldItem("model", "Model", proposed.extraction.model) : ""}
+          ${proposed ? placementItem(trace, { of: proposed.id, property: "extraction.extractor" }, "extractor", "Extractor", proposed.extraction.extractor ?? "unknown") : ""}
+          ${proposed ? fieldItem("extracted-at", "Extracted at", proposed.extraction.extractedAt ?? "unknown") : ""}
         </dl>
         ${preview
           ? `<div class="preview-section-grid">${renderSurfacePreviewSections(preview, trace)}</div><p class="preview-disclaimer preview-disclaimer-footer">${escapeHtml(preview.postureDisclaimer)}</p>`
@@ -1463,12 +1463,17 @@ function renderFooterTally(session: ReviewQueueSessionState): string {
   `;
 }
 
-function renderSurfacePreviewSections(preview: SurfaceProjectionPreview, trace: AuditRowTrace): string {
+function renderSurfacePreviewSections(preview: SurfaceProjectionPreview, trace: AuditFactTrace): string {
+  // Every row below describes the SELECTED candidate. When the reviewer kept the
+  // current value, that is a different record from the one the ID stack above
+  // describes, so none of these are repeat placements and all of them render —
+  // which is the point of keying on fact identity rather than on strings.
+  const selected = preview.canonicalClaim.candidateId;
   return [
-    renderCandidateHistory(preview, trace),
-    renderSourceEvidence(preview, trace),
+    renderCandidateHistory(preview),
+    renderSourceEvidence(preview, trace, selected),
     renderReviewEvent(preview),
-    renderIntegrityPosture(preview, trace),
+    renderIntegrityPosture(preview, trace, selected),
     renderAuthorityTrace(preview),
   ].join("");
 }
@@ -1495,14 +1500,18 @@ function renderReviewEvent(preview: SurfaceProjectionPreview): string {
   `;
 }
 
-function renderIntegrityPosture(preview: SurfaceProjectionPreview, trace: AuditRowTrace): string {
+function renderIntegrityPosture(
+  preview: SurfaceProjectionPreview,
+  trace: AuditFactTrace,
+  selected: string,
+): string {
   return renderPreviewSection("Integrity posture", "surface-integrity-posture", [
-    ["checksum", "Checksum", preview.integrityPosture.checksum],
-  ], trace, [
-    ["candidate-set-id", "Candidate set ID", preview.integrityPosture.candidateSetId],
-    ["raw-source-id", "Raw source ID", preview.integrityPosture.rawSourceId],
-    ["extraction-id", "Extraction ID", preview.integrityPosture.extractionId],
-  ]);
+    { key: "checksum", label: "Checksum", value: preview.integrityPosture.checksum },
+  ], [
+    { key: "candidate-set-id", label: "Candidate set ID", value: preview.integrityPosture.candidateSetId },
+    { key: "raw-source-id", label: "Raw source ID", value: preview.integrityPosture.rawSourceId, fact: { of: selected, property: "source.sourceId" } },
+    { key: "extraction-id", label: "Extraction ID", value: preview.integrityPosture.extractionId, fact: { of: selected, property: "extraction.extractionId" } },
+  ], trace);
 }
 
 function renderAuthorityTrace(preview: SurfaceProjectionPreview): string {
@@ -1515,12 +1524,12 @@ function renderAuthorityTrace(preview: SurfaceProjectionPreview): string {
   }
 
   return renderPreviewSection("Authority trace", "surface-authority-trace", [
-    ["authority-trace-status", "Status", preview.authorityTrace.label],
-    ["authority-trace-detail", "Detail", preview.authorityTrace.detail],
+    { key: "authority-trace-status", label: "Status", value: preview.authorityTrace.label },
+    { key: "authority-trace-detail", label: "Detail", value: preview.authorityTrace.detail },
   ]);
 }
 
-function renderCandidateHistory(preview: SurfaceProjectionPreview, trace: AuditRowTrace): string {
+function renderCandidateHistory(preview: SurfaceProjectionPreview): string {
   // Nothing unselected is not history; the row that said so carried no fact.
   if (preview.candidateHistory.length === 0) {
     return "";
@@ -1569,18 +1578,26 @@ function renderCandidateHistory(preview: SurfaceProjectionPreview, trace: AuditR
         </dl>
         ${expanderHtml}
       </div>
-      ${referenceRows.trim() ? `<details class="reference-details">
+      <details class="reference-details">
         <summary>IDs and trace links</summary>
         <dl class="field-stack compact">${referenceRows}</dl>
-      </details>` : ""}
+      </details>
     </section>
   `;
 }
 
-function renderSourceEvidence(preview: SurfaceProjectionPreview, trace: AuditRowTrace): string {
-  // The excerpt is quoted on the card face for the proposed candidate; only a
-  // decision that selected some OTHER candidate has an excerpt to add here.
-  const clampedExcerptHtml = trace.isRepeat(preview.sourceEvidence.excerpt)
+function renderSourceEvidence(
+  preview: SurfaceProjectionPreview,
+  trace: AuditFactTrace,
+  selected: string,
+): string {
+  // The excerpt is quoted on the card face for the PROPOSED candidate. A
+  // decision that selected some other candidate has a different excerpt, and it
+  // renders here.
+  const clampedExcerptHtml = trace.isRepeatPlacement(
+    { of: selected, property: "locator.excerpt" },
+    preview.sourceEvidence.excerpt,
+  )
     ? ""
     : fieldItemClamped("excerpt", "Excerpt", preview.sourceEvidence.excerpt, "excerpt");
 
@@ -1588,10 +1605,10 @@ function renderSourceEvidence(preview: SurfaceProjectionPreview, trace: AuditRow
     <section class="preview-section" data-testid="surface-source-evidence">
       <h3>${escapeHtml("Raw Source")}</h3>
       <dl class="field-stack compact">
-        ${tracedItem(trace, "source-reference", "Source Reference", preview.sourceEvidence.sourceRef)}
+        ${fieldItem("source-reference", "Source Reference", preview.sourceEvidence.sourceRef)}
         ${clampedExcerptHtml}
-        ${tracedItem(trace, "extractor", "Extractor", preview.sourceEvidence.extractor)}
-        ${tracedItem(trace, "observed", "Observed", preview.sourceEvidence.observedAt)}
+        ${placementItem(trace, { of: selected, property: "extraction.extractor" }, "extractor", "Extractor", preview.sourceEvidence.extractor)}
+        ${fieldItem("observed", "Observed", preview.sourceEvidence.observedAt)}
         ${preview.sourceEvidence.sourceAuthority ? [
           fieldItem("source-authority-class", "Source authority class", preview.sourceEvidence.sourceAuthority.authorityClass),
           fieldItem("declared-by", "Declared by", preview.sourceEvidence.sourceAuthority.declaredBy),
@@ -1599,31 +1616,45 @@ function renderSourceEvidence(preview: SurfaceProjectionPreview, trace: AuditRow
         ].join("") : ""}
       </dl>
       ${renderReferenceDetails([
-        ["raw-source-id", "Raw Source ID", preview.sourceEvidence.sourceId],
-        ["extraction-id", "Extraction ID", preview.sourceEvidence.extractionId],
+        { key: "raw-source-id", label: "Raw Source ID", value: preview.sourceEvidence.sourceId, fact: { of: selected, property: "source.sourceId" } },
+        { key: "extraction-id", label: "Extraction ID", value: preview.sourceEvidence.extractionId, fact: { of: selected, property: "extraction.extractionId" } },
       ], trace)}
     </section>
   `;
 }
 
-type PreviewRow = readonly [ReviewAuditRowKey, string, string];
+/**
+ * A row in a projection-preview section. `fact` is present only on the handful
+ * of rows the card renders in more than one place; a row without it always
+ * renders.
+ */
+interface PreviewRow {
+  readonly key: ReviewAuditRowKey;
+  readonly label: string;
+  readonly value: string;
+  readonly fact?: AuditFactId;
+}
+
+function renderPreviewRows(rows: ReadonlyArray<PreviewRow>, trace?: AuditFactTrace): string {
+  return rows
+    .map((row) => (row.fact && trace
+      ? placementItem(trace, row.fact, row.key, row.label, row.value)
+      : fieldItem(row.key, row.label, row.value)))
+    .join("");
+}
 
 function renderPreviewSection(
   title: string,
   testId: string,
   rows: ReadonlyArray<PreviewRow>,
-  trace?: AuditRowTrace,
   references: ReadonlyArray<PreviewRow> = [],
+  trace?: AuditFactTrace,
 ): string {
-  const rowHtml = rows
-    .map(([key, label, value]) => (trace ? tracedItem(trace, key, label, value) : fieldItem(key, label, value)))
-    .join("");
-
   return `
     <section class="preview-section" data-testid="${testId}">
       <h3>${escapeHtml(title)}</h3>
       <dl class="field-stack compact">
-        ${rowHtml}
+        ${renderPreviewRows(rows, trace)}
       </dl>
       ${references.length > 0 ? renderReferenceDetails(references, trace) : ""}
     </section>
@@ -1631,23 +1662,21 @@ function renderPreviewSection(
 }
 
 /**
- * The per-section "IDs and trace links" list. Rendered only when at least one
- * reference survives deduplication — an empty disclosure triangle promising ids
- * and then showing none is worse than no triangle.
+ * The per-section "IDs and trace links" list.
+ *
+ * Every call site includes at least one reference that is a first placement and
+ * so can never be suppressed — Raw Source keeps its extraction id, Integrity
+ * posture its candidate set id, and the history section's candidate ids are
+ * exempt outright. The disclosure therefore does not appear and disappear with
+ * the data, which is what a host selecting on structure would otherwise be
+ * exposed to. Keep that property when adding a reference list.
  */
-function renderReferenceDetails(references: ReadonlyArray<PreviewRow>, trace?: AuditRowTrace): string {
-  const rows = references
-    .map(([key, label, value]) => (trace ? tracedItem(trace, key, label, value) : fieldItem(key, label, value)))
-    .join("");
-  if (!rows.trim()) {
-    return "";
-  }
-
+function renderReferenceDetails(references: ReadonlyArray<PreviewRow>, trace?: AuditFactTrace): string {
   return `
     <details class="reference-details">
       <summary>IDs and trace links</summary>
       <dl class="field-stack compact">
-        ${rows}
+        ${renderPreviewRows(references, trace)}
       </dl>
     </details>
   `;
@@ -2130,17 +2159,23 @@ function fieldItem(key: ReviewAuditRowKey, label: string, value: unknown, extraC
 }
 
 /**
- * A row whose content is an identifier or a provenance scalar: rendered only if
- * this card has not already printed the same value under some other label.
+ * A row for a fact the card renders in more than one place. Rendered only if
+ * this card has not already printed the SAME property of the SAME record with
+ * the same value; see {@link AuditFactTrace}.
+ *
+ * Only the four genuinely repeated placements go through here. Every other row
+ * has exactly one home and is rendered with {@link fieldItem} directly, so no
+ * row can ever be suppressed by a fact it has nothing to do with.
  */
-function tracedItem(
-  trace: AuditRowTrace,
+function placementItem(
+  trace: AuditFactTrace,
+  fact: AuditFactId,
   key: ReviewAuditRowKey,
   label: string,
   value: unknown,
   extraClass = "",
 ): string {
-  return trace.isRepeat(value) ? "" : fieldItem(key, label, value, extraClass);
+  return trace.isRepeatPlacement(fact, value) ? "" : fieldItem(key, label, value, extraClass);
 }
 
 function escapeHtml(value: unknown): string {

@@ -343,50 +343,59 @@ test("audit details are collapsed by default and expand to show trace IDs; the J
   expect(consoleErrors).toEqual([]);
 });
 
-test("audit details never print the same identifier twice, and drop the sections that only report an absence", async ({ page }) => {
+test("audit details print each fact once, keep facts that merely share a value, and drop sections that only report an absence", async ({ page }) => {
   const consoleErrors = await loadWorkbench(page);
   const field = fieldByItemName(page, "public-directory-hours");
 
   await field.getByTestId("use-proposed").click();
   await field.getByTestId("audit-details").locator("> summary").click();
 
-  // Deciding a field used to expand this accordion into a wall in which one raw
-  // source id appeared three times under three labels and one excerpt appeared
-  // twice on the same screen. A consumer pruned it with CSS keyed on label
-  // slugs; the duplication was Survey's to stop emitting (kontourai/fieldwork#58).
-  const values = await field.evaluate((card) =>
+  const rows = await field.evaluate((card) =>
     [...card.querySelectorAll<HTMLElement>(".audit-body [data-audit-row]")].map((row) => ({
       key: row.dataset.auditRow ?? "",
       value: row.querySelector(".field-value")?.textContent?.trim() ?? "",
     })),
   );
-  expect(values.length).toBeGreaterThan(0);
+  expect(rows.length).toBeGreaterThan(0);
+  const valuesFor = (key: string) => rows.filter((row) => row.key === key).map((row) => row.value);
+  const countOf = (value: string) => rows.filter((row) => row.value === value).length;
 
-  const ABSENCE = new Set(["not provided", "not recorded", "unknown", "none", "n/a"]);
-  // `candidate-id` names WHICH unselected candidate a history value belongs to.
-  // With two candidates it repeats the ID stack; with three it does not, and
-  // suppressing it would make that section's disclosure appear and disappear
-  // with the candidate count. Row-level suppression is what the key is for.
-  const NOT_DEDUPED = new Set(["candidate-id"]);
-  const seen = new Map<string, string>();
-  for (const { key, value } of values) {
-    if (!value || ABSENCE.has(value.toLowerCase()) || NOT_DEDUPED.has(key)) continue;
-    expect(seen.has(value), `"${value}" is printed by both ${seen.get(value)} and ${key}`).toBe(false);
-    seen.set(value, key);
-  }
+  // Accepting the proposal makes the ID stack and the projection preview
+  // describe the SAME candidate, so each of these prints once — the raw source
+  // id used to appear three times under three labels
+  // (kontourai/fieldwork#58).
+  const [rawSourceId] = valuesFor("raw-source-id");
+  const [extractor] = valuesFor("extractor");
+  expect(rawSourceId).toBeTruthy();
+  expect(extractor).toBeTruthy();
+  expect(countOf(rawSourceId!)).toBe(1);
+  expect(countOf(extractor!)).toBe(1);
+  expect(valuesFor("extraction-id")).toHaveLength(1);
+
+  // But suppression is keyed on WHICH property of WHICH record, not on the
+  // rendered string. `extraction.extractedAt` and `source.observedAt` are the
+  // same timestamp in this fixture and remain two rows; matching on the value
+  // would have dropped `Observed` and left an auditor unable to tell the field
+  // existed at all.
+  const [extractedAt] = valuesFor("extracted-at");
+  const [observed] = valuesFor("observed");
+  expect(extractedAt).toBeTruthy();
+  expect(observed).toBe(extractedAt);
 
   // The excerpt is quoted on the face of the card, in full.
   const faceExcerpt = (await field.getByTestId("proposed-excerpt").locator("q").textContent())?.trim();
   expect(faceExcerpt).toBeTruthy();
-  expect(values.some((row) => row.value === faceExcerpt)).toBe(false);
+  expect(valuesFor("excerpt")).toEqual([]);
+  expect(rows.some((row) => row.value === faceExcerpt)).toBe(false);
 
   // Two rows saying no portable authority trace was supplied, and one saying
   // there are no unselected candidates, are constants, not an audit trail.
   await expect(field.getByTestId("surface-authority-trace")).toHaveCount(0);
   await expect(field.locator(".audit-body [data-audit-row]").filter({ hasText: "No unselected candidates." })).toHaveCount(0);
 
-  // An "IDs and trace links" disclosure with nothing left inside it is worse
-  // than no disclosure.
+  // Every "IDs and trace links" disclosure keeps at least one reference that
+  // can never be suppressed, so the disclosure does not appear and disappear
+  // with the data — structure a host would otherwise be exposed to.
   const emptyReferenceLists = await field.evaluate((card) =>
     [...card.querySelectorAll(".audit-body details.reference-details")]
       // The saved-record JSON shares the class but is a <pre>, not a row list.
@@ -394,6 +403,38 @@ test("audit details never print the same identifier twice, and drop the sections
       .filter((node) => node.querySelectorAll("[data-audit-row]").length === 0).length,
   );
   expect(emptyReferenceLists).toBe(0);
+
+  expect(consoleErrors).toEqual([]);
+});
+
+test("keeping the current value keeps every placement, because the preview then describes a different candidate", async ({ page }) => {
+  const consoleErrors = await loadWorkbench(page);
+  const field = fieldByItemName(page, "public-directory-hours");
+
+  await field.getByTestId("keep-current").click();
+  await field.getByTestId("audit-details").locator("> summary").click();
+
+  const rows = await field.evaluate((card) =>
+    [...card.querySelectorAll<HTMLElement>(".audit-body [data-audit-row]")].map((row) => ({
+      key: row.dataset.auditRow ?? "",
+      value: row.querySelector(".field-value")?.textContent?.trim() ?? "",
+    })),
+  );
+  const valuesFor = (key: string) => rows.filter((row) => row.key === key).map((row) => row.value);
+
+  // The ID stack describes the proposed candidate; the preview describes the
+  // kept one. Different records, so nothing is a repeat placement: two distinct
+  // raw source ids, two extractors, and the kept candidate's excerpt — which is
+  // NOT the one quoted on the card face — all render.
+  const rawSourceIds = valuesFor("raw-source-id");
+  expect(rawSourceIds).toHaveLength(2);
+  expect(new Set(rawSourceIds).size).toBe(2);
+  expect(valuesFor("extractor")).toHaveLength(2);
+
+  const faceExcerpt = (await field.getByTestId("proposed-excerpt").locator("q").textContent())?.trim();
+  const [auditExcerpt] = valuesFor("excerpt");
+  expect(auditExcerpt).toBeTruthy();
+  expect(auditExcerpt).not.toBe(faceExcerpt);
 
   expect(consoleErrors).toEqual([]);
 });
