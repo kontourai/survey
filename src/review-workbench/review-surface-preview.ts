@@ -1,4 +1,4 @@
-import { type ReviewCandidate, type ReviewDecision, type ReviewItem } from "../review-resource.js";
+import { findSoleCandidateById, type ReviewCandidate, type ReviewDecision, type ReviewItem } from "../review-resource.js";
 import { type ReviewPresentationAdapter } from "./review-presentation.js";
 
 export interface SurfaceProjectionPreview {
@@ -113,7 +113,7 @@ function selectedPreviewCandidate(
     return undefined;
   }
 
-  const candidate = item.spec.candidates.find((entry) => entry.id === decision.spec.candidateId);
+  const candidate = findSoleCandidateById(item, decision.spec.candidateId);
   if (!candidate) {
     throw new Error(`ReviewItem ${item.metadata.name} has no candidate ${decision.spec.candidateId}.`);
   }

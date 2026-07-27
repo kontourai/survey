@@ -826,6 +826,73 @@ a save when another reviewer has already written events for the same review
 queue. Survey queues saves and reports persistence status, but the producer
 owns the database, conflict response, and retry UX.
 
+## Audit Details Rows
+
+Every row inside a field card's AUDIT DETAILS carries a stable machine name:
+
+```html
+<div class="kv" data-audit-row="raw-source-id">
+  <dt class="field-label">Raw Source ID</dt>
+  <dd class="field-value">…</dd>
+</div>
+```
+
+`reviewAuditRowKeys` (exported from `@kontourai/survey/review-workbench`) is the
+complete set of keys Survey emits, and `ReviewAuditRowKey` is its type. Row
+**labels** are display copy and will change; the keys will not. A host that
+needs to address one row — restyle it, reorder it, or hide it on its own
+surface — selects on the key:
+
+```css
+/* This host promotes the locator onto the face of its own card. */
+.my-shell .survey-workbench-embed [data-audit-row="locator"] { display: none; }
+```
+
+Deriving a selector by slugging label text is not a supported way to address a
+row, and this attribute exists so that nobody has to.
+
+Keys are additive: a key may be added, and a row may stop being emitted when it
+becomes a duplicate or a constant, but a key is never renamed or repointed at a
+different fact.
+
+**Survey does its own deduplication, for four rows.** The audit surface prints a
+card's identifiers and provenance in several places (the ID stack, Raw Source,
+each section's "IDs and trace links"), and where two of those placements report
+the **same property of the same record**, the workbench prints it once — the
+first, highest-context placement wins. In practice that is `raw-source-id`,
+`extractor`, `extraction-id` and `excerpt`: the placements that actually
+coincide.
+
+One repeat is deliberately left in place. The Unselected candidate history's
+"IDs and trace links" prints `candidate-id`, which on a two-candidate item is
+the same id the ID stack already showed as `Current candidate ID` or `Proposed
+candidate ID`. It stays because it is the only row naming *which* unselected
+candidate a value belongs to, it stops being a repeat as soon as there is a
+third candidate, and suppressing it made that section's disclosure appear and
+disappear with the candidate count — structure a host would then have to key on.
+Hide it with `[data-audit-row="candidate-id"]` if your surface does not want it.
+
+Suppression is keyed on the fact, never on the rendered string. Two rows showing
+the same text are not necessarily the same fact: a candidate's
+`extraction.extractedAt` and its `source.observedAt` are frequently the same
+timestamp, and both rows render. A value can only remove a *later* printing of
+the property it came from, and only when that printing agrees with it — a
+placement that resolves differently (a projection override versus the
+candidate's own field) still renders, because the divergence is the interesting
+part. In practice this affects four rows: `raw-source-id`, `extractor`,
+`extraction-id`, and `excerpt`. Deciding to keep the current value makes the
+projection preview describe a different candidate from the ID stack above it, so
+nothing is suppressed and every row renders.
+
+Sections holding only a constant that reports an absence are not rendered at
+all: an empty portable authority trace, a card with no unselected candidates,
+and the review event of a resolution that projects none. Every "IDs and trace
+links" disclosure keeps at least one reference that can never be suppressed, so
+the disclosure itself does not appear and disappear with the data.
+
+Hosts should not need to prune duplicates; if you find yourself doing so, that is
+a defect to report upstream rather than to style around.
+
 ## Export Results
 
 Use `buildReviewWorkbenchResultsFromSession` when the producer wants a compact

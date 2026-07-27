@@ -27,9 +27,79 @@
 
       const fixture = window.__surveyEmbedFixture;
       mountReviewWorkbench(document.getElementById("queue"), fixture.session);
+      let inspectorModel = buildExtractionInspectorModel(fixture.inspectorEntry);
+      if (fixture.collidingHighlightIds) {
+        // Distinct candidates. The first publishes "highlight-beta-two"; the
+        // second publishes nothing and its own id sanitizes to "beta-two", so
+        // the derived id lands on the published one unless uniqueness is checked
+        // in the same form it is stored.
+        const [first, second, ...rest] = inspectorModel.candidates;
+        inspectorModel = {
+          sources: inspectorModel.sources,
+          candidates: [
+            { ...first, id: "alpha-one", highlightElementId: "highlight-beta-two" },
+            { ...second, id: "beta.two", highlightElementId: undefined },
+            ...rest,
+          ],
+        };
+      }
+      if (fixture.sharedSpanCandidates) {
+        // Two DISTINCT candidates over the exact same span — ordinary in
+        // extraction, and merged into a single <mark> by the renderer.
+        const [first, second, ...rest] = inspectorModel.candidates;
+        const span = { start: first.start, end: first.end, excerpt: first.excerpt };
+        const pair = [
+          { ...first, ...span },
+          { ...second, ...span, field: "shared.second" },
+        ];
+        if (fixture.sharedSpanCandidates === "reversed") pair.reverse();
+        inspectorModel = { sources: inspectorModel.sources, candidates: [...pair, ...rest] };
+      }
+      if (fixture.duplicateCandidateIdsOnPageTwo) {
+        // Two candidates sharing an id, the SECOND publishing the fragment under
+        // test, and a page size that puts it on page 2. Following its fragment
+        // must land on it, not on whichever candidate `.find(c => c.id === …)`
+        // happens to reach first.
+        const [first, second, ...rest] = inspectorModel.candidates;
+        inspectorModel = {
+          sources: inspectorModel.sources,
+          candidates: [
+            { ...first, id: "same" },
+            { ...second, id: "same", highlightElementId: "highlight-published-second" },
+            ...rest,
+          ],
+        };
+      }
+      if (fixture.duplicateCandidateIds) {
+        // A hand-authored model whose candidate ids are not unique. Nothing in
+        // the input contract enforces that they are; only the builder's own ids
+        // are structurally unique.
+        const [first, second, ...rest] = inspectorModel.candidates;
+        inspectorModel = {
+          sources: inspectorModel.sources,
+          candidates: [
+            { ...first, id: "same", highlightElementId: "highlight-published-first" },
+            { ...second, id: "same", highlightElementId: undefined },
+            ...rest,
+          ],
+        };
+      }
+      if (fixture.stripPublishedHighlightIds) {
+        // The pre-2.3.0 authoring shape: a model a caller assembled themselves,
+        // with no DOM binding on it. Mount has to render it anyway.
+        inspectorModel = {
+          sources: inspectorModel.sources,
+          candidates: inspectorModel.candidates.map(({ highlightElementId, ...candidate }) => candidate),
+        };
+      }
+      // A host holds the model it mounted; the highlight-anchor contract is a
+      // field on it. Exposed here so the spec can resolve every published id
+      // against the live DOM the way a consumer does.
+      window.__surveyInspectorModel = inspectorModel;
       mountExtractionInspector(
         document.getElementById("inspector"),
-        buildExtractionInspectorModel(fixture.inspectorEntry),
+        inspectorModel,
+        fixture.inspectorPageSize ? { pageSize: fixture.inspectorPageSize } : {},
       );
       document.body.dataset.embedReady = "1";
     </script>

@@ -1,4 +1,4 @@
-import { type ReviewCandidate, type ReviewItem } from "../review-resource.js";
+import { findSoleCandidateById, type ReviewCandidate, type ReviewItem } from "../review-resource.js";
 import { type ReviewWorkbenchResult } from "./review-workbench.js";
 import { formatValue } from "./review-surface-preview.js";
 
@@ -124,8 +124,7 @@ export function buildReviewResultPresentation(
   const targetLabel = item && itemContext
     ? adapter.labelForTarget?.(target, itemContext) ?? humanizeIdentifier(target)
     : humanizeIdentifier(target);
-  const selectedCandidate = item?.spec.candidates.find((candidate) =>
-    candidate.role === result.selectedCandidateRole || candidate.id === result.selectedCandidateId);
+  const selectedCandidate = item ? selectedCandidateForResult(item, result) : undefined;
 
   return {
     result,
@@ -144,6 +143,36 @@ export function buildReviewResultPresentation(
       ? traceRefsForResult(item, result, selectedCandidate, adapter)
       : [{ label: "Survey ReviewItem", value: result.reviewItemName, kind: "review-item" }],
   };
+}
+
+/**
+ * The candidate a result selected, resolved by its complete identity.
+ *
+ * `find(role === … || id === …)` returned whichever candidate matched EITHER
+ * half, so on an item carrying a repeated candidate id it could return a
+ * different candidate than the result names — presenting one candidate's value
+ * against another's decision, which is exactly what it did.
+ *
+ * The id is the identity; {@link findSoleCandidateById} makes it fail closed
+ * rather than pick a winner when it is ambiguous, and the declared role has to
+ * agree when the result states one. Falling back to the role alone is kept for
+ * results that carry no id, and requires the role to be unambiguous too.
+ */
+function selectedCandidateForResult(
+  item: ReviewItem,
+  result: ReviewWorkbenchResult,
+): ReviewCandidate | undefined {
+  if (result.selectedCandidateId) {
+    const candidate = findSoleCandidateById(item, result.selectedCandidateId);
+    if (candidate && (result.selectedCandidateRole === undefined || candidate.role === result.selectedCandidateRole)) {
+      return candidate;
+    }
+  }
+  if (result.selectedCandidateRole === undefined) {
+    return undefined;
+  }
+  const byRole = item.spec.candidates.filter((candidate) => candidate.role === result.selectedCandidateRole);
+  return byRole.length === 1 ? byRole[0] : undefined;
 }
 
 export function humanizeIdentifier(value: string): string {

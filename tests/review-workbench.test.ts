@@ -1383,7 +1383,7 @@ describe("review workbench prototype", () => {
     assert.equal(preview.reviewEvent?.reviewOutcomeId, "public-directory-availability:accept-proposed:review-outcome");
   });
 
-  it("AC4 labels empty authorityTrace neutrally and keeps sourceAuthority separate", () => {
+  it("AC4 keeps an empty authorityTrace off the card and keeps sourceAuthority separate", () => {
     const state = {
       ...initialReviewWorkbenchState(),
       decision: "accept-proposed" as const,
@@ -1397,12 +1397,163 @@ describe("review workbench prototype", () => {
     assert.match(preview.authorityTrace.detail, /SourceAuthority metadata is shown with Raw Source and Source Reference posture/);
     assert.match(preview.postureDisclaimer, /does not validate real-world truth/);
 
+    // The absence is a fact of the data, not a row on every card: two lines
+    // saying no portable authority trace was supplied said the same thing on
+    // every card of every queue. The posture statement they repeated is the
+    // footer disclaimer, and the data stays on the preview for hosts that
+    // project it themselves.
     const html = renderReviewWorkbenchHtml(state);
-    assert.match(html, /data-testid="surface-authority-trace"/);
-    assert.match(html, /Empty \/ not provided/);
-    assert.match(html, /is-neutral/);
+    assert.doesNotMatch(html, /data-testid="surface-authority-trace"/);
+    assert.doesNotMatch(html, /Empty \/ not provided/);
+    assert.doesNotMatch(html, /is-neutral/);
     assert.match(html, /Survey records Raw Source, Source Reference, and review posture/);
     assert.match(html, /does not validate real-world truth/);
+  });
+
+  it("keeps distinct facts that happen to share a value: extracted-at does not suppress observed", () => {
+    // The stock fixture's shape — extraction.extractedAt equals
+    // source.observedAt. Matching on the rendered string would drop `Observed`
+    // and leave an auditor unable to tell the field had ever existed.
+    const state = {
+      ...initialReviewWorkbenchState(),
+      decision: "accept-proposed" as const,
+    };
+    const item = state.item;
+    const proposed = item.spec.candidates.find((candidate) => candidate.role === "proposed")!;
+    assert.equal(proposed.extraction.extractedAt, proposed.source.observedAt);
+
+    const html = renderReviewWorkbenchHtml(state);
+
+    assert.deepEqual(auditRowValues(html, "extracted-at"), [proposed.extraction.extractedAt]);
+    assert.deepEqual(auditRowValues(html, "observed"), [proposed.source.observedAt]);
+  });
+
+  it("suppresses a later placement only when it is the same property of the same candidate", () => {
+    const state = {
+      ...initialReviewWorkbenchState(),
+      decision: "accept-proposed" as const,
+    };
+    const proposed = state.item.spec.candidates.find((candidate) => candidate.role === "proposed")!;
+    const html = renderReviewWorkbenchHtml(state);
+
+    // Accepting the proposal makes the ID stack and the projection preview
+    // describe the SAME candidate, so its source id prints once, not three
+    // times under "Raw Source ID" / "Raw Source ID" / "Raw source ID".
+    const rows = auditRows(html);
+    assert.equal(rows.filter(([, value]) => value === proposed.source.sourceId).length, 1);
+    assert.equal(rows.filter(([, value]) => value === proposed.extraction.extractor).length, 1);
+  });
+
+  it("keeps every placement when the decision selected a different candidate than the ID stack describes", () => {
+    // Keeping the current value makes the preview describe the CURRENT
+    // candidate while the ID stack still describes the proposed one. Different
+    // records, so nothing is a repeat placement and every row renders.
+    const state = {
+      ...initialReviewWorkbenchState(),
+      decision: "keep-current" as const,
+      note: "Kept current source posture.",
+    };
+    const current = state.item.spec.candidates.find((candidate) => candidate.role === "current")!;
+    const proposed = state.item.spec.candidates.find((candidate) => candidate.role === "proposed")!;
+    const html = renderReviewWorkbenchHtml(state);
+
+    const values = auditRows(html).map(([, value]) => value);
+    assert.ok(values.includes(current.source.sourceId!), "current candidate's source id");
+    assert.ok(values.includes(proposed.source.sourceId!), "proposed candidate's source id");
+    assert.ok(values.includes(current.extraction.extractor!), "current candidate's extractor");
+    assert.ok(values.includes(proposed.extraction.extractor!), "proposed candidate's extractor");
+    // The current candidate's excerpt is not on the card face, so it renders.
+    assert.ok(values.includes(current.locator!.excerpt!), "current candidate's excerpt");
+  });
+
+  it("still prints a later placement whose value diverges from the first reading", () => {
+    // Same nominal property, resolved through a different fallback chain: the
+    // projection overrides the raw source id. Identity matches, value does not,
+    // and the divergence is exactly what an auditor needs to see.
+    const item: ReviewItem = structuredClone(publicDirectoryReviewItemExample) as ReviewItem;
+    const proposed = item.spec.candidates.find((candidate) => candidate.role === "proposed")!;
+    (proposed as unknown as Record<string, unknown>).projection = {
+      ...proposed.projection,
+      rawSourceId: "projection-overrode-the-raw-source-id",
+    };
+
+    const html = renderReviewWorkbenchHtml({
+      ...initialReviewWorkbenchState(item),
+      decision: "accept-proposed" as const,
+    });
+
+    const values = auditRows(html).map(([, value]) => value);
+    assert.ok(values.includes(proposed.source.sourceId!), "the candidate's own raw source id");
+    assert.ok(values.includes("projection-overrode-the-raw-source-id"), "the projection's override");
+  });
+
+  it("fails closed on every path that makes a candidate id durable, not only when rendering", () => {
+    // The guard first landed on the render path, and the sentence describing it
+    // generalised to every path. It did not hold: the workbench still emitted a
+    // ReviewDecision naming an ambiguous candidate through the export builders,
+    // and buildReviewResultPresentation then displayed a different candidate's
+    // value against it. `candidateForDecision` is the selector all of these
+    // share, which is where the id becomes durable.
+    const item: ReviewItem = structuredClone(publicDirectoryReviewItemExample) as ReviewItem;
+    item.metadata.name = "duplicate-item";
+    const [first, second] = item.spec.candidates;
+    (second as unknown as Record<string, unknown>).id = first!.id;
+
+    const state = { ...initialReviewWorkbenchState(item), decision: "accept-proposed" as const };
+    const session = {
+      ...initialReviewQueueSessionState([item]),
+      decisionsByItemName: { "duplicate-item": "accept-proposed" as const },
+    };
+    const ambiguous = /has 2 candidates with id .*; candidate ids must be unique/;
+
+    assert.throws(() => buildReviewDecision(state), ambiguous, "buildReviewDecision");
+    assert.throws(() => renderReviewWorkbenchHtml(state), ambiguous, "renderReviewWorkbenchHtml");
+    assert.throws(() => buildReviewDecisionsFromSession(session), ambiguous, "buildReviewDecisionsFromSession");
+    assert.throws(() => buildReviewWorkbenchResultsFromSession(session), ambiguous, "buildReviewWorkbenchResultsFromSession");
+    assert.throws(() => buildReviewWorkbenchSessionExport(session), ambiguous, "buildReviewWorkbenchSessionExport");
+    assert.throws(() => buildReviewSessionEvents(session), ambiguous, "buildReviewSessionEvents");
+  });
+
+  it("presents the candidate a result actually names, not whichever matches its role or its id", () => {
+    // `find(role === … || id === …)` matched EITHER half. With a repeated id it
+    // returned the current candidate for a result naming the proposed one, and
+    // presented AVAILABLE against a proposed/WAITLIST decision.
+    const clean: ReviewItem = structuredClone(publicDirectoryReviewItemExample) as ReviewItem;
+    const [result] = buildReviewWorkbenchResultsFromSession({
+      ...initialReviewQueueSessionState([clean]),
+      decisionsByItemName: { [clean.metadata.name]: "accept-proposed" },
+    });
+    assert.ok(result);
+    assert.equal(result.selectedCandidateRole, "proposed");
+
+    // The same result, presented against an item whose candidate ids collide.
+    const collided: ReviewItem = structuredClone(clean);
+    const [current, proposed] = collided.spec.candidates;
+    (current as unknown as Record<string, unknown>).id = proposed!.id;
+
+    assert.equal(buildReviewResultPresentation(result, clean).selectedValueText, "WAITLIST");
+    assert.throws(
+      () => buildReviewResultPresentation(result, collided),
+      /has 2 candidates with id .*; candidate ids must be unique/,
+    );
+  });
+
+  it("fails closed when a ReviewItem carries two candidates under one id", () => {
+    // A ReviewDecision references its candidate by id and nothing else, so an
+    // ambiguous id makes the decision undecidable. Picking the first match would
+    // project one candidate's value under another's decision. The Surface record
+    // builder already rejects this shape; a caller-authored ReviewItem reaches
+    // the workbench without passing through it.
+    const item: ReviewItem = structuredClone(publicDirectoryReviewItemExample) as ReviewItem;
+    const [first, second] = item.spec.candidates;
+    (second as unknown as Record<string, unknown>).id = first!.id;
+
+    const state = { ...initialReviewWorkbenchState(item), decision: "accept-proposed" as const };
+
+    assert.throws(
+      () => renderReviewWorkbenchHtml(state),
+      /has 2 candidates with id .*; candidate ids must be unique/,
+    );
   });
 
   it("renders a regulated rule conflict ReviewItem without product-specific workbench branches", () => {
@@ -2382,3 +2533,22 @@ describe("review workbench: envelope-imported items", () => {
     assert.equal(root.field("current-only-item").chipText, "Kept current");
   });
 });
+
+/**
+ * The `data-audit-row` rows a card renders, as [key, value] pairs. Assertions
+ * about what the audit surface *shows* have to read the rows: the saved-record
+ * JSON below them serializes the whole decision, so a bare substring count over
+ * the HTML also counts the payload.
+ */
+function auditRows(html: string): Array<[string, string]> {
+  const rows: Array<[string, string]> = [];
+  const pattern = /data-audit-row="([^"]+)"[\s\S]*?<dd class="field-value">([\s\S]*?)<\/dd>/g;
+  for (const match of html.matchAll(pattern)) {
+    rows.push([match[1]!, match[2]!.trim()]);
+  }
+  return rows;
+}
+
+function auditRowValues(html: string, key: string): string[] {
+  return auditRows(html).filter(([rowKey]) => rowKey === key).map(([, value]) => value);
+}

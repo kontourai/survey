@@ -309,12 +309,31 @@ export class SurveyReviewWorkbenchElement extends HTMLElement {
     this.#root.appendChild(this.#mountRoot);
     this.#mountRoot.addEventListener("survey-extraction-candidate-activate", (event) => {
       if (!this.#session || !("items" in this.#session)) return;
-      const detail = (event as CustomEvent<{ candidateId: string; reviewItemName: string }>).detail;
+      const detail = (event as CustomEvent<{ candidateId: string; reviewItemName: string; highlightElementId?: string }>).detail;
       const item = this.#session.items.find((candidate) => candidate.metadata.name === detail.reviewItemName);
       if (!item) return;
       if (this.#session.activeItemName !== item.metadata.name) this.#session = { ...this.#session, activeItemName: item.metadata.name };
       this.#remount();
-      queueMicrotask(() => this.#root.querySelector<HTMLElement>(`#highlight-${CSS.escape(detail.candidateId.replace(/[^a-zA-Z0-9_-]/g, "-"))}`)?.focus());
+      // Both lookups below are published contracts, used as published.
+      // Reconstructing the element id from candidateId — which this did — meant
+      // carrying a copy of Survey's private id sanitizer and ignoring the
+      // collision suffix that makes the id unique, which is exactly what the
+      // consumer guide tells embedders not to do.
+      const { highlightElementId } = detail;
+      if (!highlightElementId) return;
+      queueMicrotask(() => {
+        // Routed on the highlight element id, which is unique by construction.
+        // candidateId is the candidate's own identity and a caller-authored
+        // model may repeat it, so a `[data-…="<candidateId>"]` lookup can select
+        // a different candidate's highlight — confidently wrong, on the surface
+        // whose job is showing which span a value came from. `~=` matches one
+        // whitespace-separated token, so a mark over a shared span is found too.
+        const highlight = this.#root.querySelector<HTMLElement>(`[data-highlight-return-to~="${CSS.escape(highlightElementId)}"]`);
+        if (highlight) { highlight.focus(); return; }
+        // Off the current page there is nothing painted; bring the link target
+        // into view instead of leaving the reader where they were.
+        this.#root.querySelector<HTMLElement>(`#${CSS.escape(highlightElementId)}`)?.scrollIntoView({ block: "center" });
+      });
     });
   }
 

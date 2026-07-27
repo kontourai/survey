@@ -33,6 +33,21 @@ export const envelopeQueueSeeds: readonly EnvelopeProposalSeed[] = [
   },
 ];
 
+/**
+ * A queue with more candidates than one mounted page, so paging and filtering
+ * are actually exercised. Field paths and excerpts are distinct so a filter can
+ * select a strict subset, and every excerpt has its own span in the prepared
+ * text.
+ */
+export function paginatingEnvelopeSeeds(count: number): readonly EnvelopeProposalSeed[] {
+  return Array.from({ length: count }, (_unused, index) => ({
+    fieldPath: `line.item${String(index).padStart(2, "0")}`,
+    candidateValue: `value-${index}`,
+    excerpt: `LineItem${String(index).padStart(2, "0")}`,
+    valueType: "string" as const,
+  }));
+}
+
 const SOURCE_REF = "https://example.test/contract.pdf";
 const SNAPSHOT_REF = "snapshot:envelope-review-fixture";
 const RUN_ID = "traverse-extraction-run:00000000-0000-4000-8000-00000000f001";

@@ -226,6 +226,118 @@ mapped onto `facet` at read time) — that shim is orthogonal to Survey's
 `@kontourai/surface`; see that package's own release notes for its scope and
 lifetime.
 
+## 2.3.0 — embedded workbench DOM
+
+`2.3.0` is a minor release: it adds two extension points, and no supported API
+is removed, renamed, or repointed at a different meaning. Two things still
+deserve your attention before you bump.
+
+This section assumes you are arriving from `2.x`. If you are on `1.x` — as every
+consuming application currently is — there is a `1.x` → `2.0.0` hop this guide
+does not yet document, and it is not covered below (kontourai/survey#211).
+
+**At the type level it is additive, but only just.**
+`ExtractionInspectorCandidate` gains an optional `highlightElementId`, and
+`buildExtractionInspectorModel` now returns the narrower
+`BuiltExtractionInspectorModel`, where that field is required. If you assemble
+an `ExtractionInspectorModel` yourself rather than taking one from the builder —
+a supported thing to do — your code keeps compiling, because the field is
+optional on the shape you author and `mountExtractionInspector` resolves an id
+for any candidate that arrives without one. Making it required outright would
+have broken that authoring path, which is a major-release change, not a minor
+one. If you *read* `highlightElementId`, take the builder's return type and it
+is a plain `string`.
+
+**At the DOM level it is genuinely breaking for embedders.** If you reach into
+the review workbench's markup, what is underneath you changed, and a host that
+was compensating for a Survey defect can end up hiding real data. Migrate before
+or with the bump rather than after.
+
+**If you slug row labels to build selectors, stop.** Every AUDIT DETAILS row now
+carries `data-audit-row="<key>"`, and `reviewAuditRowKeys` (exported from
+`@kontourai/survey/review-workbench`) is the complete set. Keys are stable
+across label copy changes; slugs are not.
+
+There was nothing on a row to select, so a host had to stamp its own attribute
+from the label text in JavaScript and then style that:
+
+```js
+// before — a slug derived from display copy, in the host's MutationObserver
+for (const row of host.querySelectorAll(".audit-body .kv")) {
+  row.dataset.auditRow = row.querySelector(".field-label")
+    ?.textContent?.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-") ?? "";
+}
+```
+
+```css
+/* before — breaks the day someone edits a label */
+[data-audit-row="raw-source-id"] /* ...stamped by the snippet above */
+/* after — Survey stamps it, and the key is the contract */
+[data-audit-row="raw-source-id"]
+```
+
+Delete the stamping; keep the selector.
+
+**If you prune duplicated audit rows, re-check those rules — most are now
+redundant.** Survey deduplicates four rows: `raw-source-id`, `extractor`,
+`extraction-id` and `excerpt`. A rule suppressing one of those is now hiding the
+only copy. One repeat is deliberately kept — the Unselected candidate history's
+`candidate-id`, which on a two-candidate item repeats the ID stack — so a rule
+against that one is still doing something. Keeping a rule that hides one of them now hides the only
+copy. Rules that reflect a *host* decision — you promote the locator onto your
+own card face, you keep identifiers out of the UI entirely — are still
+legitimate; re-point them at `data-audit-row` keys.
+
+**If you select on structure, re-check those selectors.** These sections are no
+longer rendered when they would carry only a constant reporting an absence: the
+authority trace when none was supplied, the unselected-candidate history when
+there is nothing unselected, and the review event of a `could_not_confirm`
+resolution. The `.preview-section.is-neutral` class is gone with the first of
+them. Relational selectors such as
+`[data-testid="surface-candidate-history"]:not(:has(.reference-details))` still
+behave as they did — every reference disclosure keeps at least one reference
+that can never be suppressed, so the disclosure does not blink in and out — but
+this is the class of coupling worth re-reading rather than assuming.
+
+**If you style or script the source highlight, it changed shape.** The return
+control is now the painted `<mark class="source-highlight">` — a real target the
+width of the highlighted phrase, carrying `role="button"`, `tabindex="0"` and
+`data-highlight-return-to`, a space-separated list of the `highlightElementId`s
+it covers (select with `~=`, since two candidates can share one span). The element the published id names
+is now an inert, zero-width `<span class="highlight-anchor">` that exists for
+every candidate and is not focusable or clickable. If you were stripping the
+anchor's user-agent button chrome host-side, delete that rule: it is not a button
+any more.
+
+**If your ReviewItems can carry two candidates under one id, the workbench now
+throws.** A `ReviewDecision` names its candidate by id and nothing else, so an
+ambiguous id makes the decision undecidable — the workbench used to take the
+first match and could project one candidate's value under another's decision.
+The Surface record builder already rejected this shape; the workbench now does
+too, naming the item and the id.
+
+Specifically, it throws wherever a candidate id becomes durable or is resolved
+back to a candidate: `buildReviewDecision`, `buildReviewDecisionsFromSession`,
+`buildReviewWorkbenchResultsFromSession`, `buildReviewSessionEvents`,
+`buildReviewWorkbenchSessionExport`, `renderReviewWorkbenchHtml` and
+`buildReviewResultPresentation` — everything downstream of
+`candidateForDecision`, which is the shared selector they go through. It does
+**not** validate an item on construction or on assignment to the workbench: an
+item with duplicate ids can be held and displayed in the queue list, and fails at
+the point a decision would be made from it.
+
+**If you reconstruct source-highlight element ids, delete that code.**
+`buildExtractionInspectorModel` publishes the id on each candidate, resolvable
+for every candidate whatever page or filter the inspector is on, and in the
+non-grounded postures where there is no highlighted span to land on. Re-deriving
+one from `candidate.id` was never supported and the private sanitizer behind it
+can change.
+
+**A required input inside a collapsed region no longer kills its control.** If
+you patched around "Could not confirm" doing nothing (kontourai/survey#208),
+that patch is now redundant; the workbench states the requirement next to the
+button and opens the accordion holding the input.
+
 ## See also
 
 - [consumer-integration-guide.md](consumer-integration-guide.md) — first-time

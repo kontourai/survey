@@ -202,11 +202,37 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 .survey-workbench-embed .inspector-pager button:disabled, .survey-workbench-embed .queue-pager button:disabled{ opacity: .45; }
 .survey-workbench-embed .inspector-candidates{ margin: 0; padding-left: 1.5rem; }
 .survey-workbench-embed .inspector-candidate{ width: 100%; display: grid; gap: .2rem; text-align: left; padding: .65rem; color: var(--k-text); background: transparent; border: 1px solid var(--k-line); }
-.survey-workbench-embed .inspector-source pre{ white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 1rem; background: var(--k-sunken); border: 1px solid var(--k-line); min-height: 8rem; }
+.survey-workbench-embed .inspector-source pre{ white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 1rem; background: var(--k-sunken); border: 1px solid var(--k-line); min-height: 8rem; line-height: 2.2; }
 .survey-workbench-embed .inspector-source mark{ background: var(--k-brand-wash); color: var(--k-text); outline: 1px solid var(--k-brand); }
 .survey-workbench-embed .inspector-candidate:focus{ outline: 3px solid var(--k-active); outline-offset: 2px; }
-.survey-workbench-embed .highlight-anchor{ display: inline-block; width: 1px; height: 1em; }
-.survey-workbench-embed .highlight-anchor:focus{ outline: 3px solid var(--k-active); }
+/* An inert link target, one per candidate in the model, so a host's
+   \`href="#<highlightElementId>"\` always resolves. It is not a control and must
+   not behave like one: no size, no tab stop, nothing painted. */
+.survey-workbench-embed .highlight-anchor{
+  display: inline;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* The highlight IS the return control — the only part of this surface a reader
+   can see, so it is the thing to aim at. Full phrase width, already visibly
+   marked, one tab stop per painted highlight. */
+.survey-workbench-embed .source-highlight{
+  cursor: pointer;
+  border-radius: 2px;
+  /* Vertical padding on an inline box grows the hit area without moving the
+     line box, and the prepared text's line-height below leaves room for it, so
+     the target reaches ~24px tall without lines overlapping each other. The
+     phrase itself supplies the width. */
+  padding: 5px 3px;
+  margin: 0 -3px;
+}
+
+.survey-workbench-embed .source-highlight:focus-visible{
+  outline: 3px solid var(--k-active);
+  outline-offset: 1px;
+}
 .survey-workbench-embed .source-unavailable{ color: var(--k-negative); font-weight: 700; }
 @container (max-width: 720px) { .inspector-heading, .inspector-layout { grid-template-columns: 1fr !important; } }
 
@@ -636,6 +662,22 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 }
 
 .survey-workbench-embed .verr[hidden]{
+  display: none;
+}
+
+/* Why a decision was refused, next to the button that refused it. The input
+   that satisfies the precondition can be inside the collapsed audit accordion,
+   so the message cannot live only with the input (kontourai/survey#208). */
+.survey-workbench-embed .derr{
+  display: block;
+  margin-top: 6px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--k-negative);
+}
+
+.survey-workbench-embed .derr[hidden]{
   display: none;
 }
 
@@ -1078,14 +1120,6 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-}
-
-.survey-workbench-embed .preview-section.is-neutral{
-  background: var(--k-raised);
-}
-
-.survey-workbench-embed .preview-section.is-neutral h3{
-  color: var(--k-faint);
 }
 
 .survey-workbench-embed .reference-details{

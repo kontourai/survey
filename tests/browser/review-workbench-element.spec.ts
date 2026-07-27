@@ -290,13 +290,20 @@ test("source inspector supports candidate-to-highlight keyboard navigation and p
   const candidate = page.getByRole("button", { name: /title browser-provider/ });
   await candidate.focus();
   await candidate.press("Enter");
-  const highlight = page.locator('[data-highlight-candidate-id][aria-label*="Source highlight for title"]');
+  // Activating a candidate focuses its painted highlight. The element resolves
+  // that from the binding the activation event carries; it used to rebuild the
+  // id from candidateId with a copy of Survey's private sanitizer, which is what
+  // the consumer guide tells embedders not to do.
+  const highlight = page.locator('mark[aria-label*="Highlighted for title"]');
   await expect(highlight).toBeFocused();
   await expect.poll(() => page.evaluate(() => (document.getElementById("wbe") as HTMLElement & { session: { activeItemName: string } }).session.activeItemName)).toBe(inspectorResult.reviewItems[0]!.metadata.name);
+
+  // And back again — by pointer, on a target the width of the highlighted
+  // phrase, and by keyboard on the same element.
   await highlight.click();
   await expect(candidate).toBeFocused();
   await highlight.focus();
-  await highlight.evaluate((element) => element.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true })));
+  await page.keyboard.press("Enter");
   await expect(candidate).toBeFocused();
   await expect(page.getByLabel("Extraction filters").getByText("Field")).toBeVisible();
 

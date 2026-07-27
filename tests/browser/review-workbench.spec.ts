@@ -343,11 +343,174 @@ test("audit details are collapsed by default and expand to show trace IDs; the J
   expect(consoleErrors).toEqual([]);
 });
 
+test("audit details print each fact once, keep facts that merely share a value, and drop sections that only report an absence", async ({ page }) => {
+  const consoleErrors = await loadWorkbench(page);
+  const field = fieldByItemName(page, "public-directory-hours");
+
+  await field.getByTestId("use-proposed").click();
+  await field.getByTestId("audit-details").locator("> summary").click();
+
+  const rows = await field.evaluate((card) =>
+    [...card.querySelectorAll<HTMLElement>(".audit-body [data-audit-row]")].map((row) => ({
+      key: row.dataset.auditRow ?? "",
+      value: row.querySelector(".field-value")?.textContent?.trim() ?? "",
+    })),
+  );
+  expect(rows.length).toBeGreaterThan(0);
+  const valuesFor = (key: string) => rows.filter((row) => row.key === key).map((row) => row.value);
+  const countOf = (value: string) => rows.filter((row) => row.value === value).length;
+
+  // Accepting the proposal makes the ID stack and the projection preview
+  // describe the SAME candidate, so each of these prints once — the raw source
+  // id used to appear three times under three labels
+  // (kontourai/fieldwork#58).
+  const [rawSourceId] = valuesFor("raw-source-id");
+  const [extractor] = valuesFor("extractor");
+  expect(rawSourceId).toBeTruthy();
+  expect(extractor).toBeTruthy();
+  expect(countOf(rawSourceId!)).toBe(1);
+  expect(countOf(extractor!)).toBe(1);
+  expect(valuesFor("extraction-id")).toHaveLength(1);
+
+  // But suppression is keyed on WHICH property of WHICH record, not on the
+  // rendered string. `extraction.extractedAt` and `source.observedAt` are the
+  // same timestamp in this fixture and remain two rows; matching on the value
+  // would have dropped `Observed` and left an auditor unable to tell the field
+  // existed at all.
+  const [extractedAt] = valuesFor("extracted-at");
+  const [observed] = valuesFor("observed");
+  expect(extractedAt).toBeTruthy();
+  expect(observed).toBe(extractedAt);
+
+  // The excerpt is quoted on the face of the card, in full.
+  const faceExcerpt = (await field.getByTestId("proposed-excerpt").locator("q").textContent())?.trim();
+  expect(faceExcerpt).toBeTruthy();
+  expect(valuesFor("excerpt")).toEqual([]);
+  expect(rows.some((row) => row.value === faceExcerpt)).toBe(false);
+
+  // Two rows saying no portable authority trace was supplied, and one saying
+  // there are no unselected candidates, are constants, not an audit trail.
+  await expect(field.getByTestId("surface-authority-trace")).toHaveCount(0);
+  await expect(field.locator(".audit-body [data-audit-row]").filter({ hasText: "No unselected candidates." })).toHaveCount(0);
+
+  // Every "IDs and trace links" disclosure keeps at least one reference that
+  // can never be suppressed, so the disclosure does not appear and disappear
+  // with the data — structure a host would otherwise be exposed to.
+  const emptyReferenceLists = await field.evaluate((card) =>
+    [...card.querySelectorAll(".audit-body details.reference-details")]
+      // The saved-record JSON shares the class but is a <pre>, not a row list.
+      .filter((node) => node.querySelector("dl") !== null)
+      .filter((node) => node.querySelectorAll("[data-audit-row]").length === 0).length,
+  );
+  expect(emptyReferenceLists).toBe(0);
+
+  expect(consoleErrors).toEqual([]);
+});
+
+test("keeping the current value keeps every placement, because the preview then describes a different candidate", async ({ page }) => {
+  const consoleErrors = await loadWorkbench(page);
+  const field = fieldByItemName(page, "public-directory-hours");
+
+  await field.getByTestId("keep-current").click();
+  await field.getByTestId("audit-details").locator("> summary").click();
+
+  const rows = await field.evaluate((card) =>
+    [...card.querySelectorAll<HTMLElement>(".audit-body [data-audit-row]")].map((row) => ({
+      key: row.dataset.auditRow ?? "",
+      value: row.querySelector(".field-value")?.textContent?.trim() ?? "",
+    })),
+  );
+  const valuesFor = (key: string) => rows.filter((row) => row.key === key).map((row) => row.value);
+
+  // The ID stack describes the proposed candidate; the preview describes the
+  // kept one. Different records, so nothing is a repeat placement: two distinct
+  // raw source ids, two extractors, and the kept candidate's excerpt — which is
+  // NOT the one quoted on the card face — all render.
+  const rawSourceIds = valuesFor("raw-source-id");
+  expect(rawSourceIds).toHaveLength(2);
+  expect(new Set(rawSourceIds).size).toBe(2);
+  expect(valuesFor("extractor")).toHaveLength(2);
+
+  const faceExcerpt = (await field.getByTestId("proposed-excerpt").locator("q").textContent())?.trim();
+  const [auditExcerpt] = valuesFor("excerpt");
+  expect(auditExcerpt).toBeTruthy();
+  expect(auditExcerpt).not.toBe(faceExcerpt);
+
+  expect(consoleErrors).toEqual([]);
+});
+
+test("every audit row carries a stable data-audit-row key a host can select on", async ({ page }) => {
+  const consoleErrors = await loadWorkbench(page);
+  const field = fieldByItemName(page, "public-directory-hours");
+
+  await field.getByTestId("use-proposed").click();
+  await field.getByTestId("audit-details").locator("> summary").click();
+
+  // Row LABELS are display copy. A host that needs to address one row selects
+  // on the key, not on a slug derived from the label text.
+  const rows = await field.evaluate((card) =>
+    [...card.querySelectorAll(".audit-body .kv")].map((row) => (row as HTMLElement).dataset.auditRow ?? null),
+  );
+  expect(rows.length).toBeGreaterThan(10);
+  expect(rows.filter((key) => !key)).toEqual([]);
+
+  const declared: string[] = await page.evaluate(async () => {
+    const mod = await import(
+      /* @vite-ignore */ "/dist/src/review-workbench/review-workbench.js" as string
+    ) as { reviewAuditRowKeys: readonly string[] };
+    return [...mod.reviewAuditRowKeys];
+  });
+  expect(declared.length).toBeGreaterThan(0);
+  for (const key of rows) {
+    expect(declared, `${key} is emitted but not in reviewAuditRowKeys`).toContain(key);
+  }
+
+  expect(consoleErrors).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------
+// #208: a required input inside a collapsed region must not silently kill its control
+// ---------------------------------------------------------------------------
+
+test("Could not confirm says why it refused, where the button is, and opens the way to the reason it needs", async ({ page }) => {
+  const consoleErrors = await loadWorkbench(page);
+  const field = fieldByItemName(page, "public-directory-dropin-price");
+  const details = field.getByTestId("audit-details");
+  const error = field.getByTestId("decision-error");
+
+  await expect(details).not.toHaveAttribute("open", "");
+  await expect(error).toBeHidden();
+
+  // The reason this control requires lives inside the collapsed accordion, so
+  // reporting the failure only on that textarea put it where the reviewer could
+  // not see it: the button was dead on every field, with no feedback at all.
+  await field.getByTestId("could-not-confirm").click();
+
+  await expect(error).toBeVisible();
+  await expect(error).toHaveText(/reason is required/i);
+  await expect(details).toHaveAttribute("open", "");
+  await expect(field.getByTestId("reviewer-note")).toBeFocused();
+  await expect(field).toHaveAttribute("data-state", "review");
+
+  // And the control works once the precondition it named is satisfied.
+  await field.getByTestId("reviewer-note").fill("Source page was unreachable at review time.");
+  await expect(error).toBeHidden();
+  await field.getByTestId("could-not-confirm").click();
+  await expect(field).toHaveAttribute("data-state", "could-not-confirm");
+
+  expect(consoleErrors).toEqual([]);
+});
+
 test("excerpt clamp toggle expands and collapses a long excerpt inside audit details", async ({ page }) => {
   test.skip(test.info().project.name !== "chromium-desktop", "clamp test uses desktop viewport");
 
   await page.addInitScript(() => {
+    // Distinct excerpts, and a keep-current decision: the card face quotes the
+    // PROPOSED candidate's excerpt, so only a decision that selected some other
+    // candidate has an excerpt for AUDIT DETAILS to add (and to clamp). An
+    // accept-proposed decision reprints the face, and no longer renders the row.
     const longExcerpt = "This is a very long excerpt text that should be clamped to three lines when rendered in the workbench. ".repeat(8);
+    const longProposedExcerpt = "A different, equally long proposed excerpt quoted on the face of the card itself. ".repeat(8);
     window.kontourSurveyReviewWorkbench = {
       startState: {
         items: [
@@ -373,7 +536,7 @@ test("excerpt clamp toggle expands and collapses a long excerpt inside audit det
                   role: "proposed",
                   value: "proposed value",
                   source: { sourceRef: "https://example.test/clamp-proposed", kind: "web-page", observedAt: "2026-06-04T01:00:00.000Z" },
-                  locator: { scheme: "html", locator: "html:field=clampField", excerpt: longExcerpt },
+                  locator: { scheme: "html", locator: "html:field=clampField", excerpt: longProposedExcerpt },
                   extraction: { target: "clampField", extractor: "test-crawler", extractedAt: "2026-06-04T01:00:00.000Z" },
                   claimTarget: { claimId: "clamp.proposed", subjectType: "test", subjectId: "x", facet: "test", claimType: "test", fieldOrBehavior: "clampField", impactLevel: "low" },
                 },
@@ -384,7 +547,7 @@ test("excerpt clamp toggle expands and collapses a long excerpt inside audit det
         ],
         activeItemName: "clamp-test-item",
         notesByItemName: {},
-        decisionsByItemName: { "clamp-test-item": "accept-proposed" },
+        decisionsByItemName: { "clamp-test-item": "keep-current" },
         reviewedAt: "2026-06-04T00:00:00.000Z",
         actorId: "clamp-tester",
       },

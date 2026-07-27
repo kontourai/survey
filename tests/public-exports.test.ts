@@ -16,6 +16,7 @@ import {
   stableId,
   SURVEY_INPUT_CONTRACT_VERSION,
 } from "../src/index.js";
+import { reviewAuditRowKeys } from "../src/review-workbench/review-workbench.js";
 
 describe("public barrel exports", () => {
   it("re-exports the new producer-kit values from the package root", () => {
@@ -33,6 +34,19 @@ describe("public barrel exports", () => {
     assert.equal(typeof rejectExtractionImprovementProposal, "function");
     assert.equal(typeof createExtractionEnvelopeResolutionIdentity, "function");
     assert.equal(SURVEY_INPUT_CONTRACT_VERSION, "1");
+  });
+
+  it("publishes the audit-row keys a host may hold selectors against", () => {
+    // Row labels are display copy; these keys are the addressable contract, so
+    // a host never has to slug a label to select one row (kontourai/fieldwork#58).
+    assert.ok(Array.isArray(reviewAuditRowKeys));
+    assert.ok(reviewAuditRowKeys.length > 0);
+    assert.equal(new Set(reviewAuditRowKeys).size, reviewAuditRowKeys.length);
+    for (const key of reviewAuditRowKeys) {
+      assert.match(key, /^[a-z][a-z0-9-]*$/);
+    }
+    assert.ok(reviewAuditRowKeys.includes("raw-source-id"));
+    assert.ok(reviewAuditRowKeys.includes("locator"));
   });
 
   it("keeps the re-exported helpers behaving as their module definitions", () => {

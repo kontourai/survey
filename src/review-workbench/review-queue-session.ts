@@ -1,6 +1,7 @@
 import { publicDirectoryReviewItemExample, reviewWorkbenchQueueExamples } from "./review-workbench-data.js";
 import { assertReviewResolutionConsistency } from "../producer-discipline.js";
 import {
+  assertSoleCandidateId,
   reviewResourceApiVersion,
   type ReviewCandidate,
   type ReviewDecision,
@@ -231,6 +232,17 @@ export function keepActionDecision(item: ReviewItem, flaggedWrong: boolean): Rev
   return "keep-current";
 }
 
+/**
+ * The candidate a workbench decision applies to.
+ *
+ * Selection is by role, but the id this returns is what every caller makes
+ * durable — a ReviewDecision's `candidateId`, a session event's, a result's, a
+ * replay expectation. So the id has to name exactly one candidate before it
+ * leaves here. Guarding the render path alone let the workbench emit an
+ * undecidable decision through the export path and then present a different
+ * candidate's value against it; this is the shared selector all of those go
+ * through, which is why the check belongs here rather than at each of them.
+ */
 export function candidateForDecision(item: ReviewItem, decision: ReviewWorkbenchDecision): ReviewCandidate {
   const definition = workbenchDecisionDefinitions[decision];
   const candidate = item.spec.candidates.find((entry) => entry.role === definition.candidateRole);
@@ -238,6 +250,7 @@ export function candidateForDecision(item: ReviewItem, decision: ReviewWorkbench
   if (!candidate) {
     throw new Error(`ReviewItem ${item.metadata.name} has no ${definition.candidateRole} candidate.`);
   }
+  assertSoleCandidateId(item, candidate.id);
 
   return candidate;
 }
