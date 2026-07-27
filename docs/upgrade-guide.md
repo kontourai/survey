@@ -2,12 +2,13 @@
 
 This guide is for a consumer already integrated with `@kontourai/survey`
 (see [consumer-integration-guide.md](consumer-integration-guide.md) for a
-first-time integration) who is starting a version upgrade — typically
-0.5.x to 1.x or later. It covers three things a real migration had to
+first-time integration) who is starting a version upgrade — anywhere from
+0.5.x up through the current 2.x line, including the 1.x → 2.0.0 major hop.
+The general sections cover three things a real migration had to
 discover by direct experience because no upgrade guide existed on Survey's
 side: how to safely bump the dependency, how to decide what to adopt versus
 keep from newly shipped helpers, and a `decisionEffects`-consumption gotcha
-that this release closes.
+that this release closes. Version-specific sections follow, oldest first.
 
 ## Upgrading a version
 
@@ -226,15 +227,69 @@ mapped onto `facet` at read time) — that shim is orthogonal to Survey's
 `@kontourai/surface`; see that package's own release notes for its scope and
 lifetime.
 
+## 2.0.0 — model-provider adapters removed
+
+`2.0.0` carries exactly one breaking change
+([#180](https://github.com/kontourai/survey/pull/180), commit `9f31487`):
+the `@kontourai/survey/anthropic` entry point is removed. Every other
+change in the release is additive
+([CHANGELOG](https://github.com/kontourai/survey/blob/main/CHANGELOG.md)).
+
+**What was removed.** The `./anthropic` subpath export and the module
+behind it — `createAnthropicMappingProposer`,
+`createAnthropicUtteranceExtractor`, and the `Anthropic*` client, message,
+and tool types — plus the optional `@anthropic-ai/sdk` peer dependency.
+Model prompting, response parsing, and credential handling are the
+producer application's concern now: Survey defines the extractor and
+proposer contracts and no longer ships an adapter for any model provider.
+
+**What was kept.** The pluggable interfaces those adapters implemented are
+unchanged and still exported from the package root: `MappingProposer`,
+`SchemaMappingExtractor`, and `UtteranceClaimExtractor`, along with their
+deterministic reference implementations (`referenceMappingProposer`,
+`referenceSchemaExtractor`, `referenceUtteranceExtractor`). All review and
+projection behavior is untouched by this release. A model-backed adapter
+you write in your own application implements the same interface the
+removed one did, so downstream review and projection code cannot tell the
+difference.
+
+**There is no compatibility layer, by design.** #180 deleted the module,
+its tests, and its `exports` map entry outright — no deprecation window,
+no re-export shim. `import "@kontourai/survey/anthropic"` fails at module
+resolution after the bump, and TypeScript fails the build with it, so
+exposure cannot survive silently into runtime.
+
+**Check your exposure with one search:**
+
+```sh
+grep -rn "@kontourai/survey/anthropic" src/
+```
+
+No hits means the major is a no-op at your call sites — bump and run your
+suite. That was the finding for all three real consuming applications when
+this was checked (kontourai/survey#211): none imported the adapter entry
+point. If you do have hits, move the model call into your own code — the
+"What was kept" interfaces above are the seam to implement — and delete the
+`@anthropic-ai/sdk` peer install if nothing else in your application uses
+it.
+
+**Node floor reminder while you are here.** `engines.node` has required
+`>=22` since `1.0.0` (0.x required only `>=20`). This is not new in 2.0.0,
+but a CI matrix created before your 1.x adoption may still be running Node
+20 — that exact gap surfaced in a real consumer's 0.5.x → 1.x migration —
+so check your workflow files in the same pass.
+
+`2.1.0` and `2.2.0` (and the `2.2.x` patches) are additive; the `2.3.0`
+and `2.4.0` sections below continue the path from there.
+
 ## 2.3.0 — embedded workbench DOM
 
 `2.3.0` is a minor release: it adds two extension points, and no supported API
 is removed, renamed, or repointed at a different meaning. Two things still
 deserve your attention before you bump.
 
-This section assumes you are arriving from `2.x`. If you are on `1.x` — as every
-consuming application currently is — there is a `1.x` → `2.0.0` hop this guide
-does not yet document, and it is not covered below (kontourai/survey#211).
+This section assumes you are arriving from `2.x`. If you are on `1.x`, take
+the `1.x` → `2.0.0` hop documented in the 2.0.0 section above first.
 
 **At the type level it is additive, but only just.**
 `ExtractionInspectorCandidate` gains an optional `highlightElementId`, and
