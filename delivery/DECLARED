@@ -22,5 +22,11 @@
     "reason": "Dependabot dependency-bump PR; no agent delivery involved, nothing to reconcile. Compound scope binds the platform-set actor identity to the bot's branch namespace per ADR 0022's fork-PR guidance, paired per the 2026-07-03 addendum since branch-prefix alone resolves against a pusher-controlled ref. Added because the dependency watch landed portfolio-wide before any repo except one had this exemption, so the watch's first harvest failed Trust Verify everywhere at once \u2014 the gate was right to refuse, and this is the documented route rather than a weakening. Known and accepted cost: if the bot identity rotates this stops matching and dependency PRs break loudly, which the current pinned action reports by naming the failed condition (flow-agents#1015).",
     "approved_by": "brian.anderson1222 (delegated approval, 2026-07-27 session: scoped-DECLARED-exemption route)",
     "declared_at": "2026-07-27T20:00:00Z"
+  },
+  {
+    "scope": "author:briananderson1222 branch-prefix:docs/upgrade-guide-2x-211",
+    "reason": "Documents the 1.x -> 2.0.0 upgrade hop in docs/upgrade-guide.md (kontourai/survey#211). Documentation only; no runtime code changes, so there is no Flow Agents trust bundle for Step 2 to reconcile. Step 1 (fresh verify) still runs npm run verify in full, and docs:check validates the docs-site build and links. Paired with author: because branch-prefix alone matches GITHUB_HEAD_REF, which is pusher-chosen on a fork PR (kontourai/flow-agents#1015, ADR 0022 2026-07-03 addendum).",
+    "approved_by": "briananderson1222 (repository owner; scoped to this branch only, not a standing exemption)",
+    "declared_at": "2026-07-27T00:00:00Z"
   }
 ]
