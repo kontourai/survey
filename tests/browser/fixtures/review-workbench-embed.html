@@ -28,6 +28,35 @@
       const fixture = window.__surveyEmbedFixture;
       mountReviewWorkbench(document.getElementById("queue"), fixture.session);
       let inspectorModel = buildExtractionInspectorModel(fixture.inspectorEntry);
+      if (fixture.collidingHighlightIds) {
+        // Distinct candidates. The first publishes "highlight-beta-two"; the
+        // second publishes nothing and its own id sanitizes to "beta-two", so
+        // the derived id lands on the published one unless uniqueness is checked
+        // in the same form it is stored.
+        const [first, second, ...rest] = inspectorModel.candidates;
+        inspectorModel = {
+          sources: inspectorModel.sources,
+          candidates: [
+            { ...first, id: "alpha-one", highlightElementId: "highlight-beta-two" },
+            { ...second, id: "beta.two", highlightElementId: undefined },
+            ...rest,
+          ],
+        };
+      }
+      if (fixture.duplicateCandidateIds) {
+        // A hand-authored model whose candidate ids are not unique. Nothing in
+        // the input contract enforces that they are; only the builder's own ids
+        // are structurally unique.
+        const [first, second, ...rest] = inspectorModel.candidates;
+        inspectorModel = {
+          sources: inspectorModel.sources,
+          candidates: [
+            { ...first, id: "same", highlightElementId: "highlight-published-first" },
+            { ...second, id: "same", highlightElementId: undefined },
+            ...rest,
+          ],
+        };
+      }
       if (fixture.stripPublishedHighlightIds) {
         // The pre-2.3.0 authoring shape: a model a caller assembled themselves,
         // with no DOM binding on it. Mount has to render it anyway.

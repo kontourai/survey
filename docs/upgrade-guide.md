@@ -292,6 +292,15 @@ behave as they did — every reference disclosure keeps at least one reference
 that can never be suppressed, so the disclosure does not blink in and out — but
 this is the class of coupling worth re-reading rather than assuming.
 
+**If you style or script the source highlight, it changed shape.** The return
+control is now the painted `<mark class="source-highlight">` — a real target the
+width of the highlighted phrase, carrying `role="button"`, `tabindex="0"` and
+`data-highlight-return-to="<candidate.id>"`. The element the published id names
+is now an inert, zero-width `<span class="highlight-anchor">` that exists for
+every candidate and is not focusable or clickable. If you were stripping the
+anchor's user-agent button chrome host-side, delete that rule: it is not a button
+any more.
+
 **If you reconstruct source-highlight element ids, delete that code.**
 `buildExtractionInspectorModel` publishes the id on each candidate, resolvable
 for every candidate whatever page or filter the inspector is on, and in the

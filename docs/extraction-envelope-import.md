@@ -165,9 +165,26 @@ Do **not** reconstruct these ids from `candidate.id`. The sanitizing step is
 private, lossy, and not a contract; a consumer that mirrored it shipped a copy
 of Survey's internals and a test to catch that copy drifting.
 
-For the reverse direction — finding the candidate behind a DOM node — every
-highlight anchor also carries `data-highlight-candidate-id="<candidate.id>"`.
-That attribute is public for the same reason.
+For the reverse direction — finding the candidate behind a DOM node — the link
+target carries `data-highlight-candidate-id="<candidate.id>"`, and the painted
+highlight carries `data-highlight-return-to="<candidate.id>"`. Both are public
+for the same reason. They are separate attributes so each resolves to exactly one
+element: the target is an inert `<span>` that exists for every candidate in the
+model, and the highlight is the `<mark>` painted for the candidates on the
+current page.
+
+The highlight is also the control. Activating it — click, Enter, or Space —
+returns focus to that candidate's row in the list, paging and clearing filters if
+that is what it takes to bring the row back. The link target is deliberately not
+a control: there is one per candidate, so as a focusable element it put a tab
+stop in sequence for every candidate in the model (600 of them for a
+600-candidate model, several stacked together where a source is not grounded),
+while being invisible and, at its size, unaimable. The thing a reader can
+actually see and hit is the highlight.
+
+Following a host's `href="#<highlightElementId>"` to a candidate that is off the
+current page or excluded by a filter pages the list to it and focuses its
+highlight, rather than leaving the reader on an invisible marker.
 
 `highlightElementId` is deliberately absent from `exportExtractionInspector`
 output: it is a binding to a live inspector, not extraction evidence, and must

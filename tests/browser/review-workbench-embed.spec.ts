@@ -31,6 +31,10 @@ interface EmbedOptions {
   readonly artifact?: unknown;
   /** Mounts the pre-2.3.0 authoring shape: a model carrying no DOM bindings. */
   readonly stripPublishedHighlightIds?: boolean;
+  /** Mounts a published id and a derived one that would collide with it. */
+  readonly collidingHighlightIds?: boolean;
+  /** Mounts a hand-authored model whose candidate ids are not unique. */
+  readonly duplicateCandidateIds?: boolean;
 }
 
 async function loadEmbed(page: Page, options: EmbedOptions = {}): Promise<LoadedEmbed> {
@@ -48,6 +52,8 @@ async function loadEmbed(page: Page, options: EmbedOptions = {}): Promise<Loaded
     inspectorEntry: JSON.parse(JSON.stringify(options.artifact ? { ...inspectorEntry, artifact: options.artifact } : inspectorEntry)),
     ...(options.pageSize ? { inspectorPageSize: options.pageSize } : {}),
     ...(options.stripPublishedHighlightIds ? { stripPublishedHighlightIds: true } : {}),
+    ...(options.collidingHighlightIds ? { collidingHighlightIds: true } : {}),
+    ...(options.duplicateCandidateIds ? { duplicateCandidateIds: true } : {}),
   };
   await page.addInitScript((value) => {
     (window as unknown as Record<string, unknown>).__surveyEmbedFixture = value;
@@ -192,9 +198,8 @@ test.describe("embedded workbench: source-highlight references", () => {
 
       expectAllResolve(await resolvePublishedIds(page), 4);
 
-      // And the anchor says what it is rather than promising a highlight.
-      const label = await page.locator(".highlight-anchor").first().getAttribute("aria-label");
-      expect(label).toMatch(/not grounded/i);
+      // Nothing is painted to return from, so nothing claims to be a control.
+      await expect(page.locator(".inspector-source [role='button']")).toHaveCount(0);
 
       expect(pageErrors).toEqual([]);
     });
@@ -217,29 +222,136 @@ test.describe("embedded workbench: source-highlight references", () => {
     expect(pageErrors).toEqual([]);
   });
 
-  test("return anchors paint nothing until focused, even where several sit together", async ({ page }) => {
-    // The anchor is a keyboard return target, not a control. Left with its
-    // user-agent chrome it paints a ~16x13 outset-grey box inline in the source
-    // text — a consumer was stripping that host-side. It matters more now that
-    // there is one per candidate and the non-grounded postures stack them all
-    // ahead of the message.
+  test("link targets are inert: no tab stops, no pointer target, nothing painted", async ({ page }) => {
+    // There is one of these per candidate in the model, which is what makes the
+    // published id resolve unconditionally — so it has to cost a keyboard or
+    // screen-reader user nothing. As a <button> it did: 600 candidates put 600
+    // invisible tab stops in sequence, several stacked together here.
     const { pageErrors } = await loadEmbed(page, { artifact: { status: "unavailable", code: "storage-error" } });
 
-    const painted = await page.locator(".highlight-anchor").first().evaluate((node) => {
+    const anchors = page.locator(".highlight-anchor");
+    await expect(anchors).toHaveCount(4);
+
+    const shape = await anchors.first().evaluate((node) => {
+      const box = node.getBoundingClientRect();
       const computed = window.getComputedStyle(node);
       return {
+        tag: node.tagName,
+        tabIndex: (node as HTMLElement).tabIndex,
+        role: node.getAttribute("role"),
+        width: box.width,
         borderTopWidth: computed.borderTopWidth,
         backgroundImage: computed.backgroundImage,
-        backgroundColor: computed.backgroundColor,
-        paddingTop: computed.paddingTop,
-        width: computed.width,
+        text: node.textContent,
       };
     });
-    expect(painted.borderTopWidth).toBe("0px");
-    expect(painted.paddingTop).toBe("0px");
-    expect(painted.backgroundImage).toBe("none");
-    expect(["rgba(0, 0, 0, 0)", "transparent"]).toContain(painted.backgroundColor);
-    expect(painted.width).toBe("1px");
+    expect(shape.tag).toBe("SPAN");
+    expect(shape.tabIndex).toBe(-1);
+    expect(shape.role).toBeNull();
+    expect(shape.width).toBe(0);
+    expect(shape.borderTopWidth).toBe("0px");
+    expect(shape.backgroundImage).toBe("none");
+    expect(shape.text).toBe("");
+
+    expect(pageErrors).toEqual([]);
+  });
+
+  test("the painted highlight is the return control, and tab stops stay bounded by the page", async ({ page }) => {
+    // 600 candidates, page size 100. Link targets scale with the model; the
+    // thing a reader can see and aim at does not.
+    const { pageErrors } = await loadEmbed(page, { candidates: 600 });
+
+    await expect(page.locator(".highlight-anchor")).toHaveCount(600);
+    const marks = page.locator(".inspector-source mark");
+    await expect(marks).toHaveCount(100);
+
+    // One tab stop per painted highlight. The source <pre> is itself focusable
+    // so the prepared text is reachable; nothing else in here is.
+    const focusable = await page.evaluate(() =>
+      [...document.querySelectorAll(".inspector-source [tabindex='0'], .inspector-source button, .inspector-source a[href]")]
+        .map((node) => node.tagName.toLowerCase()),
+    );
+    expect(focusable.filter((tag) => tag === "mark")).toHaveLength(100);
+    expect(focusable.filter((tag) => tag !== "mark")).toEqual(["pre"]);
+
+    // Full phrase width, not a sliver, and visibly marked already. Every target
+    // clears 24x24 (WCAG 2.5.8) on its own rather than leaning on the inline
+    // exception, and none of them overlap — the vertical padding that buys the
+    // height is inside the line box the prepared text's line-height provides.
+    const targets = await marks.evaluateAll((nodes) => nodes.map((node) => {
+      const box = node.getBoundingClientRect();
+      return { top: box.top, bottom: box.bottom, left: box.left, right: box.right, width: box.width, height: box.height };
+    }));
+    expect(Math.min(...targets.map((t) => t.height))).toBeGreaterThanOrEqual(24);
+    expect(Math.min(...targets.map((t) => t.width))).toBeGreaterThanOrEqual(24);
+    let overlaps = 0;
+    for (let i = 0; i < targets.length; i += 1) {
+      for (let j = i + 1; j < targets.length; j += 1) {
+        const a = targets[i]!, b = targets[j]!;
+        if (a.top < b.bottom && b.top < a.bottom && a.left < b.right && b.left < a.right) overlaps += 1;
+      }
+    }
+    expect(overlaps).toBe(0);
+
+    const first = marks.first();
+    await expect(first).toHaveAttribute("role", "button");
+    await expect(first).toHaveAttribute("aria-label", /activate to return to candidate/i);
+
+    expect(pageErrors).toEqual([]);
+  });
+
+  test("activating a painted highlight returns focus to its candidate row", async ({ page }) => {
+    const { pageErrors } = await loadEmbed(page);
+
+    const mark = page.locator(".inspector-source mark").first();
+    const candidateId = await mark.getAttribute("data-highlight-return-to");
+    await mark.click();
+
+    const focused = await page.evaluate(() => {
+      const active = document.activeElement as HTMLElement | null;
+      return { candidateId: active?.dataset.candidateId ?? null, isCandidateRow: active?.classList.contains("inspector-candidate") ?? false };
+    });
+    expect(focused.isCandidateRow).toBe(true);
+    expect(focused.candidateId).toBe(candidateId);
+
+    expect(pageErrors).toEqual([]);
+  });
+
+  test("a derived id never collides with one a host is already linking to", async ({ page }) => {
+    // The uniqueness check compared the bare token against a set of finished
+    // element ids, so a published `highlight-beta-two` did not stop a candidate
+    // whose id sanitizes to `beta-two` from deriving the same element id. Both
+    // mounted under it and a host's href resolved to whichever came first —
+    // collision-freedom being the whole argument for publishing a resolved value.
+    const { pageErrors } = await loadEmbed(page, { collidingHighlightIds: true });
+
+    const ids = await page.locator(".highlight-anchor").evaluateAll((nodes) => nodes.map((node) => node.id));
+    expect(ids).toHaveLength(4);
+    expect(new Set(ids).size).toBe(4);
+
+    // The published id still resolves, to exactly one element, and it is the
+    // candidate that published it — a published id is used verbatim.
+    await expect(page.locator('[id="highlight-beta-two"]')).toHaveCount(1);
+    expect(ids).toContain("highlight-beta-two");
+    const publishedOwner = await page.locator('[id="highlight-beta-two"]').getAttribute("data-highlight-candidate-id");
+    expect(publishedOwner).toBe("alpha-one");
+
+    expect(pageErrors).toEqual([]);
+  });
+
+  test("a published id survives a hand-authored model whose candidate ids are not unique", async ({ page }) => {
+    // Resolution used to be keyed on candidate.id. The builder's ids are
+    // structurally unique so that looked safe, but this function exists FOR
+    // models a caller assembled, where nothing enforces it — and two candidates
+    // sharing an id collapsed into one entry, handing the second's derived id to
+    // the first and discarding the published id a host was already linking to.
+    const { pageErrors } = await loadEmbed(page, { duplicateCandidateIds: true });
+
+    const ids = await page.locator(".highlight-anchor").evaluateAll((nodes) => nodes.map((node) => node.id));
+    expect(ids).toHaveLength(4);
+    expect(new Set(ids).size).toBe(4);
+    // The host's link still works, and still points at the candidate that published it.
+    await expect(page.locator('[id="highlight-published-first"]')).toHaveCount(1);
 
     expect(pageErrors).toEqual([]);
   });
@@ -261,12 +373,13 @@ test.describe("embedded workbench: source-highlight references", () => {
     expect(pageErrors).toEqual([]);
   });
 
-  test("activating an off-page highlight brings its candidate row back into view", async ({ page }) => {
+  test("following a host's href to an off-page candidate pages to it and paints its highlight", async ({ page }) => {
+    // This is what `href="#<highlightElementId>"` does. The anchor always
+    // resolves, but a candidate off the page or excluded by a filter has no
+    // painted highlight, so the link alone would drop the reader on an invisible
+    // marker in the middle of the source text.
     const { pageErrors } = await loadEmbed(page, { candidates: 12, pageSize: 5 });
 
-    // Anchors outlive their rows, so a highlight can be activated while its
-    // candidate is filtered out. Returning focus to a row that is not mounted
-    // would silently do nothing, so the inspector has to go and get it.
     await page.locator('input[data-filter="query"]').fill("LineItem00");
     await expect(page.locator(".inspector-candidate")).toHaveCount(1);
 
@@ -277,23 +390,20 @@ test.describe("embedded workbench: source-highlight references", () => {
       return model.candidates.find((candidate) => candidate.field === "line.item09")!;
     });
 
-    // Activated the way it is actually reached. The anchor is a 1px keyboard
-    // return target in the tab order, not a mouse-sized control, so focus it and
-    // press Enter rather than aiming a pointer at a sliver.
-    const anchor = page.locator(`[id="${offPage.highlightElementId}"]`);
-    await anchor.focus();
-    await expect(anchor).toBeFocused();
-    await page.keyboard.press("Enter");
+    await page.evaluate((id) => { window.location.hash = `#${id}`; }, offPage.highlightElementId);
 
-    const focused = await page.evaluate(() => {
-      const active = document.activeElement as HTMLElement | null;
-      return { candidateId: active?.dataset.candidateId ?? null, isCandidateRow: active?.classList.contains("inspector-candidate") ?? false };
-    });
-    expect(focused.isCandidateRow).toBe(true);
-    expect(focused.candidateId).toBe(offPage.id);
+    const mark = page.locator(`[data-highlight-return-to="${offPage.id}"]`);
+    await expect(mark).toBeVisible();
+    await expect(mark).toBeFocused();
+
+    // And from there the highlight returns to its candidate row.
+    await page.keyboard.press("Enter");
+    const focused = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.candidateId ?? null);
+    expect(focused).toBe(offPage.id);
 
     expect(pageErrors).toEqual([]);
   });
+
 });
 
 test.describe("embedded workbench: host theming", () => {

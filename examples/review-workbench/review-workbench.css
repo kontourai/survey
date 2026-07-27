@@ -48,26 +48,37 @@
 .inspector-pager button:disabled, .queue-pager button:disabled { opacity: .45; }
 .inspector-candidates { margin: 0; padding-left: 1.5rem; }
 .inspector-candidate { width: 100%; display: grid; gap: .2rem; text-align: left; padding: .65rem; color: var(--k-text); background: transparent; border: 1px solid var(--k-line); }
-.inspector-source pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 1rem; background: var(--k-sunken); border: 1px solid var(--k-line); min-height: 8rem; }
+.inspector-source pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 1rem; background: var(--k-sunken); border: 1px solid var(--k-line); min-height: 8rem; line-height: 2.2; }
 .inspector-source mark { background: var(--k-brand-wash); color: var(--k-text); outline: 1px solid var(--k-brand); }
 .inspector-candidate:focus { outline: 3px solid var(--k-active); outline-offset: 2px; }
-/* A keyboard return target, not a control: sized to a sliver and stripped of
-   user-agent button chrome, which otherwise paints a ~16x13 outset-grey box
-   inline in the source text. Invisible until focused, and there is one per
-   candidate — including in the non-grounded postures, where several sit
-   together ahead of the posture message. */
+/* An inert link target, one per candidate in the model, so a host's
+   `href="#<highlightElementId>"` always resolves. It is not a control and must
+   not behave like one: no size, no tab stop, nothing painted. */
 .highlight-anchor {
-  appearance: none;
-  display: inline-block;
-  width: 1px;
-  height: 1em;
-  padding: 0;
-  border: 0;
-  background: none;
-  vertical-align: baseline;
+  display: inline;
+  width: 0;
+  height: 0;
+  overflow: hidden;
 }
 
-.highlight-anchor:focus { outline: 3px solid var(--k-active); }
+/* The highlight IS the return control — the only part of this surface a reader
+   can see, so it is the thing to aim at. Full phrase width, already visibly
+   marked, one tab stop per painted highlight. */
+.source-highlight {
+  cursor: pointer;
+  border-radius: 2px;
+  /* Vertical padding on an inline box grows the hit area without moving the
+     line box, and the prepared text's line-height below leaves room for it, so
+     the target reaches ~24px tall without lines overlapping each other. The
+     phrase itself supplies the width. */
+  padding: 5px 3px;
+  margin: 0 -3px;
+}
+
+.source-highlight:focus-visible {
+  outline: 3px solid var(--k-active);
+  outline-offset: 1px;
+}
 .source-unavailable { color: var(--k-negative); font-weight: 700; }
 @container (max-width: 720px) { .inspector-heading, .inspector-layout { grid-template-columns: 1fr !important; } }
 
