@@ -10,7 +10,11 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 
-import { envelopeInspectorEntry, envelopeReviewQueueSession } from "../envelope-review-fixture.js";
+import {
+  envelopeInspectorEntry,
+  envelopeReviewQueueSession,
+  paginatingEnvelopeSeeds,
+} from "../envelope-review-fixture.js";
 
 const fixturePath = "/tests/browser/fixtures/review-workbench-embed.html";
 
@@ -19,7 +23,13 @@ interface LoadedEmbed {
   readonly consoleErrors: string[];
 }
 
-async function loadEmbed(page: Page): Promise<LoadedEmbed> {
+interface EmbedOptions {
+  /** Seed count and page size, to mount a queue that actually paginates. */
+  readonly candidates?: number;
+  readonly pageSize?: number;
+}
+
+async function loadEmbed(page: Page, options: EmbedOptions = {}): Promise<LoadedEmbed> {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -27,9 +37,11 @@ async function loadEmbed(page: Page): Promise<LoadedEmbed> {
     if (message.type() === "error") consoleErrors.push(message.text());
   });
 
+  const seeds = options.candidates ? paginatingEnvelopeSeeds(options.candidates) : undefined;
   const fixture = {
-    session: JSON.parse(JSON.stringify(envelopeReviewQueueSession())),
-    inspectorEntry: JSON.parse(JSON.stringify(envelopeInspectorEntry())),
+    session: JSON.parse(JSON.stringify(seeds ? envelopeReviewQueueSession(seeds) : envelopeReviewQueueSession())),
+    inspectorEntry: JSON.parse(JSON.stringify(seeds ? envelopeInspectorEntry(seeds) : envelopeInspectorEntry())),
+    ...(options.pageSize ? { inspectorPageSize: options.pageSize } : {}),
   };
   await page.addInitScript((value) => {
     (window as unknown as Record<string, unknown>).__surveyEmbedFixture = value;
@@ -84,6 +96,38 @@ test.describe("embedded workbench: design tokens", () => {
 });
 
 test.describe("embedded workbench: source-highlight references", () => {
+  /** Reads every published id and how many elements it resolves to, right now. */
+  const resolvePublishedIds = (page: Page) => page.evaluate(() => {
+    const model = (window as unknown as {
+      __surveyInspectorModel: { candidates: Array<{ id: string; highlightElementId: string }> };
+    }).__surveyInspectorModel;
+
+    return model.candidates.map((candidate) => {
+      const matches = document.querySelectorAll(`[id="${candidate.highlightElementId}"]`);
+      const anchor = matches[0] as HTMLElement | undefined;
+      return {
+        candidateId: candidate.id,
+        highlightElementId: candidate.highlightElementId,
+        matchCount: matches.length,
+        boundTo: anchor?.dataset.highlightCandidateId ?? null,
+        isHighlightAnchor: anchor?.classList.contains("highlight-anchor") ?? false,
+      };
+    });
+  });
+
+  const expectAllResolve = (
+    resolution: Awaited<ReturnType<typeof resolvePublishedIds>>,
+    expectedCount: number,
+  ) => {
+    expect(resolution).toHaveLength(expectedCount);
+    for (const entry of resolution) {
+      expect(entry.matchCount, `${entry.highlightElementId} must resolve to exactly one element`).toBe(1);
+      expect(entry.isHighlightAnchor).toBe(true);
+      // Resolving is not enough: it has to be THIS candidate's sentence.
+      expect(entry.boundTo).toBe(entry.candidateId);
+    }
+  };
+
   test("every candidate's published highlightElementId resolves to its own highlight anchor", async ({ page }) => {
     const { pageErrors } = await loadEmbed(page);
 
@@ -92,31 +136,58 @@ test.describe("embedded workbench: source-highlight references", () => {
     // sanitizer shipped a copy of it and a test to catch it drifting
     // (kontourai/fieldwork#58); the id is published on the model instead, and
     // the renderer reads the same field, so the two cannot disagree.
-    const resolution = await page.evaluate(() => {
-      const model = (window as unknown as {
-        __surveyInspectorModel: { candidates: Array<{ id: string; highlightElementId: string }> };
-      }).__surveyInspectorModel;
+    expectAllResolve(await resolvePublishedIds(page), 4);
 
-      return model.candidates.map((candidate) => {
-        const matches = document.querySelectorAll(`[id="${candidate.highlightElementId}"]`);
-        const anchor = matches[0] as HTMLElement | undefined;
-        return {
-          candidateId: candidate.id,
-          highlightElementId: candidate.highlightElementId,
-          matchCount: matches.length,
-          boundTo: anchor?.dataset.highlightCandidateId ?? null,
-          isHighlightAnchor: anchor?.classList.contains("highlight-anchor") ?? false,
-        };
-      });
+    expect(pageErrors).toEqual([]);
+  });
+
+  test("published ids still resolve for candidates that are off the mounted page or filtered out", async ({ page }) => {
+    // 12 candidates over pages of 5. Two thirds of the model is off-page on
+    // arrival, which is the condition a 204-candidate model reaches against the
+    // default page size of 100 — a host's href would have pointed at nothing.
+    const { pageErrors } = await loadEmbed(page, { candidates: 12, pageSize: 5 });
+
+    const rows = page.locator(".inspector-candidate");
+    await expect(rows).toHaveCount(5);
+    expectAllResolve(await resolvePublishedIds(page), 12);
+
+    // Paging does not take the other pages' anchors away with it.
+    await page.locator('[data-page="next"]').click();
+    await expect(rows).toHaveCount(5);
+    expectAllResolve(await resolvePublishedIds(page), 12);
+
+    // Neither does filtering the list down to one row.
+    await page.locator('input[data-filter="query"]').fill("LineItem07");
+    await expect(rows).toHaveCount(1);
+    expectAllResolve(await resolvePublishedIds(page), 12);
+
+    expect(pageErrors).toEqual([]);
+  });
+
+  test("activating an off-page highlight brings its candidate row back into view", async ({ page }) => {
+    const { pageErrors } = await loadEmbed(page, { candidates: 12, pageSize: 5 });
+
+    // Anchors outlive their rows, so a highlight can be activated while its
+    // candidate is filtered out. Returning focus to a row that is not mounted
+    // would silently do nothing, so the inspector has to go and get it.
+    await page.locator('input[data-filter="query"]').fill("LineItem00");
+    await expect(page.locator(".inspector-candidate")).toHaveCount(1);
+
+    const offPage = await page.evaluate(() => {
+      const model = (window as unknown as {
+        __surveyInspectorModel: { candidates: Array<{ id: string; highlightElementId: string; field: string }> };
+      }).__surveyInspectorModel;
+      return model.candidates.find((candidate) => candidate.field === "line.item09")!;
     });
 
-    expect(resolution.length).toBeGreaterThan(0);
-    for (const entry of resolution) {
-      expect(entry.matchCount, `${entry.highlightElementId} must resolve to exactly one element`).toBe(1);
-      expect(entry.isHighlightAnchor).toBe(true);
-      // Resolving is not enough: it has to be THIS candidate's sentence.
-      expect(entry.boundTo).toBe(entry.candidateId);
-    }
+    await page.locator(`[id="${offPage.highlightElementId}"]`).click();
+
+    const focused = await page.evaluate(() => {
+      const active = document.activeElement as HTMLElement | null;
+      return { candidateId: active?.dataset.candidateId ?? null, isCandidateRow: active?.classList.contains("inspector-candidate") ?? false };
+    });
+    expect(focused.isCandidateRow).toBe(true);
+    expect(focused.candidateId).toBe(offPage.id);
 
     expect(pageErrors).toEqual([]);
   });

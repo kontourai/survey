@@ -121,9 +121,19 @@ const presentationAdapter: ReviewPresentationAdapter = {
 ```
 
 The renderer reads the same field, so the id a host links to and the id in the
-DOM cannot drift apart. Two guarantees hold: the value is a valid HTML/CSS
-identifier usable verbatim, and it is unique across every candidate in one
-model.
+DOM cannot drift apart. Three guarantees hold: the value is a valid HTML/CSS
+identifier usable verbatim; it is unique across every candidate in one model;
+and it resolves for **every** candidate for as long as the inspector is mounted.
+
+That last one is deliberate. `mountExtractionInspector` pages the candidate list
+(`pageSize`, default 100) and filters it, but highlight anchors are exempt from
+both — a 204-candidate model mounts 204 anchors on page one, and typing in the
+filter box does not take any of them away. A link that dies because the reviewer
+paged or filtered is the same broken promise as an id that drifted. Only the
+candidate rows and the painted `<mark>` highlights follow the page.
+
+Activating a highlight whose candidate row is off-page or filtered out navigates
+the list to that candidate rather than silently failing to focus it.
 
 Do **not** reconstruct these ids from `candidate.id`. The sanitizing step is
 private, lossy, and not a contract; a consumer that mirrored it shipped a copy

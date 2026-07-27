@@ -35,6 +35,7 @@
       mountExtractionInspector(
         document.getElementById("inspector"),
         inspectorModel,
+        fixture.inspectorPageSize ? { pageSize: fixture.inspectorPageSize } : {},
       );
       document.body.dataset.embedReady = "1";
     </script>
