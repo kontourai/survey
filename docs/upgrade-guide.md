@@ -361,9 +361,13 @@ digest, not its bytes, so a record whose proposals were edited — with the
 queue re-derived from the edited record — passes both the binding and the
 cross-check (pinned as a boundary test and by `npm run check:guards`).
 Keeping the stored record equal to the record originally imported is the
-consumer's storage obligation; bind the prepared artifact's bytes to
-`result.preparedArtifact.digest` on every read so a record edit makes a third
-artifact disagree.
+consumer's storage obligation. Note that validating prepared bytes against
+`result.preparedArtifact.digest` protects artifact integrity only — the
+digest does not cover the proposals, so it stays green through a record
+rewrite. Preserving record integrity requires an independently anchored
+record digest/MAC, immutable or authenticated record storage, or
+independently re-deriving the proposals from trusted prepared bytes and
+comparing; Survey enforces none of these.
 
 **Nothing existing breaks.** `deriveServerReviewSessionApplyResult` without a
 `binding` behaves exactly as in 2.3.x — the new assertion runs only inside

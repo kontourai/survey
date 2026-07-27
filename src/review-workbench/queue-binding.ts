@@ -30,10 +30,13 @@
  * proposals and re-derives the queue from the edited record presents a
  * self-consistent pair this module blesses (pinned as a boundary test and by
  * check:guards). Keeping the stored record equal to the record originally
- * imported is the caller's storage obligation; the consumer pattern is to bind
- * the prepared artifact's bytes to `result.preparedArtifact.digest` on every
- * read, so a record edit makes an artifact the writer does not control
- * disagree.
+ * imported is the caller's storage obligation, and validating prepared bytes
+ * against `result.preparedArtifact.digest` does NOT discharge it: that digest
+ * covers the prepared artifact only, so it protects artifact integrity and
+ * stays green through a proposal rewrite. Preserving record integrity takes
+ * one of: a record digest/MAC anchored where the record's writer cannot
+ * reach, immutable or authenticated record storage, or independently
+ * re-deriving the proposals from trusted prepared bytes and comparing.
  *
  * Four bypasses from fieldwork#60's rounds, each a design input here:
  * 1. Self-agreement (above) — the binding's origin is the open, not the save.
@@ -298,11 +301,14 @@ export class UnattestedExtractionQueueError extends Error {
  * the digested artifact. A writer who edits the record's proposals and
  * re-derives the queue from the edited record presents a pair this check
  * blesses, while `result.preparedArtifact.digest` still names the honest
- * bytes. Record integrity is therefore the caller's storage obligation: bind
- * the prepared artifact's bytes to that digest on every read (the consumer
- * pattern this module's lineage comes from), so a record edit makes an
- * artifact the writer does not control disagree. This limit is pinned by a
- * boundary test and by scripts/check-guards.mjs.
+ * bytes. Record integrity is therefore the caller's storage obligation, and
+ * checking prepared bytes against that digest does not meet it — the digest
+ * covers the artifact, not the proposals, so it stays green through the
+ * rewrite. Meeting it takes one of: a record digest/MAC anchored where the
+ * record's writer cannot reach, immutable or authenticated record storage,
+ * or independently re-deriving the proposals from trusted prepared bytes and
+ * comparing. This limit is pinned by a boundary test and by
+ * scripts/check-guards.mjs.
  *
  * This is the whole-extraction rule: it applies to a queue whose items all come
  * from one import. A consumer whose rounds mix in items the extraction cannot

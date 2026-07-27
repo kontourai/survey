@@ -266,10 +266,13 @@ describe("validateReviewQueueAgainstExtractionImport", () => {
     assert.equal(validateExtractionEnvelopeImport(edited).status.state, "grounded");
 
     // And the prepared-artifact digest is UNCHANGED — it still names the
-    // honest bytes. That digest is the caller's hook: binding the prepared
-    // artifact's bytes to it on every read is what makes this rewrite
-    // detectable, and it is a storage obligation this library cannot take
-    // over. This assertion is what "a third artifact disagrees" traces to.
+    // honest bytes, which means the rewrite is INVISIBLE to artifact-digest
+    // validation: that digest covers the prepared artifact only, so checking
+    // prepared bytes against it protects artifact integrity and stays green
+    // here. Record integrity is a storage obligation this library cannot take
+    // over, and meeting it takes an independently anchored record digest/MAC,
+    // immutable or authenticated record storage, or re-deriving proposals
+    // from trusted prepared bytes — not any single artifact-digest check.
     assert.equal(
       edited.spec.envelope.result.preparedArtifact!.digest,
       honest.record.spec.envelope.result.preparedArtifact!.digest,

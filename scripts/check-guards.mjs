@@ -14,6 +14,9 @@
  * there): restores from git, verifies the restore byte-identically, and FAILS
  * rather than skips when a pattern stops matching — a missing pattern means a
  * guard moved or was removed, and the harness must not quietly bless that.
+ * Compilation is judged separately from the suite: an injection that does not
+ * compile is a matrix FAILURE (wrong attribution), never a catch, so "caught"
+ * always means a test went red.
  *
  * Not part of `npm run verify`: it edits tracked source and restores it from
  * git, so it needs a clean tree and must not race a build. Run it directly:
@@ -171,18 +174,33 @@ for (const injection of injections) {
     continue;
   }
   writeFileSync(injection.file, source.replace(injection.from, injection.to));
-  let caught = false;
+  // Compile and test are judged SEPARATELY. A guard whose removal only breaks
+  // the build is not covered by any test — counting a compile failure as
+  // "caught" is the decorative-attribution lie this matrix exists to rule out
+  // (it happened: the derive-ignores-binding injection was compiler-caught
+  // until its repair). Only a red run of the targeted suite counts.
+  let compiles = true;
   try {
     execFileSync("npx", ["tsc"], { stdio: "pipe" });
-    execFileSync("node", ["--test", SUITE], { stdio: "pipe" });
   } catch {
-    caught = true;
+    compiles = false;
+  }
+  let caught = false;
+  if (compiles) {
+    try {
+      execFileSync("node", ["--test", SUITE], { stdio: "pipe" });
+    } catch {
+      caught = true;
+    }
   }
   execFileSync("git", ["checkout", "--", injection.file]);
   if (digest(injection.file) !== before) {
     throw new Error(`${injection.file} was not restored byte-identically after injection "${injection.label}"`);
   }
-  results.push({ ...injection, outcome: caught ? "caught" : "NOT CAUGHT" });
+  results.push({
+    ...injection,
+    outcome: !compiles ? "DOES NOT COMPILE (wrong attribution)" : caught ? "caught" : "NOT CAUGHT",
+  });
 }
 
 // Leave dist matching the restored source, never an injected guard.
@@ -194,5 +212,5 @@ for (const result of results) {
 const failures = results.filter((result) => result.outcome !== "caught");
 console.log(`\n${results.length - failures.length}/${results.length} injections caught`);
 if (failures.length > 0) {
-  throw new Error(`${failures.length} injection(s) not caught by ${SUITE}`);
+  throw new Error(`${failures.length} injection(s) not caught by a red run of ${SUITE} (a non-compiling injection is wrong attribution, not a catch)`);
 }

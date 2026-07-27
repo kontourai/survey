@@ -897,12 +897,22 @@ that passes the binding *and* the cross-check, while
 `result.preparedArtifact.digest` still names the honest bytes. That pass is
 pinned as a boundary test and by `npm run check:guards`, so the limit cannot
 drift silently. Keeping the stored record equal to the record you originally
-imported is **your storage obligation**. The pattern that closes it — the one
-the consuming application this lineage comes from uses — is to bind the
-prepared artifact's bytes to `result.preparedArtifact.digest` on every read:
-then a record edit makes an artifact the writer does not control disagree, and
-the coordinated rewrite is refused one layer up, before this module is ever
-asked.
+imported is **your storage obligation** — and be precise about what does and
+does not meet it. Validating your stored prepared bytes against
+`result.preparedArtifact.digest` protects **artifact integrity only**: the
+digest covers the prepared bytes, not the proposals, so it stays green
+through the coordinated rewrite above. No single artifact-digest check closes
+this. Preserving record integrity requires one of:
+
+- a digest or MAC over the **record itself**, anchored somewhere the record's
+  writer cannot reach (a separate trust domain, an append-only log, a signer);
+- immutable or authenticated record storage, so the record cannot be
+  rewritten in place; or
+- independently re-deriving the proposals from trusted prepared bytes and
+  comparing them to the stored record's proposals.
+
+Survey enforces none of these — it cannot see your storage — which is why
+this paragraph names them instead of claiming them.
 
 **The consumer's half of the contract.** Survey cannot see your storage. The
 binding attests the queue only if you (1) call `bindReviewQueue` at queue
@@ -921,7 +931,10 @@ answer for one membership.
 
 Every refusal above is fault-injected by `npm run check:guards`, which removes
 each guard in turn and requires the suite covering it to fail — a guard no test
-fails without is decoration. The matrix also pins the documented boundary: the
+fails without is decoration. Compilation is judged separately: an injection
+that fails to compile is a matrix failure (the "catch" would belong to the
+compiler, not a test), so a reported catch always means a test went red. The
+matrix also pins the documented boundary: the
 coordinated record rewrite that the cross-check blesses is asserted as a pass
 by a dedicated test, and check:guards fails if that test is removed or stops
 observing the pass, so this section cannot quietly claim more than the module
