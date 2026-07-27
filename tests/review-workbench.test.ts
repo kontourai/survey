@@ -1410,6 +1410,36 @@ describe("review workbench prototype", () => {
     assert.match(html, /does not validate real-world truth/);
   });
 
+  it("emits no empty 'IDs and trace links' disclosure when every reference was already printed", () => {
+    // A producer that reuses one identifier across source, extraction, and
+    // candidate set leaves each reference list with nothing new to disclose.
+    // A triangle promising ids and then showing none is worse than no triangle.
+    const shared = "one-id-for-everything";
+    const item: ReviewItem = structuredClone(publicDirectoryReviewItemExample) as ReviewItem;
+    for (const candidate of item.spec.candidates as Array<ReviewItem["spec"]["candidates"][number]>) {
+      const mutable = candidate as unknown as Record<string, unknown>;
+      mutable.source = { ...candidate.source, sourceId: shared };
+      mutable.extraction = { ...candidate.extraction, extractionId: shared };
+      mutable.projection = {
+        ...candidate.projection,
+        rawSourceId: shared,
+        extractionId: shared,
+        candidateSetId: shared,
+      };
+    }
+
+    const html = renderReviewWorkbenchHtml({
+      ...initialReviewWorkbenchState(item),
+      decision: "accept-proposed" as const,
+    });
+
+    const rowLists = html.match(/<details class="reference-details">[\s\S]*?<\/details>/g) ?? [];
+    for (const list of rowLists) {
+      if (!list.includes("<dl")) continue; // the saved-record JSON shares the class
+      assert.match(list, /data-audit-row=/, `empty reference list rendered: ${list}`);
+    }
+  });
+
   it("renders a regulated rule conflict ReviewItem without product-specific workbench branches", () => {
     const state = {
       ...initialReviewWorkbenchState(regulatedRuleConflictReviewItemExample),
