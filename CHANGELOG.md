@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.4](https://github.com/kontourai/survey/compare/v2.2.3...v2.2.4) (2026-07-27)
+
+
+### Documentation
+
+* use US spellings ([#206](https://github.com/kontourai/survey/issues/206)) ([b542bf5](https://github.com/kontourai/survey/commit/b542bf5316a854b8eca720d0b85e65df7f8f893b))
+
 ## [2.2.3](https://github.com/kontourai/survey/compare/v2.2.2...v2.2.3) (2026-07-26)
 
 
