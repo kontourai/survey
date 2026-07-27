@@ -226,6 +226,55 @@ mapped onto `facet` at read time) — that shim is orthogonal to Survey's
 `@kontourai/surface`; see that package's own release notes for its scope and
 lifetime.
 
+## 2.3.0 — embedded workbench DOM
+
+`2.3.0` is a minor release: nothing in Survey's *supported* API is removed or
+repointed, and it adds two extension points. But if you embed the review
+workbench and reach into its DOM, the markup underneath you changed, and a host
+that was compensating for a Survey defect can end up hiding real data. Migrate
+before or with the bump rather than after.
+
+**If you slug row labels to build selectors, stop.** Every AUDIT DETAILS row now
+carries `data-audit-row="<key>"`, and `reviewAuditRowKeys` (exported from
+`@kontourai/survey/review-workbench`) is the complete set. Keys are stable
+across label copy changes; slugs are not.
+
+```css
+/* before — breaks the day someone edits a label */
+[data-testid="review-field"] .kv:has(.field-label:contains("Raw Source ID"))
+/* after */
+[data-audit-row="raw-source-id"]
+```
+
+**If you prune duplicated audit rows, delete those rules.** Survey no longer
+prints the same property of the same record twice, so the duplicates a host was
+suppressing are gone. Keeping a rule that hides one of them now hides the only
+copy. Rules that reflect a *host* decision — you promote the locator onto your
+own card face, you keep identifiers out of the UI entirely — are still
+legitimate; re-point them at `data-audit-row` keys.
+
+**If you select on structure, re-check those selectors.** These sections are no
+longer rendered when they would carry only a constant reporting an absence: the
+authority trace when none was supplied, the unselected-candidate history when
+there is nothing unselected, and the review event of a `could_not_confirm`
+resolution. The `.preview-section.is-neutral` class is gone with the first of
+them. Relational selectors such as
+`[data-testid="surface-candidate-history"]:not(:has(.reference-details))` still
+behave as they did — every reference disclosure keeps at least one reference
+that can never be suppressed, so the disclosure does not blink in and out — but
+this is the class of coupling worth re-reading rather than assuming.
+
+**If you reconstruct source-highlight element ids, delete that code.**
+`ExtractionInspectorCandidate.highlightElementId` publishes the id, resolvable
+for every candidate whatever page or filter the inspector is on. Re-deriving one
+from `candidate.id` was never supported and the private sanitizer behind it can
+change.
+
+**A required input inside a collapsed region no longer kills its control.** If
+you patched around "Could not confirm" doing nothing (kontourai/survey#208),
+that patch is now redundant; the workbench states the requirement next to the
+button and opens the accordion holding the input.
+
 ## See also
 
 - [consumer-integration-guide.md](consumer-integration-guide.md) — first-time
