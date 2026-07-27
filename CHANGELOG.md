@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.0](https://github.com/kontourai/survey/compare/v2.3.0...v2.4.0) (2026-07-27)
+
+
+### Features
+
+* **review-workbench:** own queue-binding attestation instead of each consumer rediscovering it ([#222](https://github.com/kontourai/survey/issues/222)) ([0b02017](https://github.com/kontourai/survey/commit/0b020179cc4035f066554227131886bb0f42d06d))
+
 ## [2.3.0](https://github.com/kontourai/survey/compare/v2.2.4...v2.3.0) (2026-07-27)
 
 
