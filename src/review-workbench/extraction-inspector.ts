@@ -425,7 +425,7 @@ export function mountExtractionInspector(
     page = Math.min(page, pageCount - 1);
     const start = page * pageSize;
     const visible = matching.slice(start, start + pageSize);
-    list.innerHTML = visible.map(c => `<li><button type="button" class="inspector-candidate" id="${escapeHtml(candidateElementId(highlightIdFor(c)))}" data-candidate-id="${escapeHtml(c.id)}" aria-controls="${escapeHtml(highlightIdFor(c))}"><strong>${escapeHtml(c.field)}</strong><span>${escapeHtml(c.provider)}${c.model ? ` / ${escapeHtml(c.model)}` : ""}</span><span>${escapeHtml(c.inferenceType)} ${escapeHtml(c.valueType)} · ${escapeHtml(c.alignment)}</span>${formatContext(c)}</button></li>`).join("") || "<li>No candidates match these filters.</li>";
+    list.innerHTML = visible.map(c => `<li><button type="button" class="inspector-candidate" id="${escapeHtml(candidateElementId(highlightIdFor(c)))}" data-candidate-id="${escapeHtml(c.id)}" data-highlight-element-id="${escapeHtml(highlightIdFor(c))}" aria-controls="${escapeHtml(highlightIdFor(c))}"><strong>${escapeHtml(c.field)}</strong><span>${escapeHtml(c.provider)}${c.model ? ` / ${escapeHtml(c.model)}` : ""}</span><span>${escapeHtml(c.inferenceType)} ${escapeHtml(c.valueType)} · ${escapeHtml(c.alignment)}</span>${formatContext(c)}</button></li>`).join("") || "<li>No candidates match these filters.</li>";
     resultCount.textContent = matching.length === 0 ? "No matching candidates" : `${start + 1}–${Math.min(start + pageSize, matching.length)} of ${matching.length}`;
     pageLabel.textContent = `Page ${page + 1} of ${pageCount}`;
     pageLabel.hidden = pageCount === 1;
@@ -443,7 +443,8 @@ export function mountExtractionInspector(
   // The event carries the resolved binding as well as the identity: a listener
   // that wants to focus the highlight must never reconstruct the id, and the
   // first-party custom element is the reference implementation of that rule.
-  const activateCandidate = (id: string) => { const candidate = model.candidates.find(c => c.id === id); if (!candidate) return; root.dispatchEvent(new CustomEvent("survey-extraction-candidate-activate", { bubbles: true, composed: true, detail: { candidateId: id, reviewItemName: candidate.reviewItemName, highlightElementId: highlightIdFor(candidate) } })); };
+  const candidateFor = (highlightElementId: string) => model.candidates.find(c => highlightIdFor(c) === highlightElementId);
+  const activateCandidate = (highlightElementId: string) => { const candidate = candidateFor(highlightElementId); if (!candidate) return; root.dispatchEvent(new CustomEvent("survey-extraction-candidate-activate", { bubbles: true, composed: true, detail: { candidateId: candidate.id, reviewItemName: candidate.reviewItemName, highlightElementId } })); };
   const clearFilters = () => {
     for (const key of Object.keys(filters) as Array<keyof ExtractionInspectorFilters>) delete filters[key];
     root.querySelectorAll<HTMLSelectElement>("select[data-filter]").forEach(select => { select.value = ""; });
@@ -458,19 +459,18 @@ export function mountExtractionInspector(
    * to a row that is not mounted would silently do nothing, so page to it —
    * clearing the filters first if they are what is hiding it.
    */
-  const revealCandidateRow = (candidateId: string): ExtractionInspectorCandidate | undefined => {
-    const candidate = model.candidates.find(c => c.id === candidateId);
+  const revealCandidateRow = (highlightElementId: string): ExtractionInspectorCandidate | undefined => {
+    const candidate = candidateFor(highlightElementId);
     if (!candidate) return undefined;
-    let index = filterExtractionInspectorCandidates(model, filters).findIndex(c => c.id === candidateId);
-    if (index < 0) { clearFilters(); index = model.candidates.findIndex(c => c.id === candidateId); }
+    let index = filterExtractionInspectorCandidates(model, filters).indexOf(candidate);
+    if (index < 0) { clearFilters(); index = model.candidates.indexOf(candidate); }
     if (index < 0) return undefined;
     page = Math.floor(index / pageSize);
     render();
     return candidate;
   };
-  const returnToCandidate = (candidateId: string) => {
-    const target = revealCandidateRow(candidateId);
-    if (target) root.querySelector<HTMLElement>(`#${CSS.escape(candidateElementId(highlightIdFor(target)))}`)?.focus();
+  const returnToCandidate = (highlightElementId: string) => {
+    if (revealCandidateRow(highlightElementId)) root.querySelector<HTMLElement>(`#${CSS.escape(candidateElementId(highlightElementId))}`)?.focus();
   };
   /**
    * Follows a host's `href="#<highlightElementId>"`.
@@ -484,17 +484,24 @@ export function mountExtractionInspector(
   const followHighlightFragment = () => {
     const fragment = typeof location === "undefined" ? "" : location.hash.slice(1);
     if (!fragment) return;
-    const candidate = model.candidates.find(c => highlightIdFor(c) === fragment);
-    if (!candidate) return;
-    revealCandidateRow(candidate.id);
-    const mark = root.querySelector<HTMLElement>(`[data-highlight-return-to="${CSS.escape(candidate.id)}"]`);
-    mark?.focus();
-    mark?.scrollIntoView({ block: "center" });
+    if (!candidateFor(fragment)) return;
+    revealCandidateRow(fragment);
+    // `~=` matches one whitespace-separated token: a mark painted over a span
+    // shared by several candidates lists all of them, and this is the one the
+    // reader asked for. Record it, so activating that mark returns to the
+    // candidate they arrived by rather than to whichever is listed first.
+    const mark = root.querySelector<HTMLElement>(`[data-highlight-return-to~="${CSS.escape(fragment)}"]`);
+    if (!mark) return;
+    mark.dataset.highlightArrivedBy = fragment;
+    mark.focus();
+    mark.scrollIntoView({ block: "center" });
   };
   const onHashChange = () => followHighlightFragment();
   if (typeof window !== "undefined") window.addEventListener("hashchange", onHashChange);
-  root.addEventListener("click", event => { const candidate = (event.target as Element).closest<HTMLButtonElement>("button[data-candidate-id]"); if (candidate) { event.preventDefault(); event.stopPropagation(); activateCandidate(candidate.dataset.candidateId!); return; } const highlight = (event.target as Element).closest<HTMLElement>("[data-highlight-return-to]"); if (highlight) { event.preventDefault(); event.stopPropagation(); returnToCandidate(highlight.dataset.highlightReturnTo!); } });
-  root.addEventListener("keydown", event => { const highlight = (event.target as Element).closest<HTMLElement>("[data-highlight-return-to]"); if (highlight) { if (event.key !== "Enter" && event.key !== " ") return; event.preventDefault(); event.stopPropagation(); returnToCandidate(highlight.dataset.highlightReturnTo!); return; } const button = (event.target as Element).closest<HTMLButtonElement>("button[data-candidate-id]"); if (!button) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); activateCandidate(button.dataset.candidateId!); return; } if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); const buttons = [...list.querySelectorAll<HTMLButtonElement>("button[data-candidate-id]")]; const index = buttons.indexOf(button); buttons[event.key === "ArrowDown" ? Math.min(index + 1, buttons.length - 1) : Math.max(index - 1, 0)]?.focus(); } });
+  /** The candidate a shared mark returns to: the one the reader arrived by, else the first it covers. */
+  const returnTargetOf = (mark: HTMLElement) => mark.dataset.highlightArrivedBy ?? mark.dataset.highlightReturnTo!.split(" ")[0]!;
+  root.addEventListener("click", event => { const candidate = (event.target as Element).closest<HTMLButtonElement>("button[data-highlight-element-id]"); if (candidate) { event.preventDefault(); event.stopPropagation(); activateCandidate(candidate.dataset.highlightElementId!); return; } const highlight = (event.target as Element).closest<HTMLElement>("[data-highlight-return-to]"); if (highlight) { event.preventDefault(); event.stopPropagation(); returnToCandidate(returnTargetOf(highlight)); } });
+  root.addEventListener("keydown", event => { const highlight = (event.target as Element).closest<HTMLElement>("[data-highlight-return-to]"); if (highlight) { if (event.key !== "Enter" && event.key !== " ") return; event.preventDefault(); event.stopPropagation(); returnToCandidate(returnTargetOf(highlight)); return; } const button = (event.target as Element).closest<HTMLButtonElement>("button[data-highlight-element-id]"); if (!button) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); activateCandidate(button.dataset.highlightElementId!); return; } if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); const buttons = [...list.querySelectorAll<HTMLButtonElement>("button[data-highlight-element-id]")]; const index = buttons.indexOf(button); buttons[event.key === "ArrowDown" ? Math.min(index + 1, buttons.length - 1) : Math.max(index - 1, 0)]?.focus(); } });
   render();
   followHighlightFragment();
   return () => { if (typeof window !== "undefined") window.removeEventListener("hashchange", onHashChange); root.remove(); };
@@ -519,7 +526,7 @@ function renderSource(text: string, anchored: ExtractionInspectorCandidate[], ma
   let html = "";
   const starts = new Map<number, ExtractionInspectorCandidate[]>(); anchored.forEach(c => starts.set(c.start, [...(starts.get(c.start) ?? []), c]));
   const emitted = new Set<ExtractionInspectorCandidate>();
-  for (let i=0; i<points.length-1; i++) { const start=points[i]!, end=points[i+1]!; for (const c of starts.get(start) ?? []) { emitted.add(c); html += anchorHtml(c, highlightIdFor(c)); } const segment=escapeHtml(text.slice(start,end)); const active=marked.filter(c => c.start < end && c.end > start); html += active.length ? markHtml(segment, active) : segment; }
+  for (let i=0; i<points.length-1; i++) { const start=points[i]!, end=points[i+1]!; for (const c of starts.get(start) ?? []) { emitted.add(c); html += anchorHtml(c, highlightIdFor(c)); } const segment=escapeHtml(text.slice(start,end)); const active=marked.filter(c => c.start < end && c.end > start); html += active.length ? markHtml(segment, active, highlightIdFor) : segment; }
   // A span starting at or past the end of the prepared text has no segment to
   // lead; its anchor still has to exist, or its published id resolves nowhere.
   for (const c of anchored) if (!emitted.has(c)) html += anchorHtml(c, highlightIdFor(c));
@@ -555,9 +562,14 @@ function anchorHtml(candidate: ExtractionInspectorCandidate, highlightElementId:
  * anchor's `data-highlight-candidate-id` so the documented reverse lookup keeps
  * resolving to exactly one element.
  */
-function markHtml(segment: string, active: ExtractionInspectorCandidate[]): string {
+function markHtml(segment: string, active: ExtractionInspectorCandidate[], highlightIdFor: (candidate: ExtractionInspectorCandidate) => string): string {
   const fields = active.map(c => escapeHtml(c.field)).join(", ");
-  return `<mark class="source-highlight" role="button" tabindex="0" data-highlight-return-to="${escapeHtml(active[0]!.id)}" aria-label="Highlighted for ${fields}; activate to return to candidate">${segment}</mark>`;
+  // Every candidate the mark covers, not just the first. Two claims over one
+  // span is ordinary in extraction, and naming both in the label while binding
+  // only one left the others with a highlight that could not be navigated to or
+  // returned from — the label said two, the binding said one.
+  const bindings = active.map(c => escapeHtml(highlightIdFor(c))).join(" ");
+  return `<mark class="source-highlight" role="button" tabindex="0" data-highlight-return-to="${bindings}" aria-label="Highlighted for ${fields}; activate to return to candidate">${segment}</mark>`;
 }
 function formatContext(candidate: ExtractionInspectorCandidate): string {
   const context: string[] = [];

@@ -43,6 +43,33 @@
           ],
         };
       }
+      if (fixture.sharedSpanCandidates) {
+        // Two DISTINCT candidates over the exact same span — ordinary in
+        // extraction, and merged into a single <mark> by the renderer.
+        const [first, second, ...rest] = inspectorModel.candidates;
+        const span = { start: first.start, end: first.end, excerpt: first.excerpt };
+        const pair = [
+          { ...first, ...span },
+          { ...second, ...span, field: "shared.second" },
+        ];
+        if (fixture.sharedSpanCandidates === "reversed") pair.reverse();
+        inspectorModel = { sources: inspectorModel.sources, candidates: [...pair, ...rest] };
+      }
+      if (fixture.duplicateCandidateIdsOnPageTwo) {
+        // Two candidates sharing an id, the SECOND publishing the fragment under
+        // test, and a page size that puts it on page 2. Following its fragment
+        // must land on it, not on whichever candidate `.find(c => c.id === …)`
+        // happens to reach first.
+        const [first, second, ...rest] = inspectorModel.candidates;
+        inspectorModel = {
+          sources: inspectorModel.sources,
+          candidates: [
+            { ...first, id: "same" },
+            { ...second, id: "same", highlightElementId: "highlight-published-second" },
+            ...rest,
+          ],
+        };
+      }
       if (fixture.duplicateCandidateIds) {
         // A hand-authored model whose candidate ids are not unique. Nothing in
         // the input contract enforces that they are; only the builder's own ids

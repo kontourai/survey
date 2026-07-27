@@ -38,6 +38,7 @@ import {
   type ReviewPresentationAdapter,
 } from "./review-presentation.js";
 import {
+  findSoleCandidateById,
   reviewResourceApiVersion,
   type ReviewCandidate,
   type ReviewDecision,
@@ -641,7 +642,7 @@ function matchingSelectedCandidate(
   item: ReviewItem,
   result: ReviewWorkbenchResult,
 ): ReviewCandidate | undefined {
-  const candidate = item.spec.candidates.find((entry) => entry.id === result.selectedCandidateId);
+  const candidate = findSoleCandidateById(item, result.selectedCandidateId);
   return candidate
     && candidate.role === result.selectedCandidateRole
     && structuralEqual(candidate.value, result.selectedValue)

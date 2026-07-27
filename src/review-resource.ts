@@ -280,3 +280,25 @@ export type ReviewSession = ResourceEnvelope<"ReviewSession", ReviewSessionSpec,
 export type ReviewSessionEvent = ResourceEnvelope<"ReviewSessionEvent", ReviewSessionEventSpec, ReviewSessionEventStatus>;
 
 export type ReviewResource = ReviewItem | ReviewDecision | ReviewSession | ReviewSessionEvent;
+
+/**
+ * The one candidate carrying `candidateId`, or `undefined` if the item has none.
+ *
+ * Fails closed when two carry it. A `ReviewDecision` references its candidate by
+ * id and nothing else, so unlike a DOM binding there is no second handle to
+ * route on: if the id is ambiguous, the decision itself is undecidable, and
+ * picking the first match would project one candidate's value under another's
+ * decision. `ReviewItem` has never validated candidate-id uniqueness — the
+ * Surface record builder does (`assertUniqueCandidateIds`), but a
+ * caller-authored ReviewItem reaches the workbench without passing through it.
+ */
+export function findSoleCandidateById(
+  item: ReviewItem,
+  candidateId: string,
+): ReviewCandidate | undefined {
+  const matches = item.spec.candidates.filter((candidate) => candidate.id === candidateId);
+  if (matches.length > 1) {
+    throw new Error(`ReviewItem ${item.metadata.name} has ${matches.length} candidates with id ${candidateId}; candidate ids must be unique.`);
+  }
+  return matches[0];
+}

@@ -319,14 +319,20 @@ export class SurveyReviewWorkbenchElement extends HTMLElement {
       // carrying a copy of Survey's private id sanitizer and ignoring the
       // collision suffix that makes the id unique, which is exactly what the
       // consumer guide tells embedders not to do.
-      const { candidateId, highlightElementId } = detail;
+      const { highlightElementId } = detail;
+      if (!highlightElementId) return;
       queueMicrotask(() => {
-        // The painted highlight is the control, so it takes focus when present.
-        const highlight = this.#root.querySelector<HTMLElement>(`[data-highlight-return-to="${CSS.escape(candidateId)}"]`);
+        // Routed on the highlight element id, which is unique by construction.
+        // candidateId is the candidate's own identity and a caller-authored
+        // model may repeat it, so a `[data-…="<candidateId>"]` lookup can select
+        // a different candidate's highlight — confidently wrong, on the surface
+        // whose job is showing which span a value came from. `~=` matches one
+        // whitespace-separated token, so a mark over a shared span is found too.
+        const highlight = this.#root.querySelector<HTMLElement>(`[data-highlight-return-to~="${CSS.escape(highlightElementId)}"]`);
         if (highlight) { highlight.focus(); return; }
         // Off the current page there is nothing painted; bring the link target
         // into view instead of leaving the reader where they were.
-        if (highlightElementId) this.#root.querySelector<HTMLElement>(`#${CSS.escape(highlightElementId)}`)?.scrollIntoView({ block: "center" });
+        this.#root.querySelector<HTMLElement>(`#${CSS.escape(highlightElementId)}`)?.scrollIntoView({ block: "center" });
       });
     });
   }

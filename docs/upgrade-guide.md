@@ -295,11 +295,19 @@ this is the class of coupling worth re-reading rather than assuming.
 **If you style or script the source highlight, it changed shape.** The return
 control is now the painted `<mark class="source-highlight">` — a real target the
 width of the highlighted phrase, carrying `role="button"`, `tabindex="0"` and
-`data-highlight-return-to="<candidate.id>"`. The element the published id names
+`data-highlight-return-to`, a space-separated list of the `highlightElementId`s
+it covers (select with `~=`, since two candidates can share one span). The element the published id names
 is now an inert, zero-width `<span class="highlight-anchor">` that exists for
 every candidate and is not focusable or clickable. If you were stripping the
 anchor's user-agent button chrome host-side, delete that rule: it is not a button
 any more.
+
+**If your ReviewItems can carry two candidates under one id, they will now
+throw.** A `ReviewDecision` names its candidate by id and nothing else, so an
+ambiguous id makes the decision undecidable — the workbench used to take the
+first match and could project one candidate's value under another's decision.
+The Surface record builder already rejected this shape; the workbench now does
+too, naming the item and the id.
 
 **If you reconstruct source-highlight element ids, delete that code.**
 `buildExtractionInspectorModel` publishes the id on each candidate, resolvable

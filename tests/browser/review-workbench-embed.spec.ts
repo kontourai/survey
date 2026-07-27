@@ -35,6 +35,10 @@ interface EmbedOptions {
   readonly collidingHighlightIds?: boolean;
   /** Mounts a hand-authored model whose candidate ids are not unique. */
   readonly duplicateCandidateIds?: boolean;
+  /** Duplicate ids with the fragment under test published by the SECOND candidate. */
+  readonly duplicateCandidateIdsOnPageTwo?: boolean;
+  /** Two distinct candidates over the exact same span, in either order. */
+  readonly sharedSpanCandidates?: "as-is" | "reversed";
 }
 
 async function loadEmbed(page: Page, options: EmbedOptions = {}): Promise<LoadedEmbed> {
@@ -54,6 +58,8 @@ async function loadEmbed(page: Page, options: EmbedOptions = {}): Promise<Loaded
     ...(options.stripPublishedHighlightIds ? { stripPublishedHighlightIds: true } : {}),
     ...(options.collidingHighlightIds ? { collidingHighlightIds: true } : {}),
     ...(options.duplicateCandidateIds ? { duplicateCandidateIds: true } : {}),
+    ...(options.duplicateCandidateIdsOnPageTwo ? { duplicateCandidateIdsOnPageTwo: true } : {}),
+    ...(options.sharedSpanCandidates ? { sharedSpanCandidates: options.sharedSpanCandidates } : {}),
   };
   await page.addInitScript((value) => {
     (window as unknown as Record<string, unknown>).__surveyEmbedFixture = value;
@@ -304,15 +310,17 @@ test.describe("embedded workbench: source-highlight references", () => {
     const { pageErrors } = await loadEmbed(page);
 
     const mark = page.locator(".inspector-source mark").first();
-    const candidateId = await mark.getAttribute("data-highlight-return-to");
+    // The binding is the highlight element id — unique by construction — not
+    // candidate.id, which a caller-authored model may repeat.
+    const binding = (await mark.getAttribute("data-highlight-return-to"))!.split(" ")[0];
     await mark.click();
 
     const focused = await page.evaluate(() => {
       const active = document.activeElement as HTMLElement | null;
-      return { candidateId: active?.dataset.candidateId ?? null, isCandidateRow: active?.classList.contains("inspector-candidate") ?? false };
+      return { binding: active?.dataset.highlightElementId ?? null, isCandidateRow: active?.classList.contains("inspector-candidate") ?? false };
     });
     expect(focused.isCandidateRow).toBe(true);
-    expect(focused.candidateId).toBe(candidateId);
+    expect(focused.binding).toBe(binding);
 
     expect(pageErrors).toEqual([]);
   });
@@ -338,6 +346,76 @@ test.describe("embedded workbench: source-highlight references", () => {
 
     expect(pageErrors).toEqual([]);
   });
+
+  test("a published fragment reaches the candidate that published it, not another sharing its id", async ({ page }) => {
+    // Generating unique ids was not enough: every navigation path threw that
+    // identity away again and looked the candidate back up by `candidate.id`,
+    // which a caller-authored model may repeat. Following the second
+    // candidate's fragment displayed the FIRST one's field, on page 1 — a
+    // confidently wrong answer on the surface whose whole job is showing an
+    // auditor which span a value came from.
+    const { pageErrors } = await loadEmbed(page, { duplicateCandidateIdsOnPageTwo: true, pageSize: 1 });
+
+    const expected = await page.evaluate(() => {
+      const model = (window as unknown as {
+        __surveyInspectorModel: { candidates: Array<{ id: string; highlightElementId: string; field: string }> };
+      }).__surveyInspectorModel;
+      const candidate = model.candidates.find((entry) => entry.highlightElementId === "highlight-published-second")!;
+      return { field: candidate.field, first: model.candidates[0]!.field };
+    });
+    expect(expected.field).not.toBe(expected.first);
+
+    await page.evaluate(() => { window.location.hash = "#highlight-published-second"; });
+
+    // The row it paged to is the publisher's, and the painted highlight is its own.
+    const rows = page.locator(".inspector-candidate");
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText(expected.field);
+    const mark = page.locator('[data-highlight-return-to~="highlight-published-second"]');
+    await expect(mark).toBeVisible();
+    await expect(mark).toBeFocused();
+
+    // And activating it returns to that same candidate, not to the id-sharing one.
+    await page.keyboard.press("Enter");
+    const focusedRow = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.highlightElementId ?? null);
+    expect(focusedRow).toBe("highlight-published-second");
+
+    expect(pageErrors).toEqual([]);
+  });
+
+  for (const order of ["as-is", "reversed"] as const) {
+    test(`both candidates over an identical span keep a return control (${order} order)`, async ({ page }) => {
+      // The renderer merges candidates over one segment into a single <mark>.
+      // Binding only the first left the second with a highlight that could not
+      // be navigated to or returned from, while the accessible label named both.
+      const { pageErrors } = await loadEmbed(page, { sharedSpanCandidates: order });
+
+      const shared = await page.evaluate(() => {
+        const model = (window as unknown as {
+          __surveyInspectorModel: { candidates: Array<{ highlightElementId: string; field: string; start: number; end: number }> };
+        }).__surveyInspectorModel;
+        const [first, second] = model.candidates;
+        return { first: first!, second: second!, sameSpan: first!.start === second!.start && first!.end === second!.end };
+      });
+      expect(shared.sameSpan).toBe(true);
+
+      // One painted mark over the span, bound to BOTH candidates.
+      const mark = page.locator(`[data-highlight-return-to~="${shared.second.highlightElementId}"]`);
+      await expect(mark).toHaveCount(1);
+      await expect(page.locator(`[data-highlight-return-to~="${shared.first.highlightElementId}"]`)).toHaveCount(1);
+      await expect(mark).toHaveAttribute("aria-label", new RegExp(shared.second.field.replace(".", "\\.")));
+
+      // Following the second candidate's fragment focuses that mark and returns
+      // to the second candidate — not to whichever the mark lists first.
+      await page.evaluate((id) => { window.location.hash = `#${id}`; }, shared.second.highlightElementId);
+      await expect(mark).toBeFocused();
+      await page.keyboard.press("Enter");
+      const focusedRow = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.highlightElementId ?? null);
+      expect(focusedRow).toBe(shared.second.highlightElementId);
+
+      expect(pageErrors).toEqual([]);
+    });
+  }
 
   test("a published id survives a hand-authored model whose candidate ids are not unique", async ({ page }) => {
     // Resolution used to be keyed on candidate.id. The builder's ids are
@@ -392,14 +470,14 @@ test.describe("embedded workbench: source-highlight references", () => {
 
     await page.evaluate((id) => { window.location.hash = `#${id}`; }, offPage.highlightElementId);
 
-    const mark = page.locator(`[data-highlight-return-to="${offPage.id}"]`);
+    const mark = page.locator(`[data-highlight-return-to~="${offPage.highlightElementId}"]`);
     await expect(mark).toBeVisible();
     await expect(mark).toBeFocused();
 
     // And from there the highlight returns to its candidate row.
     await page.keyboard.press("Enter");
-    const focused = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.candidateId ?? null);
-    expect(focused).toBe(offPage.id);
+    const focused = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.highlightElementId ?? null);
+    expect(focused).toBe(offPage.highlightElementId);
 
     expect(pageErrors).toEqual([]);
   });

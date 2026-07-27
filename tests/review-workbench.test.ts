@@ -1487,6 +1487,24 @@ describe("review workbench prototype", () => {
     assert.ok(values.includes("projection-overrode-the-raw-source-id"), "the projection's override");
   });
 
+  it("fails closed when a ReviewItem carries two candidates under one id", () => {
+    // A ReviewDecision references its candidate by id and nothing else, so an
+    // ambiguous id makes the decision undecidable. Picking the first match would
+    // project one candidate's value under another's decision. The Surface record
+    // builder already rejects this shape; a caller-authored ReviewItem reaches
+    // the workbench without passing through it.
+    const item: ReviewItem = structuredClone(publicDirectoryReviewItemExample) as ReviewItem;
+    const [first, second] = item.spec.candidates;
+    (second as unknown as Record<string, unknown>).id = first!.id;
+
+    const state = { ...initialReviewWorkbenchState(item), decision: "accept-proposed" as const };
+
+    assert.throws(
+      () => renderReviewWorkbenchHtml(state),
+      /has 2 candidates with id .*; candidate ids must be unique/,
+    );
+  });
+
   it("renders a regulated rule conflict ReviewItem without product-specific workbench branches", () => {
     const state = {
       ...initialReviewWorkbenchState(regulatedRuleConflictReviewItemExample),

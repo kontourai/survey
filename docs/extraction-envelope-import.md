@@ -167,11 +167,27 @@ of Survey's internals and a test to catch that copy drifting.
 
 For the reverse direction — finding the candidate behind a DOM node — the link
 target carries `data-highlight-candidate-id="<candidate.id>"`, and the painted
-highlight carries `data-highlight-return-to="<candidate.id>"`. Both are public
-for the same reason. They are separate attributes so each resolves to exactly one
-element: the target is an inert `<span>` that exists for every candidate in the
-model, and the highlight is the `<mark>` painted for the candidates on the
-current page.
+highlight carries `data-highlight-return-to`, a **space-separated list of the
+`highlightElementId`s** the highlight covers. Both are public. They are separate
+attributes so each resolves to exactly one element: the target is an inert
+`<span>` that exists for every candidate in the model, and the highlight is the
+`<mark>` painted for the candidates on the current page.
+
+Select on `data-highlight-return-to` with `~=`, never `=`. Two candidates over
+one span is ordinary in extraction, and the renderer paints them as a single
+`<mark>` bound to both:
+
+```js
+// the highlight covering this candidate, shared span or not
+inspectorHost.querySelector(`[data-highlight-return-to~="${candidate.highlightElementId}"]`);
+```
+
+Note which value that is. `highlightElementId` is unique by construction;
+`candidate.id` is the candidate's own identity, and a model you assembled
+yourself may repeat it. Every lookup that has to reach *one* candidate should key
+on the binding, not on the id — a `[data-…="<candidate.id>"]` selector can return
+a different candidate's highlight, which on this surface means confidently
+pointing an auditor at the wrong span.
 
 The highlight is also the control. Activating it — click, Enter, or Space —
 returns focus to that candidate's row in the list, paging and clearing filters if
