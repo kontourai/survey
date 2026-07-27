@@ -292,13 +292,17 @@ export type ReviewResource = ReviewItem | ReviewDecision | ReviewSession | Revie
  * Surface record builder does (`assertUniqueCandidateIds`), but a
  * caller-authored ReviewItem reaches the workbench without passing through it.
  */
-export function findSoleCandidateById(
-  item: ReviewItem,
-  candidateId: string,
-): ReviewCandidate | undefined {
+export function assertSoleCandidateId(item: ReviewItem, candidateId: string): void {
   const matches = item.spec.candidates.filter((candidate) => candidate.id === candidateId);
   if (matches.length > 1) {
     throw new Error(`ReviewItem ${item.metadata.name} has ${matches.length} candidates with id ${candidateId}; candidate ids must be unique.`);
   }
-  return matches[0];
+}
+
+export function findSoleCandidateById(
+  item: ReviewItem,
+  candidateId: string,
+): ReviewCandidate | undefined {
+  assertSoleCandidateId(item, candidateId);
+  return item.spec.candidates.find((candidate) => candidate.id === candidateId);
 }

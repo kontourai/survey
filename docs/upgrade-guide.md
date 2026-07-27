@@ -232,6 +232,10 @@ lifetime.
 is removed, renamed, or repointed at a different meaning. Two things still
 deserve your attention before you bump.
 
+This section assumes you are arriving from `2.x`. If you are on `1.x` — as every
+consuming application currently is — there is a `1.x` → `2.0.0` hop this guide
+does not yet document, and it is not covered below (kontourai/survey#211).
+
 **At the type level it is additive, but only just.**
 `ExtractionInspectorCandidate` gains an optional `highlightElementId`, and
 `buildExtractionInspectorModel` now returns the narrower
@@ -302,12 +306,22 @@ every candidate and is not focusable or clickable. If you were stripping the
 anchor's user-agent button chrome host-side, delete that rule: it is not a button
 any more.
 
-**If your ReviewItems can carry two candidates under one id, they will now
-throw.** A `ReviewDecision` names its candidate by id and nothing else, so an
+**If your ReviewItems can carry two candidates under one id, the workbench now
+throws.** A `ReviewDecision` names its candidate by id and nothing else, so an
 ambiguous id makes the decision undecidable — the workbench used to take the
 first match and could project one candidate's value under another's decision.
 The Surface record builder already rejected this shape; the workbench now does
 too, naming the item and the id.
+
+Specifically, it throws wherever a candidate id becomes durable or is resolved
+back to a candidate: `buildReviewDecision`, `buildReviewDecisionsFromSession`,
+`buildReviewWorkbenchResultsFromSession`, `buildReviewSessionEvents`,
+`buildReviewWorkbenchSessionExport`, `renderReviewWorkbenchHtml` and
+`buildReviewResultPresentation` — everything downstream of
+`candidateForDecision`, which is the shared selector they go through. It does
+**not** validate an item on construction or on assignment to the workbench: an
+item with duplicate ids can be held and displayed in the queue list, and fails at
+the point a decision would be made from it.
 
 **If you reconstruct source-highlight element ids, delete that code.**
 `buildExtractionInspectorModel` publishes the id on each candidate, resolvable

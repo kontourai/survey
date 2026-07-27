@@ -1487,6 +1487,57 @@ describe("review workbench prototype", () => {
     assert.ok(values.includes("projection-overrode-the-raw-source-id"), "the projection's override");
   });
 
+  it("fails closed on every path that makes a candidate id durable, not only when rendering", () => {
+    // The guard first landed on the render path, and the sentence describing it
+    // generalised to every path. It did not hold: the workbench still emitted a
+    // ReviewDecision naming an ambiguous candidate through the export builders,
+    // and buildReviewResultPresentation then displayed a different candidate's
+    // value against it. `candidateForDecision` is the selector all of these
+    // share, which is where the id becomes durable.
+    const item: ReviewItem = structuredClone(publicDirectoryReviewItemExample) as ReviewItem;
+    item.metadata.name = "duplicate-item";
+    const [first, second] = item.spec.candidates;
+    (second as unknown as Record<string, unknown>).id = first!.id;
+
+    const state = { ...initialReviewWorkbenchState(item), decision: "accept-proposed" as const };
+    const session = {
+      ...initialReviewQueueSessionState([item]),
+      decisionsByItemName: { "duplicate-item": "accept-proposed" as const },
+    };
+    const ambiguous = /has 2 candidates with id .*; candidate ids must be unique/;
+
+    assert.throws(() => buildReviewDecision(state), ambiguous, "buildReviewDecision");
+    assert.throws(() => renderReviewWorkbenchHtml(state), ambiguous, "renderReviewWorkbenchHtml");
+    assert.throws(() => buildReviewDecisionsFromSession(session), ambiguous, "buildReviewDecisionsFromSession");
+    assert.throws(() => buildReviewWorkbenchResultsFromSession(session), ambiguous, "buildReviewWorkbenchResultsFromSession");
+    assert.throws(() => buildReviewWorkbenchSessionExport(session), ambiguous, "buildReviewWorkbenchSessionExport");
+    assert.throws(() => buildReviewSessionEvents(session), ambiguous, "buildReviewSessionEvents");
+  });
+
+  it("presents the candidate a result actually names, not whichever matches its role or its id", () => {
+    // `find(role === … || id === …)` matched EITHER half. With a repeated id it
+    // returned the current candidate for a result naming the proposed one, and
+    // presented AVAILABLE against a proposed/WAITLIST decision.
+    const clean: ReviewItem = structuredClone(publicDirectoryReviewItemExample) as ReviewItem;
+    const [result] = buildReviewWorkbenchResultsFromSession({
+      ...initialReviewQueueSessionState([clean]),
+      decisionsByItemName: { [clean.metadata.name]: "accept-proposed" },
+    });
+    assert.ok(result);
+    assert.equal(result.selectedCandidateRole, "proposed");
+
+    // The same result, presented against an item whose candidate ids collide.
+    const collided: ReviewItem = structuredClone(clean);
+    const [current, proposed] = collided.spec.candidates;
+    (current as unknown as Record<string, unknown>).id = proposed!.id;
+
+    assert.equal(buildReviewResultPresentation(result, clean).selectedValueText, "WAITLIST");
+    assert.throws(
+      () => buildReviewResultPresentation(result, collided),
+      /has 2 candidates with id .*; candidate ids must be unique/,
+    );
+  });
+
   it("fails closed when a ReviewItem carries two candidates under one id", () => {
     // A ReviewDecision references its candidate by id and nothing else, so an
     // ambiguous id makes the decision undecidable. Picking the first match would
