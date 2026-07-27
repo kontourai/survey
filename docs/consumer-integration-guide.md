@@ -864,8 +864,10 @@ const applyResult = deriveServerReviewSessionApplyResult({
   requiredResolvedItems: "all",
 });
 
-// AT EXPORT, for a queue imported from an extraction envelope: check it
-// against the artifact it was NOT derived from.
+// AT EXPORT, for a queue imported from an extraction envelope: check the
+// stored queue is exactly what the stored import record derives. This attests
+// queue-to-record consistency; the record's own integrity is your storage's
+// job (see "What neither side catches" below).
 assertReviewQueueAgainstExtractionImport(stored.snapshot.items, importResult);
 ```
 
@@ -877,11 +879,30 @@ both directions, because walking only the items present can never notice one
 was removed. The binding **cannot** catch a writer who edits the queue and
 re-binds; hashing mutated bytes yields a self-consistent pair. For queues whose
 items all come from one `importExtractionEnvelope` result,
-`assertReviewQueueAgainstExtractionImport` closes that: it re-derives the
-canonical items through the public import boundary — which revalidates the
-record, so a forged `grounded` status throws before anything is compared — and
-requires the stored queue to be the same set, byte-identical per item, in both
-directions.
+`assertReviewQueueAgainstExtractionImport` narrows that hole to the record: it
+re-derives the canonical items through the public import boundary — which
+revalidates the record, so a forged `grounded` status throws before anything is
+compared — and requires the stored queue to be the same set, byte-identical per
+item, in both directions. A queue edited independently of its record fails
+(`item-diverges-from-extraction`, `item-missing-from-queue`,
+`item-not-in-extraction`).
+
+**What neither side catches.** The cross-check attests queue-to-record
+*consistency*, not record *integrity*. The portable envelope carries the
+prepared artifact's **digest**, never its bytes, so Survey — handed only the
+record — cannot verify a proposal's bytes against the digested artifact. A
+writer who edits the stored record's proposals (say, a `candidateValue`) and
+re-derives the queue from the edited record presents a self-consistent pair
+that passes the binding *and* the cross-check, while
+`result.preparedArtifact.digest` still names the honest bytes. That pass is
+pinned as a boundary test and by `npm run check:guards`, so the limit cannot
+drift silently. Keeping the stored record equal to the record you originally
+imported is **your storage obligation**. The pattern that closes it — the one
+the consuming application this lineage comes from uses — is to bind the
+prepared artifact's bytes to `result.preparedArtifact.digest` on every read:
+then a record edit makes an artifact the writer does not control disagree, and
+the coordinated rewrite is refused one layer up, before this module is ever
+asked.
 
 **The consumer's half of the contract.** Survey cannot see your storage. The
 binding attests the queue only if you (1) call `bindReviewQueue` at queue
@@ -900,7 +921,11 @@ answer for one membership.
 
 Every refusal above is fault-injected by `npm run check:guards`, which removes
 each guard in turn and requires the suite covering it to fail — a guard no test
-fails without is decoration.
+fails without is decoration. The matrix also pins the documented boundary: the
+coordinated record rewrite that the cross-check blesses is asserted as a pass
+by a dedicated test, and check:guards fails if that test is removed or stops
+observing the pass, so this section cannot quietly claim more than the module
+enforces.
 
 ## Audit Details Rows
 

@@ -20,10 +20,20 @@
  * The binding alone cannot survive a writer who edits the queue AND re-binds —
  * hashing mutated bytes yields a self-consistent pair. For queues imported from
  * an extraction envelope, {@link validateReviewQueueAgainstExtractionImport}
- * closes that: it compares the queue against an artifact it was not derived
- * from, whose own integrity the import boundary re-validates against the
- * prepared bytes' digest on every read. A one-sided edit fails the binding; a
- * coordinated edit fails the cross-check.
+ * narrows that hole to the record: it re-derives the canonical items from the
+ * presented import record and refuses a queue that diverges from it in either
+ * direction, so a queue edited independently of its record fails. What it
+ * attests is queue-to-record CONSISTENCY, not record integrity. The portable
+ * envelope carries the prepared artifact's digest and contentLength, never the
+ * prepared bytes, so a library handed only the record cannot verify proposal
+ * bytes against the digested artifact — a writer who edits the RECORD's
+ * proposals and re-derives the queue from the edited record presents a
+ * self-consistent pair this module blesses (pinned as a boundary test and by
+ * check:guards). Keeping the stored record equal to the record originally
+ * imported is the caller's storage obligation; the consumer pattern is to bind
+ * the prepared artifact's bytes to `result.preparedArtifact.digest` on every
+ * read, so a record edit makes an artifact the writer does not control
+ * disagree.
  *
  * Four bypasses from fieldwork#60's rounds, each a design input here:
  * 1. Self-agreement (above) — the binding's origin is the open, not the save.
@@ -271,16 +281,28 @@ export class UnattestedExtractionQueueError extends Error {
 }
 
 /**
- * Check a stored queue against an artifact it was not derived from.
+ * Check a stored queue for consistency with the extraction import record it
+ * was derived from.
  *
  * The queue binding alone cannot catch a writer who edits the queue and
- * re-binds: hashing mutated bytes yields a self-consistent pair. For a queue
- * that came from `importExtractionEnvelope`, the extraction import is the
- * independent side — a record produced by a different step, whose envelope the
- * import boundary re-validates against the prepared artifact's digest. This
- * re-derives the canonical ReviewItems through that public boundary and
- * requires the stored queue to be the SAME SET, byte-identically per item, in
- * both directions.
+ * re-binds: hashing mutated bytes yields a self-consistent pair. This check
+ * closes the QUEUE half of that hole: it revalidates the presented record
+ * through the public import boundary (a forged `grounded` status throws; an
+ * ungrounded import is refused), re-derives the canonical ReviewItems from it,
+ * and requires the stored queue to be the SAME SET, byte-identically per item,
+ * in both directions. A queue edited independently of its record fails.
+ *
+ * What it does NOT attest: the record itself. The envelope carries the
+ * prepared artifact's digest and contentLength, never the prepared bytes, so
+ * a library handed only the record cannot verify a proposal's bytes against
+ * the digested artifact. A writer who edits the record's proposals and
+ * re-derives the queue from the edited record presents a pair this check
+ * blesses, while `result.preparedArtifact.digest` still names the honest
+ * bytes. Record integrity is therefore the caller's storage obligation: bind
+ * the prepared artifact's bytes to that digest on every read (the consumer
+ * pattern this module's lineage comes from), so a record edit makes an
+ * artifact the writer does not control disagree. This limit is pinned by a
+ * boundary test and by scripts/check-guards.mjs.
  *
  * This is the whole-extraction rule: it applies to a queue whose items all come
  * from one import. A consumer whose rounds mix in items the extraction cannot
@@ -309,8 +331,10 @@ export function validateReviewQueueAgainstExtractionImport(
 
   // Re-derived through the public import boundary, not read from the caller's
   // importResult.reviewItems: the record is validated above, and the canonical
-  // items are a pure function of it, so this side cannot have been edited
-  // without breaking the envelope's own digest binding.
+  // items are a pure function of it, so the comparison is against what the
+  // presented record actually says — not against a reviewItems array the
+  // caller could have edited separately from it. The record itself is
+  // caller-supplied and is NOT attested here; see the function doc.
   const attesting = new Map(
     buildReviewItemsFromExtractionEnvelopeImport(record).map((item) => [item.metadata.name, item]),
   );

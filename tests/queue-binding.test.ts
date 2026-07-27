@@ -8,10 +8,15 @@
  *   drop one item (+ rebuilt record)        REFUSED
  *   emptied queue                           REFUSED
  *   coordinated queue rewrite (+ re-bind)   REFUSED (by the extraction side)
+ *   coordinated RECORD rewrite              PASSES — the pinned boundary: the
+ *     (record edit + re-derive + re-bind)   cross-check attests queue-to-record
+ *                                           consistency, not record integrity
  *
  * Every guard these tests cover is also fault-injected by
  * scripts/check-guards.mjs, which removes each guard in turn and requires this
- * suite to go red.
+ * suite to go red. The matrix also pins the boundary row above: it inverts the
+ * boundary test's pass-assertion and requires this suite to go red, so the
+ * documented limit stays load-bearing rather than prose.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -30,7 +35,11 @@ import {
   deriveServerReviewSessionApplyResult,
   hashReviewSessionSnapshot,
 } from "../src/review-workbench/server-review-session.js";
-import type { ReviewQueueSessionState } from "../src/review-workbench/review-queue-session.js";
+import { initialReviewQueueSessionState, type ReviewQueueSessionState } from "../src/review-workbench/review-queue-session.js";
+import {
+  buildReviewItemsFromExtractionEnvelopeImport,
+  validateExtractionEnvelopeImport,
+} from "../src/extraction-envelope.js";
 import type { ReviewItem } from "../src/review-resource.js";
 import { buildEnvelopeImportFixture, envelopeReviewQueueSession, ungroundedEnvelopeImportFixture as ungroundedImportFixture } from "./envelope-review-fixture.js";
 
@@ -238,6 +247,51 @@ describe("validateReviewQueueAgainstExtractionImport", () => {
       () => validateReviewQueueAgainstExtractionImport(openQueue().items, { ...importResult, record }),
       /Import status does not match envelope state/,
     );
+  });
+
+  it("blesses a coordinated record rewrite — the pinned boundary: consistency, not record integrity", () => {
+    // The reviewer's construction against PR #222: edit the stored record's
+    // candidateValue, re-derive the queue items from the edited record,
+    // re-bind. Both checks pass, because nothing in the record lets a library
+    // verify proposal bytes against the prepared artifact — the envelope
+    // carries the artifact's digest, never its bytes.
+    const honest = buildEnvelopeImportFixture();
+    const edited = structuredClone(honest.record);
+    const proposal = edited.spec.envelope.result.proposals[0]!;
+    assert.notEqual(proposal.candidateValue, "substituted-by-coordinated-rewrite");
+    proposal.candidateValue = "substituted-by-coordinated-rewrite";
+
+    // The edited record still revalidates as grounded: proposal bytes are not
+    // covered by any digest the import boundary can check.
+    assert.equal(validateExtractionEnvelopeImport(edited).status.state, "grounded");
+
+    // And the prepared-artifact digest is UNCHANGED — it still names the
+    // honest bytes. That digest is the caller's hook: binding the prepared
+    // artifact's bytes to it on every read is what makes this rewrite
+    // detectable, and it is a storage obligation this library cannot take
+    // over. This assertion is what "a third artifact disagrees" traces to.
+    assert.equal(
+      edited.spec.envelope.result.preparedArtifact!.digest,
+      honest.record.spec.envelope.result.preparedArtifact!.digest,
+    );
+
+    const items = buildReviewItemsFromExtractionEnvelopeImport(edited);
+    const snapshot = initialReviewQueueSessionState(items);
+    const rebound = bindReviewQueue(snapshot, { sessionName: SESSION });
+
+    // The binding side is blind by documentation (re-bound mutated bytes are
+    // self-consistent) ...
+    assert.deepEqual(validateReviewQueueBinding(rebound, snapshot, { sessionName: SESSION }), []);
+
+    // ... and the cross-check BLESSES the pair: the queue is exactly what the
+    // presented record derives, and consistency is all it claims. THE PASS
+    // ASSERTED ON THE NEXT LINE IS THE BOUNDARY. If it goes red, enforcement
+    // moved: rewrite the module doc, the consumer guide's "What neither side
+    // catches", and the upgrade guide's 2.4.0 scoping in the same change.
+    // scripts/check-guards.mjs pins this line — removing or rewording it is a
+    // matrix failure, and inverting it must turn this suite red.
+    assert.deepEqual(validateReviewQueueAgainstExtractionImport(items, { record: edited, reviewItems: items }), []);
+    assert.doesNotThrow(() => assertReviewQueueAgainstExtractionImport(items, { record: edited, reviewItems: items }));
   });
 });
 

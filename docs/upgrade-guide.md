@@ -351,6 +351,20 @@ changes shape or behavior unless you pass the new inputs.
 accepts an optional `binding`. See the consumer integration guide's
 "Queue-Binding Attestation" section for the contract.
 
+**What the extraction cross-check attests — and what it does not.**
+`validateReviewQueueAgainstExtractionImport` attests queue-to-record
+*consistency*: the stored queue is exactly the set of items the presented
+import record derives, byte-identical per item, in both directions, with the
+record revalidated through the import boundary first. It does **not** attest
+record *integrity*: the portable envelope carries the prepared artifact's
+digest, not its bytes, so a record whose proposals were edited — with the
+queue re-derived from the edited record — passes both the binding and the
+cross-check (pinned as a boundary test and by `npm run check:guards`).
+Keeping the stored record equal to the record originally imported is the
+consumer's storage obligation; bind the prepared artifact's bytes to
+`result.preparedArtifact.digest` on every read so a record edit makes a third
+artifact disagree.
+
 **Nothing existing breaks.** `deriveServerReviewSessionApplyResult` without a
 `binding` behaves exactly as in 2.3.x — the new assertion runs only inside
 `if (options.binding)`. `hashReviewQueueSnapshot` is byte-identical to

@@ -4,7 +4,11 @@
  * A guard that no test fails without is decoration, and a passing suite cannot
  * tell you which of the two you have. This removes each guard in turn and
  * requires the suite that covers it to go red, so the claim "these checks are
- * load-bearing" is reproducible rather than reported.
+ * load-bearing" is reproducible rather than reported. One entry is the
+ * inverse: a PINNED BOUNDARY, which flips the coordinated-record-rewrite
+ * test's pass-assertion and requires the suite to go red — pinning what the
+ * module deliberately does NOT enforce, so the docs' scoping cannot silently
+ * fall out of step with the code in either direction.
  *
  * Pattern carried from kontourai/fieldwork's scripts/check-guards.mjs (11/11
  * there): restores from git, verifies the restore byte-identically, and FAILS
@@ -27,6 +31,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 const SUITE = "dist/tests/queue-binding.test.js";
 const BINDING = "src/review-workbench/queue-binding.ts";
 const SESSION = "src/review-workbench/server-review-session.ts";
+const SUITE_SOURCE = "tests/queue-binding.test.ts";
 
 const injections = [
   {
@@ -124,6 +129,25 @@ const injections = [
     file: SESSION,
     from: "    if (options.currentSnapshot) {\n      assertReviewQueueBinding(options.binding, options.currentSnapshot, { sessionName: options.record.sessionName });\n    }",
     to: "",
+  },
+  {
+    // PINNED BOUNDARY, not a guard removal. The coordinated record rewrite —
+    // edit the record's proposals, re-derive the queue from the edited record,
+    // re-bind — is a documented PASS: the cross-check attests queue-to-record
+    // consistency, and the envelope carries the prepared artifact's digest,
+    // not its bytes, so record integrity is the caller's storage obligation.
+    // This entry inverts the boundary test's pass-assertion and requires the
+    // suite to go red, which proves the test observes a real pass rather than
+    // being decoration; and if the boundary test is removed or reworded, the
+    // pattern stops matching and the matrix FAILS rather than skips. Either
+    // way, the documented limit cannot drift without failing here — if this
+    // entry ever reports NOT CAUGHT, enforcement widened and the module doc,
+    // the consumer guide, and the upgrade guide must be re-scoped in the same
+    // change.
+    label: "pinned boundary: a coordinated record rewrite must remain a documented pass",
+    file: SUITE_SOURCE,
+    from: "    assert.deepEqual(validateReviewQueueAgainstExtractionImport(items, { record: edited, reviewItems: items }), []);",
+    to: "    assert.notDeepEqual(validateReviewQueueAgainstExtractionImport(items, { record: edited, reviewItems: items }), []);",
   },
 ];
 
