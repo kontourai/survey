@@ -1408,8 +1408,11 @@ function renderAuditDetails(
           ${proposed ? tracedItem(trace, "claim-id", "Claim ID", proposed.claimTarget.claimId ?? proposed.claimTarget.fieldOrBehavior) : ""}
           ${proposed ? tracedItem(trace, "raw-source-id", "Raw Source ID", proposed.source.sourceId ?? proposed.source.sourceRef) : ""}
           ${proposed?.locator ? tracedItem(trace, "locator", "Locator", proposed.locator.locator ?? proposed.locator.scheme) : ""}
-          ${proposed?.extraction.model ? tracedItem(trace, "model", "Model", proposed.extraction.model) : ""}
+          ${/* Extractor before Model: producers commonly set both to the same
+                string, and when they do the row that survives should be the one
+                that names what ran, not the one that names the model. */""}
           ${proposed ? tracedItem(trace, "extractor", "Extractor", proposed.extraction.extractor ?? "unknown") : ""}
+          ${proposed?.extraction.model ? tracedItem(trace, "model", "Model", proposed.extraction.model) : ""}
           ${proposed ? tracedItem(trace, "extracted-at", "Extracted at", proposed.extraction.extractedAt ?? "unknown") : ""}
         </dl>
         ${preview
@@ -1535,8 +1538,14 @@ function renderCandidateHistory(preview: SurfaceProjectionPreview, trace: AuditR
   const renderHistoryRows = (candidates: typeof preview.candidateHistory): string =>
     candidates.map((candidate) => fieldItem("history-value", "Value", candidate.value)).join("");
 
+  // Deliberately NOT deduplicated. With two candidates this repeats the ID
+  // stack's "Current candidate ID", but it is the only row that names WHICH
+  // unselected candidate a value belongs to, it stops being a repeat the moment
+  // there are three, and suppressing it would make this section's disclosure
+  // appear and disappear with the candidate count — structure a host would then
+  // have to key on. Row-level suppression is what `data-audit-row` is for.
   const referenceRows = preview.candidateHistory.map((candidate) =>
-    tracedItem(trace, "candidate-id", "Candidate ID", candidate.candidateId),
+    fieldItem("candidate-id", "Candidate ID", candidate.candidateId),
   ).join("");
 
   const overflowHtml = overflowCandidates.length > 0

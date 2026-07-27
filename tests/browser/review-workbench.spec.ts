@@ -363,9 +363,14 @@ test("audit details never print the same identifier twice, and drop the sections
   expect(values.length).toBeGreaterThan(0);
 
   const ABSENCE = new Set(["not provided", "not recorded", "unknown", "none", "n/a"]);
+  // `candidate-id` names WHICH unselected candidate a history value belongs to.
+  // With two candidates it repeats the ID stack; with three it does not, and
+  // suppressing it would make that section's disclosure appear and disappear
+  // with the candidate count. Row-level suppression is what the key is for.
+  const NOT_DEDUPED = new Set(["candidate-id"]);
   const seen = new Map<string, string>();
   for (const { key, value } of values) {
-    if (!value || ABSENCE.has(value.toLowerCase())) continue;
+    if (!value || ABSENCE.has(value.toLowerCase()) || NOT_DEDUPED.has(key)) continue;
     expect(seen.has(value), `"${value}" is printed by both ${seen.get(value)} and ${key}`).toBe(false);
     seen.set(value, key);
   }

@@ -1410,6 +1410,29 @@ describe("review workbench prototype", () => {
     assert.match(html, /does not validate real-world truth/);
   });
 
+  it("prints one row, labelled Extractor, when a producer sets model and extractor to the same string", () => {
+    // A common producer shape, and the one a consumer found in the field: two
+    // adjacent rows, byte-identical values, different labels. The row that
+    // survives names what ran, not the model.
+    const item: ReviewItem = structuredClone(publicDirectoryReviewItemExample) as ReviewItem;
+    for (const candidate of item.spec.candidates as Array<ReviewItem["spec"]["candidates"][number]>) {
+      (candidate as unknown as Record<string, unknown>).extraction = {
+        ...candidate.extraction,
+        extractor: "example-crawl",
+        model: "example-crawl",
+      };
+    }
+
+    const html = renderReviewWorkbenchHtml({
+      ...initialReviewWorkbenchState(item),
+      decision: "accept-proposed" as const,
+    });
+
+    assert.match(html, /data-audit-row="extractor"/);
+    assert.doesNotMatch(html, /data-audit-row="model"/);
+    assert.equal(html.match(/example-crawl/g)?.length, 1);
+  });
+
   it("emits no empty 'IDs and trace links' disclosure when every reference was already printed", () => {
     // A producer that reuses one identifier across source, extraction, and
     // candidate set leaves each reference list with nothing new to disclose.
