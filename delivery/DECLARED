@@ -40,5 +40,11 @@
     "reason": "The governance-file change adding the release-automation entry above. Touches delivery/DECLARED only. Scope paired with author: per the ADR 0022 2026-07-03 addendum.",
     "approved_by": "brian.anderson1222 (delegated approval, 2026-07-27 session: scoped-DECLARED-exemption route)",
     "declared_at": "2026-07-27T22:00:00Z"
+  },
+  {
+    "scope": "author:briananderson1222 branch-prefix:chore/deps-green",
+    "reason": "Hand-authored replacements for the dependency watch's first red harvest (supersedes #220's kontourai-group bumps with the vendored workbench-token re-sync the new @kontourai/ui requires, and lands the green-able members of #221's dev-dependencies group while the TypeScript 7 major stays split out). Dependency moves plus generated-asset re-sync; no agent delivery, so Step 2 bundle reconciliation has nothing to reconcile. Step 1 (fresh verify) still runs npm run verify in full, and the vendor-drift guard was fault-injected locally to confirm it catches stale vendored tokens. Paired with author: because branch-prefix alone matches GITHUB_HEAD_REF, which is pusher-chosen on a fork PR (kontourai/flow-agents#1015, ADR 0022 2026-07-03 addendum).",
+    "approved_by": "brian.anderson1222 (delegated approval, 2026-07-27 session: dependabot-backlog-green brief)",
+    "declared_at": "2026-07-27T23:00:00Z"
   }
 ]
