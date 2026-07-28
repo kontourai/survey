@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.2](https://github.com/kontourai/survey/compare/v2.4.1...v2.4.2) (2026-07-28)
+
+
+### Fixes
+
+* **deps:** bump the kontourai group and re-sync vendored workbench tokens ([#228](https://github.com/kontourai/survey/issues/228)) ([ad2f323](https://github.com/kontourai/survey/commit/ad2f323314af0a8b66d11d53610bee1e302706d6))
+
 ## [2.4.1](https://github.com/kontourai/survey/compare/v2.4.0...v2.4.1) (2026-07-28)
 
 
