@@ -9,6 +9,8 @@
   --k-font-display: "Aptos Narrow", "DIN Condensed", "IBM Plex Sans Condensed", "Gill Sans", sans-serif;
   --k-radius-sm: 0;
   --k-radius-md: 0;
+  --k-radius-control: 0;
+  --k-radius-overlay: 0;
   --k-brand: #c9ff4a;
   --k-brand-contrast: #11120f;
   --k-bg: #11120f;

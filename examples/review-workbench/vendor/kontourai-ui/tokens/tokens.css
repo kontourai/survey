@@ -8,6 +8,13 @@
   --k-line: rgba(150, 180, 210, 0.12);
   --k-line-strong: rgba(150, 180, 210, 0.22);
   --k-shadow: 0 26px 60px -42px rgba(0, 0, 0, 0.95);
+  /* Layered, downward-weighted overlay elevation (contact -> ambient falloff).
+     The single shadow floating surfaces — dialogs, menus, palettes, toasts —
+     should use, so elevation tunes in one place. */
+  --k-elevation-overlay:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 12px 32px rgba(0, 0, 0, 0.45),
+    0 24px 56px rgba(0, 0, 0, 0.4);
 
   /* text */
   --k-text: #eef3f8;
@@ -40,6 +47,10 @@
   /* radius */
   --k-radius-sm: 9px;
   --k-radius-md: 14px;
+  /* Tight, desktop-grade radii for dense product chrome (controls + overlays),
+     alongside the softer sm/md. */
+  --k-radius-control: 4px;
+  --k-radius-overlay: 10px;
 
   /* type */
   --k-text-xs: 11px;
@@ -57,6 +68,38 @@
   /* motion */
   --k-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --k-dur: 0.16s;
+
+  /* border width — replaces the ad-hoc calc(var(--k-space-1) / 4) math that
+     hairline borders computed inline across primitives. */
+  --k-border-thin: 1px;
+  --k-border-thick: 2px;
+
+  /* line-height — unitless ratios for display headings vs. body copy. */
+  --k-leading-tight: 1.1;
+  --k-leading-normal: 1.45;
+  --k-leading-loose: 1.7;
+
+  /* letter-spacing — eyebrows/badges track wide; body tracks normal. */
+  --k-tracking-tight: -0.01em;
+  --k-tracking-normal: 0;
+  --k-tracking-wide: 0.08em;
+
+  /* focus — one ring contract so every interactive primitive (controls,
+     buttons, links) shows the same keyboard-focus affordance. */
+  --k-focus-ring: var(--k-brand);
+  --k-focus-ring-width: 2px;
+  --k-focus-ring-offset: 2px;
+
+  /* z-index — semantic stacking scale for layered surfaces. Overlays read
+     these instead of inventing local magic numbers, so cross-product layering
+     stays consistent (a Flow toast never renders under a Console dialog). */
+  --k-z-base: 0;
+  --k-z-sticky: 100;
+  --k-z-dropdown: 1000;
+  --k-z-overlay: 1100;
+  --k-z-modal: 1200;
+  --k-z-popover: 1300;
+  --k-z-toast: 1400;
 }
 
 [data-theme="light"] {
@@ -67,9 +110,18 @@
   --k-line: rgba(36, 40, 46, 0.12);
   --k-line-strong: rgba(36, 40, 46, 0.20);
   --k-shadow: 0 18px 50px -30px rgba(0, 0, 0, 0.25);
+  --k-elevation-overlay:
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.1),
+    0 18px 48px rgba(0, 0, 0, 0.08);
   --k-text: #202124;
   --k-text-muted: #5b626b;
   --k-text-faint: #707782;
+  /* The dark-mode brand (#5ce0c6) is too light to carry white text or read as
+     text on the light canvas (~1.6:1). Darken it for light mode: #0e7c64 holds
+     the teal hue while clearing WCAG AA both as a button fill (white text,
+     5.1:1) and as text on --k-bg (4.7:1). */
+  --k-brand: #0e7c64;
   --k-brand-contrast: #ffffff;
   --k-positive: #168257;
   --k-caution: #8a5a00;
