@@ -66,7 +66,9 @@
     "validate:repo-hooks": "node scripts/validate-repo-hooks.cjs",
     "docs:build": "npm run build --silent && node scripts/docs-site/build.ts",
     "docs:check": "npm run docs:build && node scripts/docs-site/check-links.ts",
-    "check:generated-css": "node scripts/copy-review-workbench-package-assets.cjs --check"
+    "check:generated-css": "node scripts/copy-review-workbench-package-assets.cjs --check",
+    "workflow:sidecar": "flow-agents-workflow-sidecar",
+    "workflow:validate-artifacts": "flow-agents-validate-artifacts"
   },
   "dependencies": {
     "@kontourai/surface": "^2.9.0"
@@ -80,6 +82,7 @@
     }
   },
   "devDependencies": {
+    "@kontourai/flow-agents": "5.5.0",
     "@kontourai/traverse": "^0.25.0",
     "@kontourai/ui": "^1.1.0",
     "@playwright/test": "^1.62.0",
