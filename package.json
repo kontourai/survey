@@ -85,7 +85,7 @@
     "@playwright/test": "^1.62.0",
     "@types/node": "^26.1.2",
     "marked": "^18.0.7",
-    "typescript": "^5.8.0"
+    "typescript": "^7.0.2"
   },
   "engines": {
     "node": ">=22"
