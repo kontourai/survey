@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.1](https://github.com/kontourai/survey/compare/v2.4.0...v2.4.1) (2026-07-28)
+
+
+### Documentation
+
+* write the 1.x -&gt; 2.x upgrade-guide section ([#211](https://github.com/kontourai/survey/issues/211)) ([#225](https://github.com/kontourai/survey/issues/225)) ([73b75bd](https://github.com/kontourai/survey/commit/73b75bd44d5942987f1cf669e1536e8dd4e8af6b))
+
 ## [2.4.0](https://github.com/kontourai/survey/compare/v2.3.0...v2.4.0) (2026-07-27)
 
 
