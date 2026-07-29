@@ -71,7 +71,7 @@
     "workflow:validate-artifacts": "flow-agents-validate-artifacts"
   },
   "dependencies": {
-    "@kontourai/surface": "^2.9.0"
+    "@kontourai/surface": "^2.13.0"
   },
   "peerDependencies": {
     "typescript": ">=5.0.0"
