@@ -49,13 +49,13 @@ export interface PortableExtractionResultEnvelope {
     raw: { tokensUsed?: number };
     outcome:
       | { status: "success" }
-      | { status: "partial"; reason: "cancelled" | "max-provider-calls" | "max-total-tokens" }
+      | { status: "partial"; reason: "cancelled" | "max-provider-calls" | "max-total-tokens" | "max-chunks" }
       | { status: "failure"; category: "invalid-config" | "invalid-task" | "preparation" | "provider" | "unexpected"; code: string };
     warningClassifications?: Array<{ category: "provider" | "normalization" | "preparation" | "limit" | "storage" | "content" | "other"; code: string }>;
     extractedAt: string;
     providerCalls: number;
     totalTokensUsed: number;
-    partial?: { reason: "cancelled" | "max-provider-calls" | "max-total-tokens"; completedChunks: number; remainingChunks: number; tokenOvershoot?: number };
+    partial?: { reason: "cancelled" | "max-provider-calls" | "max-total-tokens" | "max-chunks"; completedChunks: number; remainingChunks: number; tokenOvershoot?: number };
     providerFailures?: Array<{ provider: string; kind: "authentication" | "rate-limit" | "timeout" | "invalid-request" | "unavailable" | "unknown"; retryable: boolean }>;
     taskDigest?: string;
     exampleDigests?: string[];
@@ -326,7 +326,7 @@ function isWellFormedUnicode(value: string): boolean { for (let index = 0; index
 
 const RAW_SOURCE_KINDS = new Set<RawSource["kind"]>(["uploaded-document", "web-page", "api-record", "manual-entry", "policy-standard", "inquiry-question", "agent-utterance", "system-schema"]);
 const VALUE_TYPES = new Set<ReviewValueType>(["string", "number", "boolean", "date", "enum", "array", "object"]);
-const PARTIAL = new Set(["cancelled", "max-provider-calls", "max-total-tokens"]);
+const PARTIAL = new Set(["cancelled", "max-provider-calls", "max-total-tokens", "max-chunks"]);
 const FAILURE_CATEGORIES = new Set(["invalid-config", "invalid-task", "preparation", "provider", "unexpected"]);
 const WARNING_CATEGORIES = new Set(["provider", "normalization", "preparation", "limit", "storage", "content", "other"]);
 const FAILURE_KINDS = new Set(["authentication", "rate-limit", "timeout", "invalid-request", "unavailable", "unknown"]);

@@ -48,6 +48,25 @@ describe("portable extraction envelope import", () => {
     });
   });
 
+  it("accepts the max-chunks partial reason (capped-chunk truncation) ahead of the producer emitting it", async () => {
+    // Consumer-tolerance half of the fieldwork#50 fix: traverse will classify
+    // beyond-maxChunks truncation as a partial stop with this reason, and this
+    // importer must not reject those envelopes. Only survey's own import path
+    // is asserted here — traverse's validator learns the reason in its own fix.
+    const envelope = await fixture();
+    envelope.result.outcome = { status: "partial", reason: "max-chunks" };
+    envelope.result.partial = { reason: "max-chunks", completedChunks: 2, remainingChunks: 3 };
+    const imported = importExtractionEnvelope(envelope, options());
+    assert.deepEqual(imported.record.spec.envelope.result.outcome, { status: "partial", reason: "max-chunks" });
+  });
+
+  it("still rejects partial reasons outside the vocabulary", async () => {
+    const envelope = await fixture();
+    envelope.result.outcome = { status: "partial", reason: "max-anything" } as unknown as typeof envelope.result.outcome;
+    envelope.result.partial = { reason: "max-anything", completedChunks: 2, remainingChunks: 1 } as unknown as typeof envelope.result.partial;
+    assert.throws(() => importExtractionEnvelope(envelope, options()), /partial reason is invalid/);
+  });
+
   it("keeps same values at different locators distinct", async () => {
     const imported = importExtractionEnvelope(await readFile(fixtureUrl, "utf8"), options());
     assert.equal(imported.reviewItems[0]!.spec.candidates[0]!.value, "Alpha");
