@@ -126,6 +126,11 @@ export type {
   SourceReference,
   SurveyRecordProjectionHint,
 } from "./review-resource.js";
+export {
+  toSurfaceReviewedExtractionDecision,
+  toSurfaceReviewedExtractionImport,
+  toSurfaceReviewedExtractionItem,
+} from "./surface-reviewed-extraction.js";
 export { candidateReviewRecord, candidateSetStatusFor, SurveyInputBuilder } from "./builder.js";
 export type {
   CandidateReviewRecordInput,
