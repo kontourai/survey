@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.3](https://github.com/kontourai/survey/compare/v2.4.2...v2.4.3) (2026-07-29)
+
+
+### Fixes
+
+* accept the max-chunks partial reason ahead of the producer emitting it ([#237](https://github.com/kontourai/survey/issues/237)) ([09606b4](https://github.com/kontourai/survey/commit/09606b46f33fbae11da4b4caca6c632917f70d3c))
+
 ## [2.4.2](https://github.com/kontourai/survey/compare/v2.4.1...v2.4.2) (2026-07-28)
 
 
