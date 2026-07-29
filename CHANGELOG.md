@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.0](https://github.com/kontourai/survey/compare/v2.4.3...v2.5.0) (2026-07-29)
+
+
+### Features
+
+* typed bridge to surface's reviewed-extraction contract (surface[#194](https://github.com/kontourai/survey/issues/194)) ([#239](https://github.com/kontourai/survey/issues/239)) ([45962e0](https://github.com/kontourai/survey/commit/45962e0835f25f96239b32fe8b18ecd80085e362))
+
 ## [2.4.3](https://github.com/kontourai/survey/compare/v2.4.2...v2.4.3) (2026-07-29)
 
 
