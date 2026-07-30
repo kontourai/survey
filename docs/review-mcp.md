@@ -1,8 +1,24 @@
 # Survey Review MCP
 
-`survey-review-mcp` is a minimal [Model Context Protocol](https://modelcontextprotocol.io/) server that exposes a review-queue session for inspection and decision-making through an MCP client (Claude Desktop, Cursor, or any MCP-aware host).
+`survey-review-mcp` is a [Model Context Protocol](https://modelcontextprotocol.io/)
+server that exposes a review-queue session for inspection and decision-making
+through an MCP client.
 
-The server is dependency-free — hand-rolled JSON-RPC 2.0 over stdio, no MCP SDK. It does not make any network requests. All state lives in a single session JSON file.
+The installed CLI uses the official MCP TypeScript server runtime over stdio. It
+does not make network requests. All review state lives in one local session JSON
+file.
+
+## Protocol compatibility
+
+One server definition serves both MCP eras:
+
+- MCP 2026-07-28 clients open with `server/discover`.
+- Existing clients continue to use the legacy `initialize` flow.
+
+There is no protocol setting to manage. The opening request selects the
+compatible era automatically, while the same queue, decision validation, and
+atomic persistence code runs behind both. Modern cacheable discovery, list, and
+resource responses are private with a zero TTL because the session is mutable.
 
 ## Start the server
 
@@ -34,9 +50,13 @@ Decision mapping:
 | `reject` | `reject-proposed` | Proposed value is rejected; current value is unmodified |
 | `could-not-confirm` | `could-not-confirm` | Review round ends without changing, rejecting, or escalating the claim; a reason is required |
 
-### Domain failures
+### Rejected calls
 
-Domain errors (unknown item name, item already decided, invalid decision value) are returned as `{ isError: true, content: [{ type: "text", text: "..." }] }` — not as JSON-RPC protocol errors. The client can inspect `result.isError` and the error message in `result.content[0].text`.
+Domain errors such as an unknown item or an item that is already decided return
+`{ isError: true, content: [{ type: "text", text: "..." }] }`. Schema-invalid
+arguments, including an unknown decision value, are rejected by the official
+runtime before the handler runs. In every negotiated protocol path the server
+rejects these calls before applying or persisting a decision.
 
 ## UI card behavior
 
@@ -49,7 +69,15 @@ Domain errors (unknown item name, item already decided, invalid decision value) 
     "uri": "ui://survey/review-card/<instance>",
     "mimeType": "text/html;profile=mcp-app",
     "text": "<!doctype html>...",
-    "_meta": { "mcpui.dev/ui-preferred-frame-size": ["420px", "560px"] }
+    "_meta": {
+      "ui": {
+        "csp": {
+          "connectDomains": [],
+          "resourceDomains": []
+        }
+      },
+      "mcpui.dev/ui-preferred-frame-size": ["420px", "560px"]
+    }
   }
 }
 ```
@@ -79,6 +107,11 @@ The card uses `--k-*` design tokens matching the Console Kit dark theme by defau
 
 Pass `--no-ui` to suppress the UI resource; the text content items are always returned.
 
+The queue tool also declares its app using canonical nested
+`_meta.ui.resourceUri`. The flat `_meta["ui/resourceUri"]` key remains
+transitional compatibility output for older Apps hosts. New integrations should
+read the nested shape.
+
 ## Session file contract
 
 The session file is a JSON object with three keys:
@@ -103,4 +136,8 @@ The file is written atomically so a failed write leaves the previous state intac
 
 ## No-network statement
 
-The MCP server makes no outbound network requests. It reads and writes one local file. The embedded HTML card contains no external `<script>`, `<link>`, `<img>`, or `@import` references.
+The MCP server makes no outbound network requests. It reads and writes one local
+file. The embedded HTML card contains no external `<script>`, `<link>`, `<img>`,
+or `@import` references, and its Apps CSP declares no connect or resource
+domains. Standard output is reserved for JSON-RPC; sanitized SDK and transport
+diagnostics are written only to standard error.
