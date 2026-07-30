@@ -655,33 +655,50 @@ function createReviewMcpServer(
       title: "Record a review decision",
       description:
         "Apply a decision to a review item and persist it through Survey's server-owned validation boundary. Decision must be accept, hold, reject, or could-not-confirm. Could-not-confirm requires a reason. Domain failures return isError:true.",
-      inputSchema: z.object({
-        itemName: z.string().min(1).describe("The ReviewItem name to decide."),
-        decision: z
-          .enum(["accept", "hold", "reject", "could-not-confirm"])
-          .describe(
-            "accept = accept-proposed, hold = keep-current, reject = reject-proposed, could-not-confirm = terminal non-answer.",
-          ),
-        note: z.string().optional().describe("Optional reviewer note or rationale."),
-        reason: z
-          .string()
-          .optional()
-          .describe("Required non-empty reason when decision is could-not-confirm."),
-        attemptEvidenceIds: z
-          .array(z.string())
-          .optional()
-          .describe("Evidence ids attempted before a could-not-confirm decision."),
-      }),
+      inputSchema: z.discriminatedUnion("decision", [
+        z.object({
+          itemName: z.string().min(1).describe("The ReviewItem name to decide."),
+          decision: z
+            .enum(["accept", "hold", "reject"])
+            .describe(
+              "accept = accept-proposed, hold = keep-current, reject = reject-proposed.",
+            ),
+          note: z.string().optional().describe("Optional reviewer note or rationale."),
+        }),
+        z.object({
+          itemName: z.string().min(1).describe("The ReviewItem name to decide."),
+          decision: z
+            .literal("could-not-confirm")
+            .describe("Record a terminal non-answer after evidence attempts are exhausted."),
+          reason: z
+            .string()
+            .trim()
+            .min(1)
+            .describe("Required non-empty reason for the could-not-confirm decision."),
+          attemptEvidenceIds: z
+            .array(z.string())
+            .optional()
+            .describe("Evidence ids attempted before a could-not-confirm decision."),
+        }),
+      ]),
     },
-    async ({ itemName, decision, note, reason, attemptEvidenceIds }) =>
+    async (input) =>
       runReviewTool(() =>
-        toolDecide(
-          itemName,
-          decision,
-          decision === "could-not-confirm" ? reason : note,
-          attemptEvidenceIds,
-          options,
-        ),
+        input.decision === "could-not-confirm"
+          ? toolDecide(
+              input.itemName,
+              input.decision,
+              input.reason,
+              input.attemptEvidenceIds,
+              options,
+            )
+          : toolDecide(
+              input.itemName,
+              input.decision,
+              input.note,
+              undefined,
+              options,
+            ),
       ),
   );
 
@@ -719,7 +736,10 @@ async function runReviewTool(
   operation: () => Promise<ContentItem[]>,
 ): Promise<CallToolResult> {
   try {
-    return { content: await operation(), isError: false };
+    return {
+      content: (await operation()).map(sanitizeContentItem),
+      isError: false,
+    };
   } catch (error) {
     return {
       content: [
@@ -738,6 +758,19 @@ const UNSAFE_TEXT_CHARS_RE =
 
 function sanitizeProtocolText(text: string): string {
   return text.replace(UNSAFE_TEXT_CHARS_RE, "");
+}
+
+function sanitizeContentItem(item: ContentItem): ContentItem {
+  if (item.type === "text") {
+    return { ...item, text: sanitizeProtocolText(item.text) };
+  }
+  return {
+    ...item,
+    resource: {
+      ...item.resource,
+      text: sanitizeProtocolText(item.resource.text),
+    },
+  };
 }
 
 function sanitizeDiagnostic(text: string): string {

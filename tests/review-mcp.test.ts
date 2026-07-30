@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { createInterface } from "node:readline";
-import { copyFile, readFile, mkdtemp, rm } from "node:fs/promises";
+import { copyFile, readFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -134,8 +134,21 @@ describe("survey-review-mcp", () => {
       const queueTool = (tools.result?.tools ?? []).find(
         (tool: { name: string }) => tool.name === "survey_review_queue",
       ) as Record<string, any> | undefined;
+      const decideTool = (tools.result?.tools ?? []).find(
+        (tool: { name: string }) => tool.name === "survey_review_decide",
+      ) as Record<string, any> | undefined;
       assert.equal(queueTool?._meta.ui.resourceUri, "ui://survey/review-card/queue");
       assert.equal(queueTool?._meta["ui/resourceUri"], "ui://survey/review-card/queue");
+      const decideBranches =
+        decideTool?.inputSchema?.oneOf ?? decideTool?.inputSchema?.anyOf ?? [];
+      const couldNotConfirmBranch = decideBranches.find(
+        (branch: Record<string, any>) =>
+          branch.properties?.decision?.const === "could-not-confirm",
+      );
+      assert.deepEqual(
+        couldNotConfirmBranch?.required,
+        ["itemName", "decision", "reason"],
+      );
 
       send(server, {
         jsonrpc: "2.0",
@@ -264,12 +277,22 @@ describe("survey-review-mcp", () => {
       const decideTool = (toolsList.result?.tools ?? []).find(
         (t: { name: string }) => t.name === "survey_review_decide",
       ) as Record<string, any> | undefined;
-      assert.deepEqual(decideTool?.inputSchema.properties.decision.enum, [
-        "accept", "hold", "reject", "could-not-confirm",
-      ]);
+      const decisionBranches = decideTool?.inputSchema.oneOf ?? [];
+      assert.deepEqual(
+        decisionBranches[0]?.properties.decision.enum,
+        ["accept", "hold", "reject"],
+      );
+      assert.equal(
+        decisionBranches[1]?.properties.decision.const,
+        "could-not-confirm",
+      );
       assert.match(
-        decideTool?.inputSchema.properties.reason.description,
+        decisionBranches[1]?.properties.reason.description,
         /Required non-empty reason/,
+      );
+      assert.deepEqual(
+        decisionBranches[1]?.required,
+        ["itemName", "decision", "reason"],
       );
       // The queue declares canonical nested UI metadata plus flat compatibility.
       const queueTool = (toolsList.result?.tools ?? []).find(
@@ -480,7 +503,10 @@ describe("survey-review-mcp", () => {
       });
       const missingReason = await responses.next(2);
       assert.equal(missingReason.result?.isError, true);
-      assert.match(missingReason.result?.content[0]?.text ?? "", /requires a non-empty reason/);
+      assert.match(
+        missingReason.result?.content[0]?.text ?? "",
+        /reason: Invalid input/,
+      );
 
       send(server, {
         jsonrpc: "2.0",
@@ -636,6 +662,51 @@ describe("survey-review-mcp", () => {
 
       // Text item must still be present
       assert.ok(content.some((c) => c.type === "text"), "Text item should still be present");
+    } finally {
+      server.stdin!.end();
+      await once(server, "exit");
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test("successful tool output strips terminal and bidi controls from producer text", async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), "survey-mcp-test-"));
+    const sessionPath = join(tmpDir, "session.json");
+    const fixture = JSON.parse(
+      await readFile("example-data/mcp-review-session.json", "utf8"),
+    ) as Record<string, any>;
+    fixture.snapshot.items[0].spec.target = "safe\u001b[31m target\u202e";
+    fixture.snapshot.items[0].spec.candidates[0].value = "current\u0007 value";
+    await writeFile(sessionPath, JSON.stringify(fixture, null, 2));
+
+    const server = spawn("node", ["bin/survey-review-mcp.mjs", "--session", sessionPath], {
+      stdio: ["pipe", "pipe", "inherit"],
+    });
+    const responses = collectResponses(server.stdout!);
+
+    try {
+      send(server, { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "0" } } });
+      await responses.next(1);
+      send(server, { jsonrpc: "2.0", method: "notifications/initialized" });
+
+      send(server, {
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/call",
+        params: {
+          name: "survey_review_item",
+          arguments: { itemName: fixture.snapshot.items[0].metadata.name },
+        },
+      });
+      const result = await responses.next(2);
+      assert.equal(result.result?.isError, false);
+      const text = result.result?.content?.[0]?.text ?? "";
+      assert.match(text, /safe\[31m target/);
+      assert.match(text, /current value/);
+      assert.doesNotMatch(
+        text,
+        /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u0080-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u206f]/,
+      );
     } finally {
       server.stdin!.end();
       await once(server, "exit");
