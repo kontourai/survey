@@ -4,7 +4,7 @@
     {
       "name": "trust.checkpoint.json",
       "digest": {
-        "sha256": "b293442be6c6c7d1922b409c64e428882d0434a14065e391a96067b38abdec41"
+        "sha256": "cccd3b993a24f888aa505e47ea2c31b9a03f1eac48a6f2a0f3dfb3704bc47085"
       }
     }
   ],
@@ -21,8 +21,8 @@
         "claimType": "builder.pull-work.selected",
         "fieldOrBehavior": "Work Item kontourai/survey#241 is durably assigned to the active workflow actor (assignment sha256:8af6ce163371bede1d794736b783e8e4ab1fc00e12a5f984edf5f137f1d36c1a).",
         "value": "pass",
-        "createdAt": "2026-07-30T19:39:24.816Z",
-        "updatedAt": "2026-07-30T19:39:24.816Z",
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "updatedAt": "2026-07-30T19:45:25.902Z",
         "impactLevel": "high",
         "verificationPolicyId": "policy:builder.pull-work.selected:attestation",
         "metadata": {
@@ -71,8 +71,8 @@
         "claimType": "builder.design-probe.pickup-readiness",
         "fieldOrBehavior": "Pickup probe confirms Survey #241 is ready: scope, ownership, current revision, authorization boundary, risks, and rollback are explicit.",
         "value": "pass",
-        "createdAt": "2026-07-30T19:39:24.816Z",
-        "updatedAt": "2026-07-30T19:39:24.816Z",
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "updatedAt": "2026-07-30T19:45:25.902Z",
         "impactLevel": "high",
         "verificationPolicyId": "policy:builder.design-probe.pickup-readiness:attestation",
         "metadata": {
@@ -111,8 +111,8 @@
         "claimType": "builder.design-probe.decisions",
         "fieldOrBehavior": "Protocol, legacy, Apps metadata, server authorization, package, and verification decisions are explicit; no accepted gaps remain.",
         "value": "pass",
-        "createdAt": "2026-07-30T19:39:24.816Z",
-        "updatedAt": "2026-07-30T19:39:24.816Z",
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "updatedAt": "2026-07-30T19:45:25.902Z",
         "impactLevel": "high",
         "verificationPolicyId": "policy:builder.design-probe.decisions:attestation",
         "metadata": {
@@ -151,8 +151,8 @@
         "claimType": "builder.plan.implementation",
         "fieldOrBehavior": "Implementation plan binds the official dual-era server to Survey's existing server-owned review apply boundary, bidirectional fixtures, installed-package proof, docs, rollback, and AC1-AC5.",
         "value": "pass",
-        "createdAt": "2026-07-30T19:39:24.816Z",
-        "updatedAt": "2026-07-30T19:39:24.816Z",
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "updatedAt": "2026-07-30T19:45:25.902Z",
         "impactLevel": "high",
         "verificationPolicyId": "policy:builder.plan.implementation:attestation",
         "metadata": {
@@ -218,8 +218,8 @@
         "claimType": "builder.execute.scope",
         "fieldOrBehavior": "Implemented the bounded Survey MCP dual-era runtime, protocol tests, installed-package proof, and durable docs without changing review policy, session schema, or projection semantics.",
         "value": "pass",
-        "createdAt": "2026-07-30T19:39:24.816Z",
-        "updatedAt": "2026-07-30T19:39:24.816Z",
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "updatedAt": "2026-07-30T19:45:25.902Z",
         "impactLevel": "high",
         "verificationPolicyId": "policy:builder.execute.scope:attestation",
         "metadata": {
@@ -258,8 +258,8 @@
         "claimType": "builder.verify.tests",
         "fieldOrBehavior": "Survey MCP dual-era implementation passes the complete repository verification at 91ed919: 688 core tests including schema and direct-resource sanitization regressions, clean installed modern/legacy package smoke, 120 browser tests with 4 intentional skips, and concurrent Playwright isolation.",
         "value": "pass",
-        "createdAt": "2026-07-30T19:39:24.816Z",
-        "updatedAt": "2026-07-30T19:39:24.816Z",
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "updatedAt": "2026-07-30T19:45:25.902Z",
         "impactLevel": "high",
         "verificationPolicyId": "policy:builder.verify.tests:test_output",
         "metadata": {
@@ -329,8 +329,8 @@
         "claimType": "builder.merge-ready.readiness",
         "fieldOrBehavior": "PASS: Survey source head 91ed919 is scope-clean, AC1-AC5 have command-backed evidence, the initial protocol findings are repaired, the exact-head independent critique is clean, and local/provider product checks pass; Trust Verify awaits provisional delivery.",
         "value": "pass",
-        "createdAt": "2026-07-30T19:39:24.816Z",
-        "updatedAt": "2026-07-30T19:39:24.816Z",
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "updatedAt": "2026-07-30T19:45:25.902Z",
         "impactLevel": "high",
         "verificationPolicyId": "policy:builder.merge-ready.readiness:attestation",
         "metadata": {
@@ -357,6 +357,128 @@
             "identity_version": 2,
             "recorded_at": "2026-07-30T19:39:24.816Z",
             "flow_run_head": "78023df4bbeb6a2428dbe9e5e8e867688d1699fe5cc1051e831a6a6452001864"
+          }
+        },
+        "status": "verified"
+      },
+      {
+        "id": "kontourai-survey-241-gate-claim-ci-merge-readiness.flow-agents-workflow.merge-exact-source-and-provisional-delivery-revisions-passed-acceptance-independent-review-evidence-gate-governance-and-every-required-provider-check-rollback-and-post-merge-verification-are-recorded-gate-visit-2026-07-30t19-44-58-333z",
+        "subjectType": "pull-request",
+        "subjectId": "kontourai-survey-241/gate-claim-ci-merge-readiness",
+        "facet": "flow-agents.workflow",
+        "claimType": "builder.merge-ready-ci.readiness",
+        "fieldOrBehavior": "MERGE: exact source and provisional delivery revisions passed acceptance, independent review, evidence gate, governance, and every required provider check; rollback and post-merge verification are recorded.",
+        "value": "pass",
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "updatedAt": "2026-07-30T19:45:25.902Z",
+        "impactLevel": "high",
+        "verificationPolicyId": "policy:builder.merge-ready-ci.readiness:attestation",
+        "metadata": {
+          "origin": "check",
+          "check_kind": "external",
+          "workflow_subject_ref": "kontourai/survey#241",
+          "expected_producer": "builder.release-readiness",
+          "recorded_by": "codexthread-6377ca0c787f951bb744ed6bKontour",
+          "self_produced_trust_slices": [
+            "ci-merge-readiness"
+          ],
+          "artifact_refs": [
+            {
+              "kind": "artifact",
+              "file": ".kontourai/flow-agents/kontourai-survey-241/release.json",
+              "summary": "Release-readiness MERGE decision, exact revisions, authorization, provider checks, rollback, and observability state."
+            }
+          ],
+          "gate_claim": {
+            "expectation_id": "ci-merge-readiness",
+            "claim_type": "builder.merge-ready-ci.readiness",
+            "subject_type": "pull-request",
+            "step_id": "merge-ready-ci",
+            "identity_version": 2,
+            "recorded_at": "2026-07-30T19:44:58.333Z",
+            "flow_run_head": "f4d24343af40a8f5d38b9bc7b9a75cb69ffc21ee0c22d3e3dbb362f402070c9d"
+          }
+        },
+        "status": "verified"
+      },
+      {
+        "id": "kontourai-survey-241-gate-claim-decision-evidence.flow-agents-workflow.survey-s-merge-decision-repaired-review-findings-and-retained-protocol-boundary-contracts-are-recorded-with-exact-source-and-delivery-evidence-gate-visit-2026-07-30t19-45-25-221z",
+        "subjectType": "decision",
+        "subjectId": "kontourai-survey-241/gate-claim-decision-evidence",
+        "facet": "flow-agents.workflow",
+        "claimType": "builder.learn.decisions",
+        "fieldOrBehavior": "Survey's merge decision, repaired review findings, and retained protocol-boundary contracts are recorded with exact source and delivery evidence.",
+        "value": "pass",
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "updatedAt": "2026-07-30T19:45:25.902Z",
+        "impactLevel": "high",
+        "verificationPolicyId": "policy:builder.learn.decisions:attestation",
+        "metadata": {
+          "origin": "check",
+          "check_kind": "external",
+          "workflow_subject_ref": "kontourai/survey#241",
+          "expected_producer": "builder.learning-review",
+          "recorded_by": "codexthread-6377ca0c787f951bb744ed6bKontour",
+          "self_produced_trust_slices": [
+            "decision-evidence",
+            "learning-evidence"
+          ],
+          "artifact_refs": [
+            {
+              "kind": "artifact",
+              "file": ".kontourai/flow-agents/kontourai-survey-241/learning.json",
+              "summary": "Recorded delivery decisions, completed corrections, exact-revision outcomes, and closeout state."
+            }
+          ],
+          "gate_claim": {
+            "expectation_id": "decision-evidence",
+            "claim_type": "builder.learn.decisions",
+            "subject_type": "decision",
+            "step_id": "learn",
+            "identity_version": 2,
+            "recorded_at": "2026-07-30T19:45:25.221Z",
+            "flow_run_head": "a0eb2f8c3773d8223715ff8388644bd2860efae44cab7a126bf31a3483744507"
+          }
+        },
+        "status": "verified"
+      },
+      {
+        "id": "kontourai-survey-241-gate-claim-learning-evidence.flow-agents-workflow.the-two-independent-review-gaps-were-repaired-and-regression-routed-exact-head-review-and-all-required-checks-are-clean-with-no-unresolved-follow-up-gate-visit-2026-07-30t19-45-25-902z",
+        "subjectType": "release",
+        "subjectId": "kontourai-survey-241/gate-claim-learning-evidence",
+        "facet": "flow-agents.workflow",
+        "claimType": "builder.learn.evidence",
+        "fieldOrBehavior": "The two independent-review gaps were repaired and regression-routed; exact-head review and all required checks are clean with no unresolved follow-up.",
+        "value": "pass",
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "updatedAt": "2026-07-30T19:45:25.902Z",
+        "impactLevel": "high",
+        "verificationPolicyId": "policy:builder.learn.evidence:attestation",
+        "metadata": {
+          "origin": "check",
+          "check_kind": "external",
+          "workflow_subject_ref": "kontourai/survey#241",
+          "expected_producer": "builder.learning-review",
+          "recorded_by": "codexthread-6377ca0c787f951bb744ed6bKontour",
+          "self_produced_trust_slices": [
+            "decision-evidence",
+            "learning-evidence"
+          ],
+          "artifact_refs": [
+            {
+              "kind": "artifact",
+              "file": ".kontourai/flow-agents/kontourai-survey-241/learning.json",
+              "summary": "Observed outcomes, completed correction routing, durable regression decisions, and unresolved-gap state."
+            }
+          ],
+          "gate_claim": {
+            "expectation_id": "learning-evidence",
+            "claim_type": "builder.learn.evidence",
+            "subject_type": "release",
+            "step_id": "learn",
+            "identity_version": 2,
+            "recorded_at": "2026-07-30T19:45:25.902Z",
+            "flow_run_head": "a0eb2f8c3773d8223715ff8388644bd2860efae44cab7a126bf31a3483744507"
           }
         },
         "status": "verified"
@@ -949,7 +1071,7 @@
         "method": "corroboration",
         "sourceRef": "kontourai-survey-241/evidence.json",
         "excerptOrSummary": "Work Item kontourai/survey#241 is durably assigned to the active workflow actor (assignment sha256:8af6ce163371bede1d794736b783e8e4ab1fc00e12a5f984edf5f137f1d36c1a).",
-        "observedAt": "2026-07-30T19:39:24.816Z",
+        "observedAt": "2026-07-30T19:45:25.902Z",
         "collectedBy": "flow-agents/workflow-sidecar",
         "passing": true
       },
@@ -960,7 +1082,7 @@
         "method": "corroboration",
         "sourceRef": "kontourai-survey-241/evidence.json",
         "excerptOrSummary": "Pickup probe confirms Survey #241 is ready: scope, ownership, current revision, authorization boundary, risks, and rollback are explicit.",
-        "observedAt": "2026-07-30T19:39:24.816Z",
+        "observedAt": "2026-07-30T19:45:25.902Z",
         "collectedBy": "flow-agents/workflow-sidecar",
         "passing": true
       },
@@ -971,7 +1093,7 @@
         "method": "corroboration",
         "sourceRef": "kontourai-survey-241/evidence.json",
         "excerptOrSummary": "Protocol, legacy, Apps metadata, server authorization, package, and verification decisions are explicit; no accepted gaps remain.",
-        "observedAt": "2026-07-30T19:39:24.816Z",
+        "observedAt": "2026-07-30T19:45:25.902Z",
         "collectedBy": "flow-agents/workflow-sidecar",
         "passing": true
       },
@@ -982,7 +1104,7 @@
         "method": "corroboration",
         "sourceRef": "kontourai-survey-241/evidence.json",
         "excerptOrSummary": "Implementation plan binds the official dual-era server to Survey's existing server-owned review apply boundary, bidirectional fixtures, installed-package proof, docs, rollback, and AC1-AC5.",
-        "observedAt": "2026-07-30T19:39:24.816Z",
+        "observedAt": "2026-07-30T19:45:25.902Z",
         "collectedBy": "flow-agents/workflow-sidecar",
         "passing": true
       },
@@ -993,7 +1115,7 @@
         "method": "corroboration",
         "sourceRef": "kontourai-survey-241/evidence.json",
         "excerptOrSummary": "Implemented the bounded Survey MCP dual-era runtime, protocol tests, installed-package proof, and durable docs without changing review policy, session schema, or projection semantics.",
-        "observedAt": "2026-07-30T19:39:24.816Z",
+        "observedAt": "2026-07-30T19:45:25.902Z",
         "collectedBy": "flow-agents/workflow-sidecar",
         "passing": true
       },
@@ -1004,7 +1126,7 @@
         "method": "validation",
         "sourceRef": "kontourai-survey-241/command-log.jsonl",
         "excerptOrSummary": "Survey MCP dual-era implementation passes the complete repository verification at 91ed919: 688 core tests including schema and direct-resource sanitization regressions, clean installed modern/legacy package smoke, 120 browser tests with 4 intentional skips, and concurrent Playwright isolation.",
-        "observedAt": "2026-07-30T19:39:24.816Z",
+        "observedAt": "2026-07-30T19:45:25.902Z",
         "collectedBy": "flow-agents/evidence-capture",
         "passing": true,
         "execution": {
@@ -1021,7 +1143,40 @@
         "method": "corroboration",
         "sourceRef": "kontourai-survey-241/evidence.json",
         "excerptOrSummary": "PASS: Survey source head 91ed919 is scope-clean, AC1-AC5 have command-backed evidence, the initial protocol findings are repaired, the exact-head independent critique is clean, and local/provider product checks pass; Trust Verify awaits provisional delivery.",
-        "observedAt": "2026-07-30T19:39:24.816Z",
+        "observedAt": "2026-07-30T19:45:25.902Z",
+        "collectedBy": "flow-agents/workflow-sidecar",
+        "passing": true
+      },
+      {
+        "id": "ev:kontourai-survey-241-gate-claim-ci-merge-readiness.flow-agents-workflow.merge-exact-source-and-provisional-delivery-revisions-passed-acceptance-independent-review-evidence-gate-governance-and-every-required-provider-check-rollback-and-post-merge-verification-are-recorded-gate-visit-2026-07-30t19-44-58-333z",
+        "claimId": "kontourai-survey-241-gate-claim-ci-merge-readiness.flow-agents-workflow.merge-exact-source-and-provisional-delivery-revisions-passed-acceptance-independent-review-evidence-gate-governance-and-every-required-provider-check-rollback-and-post-merge-verification-are-recorded-gate-visit-2026-07-30t19-44-58-333z",
+        "evidenceType": "attestation",
+        "method": "corroboration",
+        "sourceRef": "kontourai-survey-241/evidence.json",
+        "excerptOrSummary": "MERGE: exact source and provisional delivery revisions passed acceptance, independent review, evidence gate, governance, and every required provider check; rollback and post-merge verification are recorded.",
+        "observedAt": "2026-07-30T19:45:25.902Z",
+        "collectedBy": "flow-agents/workflow-sidecar",
+        "passing": true
+      },
+      {
+        "id": "ev:kontourai-survey-241-gate-claim-decision-evidence.flow-agents-workflow.survey-s-merge-decision-repaired-review-findings-and-retained-protocol-boundary-contracts-are-recorded-with-exact-source-and-delivery-evidence-gate-visit-2026-07-30t19-45-25-221z",
+        "claimId": "kontourai-survey-241-gate-claim-decision-evidence.flow-agents-workflow.survey-s-merge-decision-repaired-review-findings-and-retained-protocol-boundary-contracts-are-recorded-with-exact-source-and-delivery-evidence-gate-visit-2026-07-30t19-45-25-221z",
+        "evidenceType": "attestation",
+        "method": "corroboration",
+        "sourceRef": "kontourai-survey-241/evidence.json",
+        "excerptOrSummary": "Survey's merge decision, repaired review findings, and retained protocol-boundary contracts are recorded with exact source and delivery evidence.",
+        "observedAt": "2026-07-30T19:45:25.902Z",
+        "collectedBy": "flow-agents/workflow-sidecar",
+        "passing": true
+      },
+      {
+        "id": "ev:kontourai-survey-241-gate-claim-learning-evidence.flow-agents-workflow.the-two-independent-review-gaps-were-repaired-and-regression-routed-exact-head-review-and-all-required-checks-are-clean-with-no-unresolved-follow-up-gate-visit-2026-07-30t19-45-25-902z",
+        "claimId": "kontourai-survey-241-gate-claim-learning-evidence.flow-agents-workflow.the-two-independent-review-gaps-were-repaired-and-regression-routed-exact-head-review-and-all-required-checks-are-clean-with-no-unresolved-follow-up-gate-visit-2026-07-30t19-45-25-902z",
+        "evidenceType": "attestation",
+        "method": "corroboration",
+        "sourceRef": "kontourai-survey-241/evidence.json",
+        "excerptOrSummary": "The two independent-review gaps were repaired and regression-routed; exact-head review and all required checks are clean with no unresolved follow-up.",
+        "observedAt": "2026-07-30T19:45:25.902Z",
         "collectedBy": "flow-agents/workflow-sidecar",
         "passing": true
       },
@@ -1266,6 +1421,57 @@
         "impactLevel": "high"
       },
       {
+        "id": "policy:builder.merge-ready-ci.readiness:attestation",
+        "claimType": "builder.merge-ready-ci.readiness",
+        "requiredEvidence": [
+          "attestation"
+        ],
+        "acceptanceCriteria": [
+          "A verified verification event must support a builder.merge-ready-ci.readiness claim."
+        ],
+        "reviewAuthority": "system",
+        "validityRule": {
+          "kind": "manual"
+        },
+        "stalenessTriggers": [],
+        "conflictRules": [],
+        "impactLevel": "high"
+      },
+      {
+        "id": "policy:builder.learn.decisions:attestation",
+        "claimType": "builder.learn.decisions",
+        "requiredEvidence": [
+          "attestation"
+        ],
+        "acceptanceCriteria": [
+          "A verified verification event must support a builder.learn.decisions claim."
+        ],
+        "reviewAuthority": "system",
+        "validityRule": {
+          "kind": "manual"
+        },
+        "stalenessTriggers": [],
+        "conflictRules": [],
+        "impactLevel": "high"
+      },
+      {
+        "id": "policy:builder.learn.evidence:attestation",
+        "claimType": "builder.learn.evidence",
+        "requiredEvidence": [
+          "attestation"
+        ],
+        "acceptanceCriteria": [
+          "A verified verification event must support a builder.learn.evidence claim."
+        ],
+        "reviewAuthority": "system",
+        "validityRule": {
+          "kind": "manual"
+        },
+        "stalenessTriggers": [],
+        "conflictRules": [],
+        "impactLevel": "high"
+      },
+      {
         "id": "policy:workflow.acceptance.criterion:test_output",
         "claimType": "workflow.acceptance.criterion",
         "requiredEvidence": [
@@ -1308,8 +1514,8 @@
         "evidenceIds": [
           "ev:kontourai-survey-241-gate-claim-selected-work.flow-agents-workflow.work-item-kontourai-survey-241-is-durably-assigned-to-the-active-workflow-actor-assignment-sha256-8af6ce163371bede1d794736b783e8e4ab1fc00e12a5f984edf5f137f1d36c1a-gate-visit-2026-07-30t15-13-59z"
         ],
-        "createdAt": "2026-07-30T19:39:24.816Z",
-        "verifiedAt": "2026-07-30T19:39:24.816Z"
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "verifiedAt": "2026-07-30T19:45:25.902Z"
       },
       {
         "id": "evt:kontourai-survey-241-gate-claim-pickup-probe-readiness.flow-agents-workflow.pickup-probe-confirms-survey-241-is-ready-scope-ownership-current-revision-authorization-boundary-risks-and-rollback-are-explicit-gate-visit-2026-07-30t15-14-11-305z",
@@ -1320,8 +1526,8 @@
         "evidenceIds": [
           "ev:kontourai-survey-241-gate-claim-pickup-probe-readiness.flow-agents-workflow.pickup-probe-confirms-survey-241-is-ready-scope-ownership-current-revision-authorization-boundary-risks-and-rollback-are-explicit-gate-visit-2026-07-30t15-14-11-305z"
         ],
-        "createdAt": "2026-07-30T19:39:24.816Z",
-        "verifiedAt": "2026-07-30T19:39:24.816Z"
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "verifiedAt": "2026-07-30T19:45:25.902Z"
       },
       {
         "id": "evt:kontourai-survey-241-gate-claim-probe-decisions-or-accepted-gaps.flow-agents-workflow.protocol-legacy-apps-metadata-server-authorization-package-and-verification-decisions-are-explicit-no-accepted-gaps-remain-gate-visit-2026-07-30t15-14-11-585z",
@@ -1332,8 +1538,8 @@
         "evidenceIds": [
           "ev:kontourai-survey-241-gate-claim-probe-decisions-or-accepted-gaps.flow-agents-workflow.protocol-legacy-apps-metadata-server-authorization-package-and-verification-decisions-are-explicit-no-accepted-gaps-remain-gate-visit-2026-07-30t15-14-11-585z"
         ],
-        "createdAt": "2026-07-30T19:39:24.816Z",
-        "verifiedAt": "2026-07-30T19:39:24.816Z"
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "verifiedAt": "2026-07-30T19:45:25.902Z"
       },
       {
         "id": "evt:kontourai-survey-241-gate-claim-implementation-plan.flow-agents-workflow.implementation-plan-binds-the-official-dual-era-server-to-survey-s-existing-server-owned-review-apply-boundary-bidirectional-fixtures-installed-package-proof-docs-rollback-and-ac1-ac5-gate-visit-2026-07-30t15-15-39-445z",
@@ -1344,8 +1550,8 @@
         "evidenceIds": [
           "ev:kontourai-survey-241-gate-claim-implementation-plan.flow-agents-workflow.implementation-plan-binds-the-official-dual-era-server-to-survey-s-existing-server-owned-review-apply-boundary-bidirectional-fixtures-installed-package-proof-docs-rollback-and-ac1-ac5-gate-visit-2026-07-30t15-15-39-445z"
         ],
-        "createdAt": "2026-07-30T19:39:24.816Z",
-        "verifiedAt": "2026-07-30T19:39:24.816Z"
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "verifiedAt": "2026-07-30T19:45:25.902Z"
       },
       {
         "id": "evt:kontourai-survey-241-gate-claim-implementation-scope.flow-agents-workflow.implemented-the-bounded-survey-mcp-dual-era-runtime-protocol-tests-installed-package-proof-and-durable-docs-without-changing-review-policy-session-schema-or-projection-semantics-gate-visit-2026-07-30t15-27-32-265z",
@@ -1356,8 +1562,8 @@
         "evidenceIds": [
           "ev:kontourai-survey-241-gate-claim-implementation-scope.flow-agents-workflow.implemented-the-bounded-survey-mcp-dual-era-runtime-protocol-tests-installed-package-proof-and-durable-docs-without-changing-review-policy-session-schema-or-projection-semantics-gate-visit-2026-07-30t15-27-32-265z"
         ],
-        "createdAt": "2026-07-30T19:39:24.816Z",
-        "verifiedAt": "2026-07-30T19:39:24.816Z"
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "verifiedAt": "2026-07-30T19:45:25.902Z"
       },
       {
         "id": "evt:kontourai-survey-241-gate-claim-tests-evidence.flow-agents-workflow.survey-mcp-dual-era-implementation-passes-the-complete-repository-verification-at-91ed919-688-core-tests-including-schema-and-direct-resource-sanitization-regressions-clean-installed-modern-legacy-package-smoke-120-browser-tests-with-4-intentional-skips-and-concurrent-playwright-isolation-gate-visit-2026-07-30t19-38-07-219z",
@@ -1368,8 +1574,8 @@
         "evidenceIds": [
           "ev:kontourai-survey-241-gate-claim-tests-evidence.flow-agents-workflow.survey-mcp-dual-era-implementation-passes-the-complete-repository-verification-at-91ed919-688-core-tests-including-schema-and-direct-resource-sanitization-regressions-clean-installed-modern-legacy-package-smoke-120-browser-tests-with-4-intentional-skips-and-concurrent-playwright-isolation-gate-visit-2026-07-30t19-38-07-219z"
         ],
-        "createdAt": "2026-07-30T19:39:24.816Z",
-        "verifiedAt": "2026-07-30T19:39:24.816Z"
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "verifiedAt": "2026-07-30T19:45:25.902Z"
       },
       {
         "id": "evt:kontourai-survey-241-gate-claim-merge-readiness.flow-agents-workflow.pass-survey-source-head-91ed919-is-scope-clean-ac1-ac5-have-command-backed-evidence-the-initial-protocol-findings-are-repaired-the-exact-head-independent-critique-is-clean-and-local-provider-product-checks-pass-trust-verify-awaits-provisional-delivery-gate-visit-2026-07-30t19-39-24-816z",
@@ -1380,8 +1586,44 @@
         "evidenceIds": [
           "ev:kontourai-survey-241-gate-claim-merge-readiness.flow-agents-workflow.pass-survey-source-head-91ed919-is-scope-clean-ac1-ac5-have-command-backed-evidence-the-initial-protocol-findings-are-repaired-the-exact-head-independent-critique-is-clean-and-local-provider-product-checks-pass-trust-verify-awaits-provisional-delivery-gate-visit-2026-07-30t19-39-24-816z"
         ],
-        "createdAt": "2026-07-30T19:39:24.816Z",
-        "verifiedAt": "2026-07-30T19:39:24.816Z"
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "verifiedAt": "2026-07-30T19:45:25.902Z"
+      },
+      {
+        "id": "evt:kontourai-survey-241-gate-claim-ci-merge-readiness.flow-agents-workflow.merge-exact-source-and-provisional-delivery-revisions-passed-acceptance-independent-review-evidence-gate-governance-and-every-required-provider-check-rollback-and-post-merge-verification-are-recorded-gate-visit-2026-07-30t19-44-58-333z",
+        "claimId": "kontourai-survey-241-gate-claim-ci-merge-readiness.flow-agents-workflow.merge-exact-source-and-provisional-delivery-revisions-passed-acceptance-independent-review-evidence-gate-governance-and-every-required-provider-check-rollback-and-post-merge-verification-are-recorded-gate-visit-2026-07-30t19-44-58-333z",
+        "status": "verified",
+        "actor": "flow-agents/workflow-sidecar",
+        "method": "validation",
+        "evidenceIds": [
+          "ev:kontourai-survey-241-gate-claim-ci-merge-readiness.flow-agents-workflow.merge-exact-source-and-provisional-delivery-revisions-passed-acceptance-independent-review-evidence-gate-governance-and-every-required-provider-check-rollback-and-post-merge-verification-are-recorded-gate-visit-2026-07-30t19-44-58-333z"
+        ],
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "verifiedAt": "2026-07-30T19:45:25.902Z"
+      },
+      {
+        "id": "evt:kontourai-survey-241-gate-claim-decision-evidence.flow-agents-workflow.survey-s-merge-decision-repaired-review-findings-and-retained-protocol-boundary-contracts-are-recorded-with-exact-source-and-delivery-evidence-gate-visit-2026-07-30t19-45-25-221z",
+        "claimId": "kontourai-survey-241-gate-claim-decision-evidence.flow-agents-workflow.survey-s-merge-decision-repaired-review-findings-and-retained-protocol-boundary-contracts-are-recorded-with-exact-source-and-delivery-evidence-gate-visit-2026-07-30t19-45-25-221z",
+        "status": "verified",
+        "actor": "flow-agents/workflow-sidecar",
+        "method": "validation",
+        "evidenceIds": [
+          "ev:kontourai-survey-241-gate-claim-decision-evidence.flow-agents-workflow.survey-s-merge-decision-repaired-review-findings-and-retained-protocol-boundary-contracts-are-recorded-with-exact-source-and-delivery-evidence-gate-visit-2026-07-30t19-45-25-221z"
+        ],
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "verifiedAt": "2026-07-30T19:45:25.902Z"
+      },
+      {
+        "id": "evt:kontourai-survey-241-gate-claim-learning-evidence.flow-agents-workflow.the-two-independent-review-gaps-were-repaired-and-regression-routed-exact-head-review-and-all-required-checks-are-clean-with-no-unresolved-follow-up-gate-visit-2026-07-30t19-45-25-902z",
+        "claimId": "kontourai-survey-241-gate-claim-learning-evidence.flow-agents-workflow.the-two-independent-review-gaps-were-repaired-and-regression-routed-exact-head-review-and-all-required-checks-are-clean-with-no-unresolved-follow-up-gate-visit-2026-07-30t19-45-25-902z",
+        "status": "verified",
+        "actor": "flow-agents/workflow-sidecar",
+        "method": "validation",
+        "evidenceIds": [
+          "ev:kontourai-survey-241-gate-claim-learning-evidence.flow-agents-workflow.the-two-independent-review-gaps-were-repaired-and-regression-routed-exact-head-review-and-all-required-checks-are-clean-with-no-unresolved-follow-up-gate-visit-2026-07-30t19-45-25-902z"
+        ],
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "verifiedAt": "2026-07-30T19:45:25.902Z"
       },
       {
         "id": "evt:kontourai-survey-241-ac1.flow-agents-workflow.a-modern-client-discovers-survey-and-completes-representative-queue-item-decision-and-resource-operations-with-required-result-metadata-verified-2026-07-30t19-38-07-219z",
@@ -1450,8 +1692,8 @@
         "actor": "flow-agents/workflow-sidecar",
         "method": "validation",
         "evidenceIds": [],
-        "createdAt": "2026-07-30T19:39:24.816Z",
-        "verifiedAt": "2026-07-30T19:39:24.816Z"
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "verifiedAt": "2026-07-30T19:45:25.902Z"
       }
     ]
   }
