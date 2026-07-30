@@ -1,0 +1,1700 @@
+{
+  "_type": "https://in-toto.io/Statement/v1",
+  "subject": [
+    {
+      "name": "trust.checkpoint.json",
+      "digest": {
+        "sha256": "cccd3b993a24f888aa505e47ea2c31b9a03f1eac48a6f2a0f3dfb3704bc47085"
+      }
+    }
+  ],
+  "predicateType": "https://hachure.org/v1/bundle",
+  "predicate": {
+    "schemaVersion": 5,
+    "source": "flow-agents/workflow-sidecar;statusFunctionVersion=2",
+    "claims": [
+      {
+        "id": "kontourai-survey-241-gate-claim-selected-work.flow-agents-workflow.work-item-kontourai-survey-241-is-durably-assigned-to-the-active-workflow-actor-assignment-sha256-8af6ce163371bede1d794736b783e8e4ab1fc00e12a5f984edf5f137f1d36c1a-gate-visit-2026-07-30t15-13-59z",
+        "subjectType": "work-item",
+        "subjectId": "kontourai-survey-241/gate-claim-selected-work",
+        "facet": "flow-agents.workflow",
+        "claimType": "builder.pull-work.selected",
+        "fieldOrBehavior": "Work Item kontourai/survey#241 is durably assigned to the active workflow actor (assignment sha256:8af6ce163371bede1d794736b783e8e4ab1fc00e12a5f984edf5f137f1d36c1a).",
+        "value": "pass",
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "updatedAt": "2026-07-30T19:45:25.902Z",
+        "impactLevel": "high",
+        "verificationPolicyId": "policy:builder.pull-work.selected:attestation",
+        "metadata": {
+          "origin": "check",
+          "check_kind": "external",
+          "workflow_subject_ref": "kontourai/survey#241",
+          "expected_producer": "builder.pull-work",
+          "recorded_by": "codexthread-6377ca0c787f951bb744ed6bKontour",
+          "self_produced_trust_slices": [
+            "selected-work"
+          ],
+          "artifact_refs": [
+            {
+              "kind": "artifact",
+              "file": ".kontourai/flow-agents/assignment/kontourai-survey-241.json",
+              "summary": "Durable local assignment record for the selected Work Item and active actor; sha256:8af6ce163371bede1d794736b783e8e4ab1fc00e12a5f984edf5f137f1d36c1a."
+            },
+            {
+              "kind": "artifact",
+              "file": ".kontourai/flow-agents/kontourai-survey-241/assignment-provider-state.json",
+              "summary": "Provider assignment state confirming ownership before the local runtime lease was mirrored; sha256:f131f5d107036cb93422cc44fe662cc8d1d44fa9e778da1446d660222bcb3f61."
+            },
+            {
+              "kind": "artifact",
+              "file": ".kontourai/flow-agents/kontourai-survey-241/kontourai-survey-241--pull-work.md",
+              "summary": "Concrete pull-work selection report for kontourai/survey#241."
+            }
+          ],
+          "gate_claim": {
+            "expectation_id": "selected-work",
+            "claim_type": "builder.pull-work.selected",
+            "subject_type": "work-item",
+            "step_id": "pull-work",
+            "identity_version": 2,
+            "recorded_at": "2026-07-30T15:13:59Z",
+            "flow_run_head": "c1bb54c3b6e56220549556176d374b3097c4bd751d3e551e43c9430276c45d15"
+          }
+        },
+        "status": "verified"
+      },
+      {
+        "id": "kontourai-survey-241-gate-claim-pickup-probe-readiness.flow-agents-workflow.pickup-probe-confirms-survey-241-is-ready-scope-ownership-current-revision-authorization-boundary-risks-and-rollback-are-explicit-gate-visit-2026-07-30t15-14-11-305z",
+        "subjectType": "work-item",
+        "subjectId": "kontourai-survey-241/gate-claim-pickup-probe-readiness",
+        "facet": "flow-agents.workflow",
+        "claimType": "builder.design-probe.pickup-readiness",
+        "fieldOrBehavior": "Pickup probe confirms Survey #241 is ready: scope, ownership, current revision, authorization boundary, risks, and rollback are explicit.",
+        "value": "pass",
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "updatedAt": "2026-07-30T19:45:25.902Z",
+        "impactLevel": "high",
+        "verificationPolicyId": "policy:builder.design-probe.pickup-readiness:attestation",
+        "metadata": {
+          "origin": "check",
+          "check_kind": "external",
+          "workflow_subject_ref": "kontourai/survey#241",
+          "expected_producer": "builder.pickup-probe",
+          "recorded_by": "codexthread-6377ca0c787f951bb744ed6bKontour",
+          "self_produced_trust_slices": [
+            "pickup-probe"
+          ],
+          "artifact_refs": [
+            {
+              "kind": "artifact",
+              "file": ".kontourai/flow-agents/kontourai-survey-241/kontourai-survey-241--pull-work.md",
+              "summary": "Provider-grounded pickup and readiness probe"
+            }
+          ],
+          "gate_claim": {
+            "expectation_id": "pickup-probe-readiness",
+            "claim_type": "builder.design-probe.pickup-readiness",
+            "subject_type": "work-item",
+            "step_id": "design-probe",
+            "identity_version": 2,
+            "recorded_at": "2026-07-30T15:14:11.305Z",
+            "flow_run_head": "0341aa0527156962b68d441ed8df337a74d8ab2f5bc71bf2c56419e67987d41b"
+          }
+        },
+        "status": "verified"
+      },
+      {
+        "id": "kontourai-survey-241-gate-claim-probe-decisions-or-accepted-gaps.flow-agents-workflow.protocol-legacy-apps-metadata-server-authorization-package-and-verification-decisions-are-explicit-no-accepted-gaps-remain-gate-visit-2026-07-30t15-14-11-585z",
+        "subjectType": "decision",
+        "subjectId": "kontourai-survey-241/gate-claim-probe-decisions-or-accepted-gaps",
+        "facet": "flow-agents.workflow",
+        "claimType": "builder.design-probe.decisions",
+        "fieldOrBehavior": "Protocol, legacy, Apps metadata, server authorization, package, and verification decisions are explicit; no accepted gaps remain.",
+        "value": "pass",
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "updatedAt": "2026-07-30T19:45:25.902Z",
+        "impactLevel": "high",
+        "verificationPolicyId": "policy:builder.design-probe.decisions:attestation",
+        "metadata": {
+          "origin": "check",
+          "check_kind": "external",
+          "workflow_subject_ref": "kontourai/survey#241",
+          "expected_producer": "builder.pickup-probe",
+          "recorded_by": "codexthread-6377ca0c787f951bb744ed6bKontour",
+          "self_produced_trust_slices": [
+            "pickup-probe"
+          ],
+          "artifact_refs": [
+            {
+              "kind": "artifact",
+              "file": ".kontourai/flow-agents/kontourai-survey-241/kontourai-survey-241--pull-work.md",
+              "summary": "Explicit pickup decisions and zero accepted gaps"
+            }
+          ],
+          "gate_claim": {
+            "expectation_id": "probe-decisions-or-accepted-gaps",
+            "claim_type": "builder.design-probe.decisions",
+            "subject_type": "decision",
+            "step_id": "design-probe",
+            "identity_version": 2,
+            "recorded_at": "2026-07-30T15:14:11.585Z",
+            "flow_run_head": "0341aa0527156962b68d441ed8df337a74d8ab2f5bc71bf2c56419e67987d41b"
+          }
+        },
+        "status": "verified"
+      },
+      {
+        "id": "kontourai-survey-241-gate-claim-implementation-plan.flow-agents-workflow.implementation-plan-binds-the-official-dual-era-server-to-survey-s-existing-server-owned-review-apply-boundary-bidirectional-fixtures-installed-package-proof-docs-rollback-and-ac1-ac5-gate-visit-2026-07-30t15-15-39-445z",
+        "subjectType": "artifact",
+        "subjectId": "kontourai-survey-241/gate-claim-implementation-plan",
+        "facet": "flow-agents.workflow",
+        "claimType": "builder.plan.implementation",
+        "fieldOrBehavior": "Implementation plan binds the official dual-era server to Survey's existing server-owned review apply boundary, bidirectional fixtures, installed-package proof, docs, rollback, and AC1-AC5.",
+        "value": "pass",
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "updatedAt": "2026-07-30T19:45:25.902Z",
+        "impactLevel": "high",
+        "verificationPolicyId": "policy:builder.plan.implementation:attestation",
+        "metadata": {
+          "origin": "check",
+          "check_kind": "external",
+          "workflow_subject_ref": "kontourai/survey#241",
+          "expected_producer": "builder.plan-work",
+          "recorded_by": "codexthread-6377ca0c787f951bb744ed6bKontour",
+          "self_produced_trust_slices": [
+            "implementation-plan"
+          ],
+          "artifact_refs": [
+            {
+              "kind": "artifact",
+              "file": ".kontourai/flow-agents/kontourai-survey-241/kontourai-survey-241--plan-work.md",
+              "summary": "Execution-ready Survey MCP implementation plan"
+            }
+          ],
+          "acceptance_contract": {
+            "version": 1,
+            "algorithm": "sha256",
+            "digest": "d40a8bedaa090b41a16cbbc5d9e2002d74edd1bfb8bb4ed7ab21df03fd0ac145",
+            "criteria": [
+              {
+                "id": "AC1",
+                "description": "A modern client discovers Survey and completes representative queue, item, decision, and resource operations with required result metadata."
+              },
+              {
+                "id": "AC2",
+                "description": "A frozen legacy client initializes and completes equivalent representative operations against the same server factory."
+              },
+              {
+                "id": "AC3",
+                "description": "The Apps extension and canonical nested UI metadata are advertised and the self-contained review resource still renders."
+              },
+              {
+                "id": "AC4",
+                "description": "Decision authorization, validation, server apply, and atomic persistence boundaries remain enforced."
+              },
+              {
+                "id": "AC5",
+                "description": "Survey verification, installed-package smoke, and pinned Veritas readiness pass."
+              }
+            ]
+          },
+          "gate_claim": {
+            "expectation_id": "implementation-plan",
+            "claim_type": "builder.plan.implementation",
+            "subject_type": "artifact",
+            "step_id": "plan",
+            "identity_version": 2,
+            "recorded_at": "2026-07-30T15:15:39.445Z",
+            "flow_run_head": "ba3f6aa019d604d7751a44a0cf61dc95a2f985095efd4923dadd98261437e0b6"
+          }
+        },
+        "status": "verified"
+      },
+      {
+        "id": "kontourai-survey-241-gate-claim-implementation-scope.flow-agents-workflow.implemented-the-bounded-survey-mcp-dual-era-runtime-protocol-tests-installed-package-proof-and-durable-docs-without-changing-review-policy-session-schema-or-projection-semantics-gate-visit-2026-07-30t15-27-32-265z",
+        "subjectType": "change",
+        "subjectId": "kontourai-survey-241/gate-claim-implementation-scope",
+        "facet": "flow-agents.workflow",
+        "claimType": "builder.execute.scope",
+        "fieldOrBehavior": "Implemented the bounded Survey MCP dual-era runtime, protocol tests, installed-package proof, and durable docs without changing review policy, session schema, or projection semantics.",
+        "value": "pass",
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "updatedAt": "2026-07-30T19:45:25.902Z",
+        "impactLevel": "high",
+        "verificationPolicyId": "policy:builder.execute.scope:attestation",
+        "metadata": {
+          "origin": "check",
+          "check_kind": "external",
+          "workflow_subject_ref": "kontourai/survey#241",
+          "expected_producer": "builder.execute-plan",
+          "recorded_by": "codexthread-6377ca0c787f951bb744ed6bKontour",
+          "self_produced_trust_slices": [
+            "implementation-scope"
+          ],
+          "artifact_refs": [
+            {
+              "kind": "artifact",
+              "file": ".kontourai/flow-agents/kontourai-survey-241/kontourai-survey-241--deliver.md",
+              "summary": "Delivery report with changed scope and AC1-AC5 mapping"
+            }
+          ],
+          "gate_claim": {
+            "expectation_id": "implementation-scope",
+            "claim_type": "builder.execute.scope",
+            "subject_type": "change",
+            "step_id": "execute",
+            "identity_version": 2,
+            "recorded_at": "2026-07-30T15:27:32.265Z",
+            "flow_run_head": "040facb6bc612c3b34e059d73c114481e1fd62083ab6462cf635f63c7a58d68e"
+          }
+        },
+        "status": "verified"
+      },
+      {
+        "id": "kontourai-survey-241-gate-claim-tests-evidence.flow-agents-workflow.survey-mcp-dual-era-implementation-passes-the-complete-repository-verification-at-91ed919-688-core-tests-including-schema-and-direct-resource-sanitization-regressions-clean-installed-modern-legacy-package-smoke-120-browser-tests-with-4-intentional-skips-and-concurrent-playwright-isolation-gate-visit-2026-07-30t19-38-07-219z",
+        "subjectType": "flow-step",
+        "subjectId": "kontourai-survey-241/gate-claim-tests-evidence",
+        "facet": "flow-agents.workflow",
+        "claimType": "builder.verify.tests",
+        "fieldOrBehavior": "Survey MCP dual-era implementation passes the complete repository verification at 91ed919: 688 core tests including schema and direct-resource sanitization regressions, clean installed modern/legacy package smoke, 120 browser tests with 4 intentional skips, and concurrent Playwright isolation.",
+        "value": "pass",
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "updatedAt": "2026-07-30T19:45:25.902Z",
+        "impactLevel": "high",
+        "verificationPolicyId": "policy:builder.verify.tests:test_output",
+        "metadata": {
+          "origin": "check",
+          "check_kind": "command",
+          "workflow_subject_ref": "kontourai/survey#241",
+          "expected_producer": "builder.verify-work",
+          "recorded_by": "codexthread-6377ca0c787f951bb744ed6bKontour",
+          "self_produced_trust_slices": [
+            "acceptance-criteria",
+            "tests-evidence",
+            "policy-compliance"
+          ],
+          "artifact_refs": [
+            {
+              "kind": "command",
+              "excerpt": "npm run verify",
+              "summary": "Exact complete Survey verification command run successfully at 91ed919."
+            },
+            {
+              "kind": "artifact",
+              "file": ".kontourai/flow-agents/kontourai-survey-241/kontourai-survey-241--deliver.md",
+              "summary": "Acceptance mapping and repository verification plan for the dual-era MCP delivery."
+            }
+          ],
+          "output_digest": {
+            "algorithm": "sha256",
+            "hex": "a07e8880d81b3f93c24acac1e08cb334d382fcda8a8a7683464e5d75b0b6204c"
+          },
+          "observed_commands": [
+            {
+              "command": "npm run verify",
+              "exit_code": 0,
+              "output_sha256": "a07e8880d81b3f93c24acac1e08cb334d382fcda8a8a7683464e5d75b0b6204c",
+              "test_count": 3,
+              "execution_proof": {
+                "kind": "local-process-exit",
+                "runner": "node --test",
+                "static_test_units": 3
+              }
+            }
+          ],
+          "verification_workspace_snapshot": {
+            "version": 1,
+            "kind": "git-worktree",
+            "algorithm": "sha256",
+            "digest": "a35ea888f43c2f55622dd280b242dea64f5055e4d0db2a7338d4fbef332f5a24",
+            "head_sha": "91ed919682195a397f39855b3b0885257168ee08"
+          },
+          "gate_claim": {
+            "expectation_id": "tests-evidence",
+            "claim_type": "builder.verify.tests",
+            "subject_type": "flow-step",
+            "step_id": "verify",
+            "identity_version": 2,
+            "recorded_at": "2026-07-30T19:38:07.219Z",
+            "flow_run_head": "75d279eaeac2b5b058031d51871bcf0e9aec3939122e532ecbab007b60e63334"
+          }
+        },
+        "status": "verified"
+      },
+      {
+        "id": "kontourai-survey-241-gate-claim-merge-readiness.flow-agents-workflow.pass-survey-source-head-91ed919-is-scope-clean-ac1-ac5-have-command-backed-evidence-the-initial-protocol-findings-are-repaired-the-exact-head-independent-critique-is-clean-and-local-provider-product-checks-pass-trust-verify-awaits-provisional-delivery-gate-visit-2026-07-30t19-39-24-816z",
+        "subjectType": "change",
+        "subjectId": "kontourai-survey-241/gate-claim-merge-readiness",
+        "facet": "flow-agents.workflow",
+        "claimType": "builder.merge-ready.readiness",
+        "fieldOrBehavior": "PASS: Survey source head 91ed919 is scope-clean, AC1-AC5 have command-backed evidence, the initial protocol findings are repaired, the exact-head independent critique is clean, and local/provider product checks pass; Trust Verify awaits provisional delivery.",
+        "value": "pass",
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "updatedAt": "2026-07-30T19:45:25.902Z",
+        "impactLevel": "high",
+        "verificationPolicyId": "policy:builder.merge-ready.readiness:attestation",
+        "metadata": {
+          "origin": "check",
+          "check_kind": "external",
+          "workflow_subject_ref": "kontourai/survey#241",
+          "expected_producer": "builder.evidence-gate",
+          "recorded_by": "codexthread-6377ca0c787f951bb744ed6bKontour",
+          "self_produced_trust_slices": [
+            "merge-readiness"
+          ],
+          "artifact_refs": [
+            {
+              "kind": "artifact",
+              "file": ".kontourai/flow-agents/kontourai-survey-241/kontourai-survey-241--evidence-gate.md",
+              "summary": "Scope integrity, acceptance table, independent review resolution, verification, and residual-risk assessment."
+            }
+          ],
+          "gate_claim": {
+            "expectation_id": "merge-readiness",
+            "claim_type": "builder.merge-ready.readiness",
+            "subject_type": "change",
+            "step_id": "merge-ready",
+            "identity_version": 2,
+            "recorded_at": "2026-07-30T19:39:24.816Z",
+            "flow_run_head": "78023df4bbeb6a2428dbe9e5e8e867688d1699fe5cc1051e831a6a6452001864"
+          }
+        },
+        "status": "verified"
+      },
+      {
+        "id": "kontourai-survey-241-gate-claim-ci-merge-readiness.flow-agents-workflow.merge-exact-source-and-provisional-delivery-revisions-passed-acceptance-independent-review-evidence-gate-governance-and-every-required-provider-check-rollback-and-post-merge-verification-are-recorded-gate-visit-2026-07-30t19-44-58-333z",
+        "subjectType": "pull-request",
+        "subjectId": "kontourai-survey-241/gate-claim-ci-merge-readiness",
+        "facet": "flow-agents.workflow",
+        "claimType": "builder.merge-ready-ci.readiness",
+        "fieldOrBehavior": "MERGE: exact source and provisional delivery revisions passed acceptance, independent review, evidence gate, governance, and every required provider check; rollback and post-merge verification are recorded.",
+        "value": "pass",
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "updatedAt": "2026-07-30T19:45:25.902Z",
+        "impactLevel": "high",
+        "verificationPolicyId": "policy:builder.merge-ready-ci.readiness:attestation",
+        "metadata": {
+          "origin": "check",
+          "check_kind": "external",
+          "workflow_subject_ref": "kontourai/survey#241",
+          "expected_producer": "builder.release-readiness",
+          "recorded_by": "codexthread-6377ca0c787f951bb744ed6bKontour",
+          "self_produced_trust_slices": [
+            "ci-merge-readiness"
+          ],
+          "artifact_refs": [
+            {
+              "kind": "artifact",
+              "file": ".kontourai/flow-agents/kontourai-survey-241/release.json",
+              "summary": "Release-readiness MERGE decision, exact revisions, authorization, provider checks, rollback, and observability state."
+            }
+          ],
+          "gate_claim": {
+            "expectation_id": "ci-merge-readiness",
+            "claim_type": "builder.merge-ready-ci.readiness",
+            "subject_type": "pull-request",
+            "step_id": "merge-ready-ci",
+            "identity_version": 2,
+            "recorded_at": "2026-07-30T19:44:58.333Z",
+            "flow_run_head": "f4d24343af40a8f5d38b9bc7b9a75cb69ffc21ee0c22d3e3dbb362f402070c9d"
+          }
+        },
+        "status": "verified"
+      },
+      {
+        "id": "kontourai-survey-241-gate-claim-decision-evidence.flow-agents-workflow.survey-s-merge-decision-repaired-review-findings-and-retained-protocol-boundary-contracts-are-recorded-with-exact-source-and-delivery-evidence-gate-visit-2026-07-30t19-45-25-221z",
+        "subjectType": "decision",
+        "subjectId": "kontourai-survey-241/gate-claim-decision-evidence",
+        "facet": "flow-agents.workflow",
+        "claimType": "builder.learn.decisions",
+        "fieldOrBehavior": "Survey's merge decision, repaired review findings, and retained protocol-boundary contracts are recorded with exact source and delivery evidence.",
+        "value": "pass",
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "updatedAt": "2026-07-30T19:45:25.902Z",
+        "impactLevel": "high",
+        "verificationPolicyId": "policy:builder.learn.decisions:attestation",
+        "metadata": {
+          "origin": "check",
+          "check_kind": "external",
+          "workflow_subject_ref": "kontourai/survey#241",
+          "expected_producer": "builder.learning-review",
+          "recorded_by": "codexthread-6377ca0c787f951bb744ed6bKontour",
+          "self_produced_trust_slices": [
+            "decision-evidence",
+            "learning-evidence"
+          ],
+          "artifact_refs": [
+            {
+              "kind": "artifact",
+              "file": ".kontourai/flow-agents/kontourai-survey-241/learning.json",
+              "summary": "Recorded delivery decisions, completed corrections, exact-revision outcomes, and closeout state."
+            }
+          ],
+          "gate_claim": {
+            "expectation_id": "decision-evidence",
+            "claim_type": "builder.learn.decisions",
+            "subject_type": "decision",
+            "step_id": "learn",
+            "identity_version": 2,
+            "recorded_at": "2026-07-30T19:45:25.221Z",
+            "flow_run_head": "a0eb2f8c3773d8223715ff8388644bd2860efae44cab7a126bf31a3483744507"
+          }
+        },
+        "status": "verified"
+      },
+      {
+        "id": "kontourai-survey-241-gate-claim-learning-evidence.flow-agents-workflow.the-two-independent-review-gaps-were-repaired-and-regression-routed-exact-head-review-and-all-required-checks-are-clean-with-no-unresolved-follow-up-gate-visit-2026-07-30t19-45-25-902z",
+        "subjectType": "release",
+        "subjectId": "kontourai-survey-241/gate-claim-learning-evidence",
+        "facet": "flow-agents.workflow",
+        "claimType": "builder.learn.evidence",
+        "fieldOrBehavior": "The two independent-review gaps were repaired and regression-routed; exact-head review and all required checks are clean with no unresolved follow-up.",
+        "value": "pass",
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "updatedAt": "2026-07-30T19:45:25.902Z",
+        "impactLevel": "high",
+        "verificationPolicyId": "policy:builder.learn.evidence:attestation",
+        "metadata": {
+          "origin": "check",
+          "check_kind": "external",
+          "workflow_subject_ref": "kontourai/survey#241",
+          "expected_producer": "builder.learning-review",
+          "recorded_by": "codexthread-6377ca0c787f951bb744ed6bKontour",
+          "self_produced_trust_slices": [
+            "decision-evidence",
+            "learning-evidence"
+          ],
+          "artifact_refs": [
+            {
+              "kind": "artifact",
+              "file": ".kontourai/flow-agents/kontourai-survey-241/learning.json",
+              "summary": "Observed outcomes, completed correction routing, durable regression decisions, and unresolved-gap state."
+            }
+          ],
+          "gate_claim": {
+            "expectation_id": "learning-evidence",
+            "claim_type": "builder.learn.evidence",
+            "subject_type": "release",
+            "step_id": "learn",
+            "identity_version": 2,
+            "recorded_at": "2026-07-30T19:45:25.902Z",
+            "flow_run_head": "a0eb2f8c3773d8223715ff8388644bd2860efae44cab7a126bf31a3483744507"
+          }
+        },
+        "status": "verified"
+      },
+      {
+        "id": "kontourai-survey-241-ac1.flow-agents-workflow.a-modern-client-discovers-survey-and-completes-representative-queue-item-decision-and-resource-operations-with-required-result-metadata-verified-2026-07-30t19-38-07-219z",
+        "subjectType": "flow-step",
+        "subjectId": "kontourai-survey-241/AC1",
+        "facet": "flow-agents.workflow",
+        "claimType": "workflow.acceptance.criterion",
+        "fieldOrBehavior": "A modern client discovers Survey and completes representative queue, item, decision, and resource operations with required result metadata.",
+        "value": "pass",
+        "createdAt": "2026-07-30T19:38:07.219Z",
+        "updatedAt": "2026-07-30T19:38:07.219Z",
+        "impactLevel": "high",
+        "verificationPolicyId": "policy:workflow.acceptance.criterion:test_output",
+        "metadata": {
+          "origin": "acceptance",
+          "criterion": {
+            "id": "AC1",
+            "description": "A modern client discovers Survey and completes representative queue, item, decision, and resource operations with required result metadata.",
+            "status": "pass",
+            "evidence_refs": [
+              {
+                "kind": "command",
+                "excerpt": "npm run verify",
+                "summary": "Modern discovery, queue, item, decision, resource, and result metadata tests pass."
+              }
+            ],
+            "observed_commands": [
+              {
+                "command": "npm run verify",
+                "exit_code": 0,
+                "output_sha256": "a07e8880d81b3f93c24acac1e08cb334d382fcda8a8a7683464e5d75b0b6204c",
+                "test_count": 3,
+                "execution_proof": {
+                  "kind": "local-process-exit",
+                  "runner": "node --test",
+                  "static_test_units": 3
+                }
+              }
+            ],
+            "identity_version": 2,
+            "verified_at": "2026-07-30T19:38:07.219Z"
+          },
+          "workflow_subject_ref": "kontourai/survey#241"
+        },
+        "status": "verified"
+      },
+      {
+        "id": "kontourai-survey-241-ac2.flow-agents-workflow.a-frozen-legacy-client-initializes-and-completes-equivalent-representative-operations-against-the-same-server-factory-verified-2026-07-30t19-38-07-219z",
+        "subjectType": "flow-step",
+        "subjectId": "kontourai-survey-241/AC2",
+        "facet": "flow-agents.workflow",
+        "claimType": "workflow.acceptance.criterion",
+        "fieldOrBehavior": "A frozen legacy client initializes and completes equivalent representative operations against the same server factory.",
+        "value": "pass",
+        "createdAt": "2026-07-30T19:38:07.219Z",
+        "updatedAt": "2026-07-30T19:38:07.219Z",
+        "impactLevel": "high",
+        "verificationPolicyId": "policy:workflow.acceptance.criterion:test_output",
+        "metadata": {
+          "origin": "acceptance",
+          "criterion": {
+            "id": "AC2",
+            "description": "A frozen legacy client initializes and completes equivalent representative operations against the same server factory.",
+            "status": "pass",
+            "evidence_refs": [
+              {
+                "kind": "command",
+                "excerpt": "npm run verify",
+                "summary": "Frozen legacy initialize and equivalent representative operation tests pass against the same factory."
+              }
+            ],
+            "observed_commands": [
+              {
+                "command": "npm run verify",
+                "exit_code": 0,
+                "output_sha256": "a07e8880d81b3f93c24acac1e08cb334d382fcda8a8a7683464e5d75b0b6204c",
+                "test_count": 3,
+                "execution_proof": {
+                  "kind": "local-process-exit",
+                  "runner": "node --test",
+                  "static_test_units": 3
+                }
+              }
+            ],
+            "identity_version": 2,
+            "verified_at": "2026-07-30T19:38:07.219Z"
+          },
+          "workflow_subject_ref": "kontourai/survey#241"
+        },
+        "status": "verified"
+      },
+      {
+        "id": "kontourai-survey-241-ac3.flow-agents-workflow.the-apps-extension-and-canonical-nested-ui-metadata-are-advertised-and-the-self-contained-review-resource-still-renders-verified-2026-07-30t19-38-07-219z",
+        "subjectType": "flow-step",
+        "subjectId": "kontourai-survey-241/AC3",
+        "facet": "flow-agents.workflow",
+        "claimType": "workflow.acceptance.criterion",
+        "fieldOrBehavior": "The Apps extension and canonical nested UI metadata are advertised and the self-contained review resource still renders.",
+        "value": "pass",
+        "createdAt": "2026-07-30T19:38:07.219Z",
+        "updatedAt": "2026-07-30T19:38:07.219Z",
+        "impactLevel": "high",
+        "verificationPolicyId": "policy:workflow.acceptance.criterion:test_output",
+        "metadata": {
+          "origin": "acceptance",
+          "criterion": {
+            "id": "AC3",
+            "description": "The Apps extension and canonical nested UI metadata are advertised and the self-contained review resource still renders.",
+            "status": "pass",
+            "evidence_refs": [
+              {
+                "kind": "command",
+                "excerpt": "npm run verify",
+                "summary": "Apps discovery, nested UI metadata, self-contained CSP, sanitization, and browser coverage pass."
+              }
+            ],
+            "observed_commands": [
+              {
+                "command": "npm run verify",
+                "exit_code": 0,
+                "output_sha256": "a07e8880d81b3f93c24acac1e08cb334d382fcda8a8a7683464e5d75b0b6204c",
+                "test_count": 3,
+                "execution_proof": {
+                  "kind": "local-process-exit",
+                  "runner": "node --test",
+                  "static_test_units": 3
+                }
+              }
+            ],
+            "identity_version": 2,
+            "verified_at": "2026-07-30T19:38:07.219Z"
+          },
+          "workflow_subject_ref": "kontourai/survey#241"
+        },
+        "status": "verified"
+      },
+      {
+        "id": "kontourai-survey-241-ac4.flow-agents-workflow.decision-authorization-validation-server-apply-and-atomic-persistence-boundaries-remain-enforced-verified-2026-07-30t19-38-07-219z",
+        "subjectType": "flow-step",
+        "subjectId": "kontourai-survey-241/AC4",
+        "facet": "flow-agents.workflow",
+        "claimType": "workflow.acceptance.criterion",
+        "fieldOrBehavior": "Decision authorization, validation, server apply, and atomic persistence boundaries remain enforced.",
+        "value": "pass",
+        "createdAt": "2026-07-30T19:38:07.219Z",
+        "updatedAt": "2026-07-30T19:38:07.219Z",
+        "impactLevel": "high",
+        "verificationPolicyId": "policy:workflow.acceptance.criterion:test_output",
+        "metadata": {
+          "origin": "acceptance",
+          "criterion": {
+            "id": "AC4",
+            "description": "Decision authorization, validation, server apply, and atomic persistence boundaries remain enforced.",
+            "status": "pass",
+            "evidence_refs": [
+              {
+                "kind": "command",
+                "excerpt": "npm run verify",
+                "summary": "Decision schema and domain validation, server apply, negative cases, and atomic persistence tests pass."
+              }
+            ],
+            "observed_commands": [
+              {
+                "command": "npm run verify",
+                "exit_code": 0,
+                "output_sha256": "a07e8880d81b3f93c24acac1e08cb334d382fcda8a8a7683464e5d75b0b6204c",
+                "test_count": 3,
+                "execution_proof": {
+                  "kind": "local-process-exit",
+                  "runner": "node --test",
+                  "static_test_units": 3
+                }
+              }
+            ],
+            "identity_version": 2,
+            "verified_at": "2026-07-30T19:38:07.219Z"
+          },
+          "workflow_subject_ref": "kontourai/survey#241"
+        },
+        "status": "verified"
+      },
+      {
+        "id": "kontourai-survey-241-ac5.flow-agents-workflow.survey-verification-installed-package-smoke-and-pinned-veritas-readiness-pass-verified-2026-07-30t19-38-07-219z",
+        "subjectType": "flow-step",
+        "subjectId": "kontourai-survey-241/AC5",
+        "facet": "flow-agents.workflow",
+        "claimType": "workflow.acceptance.criterion",
+        "fieldOrBehavior": "Survey verification, installed-package smoke, and pinned Veritas readiness pass.",
+        "value": "pass",
+        "createdAt": "2026-07-30T19:38:07.219Z",
+        "updatedAt": "2026-07-30T19:38:07.219Z",
+        "impactLevel": "high",
+        "verificationPolicyId": "policy:workflow.acceptance.criterion:test_output",
+        "metadata": {
+          "origin": "acceptance",
+          "criterion": {
+            "id": "AC5",
+            "description": "Survey verification, installed-package smoke, and pinned Veritas readiness pass.",
+            "status": "pass",
+            "evidence_refs": [
+              {
+                "kind": "command",
+                "excerpt": "npm run verify",
+                "summary": "Complete Survey verification and clean installed-package smoke pass."
+              }
+            ],
+            "observed_commands": [
+              {
+                "command": "npm run verify",
+                "exit_code": 0,
+                "output_sha256": "a07e8880d81b3f93c24acac1e08cb334d382fcda8a8a7683464e5d75b0b6204c",
+                "test_count": 3,
+                "execution_proof": {
+                  "kind": "local-process-exit",
+                  "runner": "node --test",
+                  "static_test_units": 3
+                }
+              }
+            ],
+            "identity_version": 2,
+            "verified_at": "2026-07-30T19:38:07.219Z"
+          },
+          "workflow_subject_ref": "kontourai/survey#241"
+        },
+        "status": "verified"
+      },
+      {
+        "id": "kontourai-survey-241-review-route-repair-572.flow-agents-workflow.independent-review-of-survey-mcp-modern-and-legacy-interoperability-apps-ui-metadata-protocol-text-safety-packaging-and-regressions-found-two-open-protocol-boundary-issues-interoperability-and-package-compliance-lanes-otherwise-passed-reviewed-2026-07-30t19-30-23-867z",
+        "subjectType": "workflow-critique",
+        "subjectId": "kontourai-survey-241/review-route-repair-572",
+        "facet": "flow-agents.workflow",
+        "claimType": "workflow.critique.review",
+        "fieldOrBehavior": "Independent review of Survey MCP modern and legacy interoperability, Apps UI metadata, protocol text safety, packaging, and regressions found two open protocol-boundary issues; interoperability and package-compliance lanes otherwise passed.",
+        "value": "fail",
+        "createdAt": "2026-07-30T19:30:23.867Z",
+        "updatedAt": "2026-07-30T19:30:23.867Z",
+        "impactLevel": "medium",
+        "verificationPolicyId": "policy:workflow.critique.review",
+        "metadata": {
+          "origin": "critique",
+          "reviewer": "codex:thread-a14f7525bd3bc6ceefbbd1d6:Kontour",
+          "reviewed_at": "2026-07-30T19:30:23.867Z",
+          "identity_version": 2,
+          "critique_sequence": 1,
+          "critique_predecessor_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+          "critique_record_hash": "5a1f40a07bc2452e1ac87d5c97ed275568bdc3fb2eb6ef654bb894bcbae2bd4a",
+          "findings": [
+            {
+              "id": "mcp-decision-schema-loses-conditional-reason",
+              "severity": "medium",
+              "status": "open",
+              "description": "src/mcp/review-mcp.ts:658-674 advertises reason as an optional plain string and no longer encodes the conditional non-empty requirement for decision=could-not-confirm. The handler defense at lines 438-440 prevents persistence, but schema-driven clients and validators receive a weaker public contract; tests/review-mcp.test.ts:475-483 confirms only the later isError response. Restore a discriminated or conditional schema requiring a non-empty reason for could-not-confirm, retain the domain defense, and assert the tools/list schema.",
+              "file_refs": [
+                "src/mcp/review-mcp.ts",
+                "tests/review-mcp.test.ts"
+              ]
+            },
+            {
+              "id": "successful-protocol-text-bypasses-sanitizer",
+              "severity": "medium",
+              "status": "open",
+              "description": "src/mcp/review-mcp.ts:69-134 builds successful text from producer-controlled names, targets, notes, values, source references, excerpts, and rationale; lines 356-418 and 516-526 return it unchanged. The sanitizer at lines 718-740 is applied only to caught errors, so C0, C1, and bidirectional controls can survive in successful MCP text and spoof terminal or agent rendering. Sanitize every text content item at the final MCP result boundary and add hostile success-payload regression tests while preserving newline, tab, and carriage-return semantics.",
+              "file_refs": [
+                "src/mcp/review-mcp.ts",
+                "tests/review-mcp.test.ts"
+              ]
+            }
+          ],
+          "lanes": [
+            {
+              "id": "code-review",
+              "status": "fail",
+              "summary": "The advertised decision input schema regressed the required cross-field could-not-confirm reason constraint, although domain validation remains intact.",
+              "evidence_refs": [
+                {
+                  "kind": "artifact",
+                  "file": "src/mcp/review-mcp.ts",
+                  "summary": "Reviewed registration schema and domain enforcement."
+                },
+                {
+                  "kind": "artifact",
+                  "file": "tests/review-mcp.test.ts",
+                  "summary": "Reviewed direct MCP decision tests."
+                }
+              ]
+            },
+            {
+              "id": "security-protocol",
+              "status": "fail",
+              "summary": "Successful producer-controlled text content bypasses the new protocol sanitizer, leaving terminal and bidirectional control characters intact.",
+              "evidence_refs": [
+                {
+                  "kind": "artifact",
+                  "file": "src/mcp/review-mcp.ts",
+                  "summary": "Reviewed text construction, tool result wrapping, and stderr diagnostics."
+                }
+              ]
+            },
+            {
+              "id": "modern-legacy-interop",
+              "status": "pass",
+              "summary": "Modern and frozen legacy clients initialize and complete representative operations through the same server factory.",
+              "evidence_refs": [
+                {
+                  "kind": "artifact",
+                  "file": "tests/review-mcp.test.ts",
+                  "summary": "Source integration tests cover modern and legacy clients."
+                },
+                {
+                  "kind": "artifact",
+                  "file": "tests/package-smoke/review-mcp-package.test.ts",
+                  "summary": "Clean-consumer packed artifact smoke covers modern and legacy clients."
+                }
+              ]
+            },
+            {
+              "id": "apps-ui",
+              "status": "pass",
+              "summary": "Apps extension advertisement is conditional, canonical nested UI metadata is emitted with compatibility metadata, and the self-contained resource is escaped with private zero-TTL cache hints.",
+              "evidence_refs": [
+                {
+                  "kind": "artifact",
+                  "file": "src/mcp/review-mcp.ts",
+                  "summary": "Reviewed Apps extension, tool metadata, and UI resource implementation."
+                },
+                {
+                  "kind": "artifact",
+                  "file": "tests/review-mcp.test.ts",
+                  "summary": "Reviewed Apps UI and no-UI protocol tests."
+                }
+              ]
+            },
+            {
+              "id": "package-compliance",
+              "status": "pass",
+              "summary": "The packed CLI declares exact unbundled runtime dependencies; clean-consumer package smoke passed and installed third-party packages carry their own license files.",
+              "evidence_refs": [
+                {
+                  "kind": "artifact",
+                  "file": "package.json",
+                  "summary": "Reviewed packed file set and runtime dependency declarations."
+                },
+                {
+                  "kind": "artifact",
+                  "file": "package-lock.json",
+                  "summary": "Reviewed resolved MCP and Zod dependency graph."
+                },
+                {
+                  "kind": "artifact",
+                  "file": "tests/package-smoke/review-mcp-package.test.ts",
+                  "summary": "Reviewed and ran clean-consumer packed artifact smoke."
+                }
+              ]
+            }
+          ],
+          "review_target": {
+            "artifacts": [
+              {
+                "file": ".kontourai/flow-agents/kontourai-survey-241/kontourai-survey-241--deliver.md",
+                "sha256": "73f28f6c0ee345568132e7dc4d983ac7f92bba2855ccd79b2366aa3694df6c28"
+              },
+              {
+                "file": "src/mcp/review-mcp.ts",
+                "sha256": "9f3a878e8b2806f1ffc8bb52d7dd9ee411ad887be97bbef9a133dded1cf9b423"
+              },
+              {
+                "file": "tests/review-mcp.test.ts",
+                "sha256": "5d20d8279efb2da8278211919a9b89f668353d51f605d83066e096a45a7d1809"
+              },
+              {
+                "file": "tests/package-smoke/review-mcp-package.test.ts",
+                "sha256": "52ea51fc5af4a071108f860c12240bb3d973a921bc235f623bdc1aadd9dcb7e5"
+              },
+              {
+                "file": "package.json",
+                "sha256": "d9466a282d7ca202661cef3595d2aee563d9e343a048774de59d86cb295ea6c2"
+              },
+              {
+                "file": "package-lock.json",
+                "sha256": "1e2855251bed9a0599ff8c77d3330e849c23659b9b334c078f9e4a546ec51497"
+              }
+            ],
+            "workspace_snapshot": {
+              "version": 1,
+              "kind": "git-worktree",
+              "algorithm": "sha256",
+              "digest": "5d79e4be77f73e904f4ecbf4fe2f4c53c627418b04f2cf4ed06ab7f8ffa49fd9",
+              "head_sha": "a3797b6a99561e94713836c567fdfb792793da7f"
+            }
+          },
+          "artifact_refs": [
+            ".kontourai/flow-agents/kontourai-survey-241/kontourai-survey-241--deliver.md",
+            "src/mcp/review-mcp.ts",
+            "tests/review-mcp.test.ts",
+            "tests/package-smoke/review-mcp-package.test.ts",
+            "package.json",
+            "package-lock.json"
+          ],
+          "workflow_subject_ref": "kontourai/survey#241",
+          "superseded_by": "critique:f032d752c3205adad32cec11dbfa1aa94cd5e0f27313003cf4c6e0250dc9398a",
+          "critique_resolution": {
+            "schema_version": "1.0",
+            "kind": "same-reviewer-recheck",
+            "prior_record_id": "critique:5a1f40a07bc2452e1ac87d5c97ed275568bdc3fb2eb6ef654bb894bcbae2bd4a",
+            "resolving_record_id": "critique:f032d752c3205adad32cec11dbfa1aa94cd5e0f27313003cf4c6e0250dc9398a",
+            "resolver": "codex:thread-a14f7525bd3bc6ceefbbd1d6:Kontour",
+            "resolved_lane_ids": [
+              "code-review",
+              "security-protocol"
+            ],
+            "resolved_finding_ids": [
+              "mcp-decision-schema-loses-conditional-reason",
+              "successful-protocol-text-bypasses-sanitizer"
+            ],
+            "resolved_at": "2026-07-30T19:37:43.147Z"
+          },
+          "critique_record_id": "critique:5a1f40a07bc2452e1ac87d5c97ed275568bdc3fb2eb6ef654bb894bcbae2bd4a"
+        },
+        "status": "superseded"
+      },
+      {
+        "id": "kontourai-survey-241-review-route-repair-572.flow-agents-workflow.clean-repair-review-at-exact-head-91ed919682195a397f39855b3b0885257168ee08-supersedes-prior-fail-critique-critique-5a1f40a07bc2452e1ac87d5c97ed275568bdc3fb2eb6ef654bb894bcbae2bd4a-both-schema-and-protocol-text-findings-are-fixed-with-no-remaining-findings-in-the-reviewed-delta-reviewed-2026-07-30t19-37-43-147z",
+        "subjectType": "workflow-critique",
+        "subjectId": "kontourai-survey-241/review-route-repair-572",
+        "facet": "flow-agents.workflow",
+        "claimType": "workflow.critique.review",
+        "fieldOrBehavior": "Clean repair review at exact HEAD 91ed919682195a397f39855b3b0885257168ee08 supersedes prior FAIL critique critique:5a1f40a07bc2452e1ac87d5c97ed275568bdc3fb2eb6ef654bb894bcbae2bd4a: both schema and protocol-text findings are fixed, with no remaining findings in the reviewed delta.",
+        "value": "pass",
+        "createdAt": "2026-07-30T19:37:43.147Z",
+        "updatedAt": "2026-07-30T19:37:43.147Z",
+        "impactLevel": "medium",
+        "verificationPolicyId": "policy:workflow.critique.review",
+        "metadata": {
+          "origin": "critique",
+          "reviewer": "codex:thread-a14f7525bd3bc6ceefbbd1d6:Kontour",
+          "reviewed_at": "2026-07-30T19:37:43.147Z",
+          "identity_version": 2,
+          "critique_sequence": 2,
+          "critique_predecessor_hash": "5a1f40a07bc2452e1ac87d5c97ed275568bdc3fb2eb6ef654bb894bcbae2bd4a",
+          "critique_record_hash": "f032d752c3205adad32cec11dbfa1aa94cd5e0f27313003cf4c6e0250dc9398a",
+          "findings": [
+            {
+              "id": "mcp-decision-schema-loses-conditional-reason",
+              "severity": "medium",
+              "status": "fixed",
+              "description": "Resolved from prior FAIL critique critique:5a1f40a07bc2452e1ac87d5c97ed275568bdc3fb2eb6ef654bb894bcbae2bd4a. src/mcp/review-mcp.ts:658-683 now advertises a discriminated could-not-confirm branch whose reason is trimmed, required, and minLength one; handler defense remains at lines 438-440, and tests assert the branch required set and invalid missing-reason call.",
+              "file_refs": [
+                "src/mcp/review-mcp.ts",
+                "tests/review-mcp.test.ts"
+              ]
+            },
+            {
+              "id": "successful-protocol-text-bypasses-sanitizer",
+              "severity": "medium",
+              "status": "fixed",
+              "description": "Resolved from prior FAIL critique critique:5a1f40a07bc2452e1ac87d5c97ed275568bdc3fb2eb6ef654bb894bcbae2bd4a. src/mcp/review-mcp.ts:735-773 sanitizes successful tool text and embedded resource content, while the direct resources/read response sanitizes resource text at line 723; the hostile-content regression exercises both tools/call and resources/read and rejects C0, C1, and bidirectional controls.",
+              "file_refs": [
+                "src/mcp/review-mcp.ts",
+                "tests/review-mcp.test.ts"
+              ]
+            }
+          ],
+          "lanes": [
+            {
+              "id": "code-review",
+              "status": "pass",
+              "summary": "The could-not-confirm branch now uses a discriminated Zod schema with a trimmed, required, non-empty reason while retaining domain validation.",
+              "evidence_refs": [
+                {
+                  "kind": "artifact",
+                  "file": "src/mcp/review-mcp.ts",
+                  "summary": "Reviewed repaired decision schema and handler dispatch."
+                },
+                {
+                  "kind": "artifact",
+                  "file": "tests/review-mcp.test.ts",
+                  "summary": "Reviewed schema advertisement and invalid-call regressions."
+                }
+              ]
+            },
+            {
+              "id": "security-protocol",
+              "status": "pass",
+              "summary": "C0, C1, and bidirectional controls are removed from successful tool text, embedded resource text, direct resources/read text, and error diagnostics.",
+              "evidence_refs": [
+                {
+                  "kind": "artifact",
+                  "file": "src/mcp/review-mcp.ts",
+                  "summary": "Reviewed final tool and direct-resource sanitation boundaries."
+                },
+                {
+                  "kind": "artifact",
+                  "file": "tests/review-mcp.test.ts",
+                  "summary": "Reviewed and ran hostile producer-content regressions for tools/call and resources/read."
+                }
+              ]
+            },
+            {
+              "id": "modern-legacy-interop",
+              "status": "pass",
+              "summary": "The rebuilt packed CLI still serves representative modern and frozen-legacy MCP operations from a clean consumer.",
+              "evidence_refs": [
+                {
+                  "kind": "artifact",
+                  "file": "tests/package-smoke/review-mcp-package.test.ts",
+                  "summary": "Reviewed and ran the clean-consumer packed artifact smoke."
+                },
+                {
+                  "kind": "artifact",
+                  "file": "package.json",
+                  "summary": "Reviewed packed runtime dependency and file declarations."
+                }
+              ]
+            },
+            {
+              "id": "repair-regression",
+              "status": "pass",
+              "summary": "The focused MCP suite passed 11 of 11 tests and package smoke passed 1 of 1 at the reviewed head; the supplied full npm run verify evidence also reports success.",
+              "evidence_refs": [
+                {
+                  "kind": "artifact",
+                  "file": "tests/review-mcp.test.ts",
+                  "summary": "Focused schema, sanitation, Apps, and interoperability tests."
+                },
+                {
+                  "kind": "artifact",
+                  "file": ".kontourai/flow-agents/kontourai-survey-241/kontourai-survey-241--deliver.md",
+                  "summary": "Delivery and verification scope reviewed alongside the repair delta."
+                }
+              ]
+            }
+          ],
+          "review_target": {
+            "artifacts": [
+              {
+                "file": ".kontourai/flow-agents/kontourai-survey-241/kontourai-survey-241--deliver.md",
+                "sha256": "73f28f6c0ee345568132e7dc4d983ac7f92bba2855ccd79b2366aa3694df6c28"
+              },
+              {
+                "file": "src/mcp/review-mcp.ts",
+                "sha256": "af4d4b4b3b7c1ffba95a3115cb871f6aed5ce32da6b5f4a30dac0912c088cd18"
+              },
+              {
+                "file": "tests/review-mcp.test.ts",
+                "sha256": "6e791067ca8d65ee9b1959c191c2d348c56fd23cf18f62ee7f83c67634a6f6ea"
+              },
+              {
+                "file": "tests/package-smoke/review-mcp-package.test.ts",
+                "sha256": "52ea51fc5af4a071108f860c12240bb3d973a921bc235f623bdc1aadd9dcb7e5"
+              },
+              {
+                "file": "package.json",
+                "sha256": "d9466a282d7ca202661cef3595d2aee563d9e343a048774de59d86cb295ea6c2"
+              },
+              {
+                "file": "package-lock.json",
+                "sha256": "1e2855251bed9a0599ff8c77d3330e849c23659b9b334c078f9e4a546ec51497"
+              }
+            ],
+            "workspace_snapshot": {
+              "version": 1,
+              "kind": "git-worktree",
+              "algorithm": "sha256",
+              "digest": "a35ea888f43c2f55622dd280b242dea64f5055e4d0db2a7338d4fbef332f5a24",
+              "head_sha": "91ed919682195a397f39855b3b0885257168ee08"
+            }
+          },
+          "artifact_refs": [
+            ".kontourai/flow-agents/kontourai-survey-241/kontourai-survey-241--deliver.md",
+            "src/mcp/review-mcp.ts",
+            "tests/review-mcp.test.ts",
+            "tests/package-smoke/review-mcp-package.test.ts",
+            "package.json",
+            "package-lock.json"
+          ],
+          "workflow_subject_ref": "kontourai/survey#241",
+          "critique_record_id": "critique:f032d752c3205adad32cec11dbfa1aa94cd5e0f27313003cf4c6e0250dc9398a"
+        },
+        "status": "verified"
+      }
+    ],
+    "evidence": [
+      {
+        "id": "ev:kontourai-survey-241-gate-claim-selected-work.flow-agents-workflow.work-item-kontourai-survey-241-is-durably-assigned-to-the-active-workflow-actor-assignment-sha256-8af6ce163371bede1d794736b783e8e4ab1fc00e12a5f984edf5f137f1d36c1a-gate-visit-2026-07-30t15-13-59z",
+        "claimId": "kontourai-survey-241-gate-claim-selected-work.flow-agents-workflow.work-item-kontourai-survey-241-is-durably-assigned-to-the-active-workflow-actor-assignment-sha256-8af6ce163371bede1d794736b783e8e4ab1fc00e12a5f984edf5f137f1d36c1a-gate-visit-2026-07-30t15-13-59z",
+        "evidenceType": "attestation",
+        "method": "corroboration",
+        "sourceRef": "kontourai-survey-241/evidence.json",
+        "excerptOrSummary": "Work Item kontourai/survey#241 is durably assigned to the active workflow actor (assignment sha256:8af6ce163371bede1d794736b783e8e4ab1fc00e12a5f984edf5f137f1d36c1a).",
+        "observedAt": "2026-07-30T19:45:25.902Z",
+        "collectedBy": "flow-agents/workflow-sidecar",
+        "passing": true
+      },
+      {
+        "id": "ev:kontourai-survey-241-gate-claim-pickup-probe-readiness.flow-agents-workflow.pickup-probe-confirms-survey-241-is-ready-scope-ownership-current-revision-authorization-boundary-risks-and-rollback-are-explicit-gate-visit-2026-07-30t15-14-11-305z",
+        "claimId": "kontourai-survey-241-gate-claim-pickup-probe-readiness.flow-agents-workflow.pickup-probe-confirms-survey-241-is-ready-scope-ownership-current-revision-authorization-boundary-risks-and-rollback-are-explicit-gate-visit-2026-07-30t15-14-11-305z",
+        "evidenceType": "attestation",
+        "method": "corroboration",
+        "sourceRef": "kontourai-survey-241/evidence.json",
+        "excerptOrSummary": "Pickup probe confirms Survey #241 is ready: scope, ownership, current revision, authorization boundary, risks, and rollback are explicit.",
+        "observedAt": "2026-07-30T19:45:25.902Z",
+        "collectedBy": "flow-agents/workflow-sidecar",
+        "passing": true
+      },
+      {
+        "id": "ev:kontourai-survey-241-gate-claim-probe-decisions-or-accepted-gaps.flow-agents-workflow.protocol-legacy-apps-metadata-server-authorization-package-and-verification-decisions-are-explicit-no-accepted-gaps-remain-gate-visit-2026-07-30t15-14-11-585z",
+        "claimId": "kontourai-survey-241-gate-claim-probe-decisions-or-accepted-gaps.flow-agents-workflow.protocol-legacy-apps-metadata-server-authorization-package-and-verification-decisions-are-explicit-no-accepted-gaps-remain-gate-visit-2026-07-30t15-14-11-585z",
+        "evidenceType": "attestation",
+        "method": "corroboration",
+        "sourceRef": "kontourai-survey-241/evidence.json",
+        "excerptOrSummary": "Protocol, legacy, Apps metadata, server authorization, package, and verification decisions are explicit; no accepted gaps remain.",
+        "observedAt": "2026-07-30T19:45:25.902Z",
+        "collectedBy": "flow-agents/workflow-sidecar",
+        "passing": true
+      },
+      {
+        "id": "ev:kontourai-survey-241-gate-claim-implementation-plan.flow-agents-workflow.implementation-plan-binds-the-official-dual-era-server-to-survey-s-existing-server-owned-review-apply-boundary-bidirectional-fixtures-installed-package-proof-docs-rollback-and-ac1-ac5-gate-visit-2026-07-30t15-15-39-445z",
+        "claimId": "kontourai-survey-241-gate-claim-implementation-plan.flow-agents-workflow.implementation-plan-binds-the-official-dual-era-server-to-survey-s-existing-server-owned-review-apply-boundary-bidirectional-fixtures-installed-package-proof-docs-rollback-and-ac1-ac5-gate-visit-2026-07-30t15-15-39-445z",
+        "evidenceType": "attestation",
+        "method": "corroboration",
+        "sourceRef": "kontourai-survey-241/evidence.json",
+        "excerptOrSummary": "Implementation plan binds the official dual-era server to Survey's existing server-owned review apply boundary, bidirectional fixtures, installed-package proof, docs, rollback, and AC1-AC5.",
+        "observedAt": "2026-07-30T19:45:25.902Z",
+        "collectedBy": "flow-agents/workflow-sidecar",
+        "passing": true
+      },
+      {
+        "id": "ev:kontourai-survey-241-gate-claim-implementation-scope.flow-agents-workflow.implemented-the-bounded-survey-mcp-dual-era-runtime-protocol-tests-installed-package-proof-and-durable-docs-without-changing-review-policy-session-schema-or-projection-semantics-gate-visit-2026-07-30t15-27-32-265z",
+        "claimId": "kontourai-survey-241-gate-claim-implementation-scope.flow-agents-workflow.implemented-the-bounded-survey-mcp-dual-era-runtime-protocol-tests-installed-package-proof-and-durable-docs-without-changing-review-policy-session-schema-or-projection-semantics-gate-visit-2026-07-30t15-27-32-265z",
+        "evidenceType": "attestation",
+        "method": "corroboration",
+        "sourceRef": "kontourai-survey-241/evidence.json",
+        "excerptOrSummary": "Implemented the bounded Survey MCP dual-era runtime, protocol tests, installed-package proof, and durable docs without changing review policy, session schema, or projection semantics.",
+        "observedAt": "2026-07-30T19:45:25.902Z",
+        "collectedBy": "flow-agents/workflow-sidecar",
+        "passing": true
+      },
+      {
+        "id": "ev:kontourai-survey-241-gate-claim-tests-evidence.flow-agents-workflow.survey-mcp-dual-era-implementation-passes-the-complete-repository-verification-at-91ed919-688-core-tests-including-schema-and-direct-resource-sanitization-regressions-clean-installed-modern-legacy-package-smoke-120-browser-tests-with-4-intentional-skips-and-concurrent-playwright-isolation-gate-visit-2026-07-30t19-38-07-219z",
+        "claimId": "kontourai-survey-241-gate-claim-tests-evidence.flow-agents-workflow.survey-mcp-dual-era-implementation-passes-the-complete-repository-verification-at-91ed919-688-core-tests-including-schema-and-direct-resource-sanitization-regressions-clean-installed-modern-legacy-package-smoke-120-browser-tests-with-4-intentional-skips-and-concurrent-playwright-isolation-gate-visit-2026-07-30t19-38-07-219z",
+        "evidenceType": "test_output",
+        "method": "validation",
+        "sourceRef": "kontourai-survey-241/command-log.jsonl",
+        "excerptOrSummary": "Survey MCP dual-era implementation passes the complete repository verification at 91ed919: 688 core tests including schema and direct-resource sanitization regressions, clean installed modern/legacy package smoke, 120 browser tests with 4 intentional skips, and concurrent Playwright isolation.",
+        "observedAt": "2026-07-30T19:45:25.902Z",
+        "collectedBy": "flow-agents/evidence-capture",
+        "passing": true,
+        "execution": {
+          "runner": "bash",
+          "label": "npm run verify",
+          "isError": false,
+          "exitCode": 0
+        }
+      },
+      {
+        "id": "ev:kontourai-survey-241-gate-claim-merge-readiness.flow-agents-workflow.pass-survey-source-head-91ed919-is-scope-clean-ac1-ac5-have-command-backed-evidence-the-initial-protocol-findings-are-repaired-the-exact-head-independent-critique-is-clean-and-local-provider-product-checks-pass-trust-verify-awaits-provisional-delivery-gate-visit-2026-07-30t19-39-24-816z",
+        "claimId": "kontourai-survey-241-gate-claim-merge-readiness.flow-agents-workflow.pass-survey-source-head-91ed919-is-scope-clean-ac1-ac5-have-command-backed-evidence-the-initial-protocol-findings-are-repaired-the-exact-head-independent-critique-is-clean-and-local-provider-product-checks-pass-trust-verify-awaits-provisional-delivery-gate-visit-2026-07-30t19-39-24-816z",
+        "evidenceType": "attestation",
+        "method": "corroboration",
+        "sourceRef": "kontourai-survey-241/evidence.json",
+        "excerptOrSummary": "PASS: Survey source head 91ed919 is scope-clean, AC1-AC5 have command-backed evidence, the initial protocol findings are repaired, the exact-head independent critique is clean, and local/provider product checks pass; Trust Verify awaits provisional delivery.",
+        "observedAt": "2026-07-30T19:45:25.902Z",
+        "collectedBy": "flow-agents/workflow-sidecar",
+        "passing": true
+      },
+      {
+        "id": "ev:kontourai-survey-241-gate-claim-ci-merge-readiness.flow-agents-workflow.merge-exact-source-and-provisional-delivery-revisions-passed-acceptance-independent-review-evidence-gate-governance-and-every-required-provider-check-rollback-and-post-merge-verification-are-recorded-gate-visit-2026-07-30t19-44-58-333z",
+        "claimId": "kontourai-survey-241-gate-claim-ci-merge-readiness.flow-agents-workflow.merge-exact-source-and-provisional-delivery-revisions-passed-acceptance-independent-review-evidence-gate-governance-and-every-required-provider-check-rollback-and-post-merge-verification-are-recorded-gate-visit-2026-07-30t19-44-58-333z",
+        "evidenceType": "attestation",
+        "method": "corroboration",
+        "sourceRef": "kontourai-survey-241/evidence.json",
+        "excerptOrSummary": "MERGE: exact source and provisional delivery revisions passed acceptance, independent review, evidence gate, governance, and every required provider check; rollback and post-merge verification are recorded.",
+        "observedAt": "2026-07-30T19:45:25.902Z",
+        "collectedBy": "flow-agents/workflow-sidecar",
+        "passing": true
+      },
+      {
+        "id": "ev:kontourai-survey-241-gate-claim-decision-evidence.flow-agents-workflow.survey-s-merge-decision-repaired-review-findings-and-retained-protocol-boundary-contracts-are-recorded-with-exact-source-and-delivery-evidence-gate-visit-2026-07-30t19-45-25-221z",
+        "claimId": "kontourai-survey-241-gate-claim-decision-evidence.flow-agents-workflow.survey-s-merge-decision-repaired-review-findings-and-retained-protocol-boundary-contracts-are-recorded-with-exact-source-and-delivery-evidence-gate-visit-2026-07-30t19-45-25-221z",
+        "evidenceType": "attestation",
+        "method": "corroboration",
+        "sourceRef": "kontourai-survey-241/evidence.json",
+        "excerptOrSummary": "Survey's merge decision, repaired review findings, and retained protocol-boundary contracts are recorded with exact source and delivery evidence.",
+        "observedAt": "2026-07-30T19:45:25.902Z",
+        "collectedBy": "flow-agents/workflow-sidecar",
+        "passing": true
+      },
+      {
+        "id": "ev:kontourai-survey-241-gate-claim-learning-evidence.flow-agents-workflow.the-two-independent-review-gaps-were-repaired-and-regression-routed-exact-head-review-and-all-required-checks-are-clean-with-no-unresolved-follow-up-gate-visit-2026-07-30t19-45-25-902z",
+        "claimId": "kontourai-survey-241-gate-claim-learning-evidence.flow-agents-workflow.the-two-independent-review-gaps-were-repaired-and-regression-routed-exact-head-review-and-all-required-checks-are-clean-with-no-unresolved-follow-up-gate-visit-2026-07-30t19-45-25-902z",
+        "evidenceType": "attestation",
+        "method": "corroboration",
+        "sourceRef": "kontourai-survey-241/evidence.json",
+        "excerptOrSummary": "The two independent-review gaps were repaired and regression-routed; exact-head review and all required checks are clean with no unresolved follow-up.",
+        "observedAt": "2026-07-30T19:45:25.902Z",
+        "collectedBy": "flow-agents/workflow-sidecar",
+        "passing": true
+      },
+      {
+        "id": "ev:kontourai-survey-241-ac1.flow-agents-workflow.a-modern-client-discovers-survey-and-completes-representative-queue-item-decision-and-resource-operations-with-required-result-metadata-verified-2026-07-30t19-38-07-219z:e492cb588e46dc93",
+        "claimId": "kontourai-survey-241-ac1.flow-agents-workflow.a-modern-client-discovers-survey-and-completes-representative-queue-item-decision-and-resource-operations-with-required-result-metadata-verified-2026-07-30t19-38-07-219z",
+        "evidenceType": "test_output",
+        "method": "validation",
+        "sourceRef": "kontourai-survey-241/observed-command",
+        "excerptOrSummary": "npm run verify",
+        "observedAt": "2026-07-30T19:38:07.219Z",
+        "collectedBy": "flow-agents/workflow-sidecar",
+        "passing": true,
+        "execution": {
+          "runner": "bash",
+          "label": "npm run verify",
+          "isError": false,
+          "exitCode": 0
+        }
+      },
+      {
+        "id": "ev:kontourai-survey-241-ac2.flow-agents-workflow.a-frozen-legacy-client-initializes-and-completes-equivalent-representative-operations-against-the-same-server-factory-verified-2026-07-30t19-38-07-219z:e492cb588e46dc93",
+        "claimId": "kontourai-survey-241-ac2.flow-agents-workflow.a-frozen-legacy-client-initializes-and-completes-equivalent-representative-operations-against-the-same-server-factory-verified-2026-07-30t19-38-07-219z",
+        "evidenceType": "test_output",
+        "method": "validation",
+        "sourceRef": "kontourai-survey-241/observed-command",
+        "excerptOrSummary": "npm run verify",
+        "observedAt": "2026-07-30T19:38:07.219Z",
+        "collectedBy": "flow-agents/workflow-sidecar",
+        "passing": true,
+        "execution": {
+          "runner": "bash",
+          "label": "npm run verify",
+          "isError": false,
+          "exitCode": 0
+        }
+      },
+      {
+        "id": "ev:kontourai-survey-241-ac3.flow-agents-workflow.the-apps-extension-and-canonical-nested-ui-metadata-are-advertised-and-the-self-contained-review-resource-still-renders-verified-2026-07-30t19-38-07-219z:e492cb588e46dc93",
+        "claimId": "kontourai-survey-241-ac3.flow-agents-workflow.the-apps-extension-and-canonical-nested-ui-metadata-are-advertised-and-the-self-contained-review-resource-still-renders-verified-2026-07-30t19-38-07-219z",
+        "evidenceType": "test_output",
+        "method": "validation",
+        "sourceRef": "kontourai-survey-241/observed-command",
+        "excerptOrSummary": "npm run verify",
+        "observedAt": "2026-07-30T19:38:07.219Z",
+        "collectedBy": "flow-agents/workflow-sidecar",
+        "passing": true,
+        "execution": {
+          "runner": "bash",
+          "label": "npm run verify",
+          "isError": false,
+          "exitCode": 0
+        }
+      },
+      {
+        "id": "ev:kontourai-survey-241-ac4.flow-agents-workflow.decision-authorization-validation-server-apply-and-atomic-persistence-boundaries-remain-enforced-verified-2026-07-30t19-38-07-219z:e492cb588e46dc93",
+        "claimId": "kontourai-survey-241-ac4.flow-agents-workflow.decision-authorization-validation-server-apply-and-atomic-persistence-boundaries-remain-enforced-verified-2026-07-30t19-38-07-219z",
+        "evidenceType": "test_output",
+        "method": "validation",
+        "sourceRef": "kontourai-survey-241/observed-command",
+        "excerptOrSummary": "npm run verify",
+        "observedAt": "2026-07-30T19:38:07.219Z",
+        "collectedBy": "flow-agents/workflow-sidecar",
+        "passing": true,
+        "execution": {
+          "runner": "bash",
+          "label": "npm run verify",
+          "isError": false,
+          "exitCode": 0
+        }
+      },
+      {
+        "id": "ev:kontourai-survey-241-ac5.flow-agents-workflow.survey-verification-installed-package-smoke-and-pinned-veritas-readiness-pass-verified-2026-07-30t19-38-07-219z:e492cb588e46dc93",
+        "claimId": "kontourai-survey-241-ac5.flow-agents-workflow.survey-verification-installed-package-smoke-and-pinned-veritas-readiness-pass-verified-2026-07-30t19-38-07-219z",
+        "evidenceType": "test_output",
+        "method": "validation",
+        "sourceRef": "kontourai-survey-241/observed-command",
+        "excerptOrSummary": "npm run verify",
+        "observedAt": "2026-07-30T19:38:07.219Z",
+        "collectedBy": "flow-agents/workflow-sidecar",
+        "passing": true,
+        "execution": {
+          "runner": "bash",
+          "label": "npm run verify",
+          "isError": false,
+          "exitCode": 0
+        }
+      }
+    ],
+    "policies": [
+      {
+        "id": "policy:workflow.check.external:attestation",
+        "claimType": "workflow.check.external",
+        "requiredEvidence": [
+          "attestation"
+        ],
+        "acceptanceCriteria": [
+          "A verified verification event must support a workflow.check.external claim."
+        ],
+        "reviewAuthority": "system",
+        "validityRule": {
+          "kind": "manual"
+        },
+        "stalenessTriggers": [],
+        "conflictRules": [],
+        "impactLevel": "high"
+      },
+      {
+        "id": "policy:builder.pull-work.selected:attestation",
+        "claimType": "builder.pull-work.selected",
+        "requiredEvidence": [
+          "attestation"
+        ],
+        "acceptanceCriteria": [
+          "A verified verification event must support a builder.pull-work.selected claim."
+        ],
+        "reviewAuthority": "system",
+        "validityRule": {
+          "kind": "manual"
+        },
+        "stalenessTriggers": [],
+        "conflictRules": [],
+        "impactLevel": "high"
+      },
+      {
+        "id": "policy:builder.design-probe.pickup-readiness:attestation",
+        "claimType": "builder.design-probe.pickup-readiness",
+        "requiredEvidence": [
+          "attestation"
+        ],
+        "acceptanceCriteria": [
+          "A verified verification event must support a builder.design-probe.pickup-readiness claim."
+        ],
+        "reviewAuthority": "system",
+        "validityRule": {
+          "kind": "manual"
+        },
+        "stalenessTriggers": [],
+        "conflictRules": [],
+        "impactLevel": "high"
+      },
+      {
+        "id": "policy:builder.design-probe.decisions:attestation",
+        "claimType": "builder.design-probe.decisions",
+        "requiredEvidence": [
+          "attestation"
+        ],
+        "acceptanceCriteria": [
+          "A verified verification event must support a builder.design-probe.decisions claim."
+        ],
+        "reviewAuthority": "system",
+        "validityRule": {
+          "kind": "manual"
+        },
+        "stalenessTriggers": [],
+        "conflictRules": [],
+        "impactLevel": "high"
+      },
+      {
+        "id": "policy:builder.plan.implementation:attestation",
+        "claimType": "builder.plan.implementation",
+        "requiredEvidence": [
+          "attestation"
+        ],
+        "acceptanceCriteria": [
+          "A verified verification event must support a builder.plan.implementation claim."
+        ],
+        "reviewAuthority": "system",
+        "validityRule": {
+          "kind": "manual"
+        },
+        "stalenessTriggers": [],
+        "conflictRules": [],
+        "impactLevel": "high"
+      },
+      {
+        "id": "policy:builder.execute.scope:attestation",
+        "claimType": "builder.execute.scope",
+        "requiredEvidence": [
+          "attestation"
+        ],
+        "acceptanceCriteria": [
+          "A verified verification event must support a builder.execute.scope claim."
+        ],
+        "reviewAuthority": "system",
+        "validityRule": {
+          "kind": "manual"
+        },
+        "stalenessTriggers": [],
+        "conflictRules": [],
+        "impactLevel": "high"
+      },
+      {
+        "id": "policy:workflow.check.command:test_output",
+        "claimType": "workflow.check.command",
+        "requiredEvidence": [
+          "test_output"
+        ],
+        "acceptanceCriteria": [
+          "A verified verification event must support a workflow.check.command claim."
+        ],
+        "reviewAuthority": "system",
+        "validityRule": {
+          "kind": "manual"
+        },
+        "stalenessTriggers": [],
+        "conflictRules": [],
+        "impactLevel": "high"
+      },
+      {
+        "id": "policy:builder.verify.tests:test_output",
+        "claimType": "builder.verify.tests",
+        "requiredEvidence": [
+          "test_output"
+        ],
+        "acceptanceCriteria": [
+          "A verified verification event must support a builder.verify.tests claim."
+        ],
+        "reviewAuthority": "system",
+        "validityRule": {
+          "kind": "manual"
+        },
+        "stalenessTriggers": [],
+        "conflictRules": [],
+        "impactLevel": "high"
+      },
+      {
+        "id": "policy:builder.merge-ready.readiness:attestation",
+        "claimType": "builder.merge-ready.readiness",
+        "requiredEvidence": [
+          "attestation"
+        ],
+        "acceptanceCriteria": [
+          "A verified verification event must support a builder.merge-ready.readiness claim."
+        ],
+        "reviewAuthority": "system",
+        "validityRule": {
+          "kind": "manual"
+        },
+        "stalenessTriggers": [],
+        "conflictRules": [],
+        "impactLevel": "high"
+      },
+      {
+        "id": "policy:builder.merge-ready-ci.readiness:attestation",
+        "claimType": "builder.merge-ready-ci.readiness",
+        "requiredEvidence": [
+          "attestation"
+        ],
+        "acceptanceCriteria": [
+          "A verified verification event must support a builder.merge-ready-ci.readiness claim."
+        ],
+        "reviewAuthority": "system",
+        "validityRule": {
+          "kind": "manual"
+        },
+        "stalenessTriggers": [],
+        "conflictRules": [],
+        "impactLevel": "high"
+      },
+      {
+        "id": "policy:builder.learn.decisions:attestation",
+        "claimType": "builder.learn.decisions",
+        "requiredEvidence": [
+          "attestation"
+        ],
+        "acceptanceCriteria": [
+          "A verified verification event must support a builder.learn.decisions claim."
+        ],
+        "reviewAuthority": "system",
+        "validityRule": {
+          "kind": "manual"
+        },
+        "stalenessTriggers": [],
+        "conflictRules": [],
+        "impactLevel": "high"
+      },
+      {
+        "id": "policy:builder.learn.evidence:attestation",
+        "claimType": "builder.learn.evidence",
+        "requiredEvidence": [
+          "attestation"
+        ],
+        "acceptanceCriteria": [
+          "A verified verification event must support a builder.learn.evidence claim."
+        ],
+        "reviewAuthority": "system",
+        "validityRule": {
+          "kind": "manual"
+        },
+        "stalenessTriggers": [],
+        "conflictRules": [],
+        "impactLevel": "high"
+      },
+      {
+        "id": "policy:workflow.acceptance.criterion:test_output",
+        "claimType": "workflow.acceptance.criterion",
+        "requiredEvidence": [
+          "test_output"
+        ],
+        "acceptanceCriteria": [
+          "A verified verification event must support a workflow.acceptance.criterion claim."
+        ],
+        "reviewAuthority": "system",
+        "validityRule": {
+          "kind": "manual"
+        },
+        "stalenessTriggers": [],
+        "conflictRules": [],
+        "impactLevel": "high"
+      },
+      {
+        "id": "policy:workflow.critique.review",
+        "claimType": "workflow.critique.review",
+        "requiredEvidence": [],
+        "acceptanceCriteria": [
+          "A verified verification event must support a workflow.critique.review claim."
+        ],
+        "reviewAuthority": "system",
+        "validityRule": {
+          "kind": "manual"
+        },
+        "stalenessTriggers": [],
+        "conflictRules": [],
+        "impactLevel": "medium"
+      }
+    ],
+    "events": [
+      {
+        "id": "evt:kontourai-survey-241-gate-claim-selected-work.flow-agents-workflow.work-item-kontourai-survey-241-is-durably-assigned-to-the-active-workflow-actor-assignment-sha256-8af6ce163371bede1d794736b783e8e4ab1fc00e12a5f984edf5f137f1d36c1a-gate-visit-2026-07-30t15-13-59z",
+        "claimId": "kontourai-survey-241-gate-claim-selected-work.flow-agents-workflow.work-item-kontourai-survey-241-is-durably-assigned-to-the-active-workflow-actor-assignment-sha256-8af6ce163371bede1d794736b783e8e4ab1fc00e12a5f984edf5f137f1d36c1a-gate-visit-2026-07-30t15-13-59z",
+        "status": "verified",
+        "actor": "flow-agents/workflow-sidecar",
+        "method": "validation",
+        "evidenceIds": [
+          "ev:kontourai-survey-241-gate-claim-selected-work.flow-agents-workflow.work-item-kontourai-survey-241-is-durably-assigned-to-the-active-workflow-actor-assignment-sha256-8af6ce163371bede1d794736b783e8e4ab1fc00e12a5f984edf5f137f1d36c1a-gate-visit-2026-07-30t15-13-59z"
+        ],
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "verifiedAt": "2026-07-30T19:45:25.902Z"
+      },
+      {
+        "id": "evt:kontourai-survey-241-gate-claim-pickup-probe-readiness.flow-agents-workflow.pickup-probe-confirms-survey-241-is-ready-scope-ownership-current-revision-authorization-boundary-risks-and-rollback-are-explicit-gate-visit-2026-07-30t15-14-11-305z",
+        "claimId": "kontourai-survey-241-gate-claim-pickup-probe-readiness.flow-agents-workflow.pickup-probe-confirms-survey-241-is-ready-scope-ownership-current-revision-authorization-boundary-risks-and-rollback-are-explicit-gate-visit-2026-07-30t15-14-11-305z",
+        "status": "verified",
+        "actor": "flow-agents/workflow-sidecar",
+        "method": "validation",
+        "evidenceIds": [
+          "ev:kontourai-survey-241-gate-claim-pickup-probe-readiness.flow-agents-workflow.pickup-probe-confirms-survey-241-is-ready-scope-ownership-current-revision-authorization-boundary-risks-and-rollback-are-explicit-gate-visit-2026-07-30t15-14-11-305z"
+        ],
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "verifiedAt": "2026-07-30T19:45:25.902Z"
+      },
+      {
+        "id": "evt:kontourai-survey-241-gate-claim-probe-decisions-or-accepted-gaps.flow-agents-workflow.protocol-legacy-apps-metadata-server-authorization-package-and-verification-decisions-are-explicit-no-accepted-gaps-remain-gate-visit-2026-07-30t15-14-11-585z",
+        "claimId": "kontourai-survey-241-gate-claim-probe-decisions-or-accepted-gaps.flow-agents-workflow.protocol-legacy-apps-metadata-server-authorization-package-and-verification-decisions-are-explicit-no-accepted-gaps-remain-gate-visit-2026-07-30t15-14-11-585z",
+        "status": "verified",
+        "actor": "flow-agents/workflow-sidecar",
+        "method": "validation",
+        "evidenceIds": [
+          "ev:kontourai-survey-241-gate-claim-probe-decisions-or-accepted-gaps.flow-agents-workflow.protocol-legacy-apps-metadata-server-authorization-package-and-verification-decisions-are-explicit-no-accepted-gaps-remain-gate-visit-2026-07-30t15-14-11-585z"
+        ],
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "verifiedAt": "2026-07-30T19:45:25.902Z"
+      },
+      {
+        "id": "evt:kontourai-survey-241-gate-claim-implementation-plan.flow-agents-workflow.implementation-plan-binds-the-official-dual-era-server-to-survey-s-existing-server-owned-review-apply-boundary-bidirectional-fixtures-installed-package-proof-docs-rollback-and-ac1-ac5-gate-visit-2026-07-30t15-15-39-445z",
+        "claimId": "kontourai-survey-241-gate-claim-implementation-plan.flow-agents-workflow.implementation-plan-binds-the-official-dual-era-server-to-survey-s-existing-server-owned-review-apply-boundary-bidirectional-fixtures-installed-package-proof-docs-rollback-and-ac1-ac5-gate-visit-2026-07-30t15-15-39-445z",
+        "status": "verified",
+        "actor": "flow-agents/workflow-sidecar",
+        "method": "validation",
+        "evidenceIds": [
+          "ev:kontourai-survey-241-gate-claim-implementation-plan.flow-agents-workflow.implementation-plan-binds-the-official-dual-era-server-to-survey-s-existing-server-owned-review-apply-boundary-bidirectional-fixtures-installed-package-proof-docs-rollback-and-ac1-ac5-gate-visit-2026-07-30t15-15-39-445z"
+        ],
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "verifiedAt": "2026-07-30T19:45:25.902Z"
+      },
+      {
+        "id": "evt:kontourai-survey-241-gate-claim-implementation-scope.flow-agents-workflow.implemented-the-bounded-survey-mcp-dual-era-runtime-protocol-tests-installed-package-proof-and-durable-docs-without-changing-review-policy-session-schema-or-projection-semantics-gate-visit-2026-07-30t15-27-32-265z",
+        "claimId": "kontourai-survey-241-gate-claim-implementation-scope.flow-agents-workflow.implemented-the-bounded-survey-mcp-dual-era-runtime-protocol-tests-installed-package-proof-and-durable-docs-without-changing-review-policy-session-schema-or-projection-semantics-gate-visit-2026-07-30t15-27-32-265z",
+        "status": "verified",
+        "actor": "flow-agents/workflow-sidecar",
+        "method": "validation",
+        "evidenceIds": [
+          "ev:kontourai-survey-241-gate-claim-implementation-scope.flow-agents-workflow.implemented-the-bounded-survey-mcp-dual-era-runtime-protocol-tests-installed-package-proof-and-durable-docs-without-changing-review-policy-session-schema-or-projection-semantics-gate-visit-2026-07-30t15-27-32-265z"
+        ],
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "verifiedAt": "2026-07-30T19:45:25.902Z"
+      },
+      {
+        "id": "evt:kontourai-survey-241-gate-claim-tests-evidence.flow-agents-workflow.survey-mcp-dual-era-implementation-passes-the-complete-repository-verification-at-91ed919-688-core-tests-including-schema-and-direct-resource-sanitization-regressions-clean-installed-modern-legacy-package-smoke-120-browser-tests-with-4-intentional-skips-and-concurrent-playwright-isolation-gate-visit-2026-07-30t19-38-07-219z",
+        "claimId": "kontourai-survey-241-gate-claim-tests-evidence.flow-agents-workflow.survey-mcp-dual-era-implementation-passes-the-complete-repository-verification-at-91ed919-688-core-tests-including-schema-and-direct-resource-sanitization-regressions-clean-installed-modern-legacy-package-smoke-120-browser-tests-with-4-intentional-skips-and-concurrent-playwright-isolation-gate-visit-2026-07-30t19-38-07-219z",
+        "status": "verified",
+        "actor": "flow-agents/workflow-sidecar",
+        "method": "validation",
+        "evidenceIds": [
+          "ev:kontourai-survey-241-gate-claim-tests-evidence.flow-agents-workflow.survey-mcp-dual-era-implementation-passes-the-complete-repository-verification-at-91ed919-688-core-tests-including-schema-and-direct-resource-sanitization-regressions-clean-installed-modern-legacy-package-smoke-120-browser-tests-with-4-intentional-skips-and-concurrent-playwright-isolation-gate-visit-2026-07-30t19-38-07-219z"
+        ],
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "verifiedAt": "2026-07-30T19:45:25.902Z"
+      },
+      {
+        "id": "evt:kontourai-survey-241-gate-claim-merge-readiness.flow-agents-workflow.pass-survey-source-head-91ed919-is-scope-clean-ac1-ac5-have-command-backed-evidence-the-initial-protocol-findings-are-repaired-the-exact-head-independent-critique-is-clean-and-local-provider-product-checks-pass-trust-verify-awaits-provisional-delivery-gate-visit-2026-07-30t19-39-24-816z",
+        "claimId": "kontourai-survey-241-gate-claim-merge-readiness.flow-agents-workflow.pass-survey-source-head-91ed919-is-scope-clean-ac1-ac5-have-command-backed-evidence-the-initial-protocol-findings-are-repaired-the-exact-head-independent-critique-is-clean-and-local-provider-product-checks-pass-trust-verify-awaits-provisional-delivery-gate-visit-2026-07-30t19-39-24-816z",
+        "status": "verified",
+        "actor": "flow-agents/workflow-sidecar",
+        "method": "validation",
+        "evidenceIds": [
+          "ev:kontourai-survey-241-gate-claim-merge-readiness.flow-agents-workflow.pass-survey-source-head-91ed919-is-scope-clean-ac1-ac5-have-command-backed-evidence-the-initial-protocol-findings-are-repaired-the-exact-head-independent-critique-is-clean-and-local-provider-product-checks-pass-trust-verify-awaits-provisional-delivery-gate-visit-2026-07-30t19-39-24-816z"
+        ],
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "verifiedAt": "2026-07-30T19:45:25.902Z"
+      },
+      {
+        "id": "evt:kontourai-survey-241-gate-claim-ci-merge-readiness.flow-agents-workflow.merge-exact-source-and-provisional-delivery-revisions-passed-acceptance-independent-review-evidence-gate-governance-and-every-required-provider-check-rollback-and-post-merge-verification-are-recorded-gate-visit-2026-07-30t19-44-58-333z",
+        "claimId": "kontourai-survey-241-gate-claim-ci-merge-readiness.flow-agents-workflow.merge-exact-source-and-provisional-delivery-revisions-passed-acceptance-independent-review-evidence-gate-governance-and-every-required-provider-check-rollback-and-post-merge-verification-are-recorded-gate-visit-2026-07-30t19-44-58-333z",
+        "status": "verified",
+        "actor": "flow-agents/workflow-sidecar",
+        "method": "validation",
+        "evidenceIds": [
+          "ev:kontourai-survey-241-gate-claim-ci-merge-readiness.flow-agents-workflow.merge-exact-source-and-provisional-delivery-revisions-passed-acceptance-independent-review-evidence-gate-governance-and-every-required-provider-check-rollback-and-post-merge-verification-are-recorded-gate-visit-2026-07-30t19-44-58-333z"
+        ],
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "verifiedAt": "2026-07-30T19:45:25.902Z"
+      },
+      {
+        "id": "evt:kontourai-survey-241-gate-claim-decision-evidence.flow-agents-workflow.survey-s-merge-decision-repaired-review-findings-and-retained-protocol-boundary-contracts-are-recorded-with-exact-source-and-delivery-evidence-gate-visit-2026-07-30t19-45-25-221z",
+        "claimId": "kontourai-survey-241-gate-claim-decision-evidence.flow-agents-workflow.survey-s-merge-decision-repaired-review-findings-and-retained-protocol-boundary-contracts-are-recorded-with-exact-source-and-delivery-evidence-gate-visit-2026-07-30t19-45-25-221z",
+        "status": "verified",
+        "actor": "flow-agents/workflow-sidecar",
+        "method": "validation",
+        "evidenceIds": [
+          "ev:kontourai-survey-241-gate-claim-decision-evidence.flow-agents-workflow.survey-s-merge-decision-repaired-review-findings-and-retained-protocol-boundary-contracts-are-recorded-with-exact-source-and-delivery-evidence-gate-visit-2026-07-30t19-45-25-221z"
+        ],
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "verifiedAt": "2026-07-30T19:45:25.902Z"
+      },
+      {
+        "id": "evt:kontourai-survey-241-gate-claim-learning-evidence.flow-agents-workflow.the-two-independent-review-gaps-were-repaired-and-regression-routed-exact-head-review-and-all-required-checks-are-clean-with-no-unresolved-follow-up-gate-visit-2026-07-30t19-45-25-902z",
+        "claimId": "kontourai-survey-241-gate-claim-learning-evidence.flow-agents-workflow.the-two-independent-review-gaps-were-repaired-and-regression-routed-exact-head-review-and-all-required-checks-are-clean-with-no-unresolved-follow-up-gate-visit-2026-07-30t19-45-25-902z",
+        "status": "verified",
+        "actor": "flow-agents/workflow-sidecar",
+        "method": "validation",
+        "evidenceIds": [
+          "ev:kontourai-survey-241-gate-claim-learning-evidence.flow-agents-workflow.the-two-independent-review-gaps-were-repaired-and-regression-routed-exact-head-review-and-all-required-checks-are-clean-with-no-unresolved-follow-up-gate-visit-2026-07-30t19-45-25-902z"
+        ],
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "verifiedAt": "2026-07-30T19:45:25.902Z"
+      },
+      {
+        "id": "evt:kontourai-survey-241-ac1.flow-agents-workflow.a-modern-client-discovers-survey-and-completes-representative-queue-item-decision-and-resource-operations-with-required-result-metadata-verified-2026-07-30t19-38-07-219z",
+        "claimId": "kontourai-survey-241-ac1.flow-agents-workflow.a-modern-client-discovers-survey-and-completes-representative-queue-item-decision-and-resource-operations-with-required-result-metadata-verified-2026-07-30t19-38-07-219z",
+        "status": "verified",
+        "actor": "flow-agents/workflow-sidecar",
+        "method": "validation",
+        "evidenceIds": [
+          "ev:kontourai-survey-241-ac1.flow-agents-workflow.a-modern-client-discovers-survey-and-completes-representative-queue-item-decision-and-resource-operations-with-required-result-metadata-verified-2026-07-30t19-38-07-219z:e492cb588e46dc93"
+        ],
+        "createdAt": "2026-07-30T19:38:07.219Z",
+        "verifiedAt": "2026-07-30T19:38:07.219Z"
+      },
+      {
+        "id": "evt:kontourai-survey-241-ac2.flow-agents-workflow.a-frozen-legacy-client-initializes-and-completes-equivalent-representative-operations-against-the-same-server-factory-verified-2026-07-30t19-38-07-219z",
+        "claimId": "kontourai-survey-241-ac2.flow-agents-workflow.a-frozen-legacy-client-initializes-and-completes-equivalent-representative-operations-against-the-same-server-factory-verified-2026-07-30t19-38-07-219z",
+        "status": "verified",
+        "actor": "flow-agents/workflow-sidecar",
+        "method": "validation",
+        "evidenceIds": [
+          "ev:kontourai-survey-241-ac2.flow-agents-workflow.a-frozen-legacy-client-initializes-and-completes-equivalent-representative-operations-against-the-same-server-factory-verified-2026-07-30t19-38-07-219z:e492cb588e46dc93"
+        ],
+        "createdAt": "2026-07-30T19:38:07.219Z",
+        "verifiedAt": "2026-07-30T19:38:07.219Z"
+      },
+      {
+        "id": "evt:kontourai-survey-241-ac3.flow-agents-workflow.the-apps-extension-and-canonical-nested-ui-metadata-are-advertised-and-the-self-contained-review-resource-still-renders-verified-2026-07-30t19-38-07-219z",
+        "claimId": "kontourai-survey-241-ac3.flow-agents-workflow.the-apps-extension-and-canonical-nested-ui-metadata-are-advertised-and-the-self-contained-review-resource-still-renders-verified-2026-07-30t19-38-07-219z",
+        "status": "verified",
+        "actor": "flow-agents/workflow-sidecar",
+        "method": "validation",
+        "evidenceIds": [
+          "ev:kontourai-survey-241-ac3.flow-agents-workflow.the-apps-extension-and-canonical-nested-ui-metadata-are-advertised-and-the-self-contained-review-resource-still-renders-verified-2026-07-30t19-38-07-219z:e492cb588e46dc93"
+        ],
+        "createdAt": "2026-07-30T19:38:07.219Z",
+        "verifiedAt": "2026-07-30T19:38:07.219Z"
+      },
+      {
+        "id": "evt:kontourai-survey-241-ac4.flow-agents-workflow.decision-authorization-validation-server-apply-and-atomic-persistence-boundaries-remain-enforced-verified-2026-07-30t19-38-07-219z",
+        "claimId": "kontourai-survey-241-ac4.flow-agents-workflow.decision-authorization-validation-server-apply-and-atomic-persistence-boundaries-remain-enforced-verified-2026-07-30t19-38-07-219z",
+        "status": "verified",
+        "actor": "flow-agents/workflow-sidecar",
+        "method": "validation",
+        "evidenceIds": [
+          "ev:kontourai-survey-241-ac4.flow-agents-workflow.decision-authorization-validation-server-apply-and-atomic-persistence-boundaries-remain-enforced-verified-2026-07-30t19-38-07-219z:e492cb588e46dc93"
+        ],
+        "createdAt": "2026-07-30T19:38:07.219Z",
+        "verifiedAt": "2026-07-30T19:38:07.219Z"
+      },
+      {
+        "id": "evt:kontourai-survey-241-ac5.flow-agents-workflow.survey-verification-installed-package-smoke-and-pinned-veritas-readiness-pass-verified-2026-07-30t19-38-07-219z",
+        "claimId": "kontourai-survey-241-ac5.flow-agents-workflow.survey-verification-installed-package-smoke-and-pinned-veritas-readiness-pass-verified-2026-07-30t19-38-07-219z",
+        "status": "verified",
+        "actor": "flow-agents/workflow-sidecar",
+        "method": "validation",
+        "evidenceIds": [
+          "ev:kontourai-survey-241-ac5.flow-agents-workflow.survey-verification-installed-package-smoke-and-pinned-veritas-readiness-pass-verified-2026-07-30t19-38-07-219z:e492cb588e46dc93"
+        ],
+        "createdAt": "2026-07-30T19:38:07.219Z",
+        "verifiedAt": "2026-07-30T19:38:07.219Z"
+      },
+      {
+        "id": "evt:kontourai-survey-241-review-route-repair-572.flow-agents-workflow.clean-repair-review-at-exact-head-91ed919682195a397f39855b3b0885257168ee08-supersedes-prior-fail-critique-critique-5a1f40a07bc2452e1ac87d5c97ed275568bdc3fb2eb6ef654bb894bcbae2bd4a-both-schema-and-protocol-text-findings-are-fixed-with-no-remaining-findings-in-the-reviewed-delta-reviewed-2026-07-30t19-37-43-147z",
+        "claimId": "kontourai-survey-241-review-route-repair-572.flow-agents-workflow.clean-repair-review-at-exact-head-91ed919682195a397f39855b3b0885257168ee08-supersedes-prior-fail-critique-critique-5a1f40a07bc2452e1ac87d5c97ed275568bdc3fb2eb6ef654bb894bcbae2bd4a-both-schema-and-protocol-text-findings-are-fixed-with-no-remaining-findings-in-the-reviewed-delta-reviewed-2026-07-30t19-37-43-147z",
+        "status": "verified",
+        "actor": "flow-agents/workflow-sidecar",
+        "method": "validation",
+        "evidenceIds": [],
+        "createdAt": "2026-07-30T19:45:25.902Z",
+        "verifiedAt": "2026-07-30T19:45:25.902Z"
+      }
+    ]
+  }
+}

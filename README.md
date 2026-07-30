@@ -203,7 +203,8 @@ host app should read as itself.
 
 ## Review MCP
 
-Drive review-queue decisions from an MCP agent (Claude Desktop, Cursor, or any MCP host):
+Drive review-queue decisions from any MCP host. The official server runtime
+automatically supports MCP 2026-07-28 discovery and existing legacy clients:
 
 ```sh
 npx survey-review-mcp --session path/to/session.json

@@ -1,6 +1,9 @@
-import { createInterface } from "node:readline";
 import { readFile, writeFile, rename } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
+
+import { McpServer, type CallToolResult } from "@modelcontextprotocol/server";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import { z } from "zod";
 
 import {
   buildReviewSessionEvents,
@@ -20,30 +23,14 @@ import {
 } from "../review-workbench/server-review-session.js";
 import type { ReviewItem, ReviewSession, ReviewSessionEvent } from "../review-resource.js";
 
-/**
- * Minimal Model Context Protocol server over stdio for review-queue inspection
- * and decision-making against a session JSON file.
- *
- * Implemented without an SDK dependency — newline-delimited JSON-RPC 2.0 with
- * the MCP lifecycle (initialize / ping / tools) and an optional embedded UI
- * resource per tool call. The session file is the durable store; decisions
- * append events and write back atomically (write temp + rename).
- */
-
-const PROTOCOL_VERSION = "2025-06-18";
 const SESSION_NAME = "mcp-review-session";
 
-// MCP Apps extension (SEP-1865). The review card is offered under both UI
-// conventions so one server renders across hosts: the existing mcp-ui.dev
-// embedded resource in tool results, AND a declared `ui://` resource that the
-// official Apps hosts (ChatGPT/Claude) and Station's SEP-1865 resolver read via
-// resources/read. The canonical pointer is the FLAT `_meta["ui/resourceUri"]`
-// key (what registerAppTool emits); the nested `_meta.ui.resourceUri` is the
-// convenience shape some hosts read — we emit both.
 const UI_RESOURCE_URI_META_KEY = "ui/resourceUri";
 const UI_CAPABILITY_EXTENSION = "io.modelcontextprotocol/ui";
 const QUEUE_PANEL_URI = "ui://survey/review-card/queue";
 const UI_RESOURCE_MIME = "text/html;profile=mcp-app";
+const SERVER_INSTRUCTIONS =
+  "Use survey_review_queue to inspect the queue, survey_review_item to drill into one item, and survey_review_decide to record a decision. Decisions are validated and persisted to the session file and are irreversible within this session.";
 
 // MCP tool decision strings → ReviewWorkbenchDecision
 const MCP_DECISION_MAP: Record<string, ReviewWorkbenchDecision> = {
@@ -52,13 +39,6 @@ const MCP_DECISION_MAP: Record<string, ReviewWorkbenchDecision> = {
   reject: "reject-proposed",
   "could-not-confirm": "could-not-confirm",
 };
-
-interface JsonRpcRequest {
-  jsonrpc?: string;
-  id?: number | string | null;
-  method?: string;
-  params?: Record<string, unknown>;
-}
 
 interface ReviewMcpOptions {
   readonly sessionPath: string;
@@ -578,20 +558,27 @@ function buildUiResource(
       mimeType: "text/html;profile=mcp-app",
       text: buildReviewCardHtml(item, snapshot, events),
       _meta: {
+        ui: {
+          csp: {
+            connectDomains: [],
+            resourceDomains: [],
+          },
+        },
         "mcpui.dev/ui-preferred-frame-size": ["420px", "560px"],
       },
     },
   };
 }
 
-// Render the SEP-1865 declared review card: load the configured session, replay
-// to current state, and render the active item's card HTML (the same HTML the
-// embedded `queue` resource carries — here served via resources/read).
-async function readQueuePanelHtml(options: ReviewMcpOptions): Promise<string> {
+// Render the declared review card from the same function used by embedded tool
+// results, so Apps and text-first hosts cannot drift.
+async function readQueuePanelResource(
+  options: ReviewMcpOptions,
+): Promise<ResourceContent["resource"]> {
   const { snapshot, events } = await readSessionFile(options.sessionPath);
   const current = currentSessionState(snapshot, events);
   const activeItem = currentReviewItem(current);
-  return buildReviewCardHtml(activeItem, snapshot, events);
+  return buildUiResource(activeItem, snapshot, events, "queue").resource;
 }
 
 // ---- Domain error (maps to isError:true, not a JSON-RPC error) -----------
@@ -600,194 +587,194 @@ class DomainError extends Error {
   readonly isDomainError = true;
 }
 
-// ---- JSON-RPC dispatch ---------------------------------------------------
+// ---- Official dual-era MCP server ---------------------------------------
 
-async function handleLine(
-  line: string,
+function uiResourceMeta(resourceUri: string): Record<string, unknown> {
+  return {
+    ui: { resourceUri, visibility: ["model", "app"] },
+    [UI_RESOURCE_URI_META_KEY]: resourceUri,
+  };
+}
+
+function createReviewMcpServer(
   options: ReviewMcpOptions,
   serverVersion: string,
-): Promise<void> {
-  const trimmed = line.trim();
-  if (trimmed === "") return;
-
-  let message: JsonRpcRequest;
-  try {
-    message = JSON.parse(trimmed) as JsonRpcRequest;
-  } catch {
-    send({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } });
-    return;
-  }
-
-  const { id, method, params } = message;
-  const isNotification = id === undefined;
-
-  try {
-    if (method === "initialize") {
-      send({
-        jsonrpc: "2.0",
-        id,
-        result: {
-          protocolVersion: PROTOCOL_VERSION,
-          capabilities: {
-            tools: { listChanged: false },
-            // Resources back the SEP-1865 ui:// review card (unless --no-ui).
-            ...(options.noUi ? {} : { resources: { listChanged: false } }),
-            ...(options.noUi
-              ? {}
-              : { extensions: { [UI_CAPABILITY_EXTENSION]: {} } }),
+): McpServer {
+  const server = new McpServer(
+    {
+      name: "survey-review-mcp",
+      title: "Survey Review MCP",
+      version: serverVersion,
+    },
+    {
+      instructions: SERVER_INSTRUCTIONS,
+      capabilities: options.noUi
+        ? {}
+        : {
+            extensions: {
+              [UI_CAPABILITY_EXTENSION]: {},
+            },
           },
-          serverInfo: { name: "survey-review-mcp", title: "Survey Review MCP", version: serverVersion },
-          instructions:
-            "Use survey_review_queue to inspect the queue, survey_review_item to drill into a single item, and survey_review_decide to record a decision. Decisions are persisted to the session file and are irreversible within this session.",
-        },
-      });
-    } else if (method === "ping") {
-      send({ jsonrpc: "2.0", id, result: {} });
-    } else if (method === "tools/list") {
-      send({
-        jsonrpc: "2.0",
-        id,
-        result: {
-          tools: [
+      cacheHints: {
+        "server/discover": { ttlMs: 0, cacheScope: "private" },
+        "tools/list": { ttlMs: 0, cacheScope: "private" },
+        "resources/list": { ttlMs: 0, cacheScope: "private" },
+        "resources/read": { ttlMs: 0, cacheScope: "private" },
+      },
+    },
+  );
+
+  server.registerTool(
+    "survey_review_queue",
+    {
+      title: "Review queue",
+      description:
+        "Return a text summary and JSON of the current review queue: all items with their status, the active item, resolved/total counts, and session summary totals.",
+      inputSchema: z.object({}),
+      ...(options.noUi ? {} : { _meta: uiResourceMeta(QUEUE_PANEL_URI) }),
+    },
+    async () => runReviewTool(() => toolQueue(options)),
+  );
+
+  server.registerTool(
+    "survey_review_item",
+    {
+      title: "Review item detail",
+      description:
+        "Return full detail for one review item: current and proposed values, confidence, source references, excerpts, and any current decision.",
+      inputSchema: z.object({
+        itemName: z.string().min(1).describe("The ReviewItem name to inspect."),
+      }),
+    },
+    async ({ itemName }) => runReviewTool(() => toolItem(itemName, options)),
+  );
+
+  server.registerTool(
+    "survey_review_decide",
+    {
+      title: "Record a review decision",
+      description:
+        "Apply a decision to a review item and persist it through Survey's server-owned validation boundary. Decision must be accept, hold, reject, or could-not-confirm. Could-not-confirm requires a reason. Domain failures return isError:true.",
+      inputSchema: z.discriminatedUnion("decision", [
+        z.object({
+          itemName: z.string().min(1).describe("The ReviewItem name to decide."),
+          decision: z
+            .enum(["accept", "hold", "reject"])
+            .describe(
+              "accept = accept-proposed, hold = keep-current, reject = reject-proposed.",
+            ),
+          note: z.string().optional().describe("Optional reviewer note or rationale."),
+        }),
+        z.object({
+          itemName: z.string().min(1).describe("The ReviewItem name to decide."),
+          decision: z
+            .literal("could-not-confirm")
+            .describe("Record a terminal non-answer after evidence attempts are exhausted."),
+          reason: z
+            .string()
+            .trim()
+            .min(1)
+            .describe("Required non-empty reason for the could-not-confirm decision."),
+          attemptEvidenceIds: z
+            .array(z.string())
+            .optional()
+            .describe("Evidence ids attempted before a could-not-confirm decision."),
+        }),
+      ]),
+    },
+    async (input) =>
+      runReviewTool(() =>
+        input.decision === "could-not-confirm"
+          ? toolDecide(
+              input.itemName,
+              input.decision,
+              input.reason,
+              input.attemptEvidenceIds,
+              options,
+            )
+          : toolDecide(
+              input.itemName,
+              input.decision,
+              input.note,
+              undefined,
+              options,
+            ),
+      ),
+  );
+
+  if (!options.noUi) {
+    server.registerResource(
+      "survey-review-workbench",
+      QUEUE_PANEL_URI,
+      {
+        title: "Survey review workbench",
+        description:
+          "Interactive review card for the active item in the configured review session.",
+        mimeType: UI_RESOURCE_MIME,
+        cacheHint: { ttlMs: 0, cacheScope: "private" },
+      },
+      async () => {
+        const resource = await readQueuePanelResource(options);
+        return {
+          contents: [
             {
-              name: "survey_review_queue",
-              title: "Review queue",
-              description:
-                "Return a text summary and JSON of the current review queue: all items with their status (pending, in-review, resolved, rejected, escalated), the active item, resolved/total counts, and session summary totals.",
-              inputSchema: { type: "object", properties: {} },
-              // SEP-1865 UI pointer (both flat canonical + nested), unless --no-ui.
-              ...(options.noUi
-                ? {}
-                : {
-                    _meta: {
-                      [UI_RESOURCE_URI_META_KEY]: QUEUE_PANEL_URI,
-                      ui: { resourceUri: QUEUE_PANEL_URI, visibility: ["model", "app"] },
-                    },
-                  }),
-            },
-            {
-              name: "survey_review_item",
-              title: "Review item detail",
-              description:
-                "Return full detail for a single review item: current vs proposed values, confidence, source references, excerpts, and the current decision (if any).",
-              inputSchema: {
-                type: "object",
-                properties: {
-                  itemName: { type: "string", description: "The ReviewItem name to inspect." },
-                },
-                required: ["itemName"],
-              },
-            },
-            {
-              name: "survey_review_decide",
-              title: "Record a review decision",
-              description:
-                "Apply a decision to a review item and persist it to the session file. Decision must be accept, hold, reject, or could-not-confirm. Could-not-confirm requires a reason. Domain failures return isError:true.",
-              inputSchema: {
-                type: "object",
-                properties: {
-                  itemName: { type: "string", description: "The ReviewItem name to decide." },
-                  decision: {
-                    type: "string",
-                    enum: ["accept", "hold", "reject", "could-not-confirm"],
-                    description: "accept = accept-proposed, hold = keep-current, reject = reject-proposed, could-not-confirm = terminal non-answer.",
-                  },
-                  note: { type: "string", description: "Optional reviewer note / rationale." },
-                  reason: { type: "string", minLength: 1, description: "Required non-empty reason when decision is could-not-confirm." },
-                  attemptEvidenceIds: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "Optional evidence ids recording what was attempted before could-not-confirm.",
-                  },
-                },
-                required: ["itemName", "decision"],
-                allOf: [{
-                  if: { properties: { decision: { const: "could-not-confirm" } }, required: ["decision"] },
-                  then: { required: ["reason"] },
-                }],
-              },
+              uri: QUEUE_PANEL_URI,
+              mimeType: resource.mimeType,
+              text: sanitizeProtocolText(resource.text),
+              _meta: resource._meta,
             },
           ],
-        },
-      });
-    } else if (method === "resources/list") {
-      send({
-        jsonrpc: "2.0",
-        id,
-        result: {
-          resources: options.noUi
-            ? []
-            : [
-                {
-                  uri: QUEUE_PANEL_URI,
-                  name: "Survey review workbench",
-                  description:
-                    "Interactive review card for the active item in the configured review session (MCP Apps UI resource).",
-                  mimeType: UI_RESOURCE_MIME,
-                },
-              ],
-        },
-      });
-    } else if (method === "resources/read") {
-      const uri = typeof params?.uri === "string" ? params.uri : "";
-      if (options.noUi || uri !== QUEUE_PANEL_URI) {
-        send({ jsonrpc: "2.0", id, error: { code: -32602, message: `Unknown resource: ${uri || "(missing uri)"}` } });
-        return;
-      }
-      const html = await readQueuePanelHtml(options);
-      send({
-        jsonrpc: "2.0",
-        id,
-        result: { contents: [{ uri: QUEUE_PANEL_URI, mimeType: UI_RESOURCE_MIME, text: html }] },
-      });
-    } else if (method === "tools/call") {
-      const name = typeof params?.name === "string" ? params.name : "";
-      const toolArgs = (params?.arguments ?? {}) as Record<string, unknown>;
-
-      try {
-        let content: ContentItem[];
-
-        if (name === "survey_review_queue") {
-          content = await toolQueue(options);
-        } else if (name === "survey_review_item") {
-          const itemName = typeof toolArgs.itemName === "string" ? toolArgs.itemName : "";
-          if (!itemName) {
-            throw new DomainError("survey_review_item requires itemName");
-          }
-          content = await toolItem(itemName, options);
-        } else if (name === "survey_review_decide") {
-          const itemName = typeof toolArgs.itemName === "string" ? toolArgs.itemName : "";
-          const decision = typeof toolArgs.decision === "string" ? toolArgs.decision : "";
-          const note = typeof toolArgs.note === "string" ? toolArgs.note : undefined;
-          const reason = typeof toolArgs.reason === "string" ? toolArgs.reason : undefined;
-          const attemptEvidenceIds = Array.isArray(toolArgs.attemptEvidenceIds)
-            && toolArgs.attemptEvidenceIds.every((value) => typeof value === "string")
-            ? toolArgs.attemptEvidenceIds as string[]
-            : undefined;
-          if (!itemName) throw new DomainError("survey_review_decide requires itemName");
-          if (!decision) throw new DomainError("survey_review_decide requires decision");
-          content = await toolDecide(itemName, decision, decision === "could-not-confirm" ? reason : note, attemptEvidenceIds, options);
-        } else {
-          send({ jsonrpc: "2.0", id, error: { code: -32602, message: `Unknown tool: ${name || "(missing name)"}` } });
-          return;
-        }
-
-        send({ jsonrpc: "2.0", id, result: { content, isError: false } });
-      } catch (error) {
-        const text = error instanceof Error ? error.message : String(error);
-        send({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text }], isError: true } });
-      }
-    } else if (isNotification) {
-      // Lifecycle notifications such as notifications/initialized need no reply.
-    } else {
-      send({ jsonrpc: "2.0", id, error: { code: -32601, message: `Method not found: ${method ?? "(none)"}` } });
-    }
-  } catch (error) {
-    if (!isNotification) {
-      const messageText = error instanceof Error ? error.message : String(error);
-      send({ jsonrpc: "2.0", id, error: { code: -32603, message: messageText } });
-    }
+        };
+      },
+    );
   }
+
+  return server;
+}
+
+async function runReviewTool(
+  operation: () => Promise<ContentItem[]>,
+): Promise<CallToolResult> {
+  try {
+    return {
+      content: (await operation()).map(sanitizeContentItem),
+      isError: false,
+    };
+  } catch (error) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: sanitizeProtocolText(error instanceof Error ? error.message : String(error)),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+const UNSAFE_TEXT_CHARS_RE =
+  /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u0080-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u206f]/g;
+
+function sanitizeProtocolText(text: string): string {
+  return text.replace(UNSAFE_TEXT_CHARS_RE, "");
+}
+
+function sanitizeContentItem(item: ContentItem): ContentItem {
+  if (item.type === "text") {
+    return { ...item, text: sanitizeProtocolText(item.text) };
+  }
+  return {
+    ...item,
+    resource: {
+      ...item.resource,
+      text: sanitizeProtocolText(item.resource.text),
+    },
+  };
+}
+
+function sanitizeDiagnostic(text: string): string {
+  return sanitizeProtocolText(text).replaceAll(/\s*\r?\n\s*/g, " ").trim();
 }
 
 // ---- Entry point ---------------------------------------------------------
@@ -826,20 +813,21 @@ async function readPackageVersion(): Promise<string> {
   }
 }
 
-function send(message: unknown): void {
-  process.stdout.write(`${JSON.stringify(message)}\n`);
-}
-
 export async function runReviewMcp(args: string[]): Promise<void> {
   const options = parseMcpArgs(args);
   const serverVersion = await readPackageVersion();
-
-  const rl = createInterface({ input: process.stdin, terminal: false });
-  rl.on("line", (line) => {
-    void handleLine(line, options, serverVersion);
+  const inputClosed = new Promise<void>((resolveClosed) => {
+    process.stdin.once("end", resolveClosed);
+    process.stdin.once("close", resolveClosed);
   });
 
-  await new Promise<void>((resolveClosed) => {
-    rl.on("close", resolveClosed);
+  const handle = serveStdio(() => createReviewMcpServer(options, serverVersion), {
+    legacy: "serve",
+    onerror: (error) => {
+      process.stderr.write(`survey-review-mcp: ${sanitizeDiagnostic(error.message)}\n`);
+    },
   });
+
+  await inputClosed;
+  await handle.close();
 }

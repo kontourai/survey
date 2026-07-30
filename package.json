@@ -50,9 +50,10 @@
     "prepare": "npm run build",
     "typecheck": "tsc --noEmit",
     "test": "npm run build && node --test dist/tests/*.test.js",
+    "test:package-smoke": "npm run build && node --test dist/tests/package-smoke/*.test.js",
     "test:browser": "playwright test",
     "test:browser:concurrent": "npm run build && node scripts/test-playwright-concurrency.mjs",
-    "verify": "npm run check:content-boundary && npm run check:decisions && npm run typecheck && npm test && npm run check:review-workbench-assets && npm run check:review-workbench && npm run test:browser && npm run test:browser:concurrent",
+    "verify": "npm run check:content-boundary && npm run check:decisions && npm run typecheck && npm test && npm run test:package-smoke && npm run check:review-workbench-assets && npm run check:review-workbench && npm run test:browser && npm run test:browser:concurrent",
     "check:content-boundary": "node --test tests/content-boundary-script.test.cjs && node scripts/check-content-boundary.cjs",
     "check:decisions": "node scripts/check-decisions.cjs check",
     "check:guards": "node scripts/check-guards.mjs",
@@ -71,7 +72,9 @@
     "workflow:validate-artifacts": "flow-agents-validate-artifacts"
   },
   "dependencies": {
-    "@kontourai/surface": "^2.13.0"
+    "@kontourai/surface": "^2.13.0",
+    "@modelcontextprotocol/server": "2.0.0",
+    "zod": "4.2.0"
   },
   "peerDependencies": {
     "typescript": ">=5.0.0"

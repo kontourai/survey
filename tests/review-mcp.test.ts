@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { createInterface } from "node:readline";
-import { copyFile, readFile, mkdtemp, rm } from "node:fs/promises";
+import { copyFile, readFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -19,6 +19,25 @@ interface JsonRpcResponse {
     capabilities?: Record<string, unknown>;
   } & Record<string, unknown>;
   error?: { code: number; message: string };
+}
+
+const MODERN_PROTOCOL_VERSION = "2026-07-28";
+
+function modernMeta() {
+  return {
+    "io.modelcontextprotocol/protocolVersion": MODERN_PROTOCOL_VERSION,
+    "io.modelcontextprotocol/clientCapabilities": {
+      extensions: {
+        "io.modelcontextprotocol/ui": {
+          mimeTypes: ["text/html;profile=mcp-app"],
+        },
+      },
+    },
+    "io.modelcontextprotocol/clientInfo": {
+      name: "survey-review-mcp-tests",
+      version: "0.0.0",
+    },
+  };
 }
 
 function send(server: ReturnType<typeof spawn>, message: unknown): void {
@@ -64,6 +83,142 @@ function collectResponses(stdout: NodeJS.ReadableStream) {
 }
 
 describe("survey-review-mcp", () => {
+  test("serves MCP 2026-07-28 discovery, review tools, and resource envelopes", async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), "survey-mcp-modern-test-"));
+    const sessionPath = join(tmpDir, "session.json");
+    await copyFile("example-data/mcp-review-session.json", sessionPath);
+    const server = spawn("node", ["bin/survey-review-mcp.mjs", "--session", sessionPath], {
+      stdio: ["pipe", "pipe", "inherit"],
+    });
+    const responses = collectResponses(server.stdout!);
+
+    try {
+      send(server, {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "server/discover",
+        params: { _meta: modernMeta() },
+      });
+      const discover = await responses.next(1);
+      assert.deepEqual(discover.result?.supportedVersions, [MODERN_PROTOCOL_VERSION]);
+      assert.equal(discover.result?.resultType, "complete");
+      assert.equal(discover.result?.ttlMs, 0);
+      assert.equal(discover.result?.cacheScope, "private");
+      assert.ok(discover.result?.capabilities?.tools);
+      assert.ok(discover.result?.capabilities?.resources);
+      assert.ok(
+        (
+          discover.result?.capabilities?.extensions as Record<string, unknown>
+        )?.["io.modelcontextprotocol/ui"],
+      );
+      assert.equal(
+        (
+          discover.result?._meta as Record<
+            string,
+            { name?: string }
+          >
+        )?.["io.modelcontextprotocol/serverInfo"]?.name,
+        "survey-review-mcp",
+      );
+
+      send(server, {
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/list",
+        params: { _meta: modernMeta() },
+      });
+      const tools = await responses.next(2);
+      assert.equal(tools.result?.resultType, "complete");
+      assert.equal(tools.result?.ttlMs, 0);
+      assert.equal(tools.result?.cacheScope, "private");
+      const queueTool = (tools.result?.tools ?? []).find(
+        (tool: { name: string }) => tool.name === "survey_review_queue",
+      ) as Record<string, any> | undefined;
+      const decideTool = (tools.result?.tools ?? []).find(
+        (tool: { name: string }) => tool.name === "survey_review_decide",
+      ) as Record<string, any> | undefined;
+      assert.equal(queueTool?._meta.ui.resourceUri, "ui://survey/review-card/queue");
+      assert.equal(queueTool?._meta["ui/resourceUri"], "ui://survey/review-card/queue");
+      const decideBranches =
+        decideTool?.inputSchema?.oneOf ?? decideTool?.inputSchema?.anyOf ?? [];
+      const couldNotConfirmBranch = decideBranches.find(
+        (branch: Record<string, any>) =>
+          branch.properties?.decision?.const === "could-not-confirm",
+      );
+      assert.deepEqual(
+        couldNotConfirmBranch?.required,
+        ["itemName", "decision", "reason"],
+      );
+
+      send(server, {
+        jsonrpc: "2.0",
+        id: 3,
+        method: "tools/call",
+        params: {
+          _meta: modernMeta(),
+          name: "survey_review_queue",
+          arguments: {},
+        },
+      });
+      const queue = await responses.next(3);
+      assert.equal(queue.result?.resultType, "complete");
+      assert.equal(queue.result?.isError, false);
+      assert.match(queue.result?.content[0]?.text ?? "", /Review queue/);
+
+      send(server, {
+        jsonrpc: "2.0",
+        id: 4,
+        method: "tools/call",
+        params: {
+          _meta: modernMeta(),
+          name: "survey_review_decide",
+          arguments: {
+            itemName: "public-directory-hours",
+            decision: "accept",
+            note: "Modern client reviewed the proposal.",
+          },
+        },
+      });
+      const decision = await responses.next(4);
+      assert.equal(decision.result?.resultType, "complete");
+      assert.equal(decision.result?.isError, false);
+      assert.match(decision.result?.content[0]?.text ?? "", /Decision recorded/);
+
+      send(server, {
+        jsonrpc: "2.0",
+        id: 5,
+        method: "resources/read",
+        params: {
+          _meta: modernMeta(),
+          uri: "ui://survey/review-card/queue",
+        },
+      });
+      const resource = await responses.next(5);
+      assert.equal(resource.result?.resultType, "complete");
+      assert.equal(resource.result?.ttlMs, 0);
+      assert.equal(resource.result?.cacheScope, "private");
+      const contents = resource.result?.contents as Array<Record<string, any>>;
+      assert.equal(contents[0]?.mimeType, "text/html;profile=mcp-app");
+      assert.deepEqual(contents[0]?._meta.ui.csp, {
+        connectDomains: [],
+        resourceDomains: [],
+      });
+
+      const persisted = JSON.parse(await readFile(sessionPath, "utf8")) as {
+        events: Array<{ spec?: { data?: { workbenchDecision?: string } } }>;
+      };
+      assert.ok(
+        persisted.events.some(
+          (event) => event.spec?.data?.workbenchDecision === "accept-proposed",
+        ),
+      );
+    } finally {
+      server.stdin!.end();
+      await once(server, "exit");
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   test("initialize and tools/list complete the MCP handshake", async () => {
     const tmpDir = await mkdtemp(join(tmpdir(), "survey-mcp-test-"));
     const sessionPath = join(tmpDir, "session.json");
@@ -92,7 +247,7 @@ describe("survey-review-mcp", () => {
       assert.equal(initialize.result?.serverInfo?.name, "survey-review-mcp");
       assert.equal(initialize.result?.protocolVersion, "2025-06-18");
       assert.ok(initialize.result?.capabilities?.tools);
-      // SEP-1865: resources back the ui:// review card + the MCP Apps extension.
+      // Resources back the ui:// review card plus the MCP Apps extension.
       assert.ok((initialize.result?.capabilities as Record<string, unknown>)?.resources);
       assert.ok(
         (
@@ -122,19 +277,31 @@ describe("survey-review-mcp", () => {
       const decideTool = (toolsList.result?.tools ?? []).find(
         (t: { name: string }) => t.name === "survey_review_decide",
       ) as Record<string, any> | undefined;
-      assert.deepEqual(decideTool?.inputSchema.properties.decision.enum, [
-        "accept", "hold", "reject", "could-not-confirm",
-      ]);
-      assert.equal(decideTool?.inputSchema.properties.reason.minLength, 1);
-      assert.deepEqual(decideTool?.inputSchema.allOf[0].then.required, ["reason"]);
-      // survey_review_queue declares its SEP-1865 UI in both key shapes.
+      const decisionBranches = decideTool?.inputSchema.oneOf ?? [];
+      assert.deepEqual(
+        decisionBranches[0]?.properties.decision.enum,
+        ["accept", "hold", "reject"],
+      );
+      assert.equal(
+        decisionBranches[1]?.properties.decision.const,
+        "could-not-confirm",
+      );
+      assert.match(
+        decisionBranches[1]?.properties.reason.description,
+        /Required non-empty reason/,
+      );
+      assert.deepEqual(
+        decisionBranches[1]?.required,
+        ["itemName", "decision", "reason"],
+      );
+      // The queue declares canonical nested UI metadata plus flat compatibility.
       const queueTool = (toolsList.result?.tools ?? []).find(
         (t: { name: string }) => t.name === "survey_review_queue",
       ) as Record<string, any> | undefined;
       assert.equal(queueTool?._meta["ui/resourceUri"], "ui://survey/review-card/queue");
       assert.equal(queueTool?._meta.ui.resourceUri, "ui://survey/review-card/queue");
 
-      // SEP-1865 declared-resource path: list + read the review card.
+      // Declared-resource path: list and read the review card.
       send(server, { jsonrpc: "2.0", id: 4, method: "resources/list" });
       const resourcesList = await responses.next(4);
       const listed = ((resourcesList.result as any)?.resources ?? []) as Array<Record<string, unknown>>;
@@ -149,12 +316,16 @@ describe("survey-review-mcp", () => {
         params: { uri: "ui://survey/review-card/queue" },
       });
       const resourceRead = await responses.next(5);
-      const contents = ((resourceRead.result as any)?.contents ?? []) as Array<Record<string, string>>;
+      const contents = ((resourceRead.result as any)?.contents ?? []) as Array<Record<string, any>>;
       assert.equal(contents.length, 1);
       assert.equal(contents[0].uri, "ui://survey/review-card/queue");
       assert.equal(contents[0].mimeType, "text/html;profile=mcp-app");
       assert.match(contents[0].text, /<!doctype html>/i);
       assert.match(contents[0].text, /survey_review_decide/);
+      assert.deepEqual(contents[0]._meta.ui.csp, {
+        connectDomains: [],
+        resourceDomains: [],
+      });
 
       send(server, {
         jsonrpc: "2.0",
@@ -332,7 +503,10 @@ describe("survey-review-mcp", () => {
       });
       const missingReason = await responses.next(2);
       assert.equal(missingReason.result?.isError, true);
-      assert.match(missingReason.result?.content[0]?.text ?? "", /requires a non-empty reason/);
+      assert.match(
+        missingReason.result?.content[0]?.text ?? "",
+        /reason: Invalid input/,
+      );
 
       send(server, {
         jsonrpc: "2.0",
@@ -360,6 +534,25 @@ describe("survey-review-mcp", () => {
       assert.equal(event?.spec.resolution, "could_not_confirm");
       assert.equal(event?.spec.resolutionReason, "The listed hours could not be matched to an effective date.");
       assert.deepEqual(event?.spec.attemptEvidenceIds, ["evidence.hours.page", "evidence.hours.archive"]);
+
+      send(server, {
+        jsonrpc: "2.0",
+        id: 4,
+        method: "tools/call",
+        params: {
+          name: "survey_review_decide",
+          arguments: {
+            itemName: "public-directory-hours",
+            decision: "approve",
+          },
+        },
+      });
+      const invalidDecision = await responses.next(4);
+      assert.equal(invalidDecision.result?.isError, true);
+      assert.match(
+        invalidDecision.result?.content[0]?.text ?? "",
+        /Input validation error: Invalid arguments/,
+      );
     } finally {
       server.stdin!.end();
       await once(server, "exit");
@@ -452,7 +645,7 @@ describe("survey-review-mcp", () => {
       // No UI resources are advertised, and survey_review_queue carries no _meta.
       send(server, { jsonrpc: "2.0", id: 10, method: "resources/list" });
       const noUiResources = await responses.next(10);
-      assert.equal(((noUiResources.result as any)?.resources ?? []).length, 0);
+      assert.equal(noUiResources.error?.code, -32601);
       send(server, { jsonrpc: "2.0", id: 11, method: "tools/list" });
       const noUiTools = await responses.next(11);
       const noUiQueue = (noUiTools.result?.tools ?? []).find(
@@ -469,6 +662,68 @@ describe("survey-review-mcp", () => {
 
       // Text item must still be present
       assert.ok(content.some((c) => c.type === "text"), "Text item should still be present");
+    } finally {
+      server.stdin!.end();
+      await once(server, "exit");
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test("successful tool output strips terminal and bidi controls from producer text", async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), "survey-mcp-test-"));
+    const sessionPath = join(tmpDir, "session.json");
+    const fixture = JSON.parse(
+      await readFile("example-data/mcp-review-session.json", "utf8"),
+    ) as Record<string, any>;
+    fixture.snapshot.items[0].spec.target = "safe\u001b[31m target\u202e";
+    fixture.snapshot.items[0].spec.candidates[0].value = "current\u0007 value";
+    await writeFile(sessionPath, JSON.stringify(fixture, null, 2));
+
+    const server = spawn("node", ["bin/survey-review-mcp.mjs", "--session", sessionPath], {
+      stdio: ["pipe", "pipe", "inherit"],
+    });
+    const responses = collectResponses(server.stdout!);
+
+    try {
+      send(server, { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "0" } } });
+      await responses.next(1);
+      send(server, { jsonrpc: "2.0", method: "notifications/initialized" });
+
+      send(server, {
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/call",
+        params: {
+          name: "survey_review_item",
+          arguments: { itemName: fixture.snapshot.items[0].metadata.name },
+        },
+      });
+      const result = await responses.next(2);
+      assert.equal(result.result?.isError, false);
+      const text = result.result?.content?.[0]?.text ?? "";
+      assert.match(text, /safe\[31m target/);
+      assert.match(text, /current value/);
+      assert.doesNotMatch(
+        text,
+        /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u0080-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u206f]/,
+      );
+
+      send(server, {
+        jsonrpc: "2.0",
+        id: 3,
+        method: "resources/read",
+        params: { uri: "ui://survey/review-card/queue" },
+      });
+      const resourceResult = await responses.next(3);
+      const resourceContents = resourceResult.result?.contents as
+        | Array<{ text?: string }>
+        | undefined;
+      const resourceText = resourceContents?.[0]?.text ?? "";
+      assert.match(resourceText, /safe\[31m target/);
+      assert.doesNotMatch(
+        resourceText,
+        /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u0080-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u206f]/,
+      );
     } finally {
       server.stdin!.end();
       await once(server, "exit");
