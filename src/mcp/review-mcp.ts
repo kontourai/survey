@@ -720,7 +720,7 @@ function createReviewMcpServer(
             {
               uri: QUEUE_PANEL_URI,
               mimeType: resource.mimeType,
-              text: resource.text,
+              text: sanitizeProtocolText(resource.text),
               _meta: resource._meta,
             },
           ],

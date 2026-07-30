@@ -707,6 +707,23 @@ describe("survey-review-mcp", () => {
         text,
         /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u0080-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u206f]/,
       );
+
+      send(server, {
+        jsonrpc: "2.0",
+        id: 3,
+        method: "resources/read",
+        params: { uri: "ui://survey/review-card/queue" },
+      });
+      const resourceResult = await responses.next(3);
+      const resourceContents = resourceResult.result?.contents as
+        | Array<{ text?: string }>
+        | undefined;
+      const resourceText = resourceContents?.[0]?.text ?? "";
+      assert.match(resourceText, /safe\[31m target/);
+      assert.doesNotMatch(
+        resourceText,
+        /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u0080-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u206f]/,
+      );
     } finally {
       server.stdin!.end();
       await once(server, "exit");
