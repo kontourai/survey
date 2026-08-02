@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.0](https://github.com/kontourai/survey/compare/v3.0.0...v3.1.0) (2026-08-02)
+
+
+### Features
+
+* **kit:** declare builder.build workflow routing ([#249](https://github.com/kontourai/survey/issues/249)) ([dded2b2](https://github.com/kontourai/survey/commit/dded2b2e0a69c71076600570f6f3ffe692243949))
+
 ## [3.0.0](https://github.com/kontourai/survey/compare/v2.5.0...v3.0.0) (2026-08-02)
 
 
