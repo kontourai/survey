@@ -285,7 +285,9 @@ export {
 } from "./agent-utterance.js";
 export type {
   ExtractedStatement,
+  LocatorResolution,
   StatementBadge,
+  StatementValueComparison,
   UtteranceClaimExtractor,
   UtteranceStatement,
   UtteranceStatementRecords,

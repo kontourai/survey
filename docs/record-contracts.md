@@ -1009,8 +1009,10 @@ const report = await surveyAgentUtterance(
 // report.source.kind === "agent-utterance"
 // report.source.locatorScheme === "text-span"
 for (const stmt of report.statements) {
-  console.log(stmt.badge, stmt.target, stmt.excerpt);
-  // badge: "verified" | "assumed" | "stale" | "disputed" | "rejected" | "unsupported"
+  console.log(stmt.badge, stmt.assertedValue, stmt.comparisonRationale);
+  // badge: a Surface TrustStatus, or "contradicted", or "unsupported"
+  // e.g. contradicted "revoked" 'Contradicts for unknown/acme/status:
+  //      statement "revoked" vs verified answer "active" (compared as text).'
 }
 ```
 
@@ -1062,13 +1064,51 @@ Key contracts:
   `ClaimTarget.metadata.survey.agentUtterance` are unaffected by this and keep
   their own separate, pre-existing shapes; only `Candidate.metadata` moved to
   the shared `producerProposal` key.
-- Badges derive directly from the InquiryRecord outcome and answer status.
-  `"unsupported"` means either the outcome is unsupported or the answer status
-  is absent — the gap is honest and recordable rather than silently treated as
-  passing.  `report.statements` still has exactly one entry per extracted
-  statement, in original order, regardless of Candidate Set grouping — the
-  per-statement badge report is unaffected by how statements are grouped
-  internally.
+- **A badge grades the statement, not the target.**  It is a function of two
+  things: the status of the bundle's answer for the statement's canonical
+  target, AND how the statement's own asserted value compares to that
+  answer's value.  Reading only the answer status would answer *"is there a
+  verified claim about this subject and field?"* while being presented as the
+  answer to *"is what the agent said true?"* — so an agent asserting a value
+  the verified claim denies would carry a green badge.
+- The badge vocabulary is Surface's `TrustStatus` verbatim plus two
+  Survey-side additions that describe the statement-vs-answer relation:
+  - `"contradicted"` — the bundle's answer would otherwise read as support
+    (`verified`, `assumed`, `stale`) and the statement asserts a *different*
+    value.  Mirrors the Hachure `contradiction` transparency-gap type
+    (`merge.md` §7b): the conflict is surfaced, never silently resolved in
+    favour of one side.  When the answer status already signals the claim is
+    not to be relied on (`disputed`, `rejected`, …) that status stays the
+    badge, and the contradiction remains readable in `valueComparison`.
+  - `"unsupported"` — the inquiry resolved to no answer at all (no mapping and
+    no registered claim).  It means *"nothing here to compare against"* and
+    nothing else: a registered claim awaiting review badges its own derived
+    status (`unknown`, `proposed`, …), never `"unsupported"`.
+- `UtteranceStatement.assertedValue` carries what the extractor pulled out of
+  the prose, verbatim, so a reader can see WHAT was compared;
+  `valueComparison` (`"agrees" | "contradicts" | "not-compared"`) and
+  `comparisonRationale` say how it went.  Scalars are compared by their
+  canonical text rendering (trimmed, lowercased), which bridges *"the agent
+  wrote 95"* to *"the producer stored the number 95"* without losing a real
+  disagreement — `"5"` and `"6"` still differ.  A statement the extractor
+  parsed no value from, or a non-scalar producer value, is `"not-compared"`;
+  absence of a comparison is never reported as agreement.
+- `UtteranceStatement.locatorResolution` (`"span" | "excerpt-match" |
+  "unanchored-fallback"`) discloses how the Extraction's locator was
+  resolved.  The last branch is a well-formed `text-span:0-<excerpt.length>`
+  placeholder that does **not** point at the excerpt — a hallucinated excerpt
+  lands there — so anything resolving a locator against the source must check
+  this field first.  The same value is on
+  `Extraction.metadata.agentUtterance.locatorResolution` and
+  `ClaimTarget.metadata.survey.agentUtterance.locatorResolution`.
+- `UtteranceStatement.records` carries the statement's own Extraction,
+  Candidate, and per-target Candidate Set — including the Candidate Conflict
+  verdict and rationale when two statements in the SAME utterance disagree
+  about one target, which is a different signal from `valueComparison`
+  (statement vs bundle).
+- `report.statements` still has exactly one entry per extracted statement, in
+  original order, regardless of Candidate Set grouping — the per-statement
+  badge report is unaffected by how statements are grouped internally.
 - `surveyAgentUtterance` is `async` to support async extractors, but it works
   equally well with synchronous extractors.
 

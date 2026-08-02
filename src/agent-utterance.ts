@@ -17,7 +17,7 @@
  * run through the Inquiry pipeline rather than treated as authoritative.
  */
 
-import type { DerivationRule, InquiryRecord, TrustBundle } from "@kontourai/surface";
+import type { DerivationRule, InquiryRecord, TrustBundle, TrustStatus } from "@kontourai/surface";
 import { resolveInquiry } from "@kontourai/surface";
 import type { CanonicalClaimTarget } from "@kontourai/surface";
 import type { Candidate, CandidateSet, ClaimTarget, Extraction, RawSource, SurveyInput } from "./types.js";
@@ -65,22 +65,93 @@ export interface UtteranceClaimExtractor {
 // ---------------------------------------------------------------------------
 
 /**
- * Badge values for each extracted statement, derived from the inquiry outcome
- * and the answer status.
+ * Badge values for each extracted statement.
  *
- * - "verified": inquiry matched/derived and answer status is "verified"
- * - "assumed": inquiry matched/derived and answer status is "assumed"
- * - "stale": inquiry matched/derived and answer status is "stale"
- * - "disputed": inquiry matched/derived and answer status is "disputed"
- * - "rejected": inquiry matched/derived and answer status is "rejected"
- * - "unsupported": inquiry outcome is "unsupported" (no mapping or no registered claim)
+ * A badge grades THE STATEMENT, not the target. It is a function of two
+ * things: the status of the bundle's answer for the statement's canonical
+ * target, and how the statement's own asserted value compares to that
+ * answer's value.
+ *
+ * The status half of the vocabulary is Surface's `TrustStatus` verbatim —
+ * Survey does not mint parallel status terms for concepts Surface (and the
+ * Hachure core record shapes it implements) already name. Only two badge
+ * values are Survey-side additions, because they describe the
+ * statement-vs-answer relation rather than a claim's standing:
+ *
+ * - "contradicted": the bundle has an answer that would otherwise read as
+ *   support ("verified", "assumed", "stale") and the statement asserts a
+ *   DIFFERENT value. Mirrors the Hachure `contradiction` transparency-gap
+ *   type (merge.md §7b): a value conflict is surfaced, never silently
+ *   resolved in favour of one side.
+ * - "unsupported": the inquiry did not resolve to an answer at all — no
+ *   mapping and no registered claim for the target. This value means "there
+ *   is nothing here to compare against", and nothing else: a claim that is
+ *   registered but merely awaiting review badges "proposed", and one with no
+ *   evidence badges "unknown".
+ *
+ * Every other badge is the answer's `TrustStatus` passed through unchanged,
+ * so there is no fall-through path that can report a real status under a
+ * label meaning "no such claim".
  */
-export type StatementBadge = "verified" | "assumed" | "stale" | "disputed" | "rejected" | "unsupported";
+export type StatementBadge = TrustStatus | "contradicted" | "unsupported";
+
+/**
+ * How a statement's asserted value compares to the bundle's answer value.
+ *
+ * - "agrees": both are comparable scalars and equivalent under
+ *   `assertionComparisonKey`.
+ * - "contradicts": both are comparable scalars and NOT equivalent.
+ * - "not-compared": no comparison was possible — the inquiry produced no
+ *   answer, or the extractor parsed no value out of the statement
+ *   (`ExtractedStatement.value` absent), or one side is not a scalar.
+ *   Never treated as agreement.
+ */
+export type StatementValueComparison = "agrees" | "contradicts" | "not-compared";
+
+/**
+ * How the Extraction's `text-span:` locator was resolved for a statement.
+ *
+ * - "span": the extractor supplied an explicit character span; the locator
+ *   points where the extractor said it does.
+ * - "excerpt-match": no span, but the excerpt was found verbatim in the
+ *   utterance; the locator points at that occurrence.
+ * - "unanchored-fallback": no span AND the excerpt does not occur in the
+ *   utterance. The locator is still well-formed (`text-span:0-<length>`) so
+ *   downstream producer discipline holds, but it is a length-shaped
+ *   placeholder anchored at offset 0 — it does NOT point at the excerpt, and
+ *   the text it spans is unrelated prose. Anything that resolves the locator
+ *   against the source MUST check this field first; a hallucinated excerpt
+ *   lands here.
+ */
+export type LocatorResolution = "span" | "excerpt-match" | "unanchored-fallback";
 
 export interface UtteranceStatement {
   excerpt: string;
   span?: { start: number; end: number };
   target: CanonicalClaimTarget;
+  /**
+   * The value the statement asserted, verbatim from the extractor
+   * (`ExtractedStatement.value`) — not normalized, not defaulted. Absent when
+   * the extractor parsed no value, which is exactly when `valueComparison`
+   * is "not-compared". This is the field a reader needs to see WHAT was
+   * compared against the bundle's answer.
+   */
+  assertedValue?: unknown;
+  /** How `assertedValue` compares to `inquiryRecord.answer?.value`. */
+  valueComparison: StatementValueComparison;
+  /** Human-readable account of the comparison, naming both sides. */
+  comparisonRationale: string;
+  /**
+   * The Survey provenance records this statement produced: its Extraction,
+   * its Candidate, and the per-target Candidate Set it belongs to. The
+   * Candidate Set carries the Candidate Conflict verdict and rationale when
+   * two statements in the SAME utterance disagree about one target
+   * (`candidateSet.status === "conflict"`), which is a different signal from
+   * `valueComparison` (statement vs bundle).
+   */
+  records: UtteranceStatementRecords;
+  /** How this statement's Extraction locator was resolved. */
+  locatorResolution: LocatorResolution;
   inquiryRecord: InquiryRecord;
   badge: StatementBadge;
 }
@@ -165,6 +236,7 @@ interface BuildUtteranceExtractionParams {
 interface UtteranceExtractionAndProposal {
   extraction: Extraction;
   proposal: CandidateSetProposal<unknown, UtteranceProposalMetadata>;
+  locatorResolution: LocatorResolution;
 }
 
 /**
@@ -182,8 +254,10 @@ function buildUtteranceExtraction(params: BuildUtteranceExtractionParams): Utter
 
   // Compute locator — required for non-manual-entry sources
   // (assertProducerDiscipline throws without it). Source Locator rule:
-  // span-first, excerpt-fallback — UNCHANGED from Slice 1.
-  const locator = spanToLocator(statement.span) ?? excerptLocator(utterance, statement.excerpt);
+  // span-first, excerpt-fallback — locator VALUES unchanged from Slice 1;
+  // what is new is that the record now says which branch produced them, so
+  // an unanchored placeholder is never mistaken for a resolved pointer.
+  const { locator, resolution: locatorResolution } = resolveUtteranceLocator(utterance, statement);
 
   const extraction: Extraction = {
     id: extractionId,
@@ -201,6 +275,7 @@ function buildUtteranceExtraction(params: BuildUtteranceExtractionParams): Utter
         excerpt: statement.excerpt,
         extractorName,
         confidence: statement.confidence,
+        locatorResolution,
       },
     },
   };
@@ -219,7 +294,7 @@ function buildUtteranceExtraction(params: BuildUtteranceExtractionParams): Utter
     },
   };
 
-  return { extraction, proposal };
+  return { extraction, proposal, locatorResolution };
 }
 
 /** One target group's projected Candidate Set plus its own Candidates. */
@@ -311,6 +386,13 @@ interface UtteranceRecordsResult {
   records: UtteranceStatementRecords[];
   extractions: Extraction[];
   candidateSets: CandidateSet[];
+  /**
+   * `locatorResolutions[idx]` is how `records[idx]`'s Extraction locator was
+   * resolved — a parallel array rather than a fourth key on
+   * `UtteranceStatementRecords`, whose shape is a pinned contract. The same
+   * value is also on `records[idx].extraction.metadata.agentUtterance`.
+   */
+  locatorResolutions: LocatorResolution[];
 }
 
 /**
@@ -328,7 +410,7 @@ export function buildUtteranceRecords(params: BuildUtteranceRecordsParams): Utte
   const { sourceId, utterance, extracted, extractorName, observedAt } = params;
 
   const items = extracted.map((statement, idx) => {
-    const { extraction, proposal } = buildUtteranceExtraction({
+    const { extraction, proposal, locatorResolution } = buildUtteranceExtraction({
       sourceId,
       idx,
       statement,
@@ -336,7 +418,7 @@ export function buildUtteranceRecords(params: BuildUtteranceRecordsParams): Utte
       extractorName,
       observedAt,
     });
-    return { statement, extraction, proposal };
+    return { statement, extraction, proposal, locatorResolution };
   });
 
   const groups = groupUtteranceExtractionsByTarget(sourceId, items);
@@ -351,6 +433,7 @@ export function buildUtteranceRecords(params: BuildUtteranceRecordsParams): Utte
     records,
     extractions: items.map((i) => i.extraction),
     candidateSets: [...groups.values()].map((g) => g.candidateSet),
+    locatorResolutions: items.map((i) => i.locatorResolution),
   };
 }
 
@@ -412,7 +495,7 @@ export function utteranceToSurveyInput(
   // core) — replaces the old per-statement builder call. Claims below stay
   // one-per-statement; `record.candidateSet.id`/`record.candidate.id` may be
   // shared across several claims when statements share a target (legal).
-  const { records, extractions, candidateSets } = buildUtteranceRecords({
+  const { records, extractions, candidateSets, locatorResolutions } = buildUtteranceRecords({
     sourceId,
     utterance,
     extracted,
@@ -450,6 +533,9 @@ export function utteranceToSurveyInput(
             span: statement.span,
             confidence: statement.confidence,
             locator: record.extraction.locator,
+            // Travels with the locator so a downstream reader of the Claim
+            // never has to assume the locator resolved.
+            locatorResolution: locatorResolutions[idx]!,
           },
         },
       },
@@ -514,13 +600,14 @@ export async function surveyAgentUtterance(
   // Step 2: Extract statements
   const extracted = await Promise.resolve(extractor.extract(utterance));
 
-  // Batched, grouped provenance construction — kept for provenance/doc-comment
-  // fidelity across the whole utterance (grouping needs every statement of a
-  // target's group present at once; a per-statement call cannot compute it).
-  // Still not surfaced on UtteranceStatement/UtteranceTrustReport this slice
-  // (unchanged from Slice 1's own scoping note) — wiring is left for a future
-  // slice, same as before.
-  buildUtteranceRecords({
+  // Batched, grouped provenance construction. Grouping needs every statement
+  // of a target's group present at once, so this cannot be a per-statement
+  // call. The result is now carried onto every UtteranceStatement
+  // (`records`), so the extractor's confidence, locator, Candidate and
+  // Candidate Set — including the Candidate Conflict verdict when two
+  // statements in this utterance disagree about one target — are observable
+  // in the report instead of being computed and dropped on the floor.
+  const { records, locatorResolutions } = buildUtteranceRecords({
     sourceId,
     utterance,
     extracted,
@@ -531,7 +618,7 @@ export async function surveyAgentUtterance(
   // Step 3 & 4: Resolve each statement and build the report
   const statements: UtteranceStatement[] = [];
 
-  for (const statement of extracted) {
+  for (const [idx, statement] of extracted.entries()) {
     // Resolve the claim
     let inquiryRecord: InquiryRecord;
 
@@ -556,12 +643,18 @@ export async function surveyAgentUtterance(
       inquiryRecord = resolveByTarget(bundle, statement.target, agentId, observedAt, rules, now);
     }
 
-    const badge = badgeFromRecord(inquiryRecord);
+    const comparison = compareAssertedValue(statement, inquiryRecord);
+    const badge = badgeFor(inquiryRecord, comparison.valueComparison);
 
     statements.push({
       excerpt: statement.excerpt,
       span: statement.span,
       target: statement.target,
+      ...(hasAssertedValue(statement) ? { assertedValue: statement.value } : {}),
+      valueComparison: comparison.valueComparison,
+      comparisonRationale: comparison.rationale,
+      records: records[idx]!,
+      locatorResolution: locatorResolutions[idx]!,
       inquiryRecord,
       badge,
     });
@@ -601,39 +694,131 @@ function targetToQuestion(target: CanonicalClaimTarget): string {
   return `${target.subjectId} ${target.fieldOrBehavior}`;
 }
 
-function badgeFromRecord(record: InquiryRecord): StatementBadge {
+/**
+ * Answer statuses a reader takes as support for what the statement said.
+ * These — and only these — are the statuses a contradiction must override:
+ * badging a statement "verified" when it asserts a value the verified claim
+ * denies is the exact failure this profile exists to prevent. For any other
+ * status the claim's own standing is already the more informative thing to
+ * show, and the contradiction stays legible in `valueComparison`.
+ */
+const SUPPORTING_STATUSES: ReadonlySet<TrustStatus> = new Set<TrustStatus>(["verified", "assumed", "stale"]);
+
+function hasAssertedValue(statement: ExtractedStatement): boolean {
+  return statement.value !== undefined;
+}
+
+/**
+ * Whether a value can take part in a statement-vs-answer comparison at all.
+ * Scalars can; objects and arrays cannot, because an utterance extractor
+ * pulls a token out of prose and there is no defensible way to decide
+ * whether that token "is" a structured value. Those report "not-compared"
+ * rather than being asserted to contradict.
+ */
+function isComparableScalar(value: unknown): boolean {
+  return value === null || ["string", "number", "boolean"].includes(typeof value);
+}
+
+/**
+ * The statement-vs-answer comparison key.
+ *
+ * This is deliberately NOT `utteranceEquivalenceKey`. That key compares two
+ * values from the SAME extractor, which share one type discipline, so it
+ * refuses cross-type equality on purpose (5 and "5" from one extractor
+ * really are different findings). A statement-vs-answer comparison crosses a
+ * boundary: the left side is a token the extractor pulled out of prose, the
+ * right side is a value the producer typed. Comparing those two by
+ * `typeof` would badge every true statement about a numeric or boolean field
+ * as a contradiction — a false accusation, which damages the badge exactly
+ * as much as a false green does.
+ *
+ * So scalars are compared by their canonical TEXT rendering, trimmed and
+ * lowercased. This bridges "the agent wrote 95" to "the producer stored 95"
+ * without losing a genuine disagreement: "5" and "6" still differ, and the
+ * bridge is named in `comparisonRationale` rather than applied silently.
+ */
+function assertionComparisonKey(value: unknown): string {
+  return String(value).trim().toLowerCase();
+}
+
+/**
+ * Compare the statement's own asserted value against the bundle's answer.
+ *
+ * An absent asserted value is never treated as agreement: an extractor that
+ * parsed no value has asserted nothing to check, so it reports
+ * "not-compared".
+ */
+function compareAssertedValue(
+  statement: ExtractedStatement,
+  record: InquiryRecord,
+): { valueComparison: StatementValueComparison; rationale: string } {
+  const targetKey = canonicalTargetKey(statement.target);
+  const answer = record.answer;
+  if (!answer) {
+    return {
+      valueComparison: "not-compared",
+      rationale: `No answer for ${targetKey} (inquiry outcome: ${record.outcome}); nothing to compare the statement against.`,
+    };
+  }
+  if (!hasAssertedValue(statement)) {
+    return {
+      valueComparison: "not-compared",
+      rationale: `The extractor parsed no value out of this statement, so nothing was compared against the ${answer.status} answer for ${targetKey}.`,
+    };
+  }
+  if (!isComparableScalar(statement.value) || !isComparableScalar(answer.value)) {
+    return {
+      valueComparison: "not-compared",
+      rationale: `Statement value ${JSON.stringify(statement.value) ?? "undefined"} and the ${answer.status} answer ${JSON.stringify(answer.value) ?? "undefined"} for ${targetKey} are not both scalars; no comparison was attempted.`,
+    };
+  }
+  const asserted = assertionComparisonKey(statement.value);
+  const answered = assertionComparisonKey(answer.value);
+  const shown = `statement "${asserted}" vs ${answer.status} answer "${answered}" (compared as text)`;
+  return asserted === answered
+    ? { valueComparison: "agrees", rationale: `Agrees for ${targetKey}: ${shown}.` }
+    : { valueComparison: "contradicts", rationale: `Contradicts for ${targetKey}: ${shown}.` };
+}
+
+/**
+ * Grade the STATEMENT: the answer's status, overridden by "contradicted"
+ * when the statement asserts something the answer denies and that answer
+ * would otherwise have read as support.
+ */
+function badgeFor(record: InquiryRecord, valueComparison: StatementValueComparison): StatementBadge {
   if (record.outcome === "unsupported") return "unsupported";
   const status = record.answer?.status;
   if (!status) return "unsupported";
-  if (status === "verified") return "verified";
-  if (status === "assumed") return "assumed";
-  if (status === "stale") return "stale";
-  if (status === "disputed") return "disputed";
-  if (status === "rejected" || status === "superseded") return "rejected";
-  return "unsupported";
+  if (valueComparison === "contradicts" && SUPPORTING_STATUSES.has(status)) return "contradicted";
+  return status;
 }
 
 /**
- * Convert a text-span to a locator string.
+ * The single Source Locator rule this module guarantees: span-first,
+ * excerpt-match second, unanchored placeholder last — and it always reports
+ * WHICH of the three produced the locator.
+ *
+ * The locator strings are unchanged from Slice 1, including the last branch's
+ * `text-span:0-<excerpt.length>` placeholder. That placeholder is deliberate
+ * (producer discipline requires a locator on a non-manual-entry source), but
+ * it is well-formed and therefore resolvable — it will happily span real,
+ * unrelated prose at the head of the utterance. Returning the resolution
+ * alongside it is what keeps a hallucinated excerpt from acquiring a pointer
+ * that looks exactly like a found one: the record now says the lookup failed
+ * instead of leaving the reader to re-derive it.
  */
-function spanToLocator(span?: { start: number; end: number }): string | undefined {
-  if (!span) return undefined;
-  return `text-span:${span.start}-${span.end}`;
-}
-
-/**
- * Best-effort locator from excerpt text — find the first occurrence of the
- * excerpt in the utterance and use that as a text-span locator.
- * Falls back to text-span:0-0 if the excerpt is not found.
- */
-function excerptLocator(utterance: string, excerpt: string): string {
-  const idx = utterance.indexOf(excerpt);
-  if (idx >= 0) {
-    return `text-span:${idx}-${idx + excerpt.length}`;
+function resolveUtteranceLocator(
+  utterance: string,
+  statement: ExtractedStatement,
+): { locator: string; resolution: LocatorResolution } {
+  if (statement.span) {
+    return { locator: `text-span:${statement.span.start}-${statement.span.end}`, resolution: "span" };
   }
-  // Fallback: anchor to start (preserves discipline contract; locator is
-  // best-effort for span-less extractors)
-  return `text-span:0-${excerpt.length}`;
+  const idx = utterance.indexOf(statement.excerpt);
+  if (idx >= 0) {
+    return { locator: `text-span:${idx}-${idx + statement.excerpt.length}`, resolution: "excerpt-match" };
+  }
+  return { locator: `text-span:0-${statement.excerpt.length}`, resolution: "unanchored-fallback" };
 }
 
 // ---------------------------------------------------------------------------
