@@ -1,5 +1,21 @@
 # Changelog
 
+## [3.0.0](https://github.com/kontourai/survey/compare/v2.5.0...v3.0.0) (2026-08-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* `StatementBadge` is now `TrustStatus | "contradicted" | "unsupported"`. Statements whose asserted value contradicts a supporting answer now badge "contradicted" instead of "verified"/"assumed"/"stale"; a claim deriving to "unknown"/"proposed" now badges that status instead of "unsupported"; and a "superseded" answer badges "superseded" instead of "rejected". `UtteranceStatement` gains five required-to-read fields.
+
+### Features
+
+* serve MCP 2026-07-28 and legacy clients ([5acce73](https://github.com/kontourai/survey/commit/5acce7335f2678d16935d99d8d707431d0ed9122))
+
+
+### Fixes
+
+* badge an agent statement against its own asserted value, not just the target ([#248](https://github.com/kontourai/survey/issues/248)) ([b12c555](https://github.com/kontourai/survey/commit/b12c555118f9cb5a0d141fe98194849963326b66))
+
 ## [2.5.0](https://github.com/kontourai/survey/compare/v2.4.3...v2.5.0) (2026-07-29)
 
 
