@@ -237,7 +237,7 @@ reading's anchor evidence uses `evidenceType: "policy_rule"`,
 `method: "anchoring"`, the interpretation `ruleLocator` as `sourceLocator`,
 and the policy-standard text/version metadata. A gleaned or answer-impact
 reading's anchor evidence derives its evidence type from the anchor source's
-kind exactly like extraction evidence (api-record and manual-entry map to
+kind via `evidenceTypeFor` (unlike extraction evidence, which additionally consults `rawSource.resolution`; the anchor never does) (api-record and manual-entry map to
 `attestation`, web pages to `crawl_observation`, uploaded documents to
 `document_citation`, policy standards to `policy_rule`).
 
