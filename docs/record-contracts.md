@@ -162,8 +162,8 @@ per-kind / per-impact labels (the StatementBadge / ADR 0003 §4 discipline).
 
 The reading kinds are additive-optional: they do not change
 `SURVEY_INPUT_CONTRACT_VERSION`, and interpretations of any kind never enter
-canonical review-proof bytes (see the decision record
-[interpretation-record](decisions/interpretation-record.md)).
+canonical review-proof bytes (see the
+[interpretation-record decision record](https://github.com/kontourai/survey/blob/main/docs/decisions/interpretation-record.md)).
 
 ```ts
 import {
