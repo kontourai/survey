@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.1.0](https://github.com/kontourai/survey/compare/v3.0.0...v3.1.0) (2026-08-17)
+
+
+### Features
+
+* **interpretation:** gleaned and answerImpact reading kinds on the Interpretation record ([#259](https://github.com/kontourai/survey/issues/259)) ([#261](https://github.com/kontourai/survey/issues/261)) ([3c224ad](https://github.com/kontourai/survey/commit/3c224ad3b0829c1445642fb33f46c6c99b957c5f))
+* **kit:** declare builder.build workflow routing ([#249](https://github.com/kontourai/survey/issues/249)) ([dded2b2](https://github.com/kontourai/survey/commit/dded2b2e0a69c71076600570f6f3ffe692243949))
+
 ## [3.0.0](https://github.com/kontourai/survey/compare/v2.5.0...v3.0.0) (2026-08-02)
 
 
