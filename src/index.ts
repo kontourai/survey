@@ -7,6 +7,8 @@ export type {
   EscalationRecord,
   Extraction,
   Interpretation,
+  InterpretationAnswerImpact,
+  InterpretationReadingKind,
   LocatorScheme,
   ProvenanceResolution,
   RawSource,
@@ -227,12 +229,15 @@ export type {
   SourceOfAuthorityObservationInput,
 } from "./source-of-authority-observation.js";
 export {
+  buildInterpretationReadingPresentation,
   buildReviewCandidatePresentation,
   buildReviewItemPresentation,
   buildReviewResultPresentation,
   humanizeIdentifier,
 } from "./review-workbench/review-presentation.js";
 export type {
+  InterpretationReadingPresentation,
+  InterpretationReadingSource,
   ReviewCandidatePresentation,
   ReviewCandidatePresentationContext,
   ReviewItemPresentation,

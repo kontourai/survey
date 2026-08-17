@@ -128,11 +128,42 @@ decide whether that standard is correct for the producer's domain.
 
 ## Interpretation records
 
-Use `addInterpretation` when a producer records how an actor read a
-`policy-standard` paragraph for one claim. Interpretations are flat provenance
-records with an `appliesTo` edge to a claim and an `anchorsTo` edge to a
-policy-standard raw source; they are not nested claim derivations or rejection
-reasons.
+Use `addInterpretation` when a producer records how an actor read source
+material for one claim. Interpretations are flat provenance records with an
+`appliesTo` edge to a claim and an `anchorsTo` edge to a raw source; they are
+not nested claim derivations or rejection reasons.
+
+An interpretation carries an optional `readingKind` dimension (#259,
+generalizing the record introduced by #16):
+
+- `"policy-standard"` — the original reading: how a policy-standard paragraph
+  applies to the claim. Absent `readingKind` means this kind, so existing
+  records keep their exact prior behavior, including the hard requirement that
+  `anchorsToSourceId` names a `policy-standard` raw source.
+- `"gleaned"` — what this result taught: an authored reading of what the
+  anchored source material showed for the claim.
+- `"answerImpact"` — how the result moved the inquiry answer the claim feeds
+  (inquiry-mapping; downstream decisions live with consumers). Requires the
+  structured `answerImpact` field: `"supported"`, `"narrowed"`, or
+  `"accepted-risk"`. `answerImpact` is illegal on any other kind.
+
+The `gleaned` and `answerImpact` kinds relax only the anchor-kind constraint:
+they may anchor to a raw source of any kind (typically the result source the
+producer read), but the anchor must still resolve to a known raw source —
+unknown references throw, and `ruleLocator` still points at the read location
+inside the anchor source. Malformed reading dimensions (unknown kinds, unknown
+impact values, a missing or misplaced `answerImpact`) fail projection closed.
+
+Every reading kind is authored producer judgment. Consumers rendering
+readings must present them as such — visually distinct from machine-observed
+facts — via `buildInterpretationReadingPresentation`, which stamps every
+reading with the derived `provenance: "authored-judgment"` marker and
+per-kind / per-impact labels (the StatementBadge / ADR 0003 §4 discipline).
+
+The reading kinds are additive-optional: they do not change
+`SURVEY_INPUT_CONTRACT_VERSION`, and interpretations of any kind never enter
+canonical review-proof bytes (see the
+[interpretation-record decision record](https://github.com/kontourai/survey/blob/main/docs/decisions/interpretation-record.md)).
 
 ```ts
 import {
@@ -199,9 +230,16 @@ Projection emits a normal Surface verification event with
 `method: "survey-interpretation"`, the existing `claimId`, and anchor
 `evidenceIds`. Because current Surface verification events reject unsupported
 keys, typed edge details are preserved on the projected claim at
-`metadata.survey.interpretations[]`. The anchor evidence uses
-`evidenceType: "policy_rule"`, `method: "anchoring"`, the interpretation
-`ruleLocator` as `sourceLocator`, and the policy-standard text/version metadata.
+`metadata.survey.interpretations[]`; when a record sets `readingKind` (and
+`answerImpact`), those fields project into its entry and into the anchor
+evidence metadata, so legacy entries stay byte-identical. A policy-standard
+reading's anchor evidence uses `evidenceType: "policy_rule"`,
+`method: "anchoring"`, the interpretation `ruleLocator` as `sourceLocator`,
+and the policy-standard text/version metadata. A gleaned or answer-impact
+reading's anchor evidence derives its evidence type from the anchor source's
+kind via `evidenceTypeFor` (unlike extraction evidence, which additionally consults `rawSource.resolution`; the anchor never does) (api-record and manual-entry map to
+`attestation`, web pages to `crawl_observation`, uploaded documents to
+`document_citation`, policy standards to `policy_rule`).
 
 
 ## Review resources
