@@ -7,6 +7,7 @@ import { SURVEY_INPUT_CONTRACT_VERSION } from "../src/types.js";
 import {
   buildCanonicalReviewProofPayload,
   buildSurveyTrustBundle,
+  canonicalReviewProofJson,
   candidateReviewRecord,
   apiRecordSource,
   fieldObservation,
@@ -505,6 +506,265 @@ describe("Survey Surface projection", () => {
     assert.throws(
       () => buildSurveyTrustBundle(input),
       /Missing interpretation anchor raw source: source\.example\.unknown-policy-standard/,
+    );
+  });
+
+  // #259: gleaned / answerImpact reading kinds on the Interpretation record.
+  // The reading-kind fixture binds readings to one claim whose evidence comes
+  // from an api-record source — the "results" the readings interpret.
+  function readingKindFixture(interpretations: Parameters<SurveyInputBuilder["addInterpretation"]>[0][]): SurveyInput {
+    const observedAt = "2026-08-17T12:00:00.000Z";
+    const builder = new SurveyInputBuilder({
+      source: "survey.interpretation.reading-kinds",
+      generatedAt: "2026-08-17T12:05:00.000Z",
+    })
+      .addObservation(fieldObservation({
+        id: "observation.example.run-result",
+        field: "runResult.status",
+        value: "PASSED",
+        rawSource: apiRecordSource({
+          id: "source.example.run-record",
+          sourceRef: "example-runs://run/run-1",
+          observedAt,
+          checksum: "run-1",
+        }),
+        extraction: {
+          target: "runResult.status",
+          locator: "json:$.runResult.status",
+          extractor: "example-extractor",
+          extractedAt: observedAt,
+        },
+        claim: {
+          id: "claim.example.run-result",
+          subjectType: "example.run",
+          subjectId: "run-1",
+          facet: "example.review",
+          claimType: "run-result.status",
+          impactLevel: "medium",
+          collectedBy: "example-extractor",
+        },
+      }));
+    for (const interpretation of interpretations) builder.addInterpretation(interpretation);
+    return builder.build();
+  }
+
+  it("projects gleaned and answerImpact readings with their reading dimension in claim metadata", () => {
+    const input = readingKindFixture([
+      {
+        id: "interpretation.example.gleaned",
+        appliesToClaimId: "claim.example.run-result",
+        readingKind: "gleaned",
+        anchorsToSourceId: "source.example.run-record",
+        ruleLocator: "json:$.runResult.status",
+        reading: "The run record showed the check completing against the production config.",
+        actor: "producer-operator",
+        recordedAt: "2026-08-17T12:04:00.000Z",
+      },
+      {
+        id: "interpretation.example.answer-impact",
+        appliesToClaimId: "claim.example.run-result",
+        readingKind: "answerImpact",
+        answerImpact: "supported",
+        anchorsToSourceId: "source.example.run-record",
+        ruleLocator: "json:$.runResult.status",
+        reading: "This result supported the inquiry answer that the rollout is healthy.",
+        actor: "producer-operator",
+        recordedAt: "2026-08-17T12:04:30.000Z",
+      },
+    ]);
+
+    const trustBundle = buildSurveyTrustBundle(input);
+    const valid = validateTrustBundle(trustBundle);
+    const report = buildTrustReport(valid);
+
+    const claim = report.claims.find((item) => item.id === "claim.example.run-result");
+    const surveyMetadata = claim?.metadata?.survey as {
+      interpretations?: Array<Record<string, unknown>>;
+    } | undefined;
+    const gleanedEntry = surveyMetadata?.interpretations?.find(
+      (entry) => entry.interpretationId === "interpretation.example.gleaned",
+    );
+    const impactEntry = surveyMetadata?.interpretations?.find(
+      (entry) => entry.interpretationId === "interpretation.example.answer-impact",
+    );
+    assert.equal(gleanedEntry?.readingKind, "gleaned");
+    assert.equal(gleanedEntry?.answerImpact, undefined);
+    assert.equal(impactEntry?.readingKind, "answerImpact");
+    assert.equal(impactEntry?.answerImpact, "supported");
+
+    // Events keep the existing Surface-compatible shape and method.
+    const readingEvents = report.events.filter((event) => event.method === "survey-interpretation");
+    assert.equal(readingEvents.length, 2);
+    for (const event of readingEvents) {
+      const unsupportedKeys = Object.keys(event).filter(
+        (key) => !["id", "claimId", "status", "actor", "method", "evidenceIds", "createdAt", "verifiedAt", "notes"].includes(key),
+      );
+      assert.deepEqual(unsupportedKeys, []);
+    }
+
+    // Anchor evidence derives its type from the anchor source actually read
+    // (api-record -> attestation), not the policy_rule literal.
+    const gleanedEvidence = report.evidence.find((item) => item.id === "interpretation.example.gleaned.evidence.anchor");
+    assert.equal(gleanedEvidence?.evidenceType, "attestation");
+    assert.equal(gleanedEvidence?.method, "anchoring");
+    assert.equal(gleanedEvidence?.metadata?.readingKind, "gleaned");
+    const impactEvidence = report.evidence.find((item) => item.id === "interpretation.example.answer-impact.evidence.anchor");
+    assert.equal(impactEvidence?.metadata?.readingKind, "answerImpact");
+    assert.equal(impactEvidence?.metadata?.answerImpact, "supported");
+  });
+
+  it("keeps the hard policy-standard anchor for policy-standard readings, explicit or defaulted", () => {
+    for (const readingKind of [undefined, "policy-standard" as const]) {
+      const input = readingKindFixture([
+        {
+          id: "interpretation.example.policy-standard-anchor",
+          appliesToClaimId: "claim.example.run-result",
+          ...(readingKind ? { readingKind } : {}),
+          anchorsToSourceId: "source.example.run-record",
+          ruleLocator: "json:$.runResult.status",
+          reading: "A policy-standard reading must anchor to a policy-standard source.",
+          actor: "producer-operator",
+          recordedAt: "2026-08-17T12:04:00.000Z",
+        },
+      ]);
+      assert.throws(
+        () => buildSurveyTrustBundle(input),
+        /Interpretation interpretation\.example\.policy-standard-anchor anchors to raw source source\.example\.run-record, but expected policy-standard source/,
+      );
+    }
+  });
+
+  it("keeps referential integrity for the new reading kinds: unknown anchors throw", () => {
+    const input = readingKindFixture([
+      {
+        id: "interpretation.example.gleaned-unknown-anchor",
+        appliesToClaimId: "claim.example.run-result",
+        readingKind: "gleaned",
+        anchorsToSourceId: "source.example.not-a-source",
+        ruleLocator: "json:$.runResult.status",
+        reading: "A gleaned reading still needs a known anchor source.",
+        actor: "producer-operator",
+        recordedAt: "2026-08-17T12:04:00.000Z",
+      },
+    ]);
+    assert.throws(
+      () => buildSurveyTrustBundle(input),
+      /Missing interpretation anchor raw source: source\.example\.not-a-source/,
+    );
+  });
+
+  it("fails closed on malformed reading dimensions", () => {
+    const base = {
+      appliesToClaimId: "claim.example.run-result",
+      anchorsToSourceId: "source.example.run-record",
+      ruleLocator: "json:$.runResult.status",
+      reading: "A reading with a malformed dimension.",
+      actor: "producer-operator",
+      recordedAt: "2026-08-17T12:04:00.000Z",
+    };
+    const cases: Array<{ interpretation: Parameters<SurveyInputBuilder["addInterpretation"]>[0]; message: RegExp }> = [
+      {
+        interpretation: { ...base, id: "interpretation.example.impact-missing", readingKind: "answerImpact" },
+        message: /readingKind answerImpact requires an answerImpact value/,
+      },
+      {
+        interpretation: { ...base, id: "interpretation.example.impact-on-gleaned", readingKind: "gleaned", answerImpact: "supported" },
+        message: /sets answerImpact but readingKind is gleaned/,
+      },
+      {
+        interpretation: {
+          ...base,
+          id: "interpretation.example.impact-on-default",
+          answerImpact: "supported",
+        },
+        message: /sets answerImpact but readingKind is policy-standard/,
+      },
+      {
+        interpretation: {
+          ...base,
+          id: "interpretation.example.unknown-kind",
+          readingKind: "vibes" as never,
+        },
+        message: /unknown readingKind vibes/,
+      },
+      {
+        interpretation: {
+          ...base,
+          id: "interpretation.example.unknown-impact",
+          readingKind: "answerImpact",
+          answerImpact: "changed-everything" as never,
+        },
+        message: /unknown answerImpact changed-everything/,
+      },
+    ];
+    for (const { interpretation, message } of cases) {
+      assert.throws(() => buildSurveyTrustBundle(readingKindFixture([interpretation])), message);
+    }
+  });
+
+  it("keeps canonical review-proof bytes identical with and without the new readings", () => {
+    const baselineInput = structuredClone(publicFieldReviewExample);
+    const readingInput = structuredClone(publicFieldReviewExample);
+    readingInput.interpretations = [
+      {
+        id: "interpretation.public-field.gleaned",
+        appliesToClaimId: "public-field.entity-123.availability-status.current",
+        readingKind: "gleaned",
+        anchorsToSourceId: "public-field:source:approved-page",
+        ruleLocator: "html:field=availabilityStatus",
+        reading: "The approved listing page showed the program open for availability.",
+        actor: "example-reviewer",
+        recordedAt: "2026-08-17T12:04:00.000Z",
+      },
+      {
+        id: "interpretation.public-field.answer-impact",
+        appliesToClaimId: "public-field.entity-123.availability-status.current",
+        readingKind: "answerImpact",
+        answerImpact: "narrowed",
+        anchorsToSourceId: "public-field:source:approved-page",
+        ruleLocator: "html:field=availabilityStatus",
+        reading: "The observation narrowed the availability answer to the approved page's state.",
+        actor: "example-reviewer",
+        recordedAt: "2026-08-17T12:04:30.000Z",
+      },
+    ];
+
+    const baseline = buildSurveyTrustBundle(baselineInput, { reviewProofs: true });
+    const withReadings = buildSurveyTrustBundle(readingInput, { reviewProofs: true });
+    const reviewedId = "public-field.entity-123.availability-status.current";
+    const baselineAnchor = baseline.claims.find((claim) => claim.id === reviewedId)?.currentIntegrityAnchor;
+    const readingAnchor = withReadings.claims.find((claim) => claim.id === reviewedId)?.currentIntegrityAnchor;
+
+    // The readings project (events + evidence + claim metadata) ...
+    assert.equal(withReadings.events.filter((event) => event.method === "survey-interpretation").length, 2);
+    // ... while the canonical review-proof anchor stays byte-identical.
+    assert.ok(baselineAnchor?.value);
+    assert.deepEqual(readingAnchor, baselineAnchor);
+
+    // Belt and braces: the full canonical proof payload built from each
+    // batch's records serializes to identical bytes and identical hashes.
+    const payloadFor = (input: SurveyInput) =>
+      buildCanonicalReviewProofPayload({
+        rawSource: input.rawSources[0]!,
+        extraction: input.extractions[0]!,
+        candidate: input.candidateSets[0]!.candidates[0]!,
+        candidateSet: input.candidateSets[0]!,
+        reviewOutcome: input.reviewOutcomes[0]!,
+        claim: {
+          ...input.claims[0]!,
+          value: input.candidateSets[0]!.candidates[0]!.value,
+          status: input.reviewOutcomes[0]!.status,
+        },
+      });
+    const baselinePayload = payloadFor(baselineInput);
+    const readingPayload = payloadFor(readingInput);
+    assert.equal(
+      canonicalReviewProofJson(readingPayload),
+      canonicalReviewProofJson(baselinePayload),
+    );
+    assert.equal(
+      hashCanonicalReviewProofPayload(readingPayload),
+      hashCanonicalReviewProofPayload(baselinePayload),
     );
   });
 

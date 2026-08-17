@@ -9,6 +9,8 @@ import type {
   ClaimTarget,
   Extraction,
   Interpretation,
+  InterpretationAnswerImpact,
+  InterpretationReadingKind,
   RawSource,
   ReviewOutcome,
   SurveyInput,
@@ -330,7 +332,8 @@ function buildInterpretationProjection(input: {
   evidence: Evidence;
   event: VerificationEvent;
 } {
-  const anchorSource = requirePolicyStandardAnchor(input.interpretation, input.rawSources);
+  assertInterpretationReadingShape(input.interpretation);
+  const anchorSource = requireInterpretationAnchor(input.interpretation, input.rawSources);
   const claim = resolveInterpretationClaim(input.interpretation, input.claims, input.input);
   if (!input.claimsById.has(claim.id)) {
     throw new Error(`Interpretation ${input.interpretation.id} resolved unknown claim ${claim.id}`);
@@ -357,6 +360,58 @@ function buildInterpretationProjection(input: {
   };
 }
 
+const INTERPRETATION_READING_KINDS: readonly InterpretationReadingKind[] = ["policy-standard", "gleaned", "answerImpact"];
+const INTERPRETATION_ANSWER_IMPACTS: readonly InterpretationAnswerImpact[] = ["supported", "narrowed", "accepted-risk"];
+
+/** Absent readingKind means the original policy-standard reading (pre-#259 records). */
+function interpretationReadingKind(interpretation: Interpretation): InterpretationReadingKind {
+  return interpretation.readingKind ?? "policy-standard";
+}
+
+/**
+ * Fail-closed shape validation for the reading dimension (#259). Records come
+ * from JSON as often as from typed callers, so unknown vocabulary throws
+ * instead of silently projecting under a label nothing derived.
+ */
+function assertInterpretationReadingShape(interpretation: Interpretation): void {
+  if (interpretation.readingKind !== undefined && !INTERPRETATION_READING_KINDS.includes(interpretation.readingKind)) {
+    throw new Error(
+      `Interpretation ${interpretation.id} has unknown readingKind ${String(interpretation.readingKind)}; expected one of ${INTERPRETATION_READING_KINDS.join(", ")}`,
+    );
+  }
+  const kind = interpretationReadingKind(interpretation);
+  if (kind === "answerImpact") {
+    if (interpretation.answerImpact === undefined) {
+      throw new Error(`Interpretation ${interpretation.id} readingKind answerImpact requires an answerImpact value`);
+    }
+    if (!INTERPRETATION_ANSWER_IMPACTS.includes(interpretation.answerImpact)) {
+      throw new Error(
+        `Interpretation ${interpretation.id} has unknown answerImpact ${String(interpretation.answerImpact)}; expected one of ${INTERPRETATION_ANSWER_IMPACTS.join(", ")}`,
+      );
+    }
+    return;
+  }
+  if (interpretation.answerImpact !== undefined) {
+    throw new Error(
+      `Interpretation ${interpretation.id} sets answerImpact but readingKind is ${kind}; answerImpact is only valid on answerImpact readings`,
+    );
+  }
+}
+
+/**
+ * Resolves an interpretation's anchor raw source. Every reading kind requires
+ * a KNOWN raw source (referential integrity per #16 R3); only the original
+ * policy-standard reading additionally requires the source kind to be
+ * `policy-standard`. The gleaned / answerImpact readings (#259) anchor to the
+ * result source the producer read, whatever its kind.
+ */
+function requireInterpretationAnchor(interpretation: Interpretation, rawSources: Map<string, RawSource>): RawSource {
+  if (interpretationReadingKind(interpretation) === "policy-standard") {
+    return requirePolicyStandardAnchor(interpretation, rawSources);
+  }
+  return requireMapValue(rawSources, interpretation.anchorsToSourceId, "interpretation anchor raw source");
+}
+
 function requirePolicyStandardAnchor(interpretation: Interpretation, rawSources: Map<string, RawSource>): RawSource {
   const anchorSource = requireMapValue(rawSources, interpretation.anchorsToSourceId, "interpretation anchor raw source");
   if (anchorSource.kind !== "policy-standard") {
@@ -374,15 +429,21 @@ function createInterpretationAnchorEvidence(input: {
   policyStandard?: PolicyStandardFields;
   projectionContextId: string | undefined;
 }): Evidence {
+  const readingKind = interpretationReadingKind(input.interpretation);
   return {
     id: projectionRecordId(input.interpretation.id, input.projectionContextId, "interpretation-evidence", "evidence.anchor"),
     claimId: input.claim.id,
-    evidenceType: "policy_rule",
+    // The policy-standard reading keeps its exact prior projection; the new
+    // reading kinds (#259) derive the evidence type from the anchor source
+    // they actually read, via the same mapping extraction evidence uses.
+    evidenceType: readingKind === "policy-standard" ? "policy_rule" : evidenceTypeFor(input.anchorSource),
     method: "anchoring",
     sourceRef: input.anchorSource.sourceRef,
     sourceLocator: input.interpretation.ruleLocator,
     excerptOrSummary:
-      input.policyStandard?.inlineText ?? `Anchored policy-standard reading at ${input.interpretation.ruleLocator}.`,
+      readingKind === "policy-standard"
+        ? input.policyStandard?.inlineText ?? `Anchored policy-standard reading at ${input.interpretation.ruleLocator}.`
+        : input.anchorSource.inlineText ?? `Anchored ${readingKind} reading at ${input.interpretation.ruleLocator}.`,
     observedAt: input.anchorSource.observedAt,
     collectedBy: input.interpretation.actor,
     integrityRef: input.anchorSource.checksum,
@@ -394,6 +455,10 @@ function createInterpretationAnchorEvidence(input: {
       locatorScheme: input.anchorSource.locatorScheme,
       anchorsToSourceId: input.anchorSource.id,
       ruleLocator: input.interpretation.ruleLocator,
+      // Only explicitly-set reading kinds project, so legacy batches stay
+      // byte-identical. Authored-judgment provenance markers, not machine facts.
+      ...(input.interpretation.readingKind ? { readingKind: input.interpretation.readingKind } : {}),
+      ...(input.interpretation.answerImpact ? { answerImpact: input.interpretation.answerImpact } : {}),
     },
   };
 }
@@ -439,6 +504,10 @@ function attachInterpretationClaimMetadata(input: {
           reading: input.interpretation.reading,
           actor: input.interpretation.actor,
           recordedAt: input.interpretation.recordedAt,
+          // Explicit reading dimension only (#259): legacy entries keep their
+          // exact prior bytes; absent readingKind means policy-standard.
+          ...(input.interpretation.readingKind ? { readingKind: input.interpretation.readingKind } : {}),
+          ...(input.interpretation.answerImpact ? { answerImpact: input.interpretation.answerImpact } : {}),
           ...(input.interpretation.metadata ? { metadata: input.interpretation.metadata } : {}),
           edges: [
             {

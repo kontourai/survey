@@ -123,11 +123,52 @@ export interface EscalationRecord {
   metadata?: Record<string, unknown>;
 }
 
+/**
+ * The reading dimension of an {@link Interpretation} (#259, generalizing #16):
+ *
+ * - `"policy-standard"` — the original reading of how a policy-standard
+ *   paragraph applies to the claim. This kind keeps the hard requirement that
+ *   the anchor raw source is `kind: "policy-standard"`.
+ * - `"gleaned"` — what this result taught: an authored reading of what the
+ *   anchored source material showed for the claim.
+ * - `"answerImpact"` — how the reading moved the inquiry answer the claim
+ *   feeds (see {@link InterpretationAnswerImpact}); requires `answerImpact`.
+ *
+ * Additive-optional: a record with no `readingKind` is a `"policy-standard"`
+ * reading, so existing batches keep their exact prior validation and
+ * projection behavior. Interpretations never enter canonical review-proof
+ * bytes regardless of kind.
+ */
+export type InterpretationReadingKind = "policy-standard" | "gleaned" | "answerImpact";
+
+/**
+ * How an `"answerImpact"` reading moved the inquiry answer its claim feeds:
+ * the result `supported` the answer, `narrowed` it, or was recorded as an
+ * `accepted-risk`. "Answer" means the inquiry answer (inquiry-mapping);
+ * downstream decisions stay with consumers.
+ */
+export type InterpretationAnswerImpact = "supported" | "narrowed" | "accepted-risk";
+
 export interface Interpretation {
   id: string;
   appliesToTarget?: string;
   appliesToClaimId?: string;
+  /**
+   * Which reading dimension this record carries. Absent means
+   * `"policy-standard"` (the pre-#259 behavior, unchanged).
+   */
+  readingKind?: InterpretationReadingKind;
+  /**
+   * Required when `readingKind` is `"answerImpact"`; illegal for any other
+   * kind. The structured impact beside the free-text `reading`.
+   */
+  answerImpact?: InterpretationAnswerImpact;
   anchorsToSourceId: string;
+  /**
+   * Locator inside the anchor source: the rule paragraph for a
+   * `"policy-standard"` reading, or the result location the producer read for
+   * `"gleaned"` / `"answerImpact"` readings.
+   */
   ruleLocator: string;
   reading: string;
   actor: string;

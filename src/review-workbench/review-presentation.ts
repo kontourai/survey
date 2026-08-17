@@ -1,4 +1,5 @@
 import { findSoleCandidateById, type ReviewCandidate, type ReviewItem } from "../review-resource.js";
+import type { InterpretationAnswerImpact, InterpretationReadingKind } from "../types.js";
 import { type ReviewWorkbenchResult } from "./review-workbench.js";
 import { formatValue } from "./review-surface-preview.js";
 
@@ -71,6 +72,100 @@ export interface ReviewResultPresentation {
   readonly applyMeaning: string;
   readonly reviewItemLink?: ReviewPresentationLink;
   readonly traceRefs: readonly ReviewTraceRef[];
+}
+
+/**
+ * Structural input for {@link buildInterpretationReadingPresentation}: either
+ * a Survey `Interpretation` record (`id`) or the entry Survey projects onto a
+ * claim at `metadata.survey.interpretations[]` (`interpretationId`). Kind and
+ * impact arrive as plain strings when read back from projected metadata.
+ */
+export interface InterpretationReadingSource {
+  readonly id?: string;
+  readonly interpretationId?: string;
+  readonly readingKind?: string;
+  readonly answerImpact?: string;
+  readonly ruleLocator: string;
+  readonly reading: string;
+  readonly actor: string;
+  readonly recordedAt: string;
+}
+
+export interface InterpretationReadingPresentation {
+  readonly interpretationId: string;
+  readonly readingKind: InterpretationReadingKind;
+  readonly kindLabel: string;
+  readonly answerImpact?: InterpretationAnswerImpact;
+  readonly answerImpactLabel?: string;
+  readonly reading: string;
+  readonly actor: string;
+  readonly recordedAt: string;
+  readonly ruleLocator: string;
+  /**
+   * Always `"authored-judgment"`. This is DERIVED from the record type, not a
+   * stored flag: every Interpretation reading is a producer-authored reading
+   * by contract (CONTEXT.md "Interpretation Record"), never a machine-observed
+   * fact. Renderers must present readings under this marking, visually
+   * distinct from machine-observed values — the StatementBadge / ADR 0003 §4
+   * discipline (blending the two is the defect class of #247).
+   */
+  readonly provenance: "authored-judgment";
+  readonly provenanceLabel: string;
+}
+
+const INTERPRETATION_KIND_LABELS: Record<InterpretationReadingKind, string> = {
+  "policy-standard": "Policy-standard reading",
+  gleaned: "Gleaned from results",
+  answerImpact: "Answer impact",
+};
+
+const ANSWER_IMPACT_LABELS: Record<InterpretationAnswerImpact, string> = {
+  supported: "Supported the answer",
+  narrowed: "Narrowed the answer",
+  "accepted-risk": "Accepted as a risk",
+};
+
+/**
+ * Presents one interpretation reading as authored judgment. Fails closed on
+ * unknown reading-kind / answer-impact vocabulary rather than rendering an
+ * authored record under a label nothing derived.
+ */
+export function buildInterpretationReadingPresentation(
+  source: InterpretationReadingSource,
+): InterpretationReadingPresentation {
+  const interpretationId = source.interpretationId ?? source.id;
+  if (!interpretationId) {
+    throw new Error("Interpretation reading presentation requires an id or interpretationId.");
+  }
+  const readingKind = (source.readingKind ?? "policy-standard") as InterpretationReadingKind;
+  const kindLabel = INTERPRETATION_KIND_LABELS[readingKind];
+  if (!kindLabel) {
+    throw new Error(`Interpretation ${interpretationId} has unknown readingKind ${String(source.readingKind)}`);
+  }
+  const answerImpact = source.answerImpact as InterpretationAnswerImpact | undefined;
+  const answerImpactLabel = answerImpact === undefined ? undefined : ANSWER_IMPACT_LABELS[answerImpact];
+  if (answerImpact !== undefined && !answerImpactLabel) {
+    throw new Error(`Interpretation ${interpretationId} has unknown answerImpact ${String(source.answerImpact)}`);
+  }
+  if (readingKind === "answerImpact" && answerImpact === undefined) {
+    throw new Error(`Interpretation ${interpretationId} readingKind answerImpact requires an answerImpact value`);
+  }
+  if (readingKind !== "answerImpact" && answerImpact !== undefined) {
+    throw new Error(`Interpretation ${interpretationId} sets answerImpact but readingKind is ${readingKind}`);
+  }
+
+  return {
+    interpretationId,
+    readingKind,
+    kindLabel,
+    ...(answerImpact !== undefined ? { answerImpact, answerImpactLabel } : {}),
+    reading: source.reading,
+    actor: source.actor,
+    recordedAt: source.recordedAt,
+    ruleLocator: source.ruleLocator,
+    provenance: "authored-judgment",
+    provenanceLabel: "Authored judgment",
+  };
 }
 
 export function buildReviewItemPresentation(

@@ -14,6 +14,7 @@ Numbered ADRs under `docs/adr/` are frozen history and are not listed here.
 | [could-not-confirm](./could-not-confirm.md) | current | Could Not Confirm Review Outcome |
 | [extraction-envelope-import](./extraction-envelope-import.md) | current | Extraction Envelope Import |
 | [governed-extraction-improvement-proposals](./governed-extraction-improvement-proposals.md) | current | Extraction Improvement Proposal |
+| [interpretation-record](./interpretation-record.md) | current | Interpretation Record |
 | [producer-profile](./producer-profile.md) | current | Producer Profile |
 | [proposed-value-edit](./proposed-value-edit.md) | current | Proposed-Value Edit |
 | [review-workbench](./review-workbench.md) | current | Review Workbench |
