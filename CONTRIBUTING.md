@@ -16,8 +16,10 @@ This file is the footnote for people developing the product itself.
 ## Setup
 
 ```bash
-npm install
+pnpm install
 ```
+
+The pnpm version is pinned in `package.json` (`packageManager`). Dependency install scripts are blocked by default; the only packages allowed to run one are listed under `allowBuilds` in `pnpm-workspace.yaml`, pinned by version. Scripts are still run with `npm run …` — that only invokes `package.json` scripts and does not depend on which tool installed `node_modules`.
 
 Node >= 20 is required.
 
