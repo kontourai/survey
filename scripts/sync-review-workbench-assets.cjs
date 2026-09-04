@@ -30,7 +30,7 @@ async function main() {
 async function resolveKitRoot() {
   const stat = await fs.lstat(installedKitRoot).catch(() => undefined);
   if (!stat?.isDirectory() && !stat?.isSymbolicLink()) {
-    throw new Error("Missing @kontourai/ui. Run npm install before syncing review workbench assets.");
+    throw new Error("Missing @kontourai/ui. Run pnpm install before syncing review workbench assets.");
   }
   await assertPackageName(installedKitRoot);
   return installedKitRoot;

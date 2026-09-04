@@ -96,6 +96,7 @@
   "engines": {
     "node": ">=22"
   },
+  "packageManager": "pnpm@11.25.0",
   "bin": {
     "survey-review-mcp": "./bin/survey-review-mcp.mjs",
     "survey-review-console": "./bin/survey-review-console.mjs"
