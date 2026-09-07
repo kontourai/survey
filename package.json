@@ -72,7 +72,7 @@
     "workflow:validate-artifacts": "flow-agents-validate-artifacts"
   },
   "dependencies": {
-    "@kontourai/surface": "^2.13.0",
+    "@kontourai/surface": "^3.2.0",
     "@modelcontextprotocol/server": "2.0.0",
     "zod": "4.4.3"
   },
@@ -85,7 +85,7 @@
     }
   },
   "devDependencies": {
-    "@kontourai/flow-agents": "5.10.0",
+    "@kontourai/flow-agents": "6.2.0",
     "@kontourai/traverse": "^0.25.0",
     "@kontourai/ui": "^1.1.0",
     "@playwright/test": "^1.62.0",
