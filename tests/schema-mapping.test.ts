@@ -80,7 +80,8 @@ function makeReviewedMapping(
   const selectedCandidate = {
     id: candidateId,
     extractionId: `schema-mapping.extraction.${proposal.id}`,
-    value: { relation: proposal.relation, targetField: proposal.targetField, conversion: proposal.conversion },
+    // The reviewed candidate value is the whole mapping; the claim restates it.
+    value: { relation: proposal.relation, sourceField: proposal.sourceField, targetField: proposal.targetField, conversion: proposal.conversion },
     confidence: proposal.confidence,
     metadata: {
       producerProposal: {
@@ -520,6 +521,32 @@ describe("surveySchemaMapping — auto-accept range validation and projection (#
     assert.equal(claim?.conclusionConfidence?.comfortZone?.within, true);
   });
 
+  it("an auto-accepted claim carries exactly the accepted candidate's value, source field included (#290)", async () => {
+    const out = await surveySchemaMapping({ systems }, extractorWithConfidence(0.95), {
+      autoAcceptMinConfidence: 0.9,
+      generatedAt: at,
+    });
+    const target = out.surveyInput.claims[0]!;
+    assert.equal(target.value, undefined, "the schema-mapping claim target must not override the candidate value");
+    const candidate = out.candidateSets[0]!.candidates.find((c) => c.id === target.candidateId)!;
+    const claim = buildSurveyTrustBundle(out.surveyInput).claims[0]!;
+    assert.equal(claim.status, "assumed");
+    assert.deepEqual(claim.value, candidate.value);
+    assert.deepEqual(Object.keys(claim.value as object).sort(), ["conversion", "relation", "sourceField", "targetField"]);
+  });
+
+  it("refuses a trusted schema-mapping claim whose value is not the reviewed candidate value (#290)", async () => {
+    const out = await surveySchemaMapping({ systems }, extractorWithConfidence(0.95), {
+      autoAcceptMinConfidence: 0.9,
+      generatedAt: at,
+    });
+    const input = {
+      ...out.surveyInput,
+      claims: out.surveyInput.claims.map((t) => ({ ...t, value: { relation: "subsumes" } })),
+    };
+    assert.throws(() => buildSurveyTrustBundle(input), { name: "ReviewAgreementError", code: "value-mismatch" });
+  });
+
   it("keeps operator authority and moderate evidence for a human-reviewed claim", async () => {
     const out = await surveySchemaMapping({ systems }, extractorWithConfidence(0.95), { generatedAt: at });
     const set = out.candidateSets[0]!;
@@ -563,6 +590,8 @@ describe("mappingReviewToSurface — claim and identity-link pairing", () => {
     assert.ok(claim, "should have a maps-to claim");
     assert.equal(claim?.subjectType, "system-field");
     assert.equal(claim?.status, "verified");
+    // #290: the verified claim value is the reviewed candidate value.
+    assert.deepEqual(claim?.value, rm.selectedCandidate.value);
   });
 
   it("produces an IdentityLink for each accepted mapping", () => {

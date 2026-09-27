@@ -177,6 +177,22 @@ export interface SchemaMappingOptions {
  * every field read across `mappingReviewToSurface`'s read-back sites and
  * written at Candidate-projection time below.
  */
+/**
+ * The value a schema-mapping candidate and its claim carry: the whole mapping,
+ * source field included, so a reviewed claim's value is exactly the reviewed
+ * candidate value.
+ */
+export type SchemaMappingValue = Pick<MappingProposalRecord, "relation" | "sourceField" | "targetField" | "conversion">;
+
+function mappingValue(proposal: MappingProposalRecord): SchemaMappingValue {
+  return {
+    relation: proposal.relation,
+    sourceField: proposal.sourceField,
+    targetField: proposal.targetField,
+    conversion: proposal.conversion,
+  };
+}
+
 interface SchemaMappingProposalMetadata {
   proposalId?: string;
   sourceField?: SystemFieldRef;
@@ -267,7 +283,7 @@ export async function surveySchemaMapping(
     const claimId = `schema-mapping.claim.${pairKey}`;
 
     const candidateSetProposals: CandidateSetProposal<
-      { relation: "equivalent" | "subsumes" | "converts"; targetField: SystemFieldRef; conversion?: { factor?: number; offset?: number; note?: string } },
+      SchemaMappingValue,
       SchemaMappingProposalMetadata
     >[] = pairProposals.map((proposal) => {
       // Use the source system's RawSource for this extraction
@@ -278,11 +294,7 @@ export async function surveySchemaMapping(
         id: extractionId,
         sourceId: rawSource.id,
         target: `${proposal.sourceField.entity}.${proposal.sourceField.field}:maps-to:${proposal.targetField.entity}.${proposal.targetField.field}`,
-        value: {
-          relation: proposal.relation,
-          targetField: proposal.targetField,
-          conversion: proposal.conversion,
-        },
+        value: mappingValue(proposal),
         confidence: proposal.confidence,
         locator: proposal.sourceField.locator ?? `structured-field:${proposal.sourceField.entity}.${proposal.sourceField.field}`,
         excerpt: proposal.evidence.map((e) => `[${e.system}] ${e.excerpt}`).join(" | "),
@@ -307,11 +319,7 @@ export async function surveySchemaMapping(
       return {
         candidateId: `schema-mapping.candidate.${proposal.id}`,
         extractionId,
-        value: {
-          relation: proposal.relation,
-          targetField: proposal.targetField,
-          conversion: proposal.conversion,
-        },
+        value: mappingValue(proposal),
         confidence: proposal.confidence,
         equivalenceKey: proposal.relation,
         metadata: {
@@ -418,12 +426,8 @@ export async function surveySchemaMapping(
         facet: "schema-mapping.profile",
         claimType: "schema-mapping.field-link",
         fieldOrBehavior: "maps-to",
-        value: {
-          relation: first.relation,
-          sourceField: first.sourceField,
-          targetField: first.targetField,
-          conversion: first.conversion,
-        },
+        // No value override: the claim carries the selected candidate's value,
+        // which is the whole mapping a reviewer (or auto-accept) decided on.
         ...(claimStatus ? { status: claimStatus } : {}),
         impactLevel: "medium",
         collectedBy: extractor.name,
@@ -568,7 +572,7 @@ export function mappingReviewToSurface(
       id: extractionId,
       sourceId: rawSourceId,
       target: `${sourceField.entity}.${sourceField.field}:maps-to:${targetField.entity}.${targetField.field}`,
-      value: { relation, targetField, conversion },
+      value: { relation, sourceField, targetField, conversion },
       confidence,
       locator: sourceField.locator ?? `structured-field:${sourceField.entity}.${sourceField.field}`,
       excerpt: evidence.map((e) => `[${e.system}] ${e.excerpt}`).join(" | "),
@@ -608,7 +612,6 @@ export function mappingReviewToSurface(
       facet: "schema-mapping.profile",
       claimType: "schema-mapping.field-link",
       fieldOrBehavior: "maps-to",
-      value: { relation, sourceField, targetField, conversion },
       status: rm.reviewOutcome.status as "verified" | "assumed",
       impactLevel: "medium",
       collectedBy: proposedBy,

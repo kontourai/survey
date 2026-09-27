@@ -147,7 +147,7 @@ export type {
   CurrentProposedCandidateRole,
   ReviewedCurrentProposedResolutionInput,
 } from "./reviewed-current-proposed-resolution.js";
-export { buildSurveyTrustBundle } from "./to-surface.js";
+export { buildSurveyTrustBundle, ReviewAgreementError } from "./to-surface.js";
 export type { BuildSurveyTrustBundleOptions } from "./to-surface.js";
 export { buildCanonicalReviewedTrustInput } from "./canonical-reviewed-trust-input.js";
 export type {
@@ -310,6 +310,7 @@ export type {
   ReviewedMapping,
   SchemaMappingExtractor,
   SchemaMappingOptions,
+  SchemaMappingValue,
   SystemFieldRef,
 } from "./schema-mapping.js";
 export { buildAuthorizedActionAuthorizing, buildPromptRef, isValidAuthorizing, validateAuthorizing } from "./review-authorizing.js";

@@ -468,6 +468,40 @@ Calibration output is now experimental and guarded. If you use
   `source-version`, `current`, a free-form role, or none), as before: with one
   candidate there is no reviewer pick to mistake for the proposal.
 
+## Claims must agree with their review (#290)
+
+A `verified` or `assumed` claim now has to restate the review it cites.
+`buildSurveyTrustBundle` throws `ReviewAgreementError` (exported, with a
+`code`) instead of projecting a contradiction:
+
+- **`status-mismatch`.** An explicit `ClaimTarget.status` of `verified` or
+  `assumed` must equal the selected review's `status`. A claim can still be
+  projected with a weaker status than its review (for example `proposed`).
+  `reviewedCandidateResolution` and `reviewedCurrentProposedResolution` throw
+  the same error when `selectedClaimStatus`, or the selected observation's own
+  `claim.status`, is `verified`/`assumed` and differs from
+  `reviewOutcome.status`.
+- **`value-mismatch`.** A trusted claim's value must equal the reviewed value
+  by canonical JSON: the candidate value, or the edit the review records as
+  `metadata.editedValue` (which `buildCanonicalReviewedTrustInput` sets). Drop
+  `ClaimTarget.value` to take the reviewed value, or make the candidate carry
+  the value you want to claim. `ClaimTarget.value` is still free for claims
+  that are not trusted.
+- **`ambiguous-review-order`.** When several reviews apply to one candidate,
+  the latest by `reviewedAt` now governs, whatever their array order (before,
+  the first one in the array won). Reviews bound to the exact candidate still
+  take precedence over reviews without a `candidateId`. If the latest cannot
+  be determined — a tie, or a missing or unparseable `reviewedAt` among
+  several reviews — the projection throws.
+
+Schema mapping: candidate and extraction values from `surveySchemaMapping`
+now carry the whole mapping (`relation`, `sourceField`, `targetField`,
+`conversion`; exported as `SchemaMappingValue`), and neither
+`surveySchemaMapping` nor `mappingReviewToSurface` overrides the claim value.
+The projected claim value is unchanged for mappings built by
+`surveySchemaMapping`. If you hand-build a `ReviewedMapping`, give its
+`selectedCandidate.value` the same four keys.
+
 ## See also
 
 - [consumer-integration-guide.md](consumer-integration-guide.md) — first-time
