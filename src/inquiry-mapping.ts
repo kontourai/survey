@@ -23,6 +23,7 @@ import { resolveInquiry } from "@kontourai/surface";
 import type { CanonicalClaimTarget } from "@kontourai/surface";
 import type { Candidate, CandidateSet, ReviewOutcome } from "./types.js";
 import {
+  assertValidAutoAcceptThreshold,
   evaluateAutoAccept,
   getProducerProposal,
   hasCandidateConflict,
@@ -286,6 +287,9 @@ export interface AutoAcceptPolicy {
  *
  * Proposals at or above minConfidence → status "assumed", withinComfortZone: true
  * Proposals below minConfidence → return a "needs-review" mapping (not yet durable)
+ * Proposals whose confidence is not a finite number in [0, 1] are never
+ * auto-accepted. Throws `RangeError` unless `policy.minConfidence` is a finite
+ * number in (0, 1].
  *
  * Only non-conflicting proposals are auto-accepted. If proposals disagree, they
  * need human review regardless of confidence.
@@ -296,6 +300,7 @@ export function applyAutoAcceptPolicy(
   proposals: MappingProposal[],
   policy: AutoAcceptPolicy,
 ): InquiryMapping[] {
+  assertValidAutoAcceptThreshold(policy.minConfidence);
   if (proposals.length === 0) return [];
 
   // If proposals disagree, none can be auto-accepted

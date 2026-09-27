@@ -23,6 +23,7 @@
 
 import type { IdentityLink, IdentityLinkConversion, TrustBundle } from "@kontourai/surface";
 import {
+  assertValidAutoAcceptThreshold,
   evaluateAutoAccept,
   getProducerProposal,
   projectProposalsToCandidateSet,
@@ -154,6 +155,10 @@ export interface SchemaMappingOptions {
    * If set, proposals at or above this confidence threshold are auto-accepted
    * as "assumed" (mirrors applyAutoAcceptPolicy in inquiry-mapping).
    * Conflicting proposals are never auto-accepted.
+   *
+   * Experimental: the gate trusts the proposer's self-reported confidence.
+   * Must be a finite number in (0, 1] (otherwise `RangeError`); a proposal
+   * whose confidence is not a finite number in [0, 1] is never auto-accepted.
    */
   autoAcceptMinConfidence?: number;
   /** ISO 8601 timestamp; defaults to new Date().toISOString(). */
@@ -217,6 +222,7 @@ export async function surveySchemaMapping(
   proposals: MappingProposalRecord[];
   candidateSets: CandidateSet[];
 }> {
+  if (options.autoAcceptMinConfidence !== undefined) assertValidAutoAcceptThreshold(options.autoAcceptMinConfidence);
   const generatedAt = options.generatedAt ?? new Date().toISOString();
   const source = options.source ?? `schema-mapping:${extractor.name}`;
 

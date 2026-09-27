@@ -194,6 +194,30 @@ export function meetsAutoAcceptThreshold(confidence: number, minConfidence: numb
   return confidence >= minConfidence;
 }
 
+/**
+ * Refuse an auto-accept policy threshold that cannot express a comfort zone:
+ * `minConfidence` must be a finite number in (0, 1]. A threshold of 0 (or
+ * below) would accept every proposal, and one above 1 accepts only
+ * out-of-range self-reports, so either makes `withinComfortZone: true` a
+ * false statement. Throws `RangeError`.
+ */
+export function assertValidAutoAcceptThreshold(minConfidence: number): void {
+  if (typeof minConfidence !== "number" || !Number.isFinite(minConfidence) || minConfidence <= 0 || minConfidence > 1) {
+    throw new RangeError(
+      `Auto-accept minConfidence must be a finite number in (0, 1]; received ${String(minConfidence)}.`,
+    );
+  }
+}
+
+/**
+ * Whether a proposal's self-reported confidence is usable by the auto-accept
+ * gate: a finite number in [0, 1]. Anything else (7, -5, NaN) is never
+ * auto-accepted; the proposal stays in human review.
+ */
+export function isAutoAcceptConfidenceInRange(confidence: number): boolean {
+  return typeof confidence === "number" && Number.isFinite(confidence) && confidence >= 0 && confidence <= 1;
+}
+
 // ---------------------------------------------------------------------------
 // Unified auto-accept decision
 // ---------------------------------------------------------------------------
@@ -235,8 +259,17 @@ export interface AutoAcceptPolicy {
 
 /** The unified auto-accept decision `evaluateAutoAccept` returns. */
 export interface AutoAcceptDecision {
-  /** `true` iff there is no conflict and `evidence.confidence` clears `policy.minConfidence`. */
+  /**
+   * `true` iff there is no conflict, `evidence.confidence` is a finite number
+   * in [0, 1], and it clears `policy.minConfidence`.
+   */
   accepted: boolean;
+  /**
+   * Set when the proposal was refused because its self-reported confidence
+   * is not a finite number in [0, 1]. The proposal is not auto-accepted and
+   * stays in human review.
+   */
+  warning?: "confidence-out-of-range";
   /** The confidence value that was gated on (== `evidence.confidence`). */
   confidence: number;
   /** Composed rationale — always computed; callers only use it when `accepted`. */
@@ -264,7 +297,11 @@ export interface AutoAcceptDecision {
  *    back to `fallbackTimestamp` (and reporting which source was used via
  *    `reviewedAtSource`) when a profile's evidence carries no timestamp of
  *    its own.
- * 4. Always report `actor: AUTO_ACCEPT_ACTOR` and
+ * 4. Refuse out-of-range inputs: throw `RangeError` unless
+ *    `policy.minConfidence` is a finite number in (0, 1], and never accept a
+ *    proposal whose confidence is not a finite number in [0, 1] (reported via
+ *    `warning`). This is what keeps `withinComfortZone: true` truthful.
+ * 5. Always report `actor: AUTO_ACCEPT_ACTOR` and
  *    `withinComfortZone: AUTO_ACCEPT_WITHIN_COMFORT_ZONE` (ADR 0003 §4:
  *    auto-accept only ever yields "assumed" with the comfort-zone posture).
  *
@@ -279,7 +316,9 @@ export function evaluateAutoAccept(
   policy: AutoAcceptPolicy,
   fallbackTimestamp: string,
 ): AutoAcceptDecision {
-  const accepted = !hasConflict && meetsAutoAcceptThreshold(evidence.confidence, policy.minConfidence);
+  assertValidAutoAcceptThreshold(policy.minConfidence);
+  const inRange = isAutoAcceptConfidenceInRange(evidence.confidence);
+  const accepted = !hasConflict && inRange && meetsAutoAcceptThreshold(evidence.confidence, policy.minConfidence);
   const rationale =
     `Auto-accepted: confidence ${evidence.confidence} >= threshold ${policy.minConfidence}.` +
     (evidence.rationale !== undefined ? ` ${evidence.rationale}` : "");
@@ -293,5 +332,6 @@ export function evaluateAutoAccept(
     reviewedAtSource: evidence.proposedAt !== undefined ? "proposedAt" : "fallback",
     actor: AUTO_ACCEPT_ACTOR,
     withinComfortZone: AUTO_ACCEPT_WITHIN_COMFORT_ZONE,
+    ...(inRange ? {} : { warning: "confidence-out-of-range" as const }),
   };
 }

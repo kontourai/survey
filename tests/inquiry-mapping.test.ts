@@ -247,6 +247,19 @@ describe("applyAutoAcceptPolicy", () => {
     assert.equal(applyAutoAcceptPolicy([], { minConfidence: 0.8 }).length, 0);
   });
 
+  it("throws RangeError for an invalid minConfidence even with no proposals (#280)", () => {
+    for (const minConfidence of [0, -1, 1.5, Number.NaN]) {
+      assert.throws(() => applyAutoAcceptPolicy([], { minConfidence }), RangeError);
+    }
+  });
+
+  it("does not auto-accept an out-of-range proposal confidence (#280)", () => {
+    for (const confidence of [7, -5, Number.NaN]) {
+      const proposal = { ...makeProposal({ id: "p-range", question: "is entity-1 active" }), confidence };
+      assert.equal(applyAutoAcceptPolicy([proposal], { minConfidence: 0.5 }).length, 0);
+    }
+  });
+
   it("composes the exact rationale string and reviewedAt (pins byte-identical output post-core-delegation)", () => {
     const proposal = makeProposal({
       id: "p1",
