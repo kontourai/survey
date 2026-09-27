@@ -23,11 +23,12 @@
 
 import type { IdentityLink, IdentityLinkConversion, TrustBundle } from "@kontourai/surface";
 import {
+  assertValidAutoAcceptThreshold,
   evaluateAutoAccept,
   getProducerProposal,
   projectProposalsToCandidateSet,
 } from "./producer-profile.js";
-import type { CandidateSetProposal } from "./producer-profile.js";
+import type { AutoAcceptWarning, CandidateSetProposal } from "./producer-profile.js";
 import { buildSurveyTrustBundle } from "./to-surface.js";
 import type {
   Candidate,
@@ -154,6 +155,10 @@ export interface SchemaMappingOptions {
    * If set, proposals at or above this confidence threshold are auto-accepted
    * as "assumed" (mirrors applyAutoAcceptPolicy in inquiry-mapping).
    * Conflicting proposals are never auto-accepted.
+   *
+   * Experimental: the gate trusts the proposer's self-reported confidence.
+   * Must be a finite number in (0, 1] (otherwise `RangeError`); a proposal
+   * whose confidence is not a finite number in [0, 1] is never auto-accepted.
    */
   autoAcceptMinConfidence?: number;
   /** ISO 8601 timestamp; defaults to new Date().toISOString(). */
@@ -216,11 +221,19 @@ export async function surveySchemaMapping(
   surveyInput: SurveyInput;
   proposals: MappingProposalRecord[];
   candidateSets: CandidateSet[];
+  /**
+   * Proposals the auto-accept policy refused because their confidence is not
+   * a finite number in [0, 1]. Present only when non-empty; those proposals
+   * stay in human review.
+   */
+  autoAcceptWarnings?: AutoAcceptWarning[];
 }> {
+  if (options.autoAcceptMinConfidence !== undefined) assertValidAutoAcceptThreshold(options.autoAcceptMinConfidence);
   const generatedAt = options.generatedAt ?? new Date().toISOString();
   const source = options.source ?? `schema-mapping:${extractor.name}`;
 
   const proposals = await Promise.resolve(extractor.extract(context));
+  const autoAcceptWarnings: AutoAcceptWarning[] = [];
 
   // One RawSource per system schema
   const rawSources: RawSource[] = context.systems.map((s) => ({
@@ -367,6 +380,13 @@ export async function surveySchemaMapping(
         generatedAt,
       );
 
+      if (decision.warning) {
+        autoAcceptWarnings.push({
+          code: decision.warning,
+          proposalId: selectedProposal?.proposalId ?? selectedCandidate.id,
+          confidence: decision.confidence,
+        });
+      }
       if (decision.accepted) {
         const reviewId = `schema-mapping.review.${pairKey}`;
         reviewOutcomes.push({
@@ -434,7 +454,12 @@ export async function surveySchemaMapping(
     claims,
   };
 
-  return { surveyInput, proposals, candidateSets };
+  return {
+    surveyInput,
+    proposals,
+    candidateSets,
+    ...(autoAcceptWarnings.length > 0 ? { autoAcceptWarnings } : {}),
+  };
 }
 
 // ---------------------------------------------------------------------------

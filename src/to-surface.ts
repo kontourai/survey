@@ -3,6 +3,7 @@ import type { Claim, Evidence, TrustBundle, TrustStatus, VerificationEvent } fro
 import { buildReviewProofAnchor } from "./review-proof.js";
 import { assertReviewOutcomeDiscipline } from "./producer-discipline.js";
 import { deriveCalibration, type CalibrationMetrics } from "./calibration.js";
+import { AUTO_ACCEPT_ACTOR } from "./producer-profile.js";
 import type {
   Candidate,
   CandidateSet,
@@ -118,6 +119,7 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
     const createdAt = projection.createdAt ?? extraction.extractedAt;
     const updatedAt = projection.updatedAt ?? projectionReview?.reviewedAt ?? input.generatedAt;
     const evidenceId = projectionRecordId(projection.id, projectionContextId, "claim-evidence", "evidence.source");
+    const autoAccepted = projectionReview?.actor === AUTO_ACCEPT_ACTOR;
 
     const claim: Claim = {
       id: projection.id,
@@ -136,8 +138,13 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
       confidenceBasis: {
         sourceQuality: "moderate",
         extractionConfidence: candidate.confidence ?? extraction.confidence,
-        reviewerAuthority: status === "verified" || status === "assumed" ? "operator" : "none",
-        evidenceStrength: status === "verified" || status === "assumed" ? "moderate" : "weak",
+        // An auto-accept policy checked nothing but the proposer's own
+        // confidence, so its claims carry system authority and weak evidence;
+        // only a human review earns operator authority.
+        reviewerAuthority: status === "verified" || status === "assumed"
+          ? (autoAccepted ? "system" : "operator")
+          : "none",
+        evidenceStrength: (status === "verified" || status === "assumed") && !autoAccepted ? "moderate" : "weak",
         impactLevel: projection.impactLevel,
         ...projection.confidenceBasis,
       },

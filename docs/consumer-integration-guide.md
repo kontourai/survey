@@ -155,6 +155,17 @@ const domainAwareBasis = confidenceBasisForReview({
 });
 ```
 
+`buildSurveyTrustBundle` applies its own projection defaults, which differ from
+this helper: a human-reviewed `verified` or `assumed` claim projects
+`reviewerAuthority: "operator"` and `evidenceStrength: "moderate"`, and a claim
+whose review actor is the auto-accept policy (`"auto-accept-policy"`) projects
+`reviewerAuthority: "system"` and `evidenceStrength: "weak"`, because the policy
+checked nothing but the proposer's self-reported confidence. Auto-accept
+(`autoAcceptMinConfidence`, `applyAutoAcceptPolicy`) is opt-in and experimental:
+thresholds outside (0, 1] throw `RangeError`, and proposals whose confidence is
+not a finite number in [0, 1] are never auto-accepted (they are reported as
+`confidence-out-of-range` warnings).
+
 ## Server-Owned Review Sessions
 
 For browser-backed review flows, the server should own the review snapshot. A

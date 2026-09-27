@@ -980,7 +980,9 @@ const reviewOutcome = {
 };
 const mapping = applyMappingReview(candidateSet, reviewOutcome);
 
-// 4b. Auto-accept policy path (proposals at or above threshold → "assumed")
+// 4b. Auto-accept policy path (proposals at or above threshold → "assumed").
+// Experimental: minConfidence must be in (0, 1] (else RangeError); a proposal
+// whose confidence is not a finite number in [0, 1] is never auto-accepted.
 const autoMappings = applyAutoAcceptPolicy(proposals, { minConfidence: 0.85 });
 
 // 5. Resolve — looks up mapping by exact normalized text; answer always live
@@ -1232,6 +1234,9 @@ The function runs the extractor and projects proposals into the standard Survey 
   - `status: "conflict"` when proposals for the same pair disagree on `relation`.
   - `status: "needs-review"` otherwise.
 - One `ReviewOutcome` (`status: "assumed"`, `actor: "auto-accept-policy"`) per non-conflicting candidate set whose *selected* candidate (`candidates[0]`, first-proposal-wins within the group) has its own confidence at or above `autoAcceptMinConfidence`.  Conflicting sets are never auto-accepted.
+- **Range validation.** `autoAcceptMinConfidence` must be a finite number in (0, 1]; any other value throws `RangeError`. A proposal whose confidence is not a finite number in [0, 1] (for example `7`, `-5`, `NaN`) is never auto-accepted and stays `needs-review`; each one is reported in the result's optional `autoAcceptWarnings` array (`{ code: "confidence-out-of-range", proposalId, confidence }`), which is omitted when empty. `applyAutoAcceptPolicy` reports the same warning through its optional third argument, `{ onWarning }`.
+- **Projected authority.** A claim whose review actor is `"auto-accept-policy"` projects `confidenceBasis.reviewerAuthority: "system"` and `evidenceStrength: "weak"`: the policy checked nothing but the proposer's own self-reported confidence. Human-reviewed `verified`/`assumed` claims keep `"operator"`/`"moderate"`. (Before survey#280, auto-accepted claims projected `"operator"`/`"moderate"`; consumers that count claims by `reviewerAuthority` will see them move to `"system"`.)
+- **Experimental.** Auto-accept stays opt-in. Self-reported confidence is not a calibrated probability, and the policy does not check that a proposal's evidence excerpt occurs in the named schema.
 
 ### mappingReviewToSurface
 
@@ -1285,7 +1290,7 @@ const record = resolveInquiry(bundle, {
 - `IdentityLink.subjects` use `subjectType: "system-field"` and `subjectId` in the form `"<system>::<entity>::<field>"`.
 - `IdentityLink.mappingClaimId` must point at a claim present in the same bundle; `resolveInquiry` uses it to compute the weakest-link ceiling.
 - The `SchemaMappingExtractor` interface is synchronous or async; `surveySchemaMapping` always awaits it.
-- Auto-accept shares its gate/rationale/`reviewedAt` decision with `applyAutoAcceptPolicy` in `inquiry-mapping` via the core `evaluateAutoAccept` function (`src/producer-profile.ts`, see `docs/decisions/producer-profile.md`): the non-conflicting selected candidate is accepted as `"assumed"` when its own confidence is above the threshold, never as `"verified"`.  Conflicts require explicit human review.
+- Auto-accept shares its gate/rationale/`reviewedAt` decision with `applyAutoAcceptPolicy` in `inquiry-mapping` via the core `evaluateAutoAccept` function (`src/producer-profile.ts`, see `docs/decisions/producer-profile.md`): the non-conflicting selected candidate is accepted as `"assumed"` when its own confidence, a finite number in [0, 1], is at or above the threshold, never as `"verified"`.  Both profiles throw `RangeError` for a threshold outside (0, 1].  Conflicts require explicit human review.
 - `referenceSchemaExtractor` is deterministic and test-only.  Its matching strategy (exact field-name, optional type-token match) is intentionally simple and transparent.
 
 
