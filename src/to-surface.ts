@@ -177,6 +177,7 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
           candidate,
           review: projectionReview,
           comfortZoneReview: review,
+          valueEdit: (status === "verified" || status === "assumed") && review ? acceptedEdit(review) : undefined,
         }),
       },
     };
@@ -625,6 +626,7 @@ function buildSurveyMetadata(input: {
   candidate: Candidate;
   review?: ReviewOutcome;
   comfortZoneReview?: ReviewOutcome;
+  valueEdit?: { value: unknown };
 }): Record<string, unknown> {
   const producerSurveyMetadata = isRecord(input.projection.metadata?.survey) ? input.projection.metadata.survey : {};
   const producerCandidateMetadata = isRecord(producerSurveyMetadata.candidate) ? producerSurveyMetadata.candidate : {};
@@ -642,6 +644,11 @@ function buildSurveyMetadata(input: {
             rejectionReason: input.candidate.rejectionReason,
           },
         }
+      : {}),
+    // A trusted claim whose value is a reviewer's edit says so, and keeps the
+    // value the reviewer was shown.
+    ...(input.valueEdit
+      ? { valueEdit: { edited: true, originalValue: input.candidate.value, reviewOutcomeId: input.comfortZoneReview?.id } }
       : {}),
     ...(input.comfortZoneReview?.withinComfortZone === false
       ? {
@@ -715,13 +722,22 @@ function selectCandidate(candidateSet: CandidateSet, candidateId?: string): Cand
   return candidate;
 }
 
-/** The value a review outcome attests: an edit the reviewer applied (recorded
- *  as `metadata.editedValue` by the canonical reviewed path), else the
- *  candidate value that was reviewed. */
+/** An accepted edit the review records. `buildCanonicalReviewedTrustInput`
+ *  writes `metadata.editedValue` next to `metadata.workbenchDecision`; only an
+ *  edit on an `accept-proposed` decision replaces the reviewed value. Any other
+ *  `editedValue` (a bare one, or one on a reject or keep decision) is not an
+ *  accepted edit and is ignored. */
+function acceptedEdit(review: ReviewOutcome): { value: unknown } | undefined {
+  const metadata = review.metadata;
+  return metadata?.workbenchDecision === "accept-proposed" && Object.hasOwn(metadata, "editedValue")
+    ? { value: metadata.editedValue }
+    : undefined;
+}
+
+/** The value a review outcome attests: its accepted edit, else the candidate value that was reviewed. */
 function reviewedValueFor(review: ReviewOutcome, candidate: Candidate): unknown {
-  return review.metadata && Object.hasOwn(review.metadata, "editedValue")
-    ? review.metadata.editedValue
-    : candidate.value;
+  const edit = acceptedEdit(review);
+  return edit ? edit.value : candidate.value;
 }
 
 /** The latest applicable review governs. Exact candidate bindings take
@@ -744,14 +760,26 @@ function latestReview(reviews: ReviewOutcome[], claimId: string): ReviewOutcome 
     );
   }
   const latestAt = Math.max(...timed.map((entry) => entry.at));
-  const latest = timed.filter((entry) => entry.at === latestAt);
-  if (latest.length > 1) {
+  const latest = timed.filter((entry) => entry.at === latestAt).map((entry) => entry.review);
+  // Reviews at the same instant (however the timestamp is spelled) that record
+  // the same decision are one review recorded twice; conflicting ones are refused.
+  if (new Set(latest.map(reviewDecisionKey)).size > 1) {
     throw new ReviewAgreementError(
       "ambiguous-review-order",
-      `Claim ${claimId} has review outcomes ${latest.map((entry) => entry.review.id).join(", ")} tied at the latest reviewedAt`,
+      `Claim ${claimId} has conflicting review outcomes ${latest.map((review) => review.id).join(", ")} at the latest reviewedAt`,
     );
   }
-  return latest[0]!.review;
+  return [...latest].sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))[0]!;
+}
+
+function reviewDecisionKey(review: ReviewOutcome): string {
+  const edit = acceptedEdit(review);
+  return canonicalJson({
+    candidateId: review.candidateId ?? null,
+    status: review.status,
+    resolution: review.resolution ?? null,
+    edit: edit ? { value: edit.value } : null,
+  });
 }
 
 function normalizeCalibrationOptions(

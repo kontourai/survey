@@ -482,17 +482,24 @@ A `verified` or `assumed` claim now has to restate the review it cites.
   `claim.status`, is `verified`/`assumed` and differs from
   `reviewOutcome.status`.
 - **`value-mismatch`.** A trusted claim's value must equal the reviewed value
-  by canonical JSON: the candidate value, or the edit the review records as
-  `metadata.editedValue` (which `buildCanonicalReviewedTrustInput` sets). Drop
+  by canonical JSON: the candidate value, or an accepted edit. An accepted
+  edit is `metadata.editedValue` on a review whose `metadata.workbenchDecision`
+  is `accept-proposed`, which is what `buildCanonicalReviewedTrustInput` writes.
+  Any other `editedValue` is ignored. A claim that takes an edit carries
+  `metadata.survey.valueEdit: { edited: true, originalValue, reviewOutcomeId }`,
+  so the bundle shows the value was edited and what it was edited from. Drop
   `ClaimTarget.value` to take the reviewed value, or make the candidate carry
   the value you want to claim. `ClaimTarget.value` is still free for claims
   that are not trusted.
 - **`ambiguous-review-order`.** When several reviews apply to one candidate,
   the latest by `reviewedAt` now governs, whatever their array order (before,
   the first one in the array won). Reviews bound to the exact candidate still
-  take precedence over reviews without a `candidateId`. If the latest cannot
-  be determined — a tie, or a missing or unparseable `reviewedAt` among
-  several reviews — the projection throws.
+  take precedence over reviews without a `candidateId`. Timestamps compare as
+  instants, so `…T00:00:00Z` and `…T09:00:00+09:00` are the same time. Reviews
+  at the latest instant that record the same decision count as one review
+  (the claim cites the lowest id). The projection throws if reviews at that
+  instant record different decisions, or if any of several reviews has a
+  missing or unparseable `reviewedAt`.
 
 Schema mapping: candidate and extraction values from `surveySchemaMapping`
 now carry the whole mapping (`relation`, `sourceField`, `targetField`,

@@ -141,16 +141,39 @@ describe("trusted claim value is the reviewed value (#290)", () => {
     assert.deepEqual(bundle.claims[0]?.value, { currency: "USD", amount: 48000 });
   });
 
-  it("uses the edit a review records as the reviewed value", () => {
-    const edited = review({ id: "review.edited", status: "verified", metadata: { editedValue: 52000 } });
+  it("uses an accepted edit as the reviewed value and records the edit on the claim", () => {
+    const edited = review({ id: "review.edited", status: "verified", metadata: { workbenchDecision: "accept-proposed", editedValue: 52000 } });
     const bundle = buildSurveyTrustBundle(input({ reviews: [edited], claim: { value: 52000 } }));
     assert.equal(bundle.claims[0]?.value, 52000);
+    assert.deepEqual((bundle.claims[0]?.metadata?.survey as { valueEdit?: unknown }).valueEdit, {
+      edited: true, originalValue: 48000, reviewOutcomeId: "review.edited",
+    });
 
     // The unedited candidate value is not what the reviewer approved.
     assert.throws(
       () => buildSurveyTrustBundle(input({ reviews: [edited] })),
       { name: "ReviewAgreementError", code: "value-mismatch" },
     );
+  });
+
+  it("ignores an editedValue that is not an accepted edit", () => {
+    // A bare editedValue (no accept-proposed decision) and an edit on a reject
+    // or keep decision do not replace the reviewed value.
+    for (const metadata of [
+      { editedValue: 777 },
+      { workbenchDecision: "reject-proposed", editedValue: 777 },
+      { workbenchDecision: "keep-current", editedValue: 777 },
+    ]) {
+      const forged = review({ id: "review.forged", status: "verified", metadata });
+      assert.throws(
+        () => buildSurveyTrustBundle(input({ reviews: [forged], claim: { value: 777 } })),
+        { name: "ReviewAgreementError", code: "value-mismatch" },
+        `metadata ${JSON.stringify(metadata)} must not launder 777`,
+      );
+      const bundle = buildSurveyTrustBundle(input({ reviews: [forged] }));
+      assert.equal(bundle.claims[0]?.value, 48000);
+      assert.equal((bundle.claims[0]?.metadata?.survey as { valueEdit?: unknown }).valueEdit, undefined);
+    }
   });
 
   it("does not pin the value of a claim that is not trusted", () => {
@@ -182,14 +205,25 @@ describe("the latest applicable review governs (#290)", () => {
     );
   });
 
-  it("refuses to choose between reviews tied at the latest reviewedAt", () => {
-    const tied = review({ id: "review.3", status: "verified", reviewedAt: laterRejected.reviewedAt });
-    assert.throws(() => buildSurveyTrustBundle(input({ reviews: [earlierVerified, laterRejected, tied] })), (error: unknown) => {
+  it("refuses conflicting reviews at the same latest instant, however it is spelled", () => {
+    const sameInstantVerified = review({ id: "review.3", status: "verified", reviewedAt: "2026-09-25T02:00:00+02:00" });
+    assert.throws(() => buildSurveyTrustBundle(input({ reviews: [earlierVerified, laterRejected, sameInstantVerified] })), (error: unknown) => {
       assert.ok(error instanceof ReviewAgreementError);
       assert.equal(error.code, "ambiguous-review-order");
-      assert.match(error.message, /review\.2, review\.3 tied at the latest reviewedAt/);
+      assert.match(error.message, /conflicting review outcomes review\.2, review\.3 at the latest reviewedAt/);
       return true;
     });
+  });
+
+  it("treats identical decisions at the same instant as one review", () => {
+    const duplicate = review({ id: "review.2-copy", status: "rejected", reviewedAt: "2026-09-25T00:00:00.000Z" });
+    const respelled = review({ id: "review.2-respelled", status: "rejected", reviewedAt: "2026-09-25T09:00:00+09:00" });
+    for (const reviews of [[earlierVerified, laterRejected, duplicate, respelled], [respelled, duplicate, laterRejected, earlierVerified]]) {
+      const bundle = buildSurveyTrustBundle(input({ reviews }));
+      assert.equal(bundle.claims[0]?.status, "rejected");
+      // Deterministic citation whatever the array order.
+      assert.equal((bundle.claims[0]?.metadata?.survey as { reviewOutcomeId?: string }).reviewOutcomeId, "review.2");
+    }
   });
 
   it("refuses to order several reviews when one has no parseable reviewedAt", () => {

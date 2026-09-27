@@ -155,6 +155,16 @@ describe("buildCanonicalReviewedTrustInput", () => {
     assert.equal(projected.surveyInput.candidateSets[0]?.candidates[1]?.value, "WAITLIST");
     assert.equal(projected.surveyInput.extractions[1]?.value, "WAITLIST");
     assert.equal(projected.surveyInput.reviewOutcomes[0]?.metadata?.editedValue, "WAITLISTED");
+
+    // The projected claim carries the edit and says it is one (#290 review).
+    const claim = buildSurveyTrustBundle(projected.surveyInput, { projectionContextId: projected.projectionContextId }).claims[0]!;
+    assert.equal(claim.status, "verified");
+    assert.equal(claim.value, "WAITLISTED");
+    assert.deepEqual((claim.metadata?.survey as { valueEdit?: unknown }).valueEdit, {
+      edited: true,
+      originalValue: "WAITLIST",
+      reviewOutcomeId: projected.surveyInput.reviewOutcomes[0]!.id,
+    });
   });
 
   it("fails closed when a result no longer matches its canonical ReviewItem", () => {
