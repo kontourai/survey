@@ -5,7 +5,8 @@
  * Routes:
  *   GET  /              HTML shell that mounts the workbench
  *   GET  /api/session   Current session state (snapshot + replayed events)
- *   POST /api/events    Append review session events (same contract as MCP server)
+ *   POST /api/events    Replace the event log (same validation as MCP server),
+ *                       compare-and-swap on the revision the client last read
  *   GET  /api/stream    SSE stream: emits "update" events when the session file changes
  *   GET  /api/health    Health check
  *   GET  /dist/*        Compiled assets served from the dist tree (traversal-safe)
@@ -13,7 +14,7 @@
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { watch } from "node:fs";
-import { readFile as readFileAsync, writeFile as writeFileAsync, rename as renameAsync } from "node:fs/promises";
+import { readFile as readFileAsync } from "node:fs/promises";
 import { resolve, join, dirname, extname, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -27,6 +28,11 @@ import {
 } from "../review-workbench/server-review-session.js";
 import type { ReviewQueueSessionState } from "../review-workbench/review-queue-session.js";
 import type { ReviewSessionEvent } from "../review-resource.js";
+import {
+  readReviewSessionFile,
+  reviewSessionRevision,
+  updateReviewSessionFile,
+} from "../review-session-file.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -98,14 +104,7 @@ function distRoot(): string {
 // ---------------------------------------------------------------------------
 
 async function readSession(path: string): Promise<SessionFileContent> {
-  const raw = await readFileAsync(path, "utf8");
-  return JSON.parse(raw) as SessionFileContent;
-}
-
-async function writeSessionAtomic(path: string, content: SessionFileContent): Promise<void> {
-  const tmp = `${path}.tmp`;
-  await writeFileAsync(tmp, JSON.stringify(content, null, 2), "utf8");
-  await renameAsync(tmp, path);
+  return readReviewSessionFile<SessionFileContent>(path);
 }
 
 // ---------------------------------------------------------------------------
@@ -333,6 +332,14 @@ body {
 .connection-dot.disconnected {
   background: var(--k-negative, #ff6f6f);
 }
+.console-save-status {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--k-negative, #ff6f6f);
+  background: var(--k-panel-raised, #16202d);
+  color: var(--k-text, #eef3f8);
+  font-size: 13px;
+}
+.console-save-status[hidden] { display: none; }
 #review-workbench {
   flex: 1;
   min-height: 0;
@@ -371,31 +378,84 @@ body {
     </button>
   </div>
 </header>
+<div id="console-save-status" class="console-save-status" role="alert" data-testid="console-save-status" hidden></div>
 <main id="review-workbench" class="workbench survey-workbench-embed" data-testid="review-workbench"></main>
 <script type="module">
 import { mountReviewWorkbench, replayReviewSessionEvents, defaultReviewSessionName, buildReviewSessionEvents } from "${workbenchJsPath}";
 
 // ---- persistence adapter: POST events to /api/events ----
-function createConsoleEventStore() {
-  let _events = [];
+// One store per mount, bound to the server revision the mount was built from.
+// Each save posts the full log regenerated from the workbench's session state
+// (which starts from the stored state, so decisions another writer such as the
+// MCP server made are carried forward, not replaced by the workbench's own
+// incremental events). Saves are serialized so each one carries the revision
+// the previous save produced. A save the server refuses (409 conflict or any
+// other failure) is never kept as local truth: the console re-fetches the
+// stored session, re-mounts from it and tells the reviewer.
+let saveChain = Promise.resolve();
+
+function showSaveStatus(message) {
+  const el = document.getElementById("console-save-status");
+  if (!el) return;
+  if (message) {
+    el.textContent = message;
+    el.hidden = false;
+  } else {
+    el.textContent = "";
+    el.hidden = true;
+  }
+}
+
+function createConsoleEventStore(baseRevision) {
+  let revision = baseRevision;
+
+  async function persist(events) {
+    let res;
+    try {
+      res = await fetch("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ events, baseRevision: revision }),
+      });
+    } catch (err) {
+      console.error("[console] Failed to persist events:", err);
+      showSaveStatus("Your last change was not saved: the console could not reach the server.");
+      await fetchAndMount();
+      return;
+    }
+    if (res.ok) {
+      const body = await res.json().catch(() => ({}));
+      if (typeof body.revision === "string") revision = body.revision;
+      showSaveStatus("");
+      return;
+    }
+    if (res.status === 409) {
+      showSaveStatus("Your last change was not saved because the session changed (another tab, reviewer or agent wrote to it). The console reloaded the current session.");
+    } else {
+      const body = await res.json().catch(() => ({}));
+      showSaveStatus("Your last change was not saved (HTTP " + res.status + (body.error ? ": " + body.error : "") + "). The console reloaded the stored session.");
+    }
+    await fetchAndMount();
+  }
+
   return {
-    load: () => _events.length > 0 ? [..._events] : undefined,
-    save: async (_session, events) => {
-      _events = [...events];
+    // The mount state is already replayed from the stored log.
+    load: () => undefined,
+    save: (session) => {
+      let toSave;
       try {
-        await fetch("/api/events", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ events }),
-        });
+        toSave = buildReviewSessionEvents(session, defaultReviewSessionName);
       } catch (err) {
-        console.error("[console] Failed to persist events:", err);
+        showSaveStatus("Your last change was not saved: " + (err && err.message ? err.message : String(err)));
+        saveChain = saveChain.then(() => fetchAndMount());
+        return saveChain;
       }
+      saveChain = saveChain.then(() => persist(toSave));
+      return saveChain;
     },
   };
 }
 
-const eventStore = createConsoleEventStore();
 let activeItemName = null;
 
 async function fetchAndMount() {
@@ -403,7 +463,7 @@ async function fetchAndMount() {
     const res = await fetch("/api/session");
     if (!res.ok) throw new Error("Session fetch failed: " + res.status);
     const data = await res.json();
-    const { snapshot, events } = data;
+    const { snapshot, events, revision } = data;
     const state = events && events.length > 0
       ? replayReviewSessionEvents(snapshot, events)
       : snapshot;
@@ -416,7 +476,7 @@ async function fetchAndMount() {
     const root = document.getElementById("review-workbench");
     if (!root) return;
 
-    mountReviewWorkbench(root, state, { eventStore });
+    mountReviewWorkbench(root, state, { eventStore: createConsoleEventStore(revision) });
   } catch (err) {
     console.error("[console] Mount error:", err);
   }
@@ -517,6 +577,51 @@ async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknow
 }
 
 // ---------------------------------------------------------------------------
+// Request guards (kontourai/survey#281)
+// ---------------------------------------------------------------------------
+
+function hostnameOf(hostHeader: string): string | undefined {
+  try {
+    return new URL(`http://${hostHeader}`).hostname.replace(/^\[|\]$/g, "");
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The server binds to loopback only, but a browser page on another site can
+ * still reach it through DNS rebinding (Host is the attacker's name) or a
+ * cross-origin "simple request" (text/plain body, foreign Origin). Each guard
+ * returns an error message, or undefined when the request passes.
+ */
+function hostGuard(req: IncomingMessage): string | undefined {
+  const host = req.headers.host;
+  const hostname = host ? hostnameOf(host) : undefined;
+  return hostname && LOOPBACK_HOSTS.has(hostname) ? undefined : "Host must be a loopback address";
+}
+
+function originGuard(req: IncomingMessage, port: number): string | undefined {
+  const origin = req.headers.origin;
+  if (origin === undefined) return undefined;
+  try {
+    const parsed = new URL(origin);
+    const originPort = parsed.port === "" ? "80" : parsed.port;
+    const hostname = parsed.hostname.replace(/^\[|\]$/g, "");
+    if (parsed.protocol === "http:" && LOOPBACK_HOSTS.has(hostname) && originPort === String(port)) {
+      return undefined;
+    }
+  } catch {
+    // Unparseable (for example "null"): refuse below.
+  }
+  return "Cross-origin writes are not allowed";
+}
+
+function contentTypeGuard(req: IncomingMessage): string | undefined {
+  const mediaType = (req.headers["content-type"] ?? "").split(";")[0].trim().toLowerCase();
+  return mediaType === "application/json" ? undefined : "Content-Type must be application/json";
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -535,8 +640,14 @@ export async function startReviewConsoleServer(
     broadcaster.broadcast("update", JSON.stringify({ ts: Date.now() }));
   });
 
+  let listenPort = 0;
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     try {
+      const hostError = hostGuard(req);
+      if (hostError) {
+        sendJson(res, 403, { error: hostError });
+        return;
+      }
       const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
       const pathname = url.pathname;
 
@@ -566,6 +677,7 @@ export async function startReviewConsoleServer(
           session: content.session,
           snapshot: content.snapshot,
           events: content.events,
+          revision: reviewSessionRevision(content.events),
           state: currentSessionState(content.snapshot, content.events),
         });
         return;
@@ -573,45 +685,75 @@ export async function startReviewConsoleServer(
 
       // ---- Events write (append) ----
       if (pathname === "/api/events" && req.method === "POST") {
+        const originError = originGuard(req, listenPort);
+        if (originError) {
+          sendJson(res, 403, { error: originError });
+          return;
+        }
+        const contentTypeError = contentTypeGuard(req);
+        if (contentTypeError) {
+          sendJson(res, 415, { error: contentTypeError });
+          return;
+        }
+
         const body = await readJsonBody(req);
         const incomingEvents = body.events as ReviewSessionEvent[];
+        const baseRevision = body.baseRevision;
 
         if (!Array.isArray(incomingEvents)) {
           sendJson(res, 400, { error: "events must be an array" });
           return;
         }
 
-        const content = await readSession(sessionPath);
-        const { snapshot, events: existingEvents } = content;
+        const outcome = await updateReviewSessionFile<SessionFileContent, { status: number; body: Record<string, unknown> }>(
+          sessionPath,
+          (content) => {
+            const { snapshot, events: existingEvents } = content;
+            const revision = reviewSessionRevision(existingEvents);
 
-        const record = createServerReviewSessionRecord({
-          sessionName: defaultReviewSessionName,
-          snapshot,
-          eventCount: existingEvents.length,
-          updatedAt: new Date(),
-        });
+            // Compare-and-swap: the write replaces the whole log, so it is only
+            // safe when it was built on the log that is stored right now.
+            if (typeof baseRevision !== "string") {
+              return { result: { status: 428, body: { error: "baseRevision is required: send the revision from GET /api/session", revision, eventCount: existingEvents.length } } };
+            }
+            if (baseRevision !== revision) {
+              return { result: { status: 409, body: { error: "Session changed since it was read; reload and retry", revision, eventCount: existingEvents.length } } };
+            }
+            if (incomingEvents.length === 0 && existingEvents.length > 0) {
+              return { result: { status: 422, body: { error: "Refusing to replace a non-empty event log with an empty one", revision, eventCount: existingEvents.length } } };
+            }
 
-        const applyResult = deriveServerReviewSessionApplyResult({
-          record,
-          events: incomingEvents,
-          requiredResolvedItems: "none",
-        });
+            const record = createServerReviewSessionRecord({
+              sessionName: defaultReviewSessionName,
+              snapshot,
+              eventCount: existingEvents.length,
+              updatedAt: new Date(),
+            });
 
-        if (!applyResult.ok) {
-          const issueMessages = applyResult.issues.map((issue) =>
-            "message" in issue ? issue.message : String(issue),
-          );
-          sendJson(res, 422, { error: `Validation failed: ${issueMessages.join("; ")}` });
-          return;
-        }
+            const applyResult = deriveServerReviewSessionApplyResult({
+              record,
+              events: incomingEvents,
+              requiredResolvedItems: "none",
+            });
 
-        await writeSessionAtomic(sessionPath, {
-          session: content.session,
-          snapshot,
-          events: incomingEvents,
-        });
+            if (!applyResult.ok) {
+              const issueMessages = applyResult.issues.map((issue) =>
+                "message" in issue ? issue.message : String(issue),
+              );
+              return { result: { status: 422, body: { error: `Validation failed: ${issueMessages.join("; ")}` } } };
+            }
 
-        sendJson(res, 200, { ok: true, eventCount: incomingEvents.length });
+            return {
+              next: { session: content.session, snapshot, events: incomingEvents },
+              result: {
+                status: 200,
+                body: { ok: true, eventCount: incomingEvents.length, revision: reviewSessionRevision(incomingEvents) },
+              },
+            };
+          },
+        );
+
+        sendJson(res, outcome.status, outcome.body);
         return;
       }
 
@@ -646,6 +788,7 @@ export async function startReviewConsoleServer(
   if (!address || typeof address === "string") {
     throw new Error("Unable to determine server address");
   }
+  listenPort = address.port;
   const normalizedHost = host === "::1" ? "[::1]" : host;
   const url = `http://${normalizedHost}:${address.port}/`;
 

@@ -2,11 +2,13 @@
  * Playwright browser tests for the standalone Survey Review Console.
  */
 import { test, expect } from "@playwright/test";
-import { copyFile, readFile, mkdtemp, rm } from "node:fs/promises";
+import { copyFile, readFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { startReviewConsoleServer, type ReviewConsoleServerHandle } from "../../src/console/review-console-server.js";
+import { currentSessionState } from "../../src/review-workbench/server-review-session.js";
+import { buildReviewSessionEvents } from "../../src/review-workbench/review-workbench.js";
 
 const SAMPLE_SESSION = "example-data/mcp-review-session.json";
 
@@ -127,4 +129,71 @@ test("console page: theme toggle switches theme", async ({ page }) => {
   await toggle.click();
   const backToDark = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
   expect(backToDark).toBeNull();
+});
+
+for (const failure of [
+  { status: 409, message: /not saved because the session changed/ },
+  { status: 500, message: /not saved \(HTTP 500/ },
+]) {
+  test(`console page: a save the server refuses with ${failure.status} is not shown as saved`, async ({ page }) => {
+    await gotoConsole(page);
+
+    // The server refuses the save; the stored session stays as it was.
+    await page.route("**/api/events", (route) =>
+      route.fulfill({
+        status: failure.status,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "refused by test" }),
+      }),
+    );
+
+    const field = page.locator("[data-testid='review-field']:not([data-state='accepted'])").first();
+    const itemName = await field.getAttribute("data-item-name");
+    const refetched = page.waitForRequest(
+      (req) => req.url().endsWith("/api/session") && req.method() === "GET",
+      { timeout: 5000 },
+    );
+    await field.getByTestId("use-proposed").click();
+
+    // The adapter re-fetches the stored session, re-mounts from it and tells
+    // the reviewer; the refused decision is not displayed as saved.
+    await refetched;
+    await expect(page.getByTestId("console-save-status")).toBeVisible();
+    await expect(page.getByTestId("console-save-status")).toHaveText(failure.message);
+    await expect(
+      page.locator(`[data-testid='review-field'][data-item-name='${itemName}']`),
+    ).not.toHaveAttribute("data-state", "accepted");
+
+    const stored = JSON.parse(await readFile(sessionPath, "utf8")) as { events: Array<{ spec: { reviewItemName?: string; eventType: string } }> };
+    expect(stored.events.some((e) => e.spec.eventType === "decision-submitted" && e.spec.reviewItemName === itemName)).toBe(false);
+  });
+}
+
+test("console page: a decision another writer (MCP) stored is kept when the reviewer decides a different item", async ({ page }) => {
+  // Write a decision the way survey-review-mcp does: the whole log regenerated
+  // under the MCP session name. The console must carry it forward, not replace
+  // the log with only its own events.
+  const stored = JSON.parse(await readFile(sessionPath, "utf8"));
+  const state = currentSessionState(stored.snapshot, stored.events);
+  const mcpItem = state.items.find((item: { metadata: { name: string } }) => !state.decisionsByItemName[item.metadata.name])!.metadata.name;
+  const mcpEvents = buildReviewSessionEvents(
+    { ...state, decisionsByItemName: { ...state.decisionsByItemName, [mcpItem]: "keep-current" } },
+    "mcp-review-session",
+  );
+  await writeFile(sessionPath, JSON.stringify({ ...stored, events: mcpEvents }, null, 2));
+
+  await gotoConsole(page);
+  const eventsSaved = page.waitForResponse(
+    (resp) => resp.url().includes("/api/events") && resp.request().method() === "POST",
+    { timeout: 5000 },
+  );
+  const field = page.locator(`[data-testid='review-field']:not([data-state='accepted']):not([data-item-name='${mcpItem}'])`).first();
+  const consoleItem = await field.getAttribute("data-item-name");
+  await field.getByTestId("use-proposed").click();
+  expect((await eventsSaved).status()).toBe(200);
+
+  const after = JSON.parse(await readFile(sessionPath, "utf8"));
+  const decisions = currentSessionState(after.snapshot, after.events).decisionsByItemName;
+  expect(decisions[mcpItem]).toBe("keep-current");
+  expect(decisions[consoleItem!]).toBe("accept-proposed");
 });

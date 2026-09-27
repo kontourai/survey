@@ -23,6 +23,12 @@ async function makeIsolatedServer(): Promise<{ handle: ReviewConsoleServerHandle
   return { handle, sessionPath, tmpDir };
 }
 
+async function currentRevision(handle: ReviewConsoleServerHandle): Promise<string> {
+  const res = await fetch(`${handle.url}api/session`);
+  const body = await res.json() as { revision: string };
+  return body.revision;
+}
+
 async function teardown(handle: ReviewConsoleServerHandle, tmpDir: string): Promise<void> {
   await handle.close();
   await rm(tmpDir, { recursive: true, force: true });
@@ -149,7 +155,7 @@ describe("survey-review-console server", () => {
     const postRes = await fetch(`${handle.url}api/events`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ events: newEvents }),
+      body: JSON.stringify({ events: newEvents, baseRevision: await currentRevision(handle) }),
     });
     assert.equal(postRes.status, 200);
     const postBody = await postRes.json() as Record<string, unknown>;
@@ -217,7 +223,7 @@ describe("survey-review-console server", () => {
     await fetch(`${handle.url}api/events`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ events }),
+      body: JSON.stringify({ events, baseRevision: await currentRevision(handle) }),
     });
 
     await updateReceived;
@@ -263,7 +269,7 @@ describe("survey-review-console server", () => {
       await fetch(`${h2.url}api/events`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ events }),
+        body: JSON.stringify({ events, baseRevision: await currentRevision(h2) }),
       });
 
       await Promise.all([first, second]);
