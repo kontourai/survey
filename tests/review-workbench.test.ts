@@ -1779,6 +1779,19 @@ describe("review workbench prototype", () => {
       assert.match(validateProposedValue({ type: "number" }, "  ") ?? "", /Enter a number/);
     });
 
+    it("accepts any safe integer (16 digits), refusing only past the safe-integer boundary (kontourai/survey#278 fix round 2)", () => {
+      // Number.MAX_SAFE_INTEGER: 16 digits, more than the 15-significant-digit
+      // rule for fractions would allow, but exact as a JSON number.
+      assert.equal(validateProposedValue({ type: "number" }, "9007199254740991"), undefined);
+      // One past MAX_SAFE_INTEGER: Number(...) rounds it to a different
+      // integer (9007199254740992), so it must be refused, not silently
+      // stored as the wrong value.
+      assert.match(validateProposedValue({ type: "number" }, "9007199254740993") ?? "", /not a number/);
+      // The 15-significant-digit rule still governs fractions: this has 16
+      // significant digits and Number.isSafeInteger does not apply to it.
+      assert.match(validateProposedValue({ type: "number" }, "1.234567890123456") ?? "", /not a number/);
+    });
+
     it("accepts only true/false for type boolean", () => {
       assert.equal(validateProposedValue({ type: "boolean" }, "true"), undefined);
       assert.equal(validateProposedValue({ type: "boolean" }, "false"), undefined);

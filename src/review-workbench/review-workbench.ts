@@ -1331,7 +1331,7 @@ export function validateProposedValue(
       if (value === "") return "Enter a number.";
       return parsePlainDecimal(value) !== undefined
         ? undefined
-        : `"${rawValue}" is not a number (use plain decimal digits, at most 15 significant).`;
+        : `"${rawValue}" is not a number (use plain decimal digits: any safe integer, or a fraction of at most 15 significant digits).`;
     case "boolean":
       if (value === "") return "Choose true or false.";
       return value === "true" || value === "false" ? undefined : `"${rawValue}" is not true or false.`;

@@ -68,6 +68,16 @@ describe("editedValueFromEditorText", () => {
     assert.equal(editedValueFromEditorText({ type: "boolean" }, "yes"), undefined);
     assert.equal(editedValueFromEditorText({ type: "date" }, "2026-03-03"), "2026-03-03");
     assert.equal(editedValueFromEditorText({ type: "string" }, " kept as typed "), " kept as typed ");
+  });
+
+  it("accepts any safe integer in legacy text edits, refusing only past the safe-integer boundary (kontourai/survey#278 fix round 2)", () => {
+    // Number.MAX_SAFE_INTEGER (16 digits): exact as a JSON number even though
+    // it exceeds the 15-significant-digit rule that governs fractions.
+    assert.equal(editedValueFromEditorText({ type: "number" }, "9007199254740991"), 9007199254740991);
+    // One past MAX_SAFE_INTEGER: Number(...) would silently round it to a
+    // different integer (9007199254740992), so the legacy conversion must
+    // refuse it rather than store the wrong value.
+    assert.equal(editedValueFromEditorText({ type: "number" }, "9007199254740993"), undefined);
     assert.equal(editedValueFromEditorText(undefined, "raw"), "raw");
   });
 });

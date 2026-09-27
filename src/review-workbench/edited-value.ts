@@ -43,14 +43,32 @@ const maxSignificantDigits = 15;
 
 /**
  * Parses number-field editor text, or returns `undefined` when it is not a
- * plain decimal or would not survive storage as a JSON number exactly: more
- * than 15 significant digits is refused rather than silently rounded, and a
- * value that overflows to Infinity is refused. `-0` is stored as `0` (JSON has
- * no negative zero).
+ * plain decimal or would not survive storage as a JSON number exactly.
+ *
+ * Integer-only text (no `.` and no exponent) is checked by
+ * `Number.isSafeInteger` instead of the digit count: every safe integer
+ * (|value| ≤ 2^53−1, i.e. up to 9007199254740991, 16 digits) round-trips
+ * through a JSON number exactly, so the 15-significant-digit rule would
+ * wrongly refuse `9007199254740991` while accepting some 15-digit values
+ * that are actually less precise. `9007199254740993` is refused: it is
+ * outside the safe range and `Number(...)` rounds it to `9007199254740992`,
+ * a different integer than the text named.
+ *
+ * A fractional value (has `.` or an exponent) keeps the 15-significant-digit
+ * rule: `Number.isSafeInteger` does not apply to it, and IEEE 754 doubles
+ * only guarantee exactness up to 15 significant decimal digits, so anything
+ * longer is refused rather than silently rounded. A value that overflows to
+ * Infinity is refused. `-0` is stored as `0` (JSON has no negative zero).
  */
 export function parsePlainDecimal(text: string): number | undefined {
   const match = plainDecimalPattern.exec(text);
   if (!match) return undefined;
+  const isIntegerOnly = match[2] === undefined && match[3] === undefined;
+  if (isIntegerOnly) {
+    const parsed = Number(text);
+    if (!Number.isSafeInteger(parsed)) return undefined;
+    return parsed === 0 ? 0 : parsed;
+  }
   const digits = `${match[1]}${(match[2] ?? "").slice(1)}`.replace(/^0+/, "").replace(/0+$/, "");
   if (digits.length > maxSignificantDigits) return undefined;
   const parsed = Number(text);
