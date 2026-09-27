@@ -14,6 +14,7 @@ Survey is the producer-side contract: source → extraction → candidate → re
 - Adversarial passes, learning, the Flow bridge adapter: [docs/adversarial-and-learning.md](docs/adversarial-and-learning.md).
 - Review resources and session events: [docs/review-resource-contract.md](docs/review-resource-contract.md).
 - Releases (automated + manual fallback): [docs/RELEASING.md](docs/RELEASING.md).
+- UI, brand, and product-copy rules: `DESIGN.md` in `@kontourai/ui` (https://github.com/kontourai/ui/blob/main/DESIGN.md; also shipped at `node_modules/@kontourai/ui/DESIGN.md` from 1.13.0). Style with the `--k-*` tokens instead of hard-coded colors, spacing, radii or font sizes, and don't resolve anything the doc marks OPEN.
 
 ## Match Checks To Change Type
 
