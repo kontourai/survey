@@ -226,6 +226,26 @@ describe("the latest applicable review governs (#290)", () => {
     }
   });
 
+  it("refuses same-instant reviews that differ only in comfort zone or authority, in either id order", () => {
+    const at = "2026-09-25T00:00:00.000Z";
+    const variants: Array<Partial<ReviewOutcome>> = [
+      { withinComfortZone: false },
+      { withinComfortZone: true, comfortZoneNote: "needs domain review" },
+      { authorizing: { kind: "explicit-statement", statement: "Approved by the records owner." } },
+    ];
+    for (const variant of variants) {
+      for (const [plainId, variantId] of [["review.a", "review.b"], ["review.b", "review.a"]] as const) {
+        const plain = review({ id: plainId, status: "verified", reviewedAt: at, withinComfortZone: true });
+        const differing = review({ id: variantId, status: "verified", reviewedAt: at, withinComfortZone: true, ...variant });
+        assert.throws(
+          () => buildSurveyTrustBundle(input({ reviews: [plain, differing] })),
+          { name: "ReviewAgreementError", code: "ambiguous-review-order" },
+          `${JSON.stringify(variant)} with ids ${plainId}/${variantId} must not be merged`,
+        );
+      }
+    }
+  });
+
   it("refuses to order several reviews when one has no parseable reviewedAt", () => {
     const untimed = review({ id: "review.untimed", status: "proposed", reviewedAt: undefined });
     assert.throws(

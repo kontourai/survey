@@ -487,10 +487,13 @@ A `verified` or `assumed` claim now has to restate the review it cites.
   is `accept-proposed`, which is what `buildCanonicalReviewedTrustInput` writes.
   Any other `editedValue` is ignored. A claim that takes an edit carries
   `metadata.survey.valueEdit: { edited: true, originalValue, reviewOutcomeId }`,
-  so the bundle shows the value was edited and what it was edited from. Drop
-  `ClaimTarget.value` to take the reviewed value, or make the candidate carry
-  the value you want to claim. `ClaimTarget.value` is still free for claims
-  that are not trusted.
+  so the bundle shows the value was edited and what it was edited from. Without
+  an accepted edit, drop `ClaimTarget.value` (the claim then takes the
+  candidate value) or make the candidate carry the value you want to claim.
+  With an accepted edit, set `ClaimTarget.value` to the edited value, as
+  `buildCanonicalReviewedTrustInput` does; omitting it projects the candidate
+  value, which is not what was reviewed, and throws. `ClaimTarget.value` is
+  still free for claims that are not trusted.
 - **`ambiguous-review-order`.** When several reviews apply to one candidate,
   the latest by `reviewedAt` now governs, whatever their array order (before,
   the first one in the array won). Reviews bound to the exact candidate still

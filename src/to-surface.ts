@@ -779,6 +779,11 @@ function reviewDecisionKey(review: ReviewOutcome): string {
     status: review.status,
     resolution: review.resolution ?? null,
     edit: edit ? { value: edit.value } : null,
+    // These reach the claim (comfort zone, testimony provenance), so reviews
+    // that differ in them are different decisions, not one recorded twice.
+    withinComfortZone: review.withinComfortZone ?? null,
+    comfortZoneNote: review.comfortZoneNote ?? null,
+    authorizing: review.authorizing ?? null,
   });
 }
 
