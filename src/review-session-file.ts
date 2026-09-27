@@ -74,15 +74,36 @@ function isPidAlive(pid: number): boolean {
   }
 }
 
+/**
+ * A lock is stale only when we can show its holder is gone, never merely
+ * because it is old. Liveness is authoritative whenever the lock carries a
+ * usable pid: a holder that is alive but slow (age past `staleMs`) is NOT
+ * stale — age alone used to be enough to break it, which let a live-but-slow
+ * holder's lock be removed out from under it (kontourai/survey#281 review:
+ * 135 double-hold events in 60 rounds of the reviewer's stress test). We
+ * deliberately do not add a hard age ceiling that overrides a live pid: with
+ * the default timeoutMs (10s) well under the default staleMs (30s), a waiter
+ * simply times out with {@link ReviewSessionFileLockTimeoutError} against a
+ * live holder that never releases in time, which is a loud, safe failure
+ * mode rather than a silent double-hold. A genuinely wedged holder (hung
+ * forever) requires an operator to remove the lock file by hand; that is the
+ * accepted cost of "never remove a live lock" actually holding.
+ *
+ * The age rule is kept only as the fallback for a lock we cannot judge by
+ * liveness: no pid field (unknown-PID) or, since the lock carries no host
+ * identity, a pid from another host/container sharing this volume (`isPidAlive`
+ * is meaningless there, in either direction — the residual this repo has
+ * always accepted for that case).
+ */
 async function lockIsStale(lockPath: string, staleMs: number): Promise<boolean> {
   try {
     const info = await stat(lockPath);
     const age = Date.now() - info.mtimeMs;
-    if (age > staleMs) return true;
     const raw = await readFile(lockPath, "utf8");
     if (raw.trim() === "") return age > EMPTY_LOCK_STALE_MS;
     const holder = JSON.parse(raw) as { pid?: unknown };
-    return typeof holder.pid === "number" && !isPidAlive(holder.pid);
+    if (typeof holder.pid === "number") return !isPidAlive(holder.pid);
+    return age > staleMs;
   } catch {
     // Vanished (released) or half-written by a live acquirer: not stale.
     return false;
@@ -94,14 +115,18 @@ async function lockIsStale(lockPath: string, staleMs: number): Promise<boolean> 
  *
  * Breakers serialize on a separate `<lock>.break` mutex and re-judge the lock
  * inside it. While a breaker holds the mutex, the lock file can only change if
- * its owner releases it, and a stale lock's owner is dead (or has held it for
- * `staleMs`), so the file the breaker removes is the one it judged stale. The
- * earlier rename-aside scheme let two waiters that both judged the same lock
- * stale each remove it, the second removing the first's fresh lock
- * (kontourai/survey#281 review). Residual (accepted): a breaker that dies
- * inside the few-millisecond break section leaves a mutex that is removed
- * after BREAK_MUTEX_STALE_MS, and pid liveness means nothing across hosts or
- * containers that share the session volume (only the age rule applies there).
+ * its owner releases it, and {@link lockIsStale} only calls a lock stale once
+ * its holder is provably dead (or, lacking a usable pid, sufficiently old), so
+ * the file the breaker removes is the one it judged stale. The earlier
+ * rename-aside scheme let two waiters that both judged the same lock stale
+ * each remove it, the second removing the first's fresh lock
+ * (kontourai/survey#281 review). A holder that is merely alive-but-slow is
+ * never broken, by construction, no matter its age (see {@link lockIsStale}).
+ * Residual (accepted): a breaker that dies inside the few-millisecond break
+ * section leaves a mutex that is removed after BREAK_MUTEX_STALE_MS, and pid
+ * liveness means nothing across hosts or containers that share the session
+ * volume (the age rule is the only signal available there, and it is a
+ * pre-existing limitation, not one this fix introduces).
  */
 async function breakStaleLock(lockPath: string, staleMs: number): Promise<void> {
   const breakPath = `${lockPath}.break`;

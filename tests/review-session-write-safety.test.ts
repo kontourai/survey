@@ -9,7 +9,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { request } from "node:http";
 import { createInterface } from "node:readline";
-import { copyFile, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -443,6 +443,67 @@ describe("session lock robustness (#281)", () => {
       assert.equal(res.status, 200, JSON.stringify(res.body));
       assert.ok(Date.now() - started < 5_000, `took ${Date.now() - started}ms`);
     });
+  });
+
+  test("a live holder that outlasts staleMs is never broken by another writer (#281 fix round 2)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "survey-lock-live-"));
+    const sessionPath = join(dir, "session.json");
+    const marker = join(dir, "holder.marker");
+    // The holder is a genuinely separate, alive process (its own real pid),
+    // so the waiter below can only judge it via process.kill(pid, 0), never
+    // by coincidence with the test process's own pid.
+    const HOLD_MS = 900;
+    const holderScript = `
+      import { open, rm } from "node:fs/promises";
+      const { acquireReviewSessionFileLock } = await import(${JSON.stringify(moduleUrl)});
+      const [sessionPath, marker, holdMs] = process.argv.slice(1);
+      const release = await acquireReviewSessionFileLock(sessionPath, { timeoutMs: 20000 });
+      const handle = await open(marker, "wx");
+      await handle.close();
+      await new Promise((r) => setTimeout(r, Number(holdMs)));
+      await rm(marker, { force: true });
+      await release();
+    `;
+    const fileExists = async (path: string): Promise<boolean> => {
+      try {
+        await stat(path);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const holder = spawn(process.execPath, ["--input-type=module", "-e", holderScript, sessionPath, marker, String(HOLD_MS)], {
+      stdio: ["ignore", "ignore", "inherit"],
+    });
+    try {
+      // Wait for the holder to actually take the lock before racing it.
+      const holderStarted = Date.now();
+      while (!(await fileExists(marker))) {
+        if (Date.now() - holderStarted > 5_000) throw new Error("holder never acquired the lock");
+        await new Promise((r) => setTimeout(r, 10));
+      }
+
+      // A staleMs far shorter than the holder's hold time: on the pre-fix
+      // code, age alone made the lock stale well before the holder released
+      // it, so this acquire would succeed *while the marker still exists*
+      // (the holder is alive and still working) — a double hold.
+      const started = Date.now();
+      const release = await acquireReviewSessionFileLock(sessionPath, { staleMs: 150, timeoutMs: HOLD_MS + 5_000 });
+      const waitedMs = Date.now() - started;
+      const holderStillWorking = await fileExists(marker);
+      await release();
+
+      assert.ok(
+        !holderStillWorking,
+        `entered the lock after only ${waitedMs}ms while the live holder's marker still existed: ` +
+          "a stale-by-age lock was broken out from under a holder that was alive and merely slow " +
+          "(the exact double-hold defect kontourai/survey#281's reviewer reproduced)",
+      );
+      assert.ok(waitedMs >= HOLD_MS - 50, `acquired too early (${waitedMs}ms) for a lock held by a live process for ${HOLD_MS}ms`);
+    } finally {
+      await once(holder, "exit");
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   test("orphan temp files from a crashed writer are removed on the next write", async () => {
