@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildSurveyTrustBundle, deriveCalibration } from "../src/index.js";
+import { resetCalibrationOptInWarningForTests } from "../src/to-surface.js";
 import type { ReviewStatus, SurveyInput } from "../src/types.js";
 
 // ---------------------------------------------------------------------------
@@ -82,6 +83,20 @@ function fixture(samples: Sample[]): SurveyInput {
   return input;
 }
 
+/** Runs `fn` with console.warn captured and the once-per-process warning re-armed. */
+function captureWarnings(fn: () => void): string[] {
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
+  resetCalibrationOptInWarningForTests();
+  console.warn = (...args: unknown[]) => { warnings.push(args.map(String).join(" ")); };
+  try {
+    fn();
+  } finally {
+    console.warn = originalWarn;
+  }
+  return warnings;
+}
+
 function ccOf(input: SurveyInput, opts?: Parameters<typeof buildSurveyTrustBundle>[1]) {
   const bundle = buildSurveyTrustBundle(input, opts);
   return bundle.claims.map((c) => c.conclusionConfidence);
@@ -107,6 +122,35 @@ describe("buildSurveyTrustBundle — conclusionConfidence.value (produce side, #
       ccOf(input, { calibration: { minSamples: 2, experimentalConclusionValue: true } }).map((cc) => cc?.value),
       [1, 1],
     );
+  });
+
+  it("warns once when calibration is requested without the experimental opt-in (#279)", () => {
+    const input = fixture([{ status: "verified" }, { status: "verified" }]);
+    const metrics = deriveCalibration({
+      reviewOutcomes: input.reviewOutcomes,
+      candidateSets: input.candidateSets,
+      extractions: input.extractions,
+    });
+    const pattern = /calibration.*no longer sets conclusionConfidence\.value.*experimentalConclusionValue: true/;
+
+    const forTrue = captureWarnings(() => {
+      ccOf(input, { calibration: true });
+      ccOf(input, { calibration: true }); // once per process, not per call
+    });
+    assert.equal(forTrue.length, 1);
+    assert.match(forTrue[0]!, pattern);
+
+    const forMetrics = captureWarnings(() => ccOf(input, { calibration: { metrics, minSamples: 2 } }));
+    assert.equal(forMetrics.length, 1);
+    assert.match(forMetrics[0]!, pattern);
+
+    // Silent: no calibration, calibration: false, an explicit opt-out, and the opt-in.
+    assert.deepEqual(captureWarnings(() => {
+      ccOf(input);
+      ccOf(input, { calibration: false });
+      ccOf(input, { calibration: { metrics, experimentalConclusionValue: false } });
+      ccOf(input, { calibration: { metrics, minSamples: 2, experimentalConclusionValue: true } });
+    }), []);
   });
 
   it("produces value = empirical affirmation rate on affirmed claims, none on the rejected one", () => {

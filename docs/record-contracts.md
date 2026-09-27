@@ -1366,7 +1366,7 @@ Every reviewed candidate is a labeled sample: the system-proposed candidate carr
 a stated confidence (the prediction), and the human review affirmed or overturned
 that value (the label). The proposed candidate is found by its producer role — the
 one candidate whose `metadata.candidateRole` or `metadata.role` is `"proposed"`, or
-the only candidate of an unmarked one-candidate set — never by
+the only candidate of a one-candidate set (whatever its role) — never by
 `selectedCandidateId`, which records the reviewer's pick. A set whose proposal
 cannot be determined is skipped and counted in `skippedCount`; a reviewer who kept
 the current value scores the proposal as a miss. `deriveCalibration` turns those samples into an empirical
@@ -1418,7 +1418,8 @@ const bundle = mergeTrustBundleWithCalibration(existingBundle, calibrationToClai
 
 `buildSurveyTrustBundle` can attach a group affirmation rate to the emitted claims,
 but only under an explicit experimental opt-in. `calibration: true`, or an object
-without `experimentalConclusionValue: true`, sets no value (#279):
+without `experimentalConclusionValue`, sets no value and logs one `console.warn`
+per process; `experimentalConclusionValue: false` sets no value silently (#279):
 
 ```ts
 // Derive the curve from this batch...

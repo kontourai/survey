@@ -677,8 +677,39 @@ function selectReview(reviews: ReviewOutcome[], candidateId: string): ReviewOutc
 function normalizeCalibrationOptions(
   calibration: BuildSurveyTrustBundleOptions["calibration"],
 ): SurveyCalibrationOptions | undefined {
-  if (calibration === undefined || typeof calibration === "boolean") return undefined;
+  if (calibration === undefined || calibration === false) return undefined;
+  if (calibration === true || calibration.experimentalConclusionValue === undefined) {
+    // Callers written before #279 asked for a value this way; tell them it is
+    // now ignored instead of silently dropping it. An explicit `false` is a
+    // deliberate opt-out and stays quiet.
+    warnCalibrationOptInMissingOnce();
+    return undefined;
+  }
   return calibration.experimentalConclusionValue === true ? calibration : undefined;
+}
+
+let warnedCalibrationOptInMissing = false;
+
+/**
+ * Warn once per process, matching the `defineProductVocabulary` deprecation
+ * notice: `buildSurveyTrustBundle` has no diagnostics channel in its return
+ * value (it returns a TrustBundle), and a per-call warning would flood batch
+ * projections.
+ */
+function warnCalibrationOptInMissingOnce(): void {
+  if (warnedCalibrationOptInMissing) return;
+  warnedCalibrationOptInMissing = true;
+  console.warn(
+    "[@kontourai/survey] buildSurveyTrustBundle: the `calibration` option no longer sets " +
+      "conclusionConfidence.value without `calibration: { experimentalConclusionValue: true }` (#279). " +
+      "The value is an experimental extractor/field group base rate, not a per-claim probability. " +
+      "Pass the flag to keep it, or `experimentalConclusionValue: false` / omit `calibration` to silence this warning.",
+  );
+}
+
+/** Test-only: re-arm the once-per-process calibration opt-in warning. Not exported from the package index. */
+export function resetCalibrationOptInWarningForTests(): void {
+  warnedCalibrationOptInMissing = false;
 }
 
 /**

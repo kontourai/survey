@@ -100,8 +100,10 @@ The first cut overstated what the numbers support, so calibration is now marked
   paths `selectedCandidateId` records the reviewer's pick, so reading it as "the
   system proposal" scored keep-current decisions as correct. The prediction is now
   the single candidate whose `metadata.candidateRole` or `metadata.role` is
-  `"proposed"`, or the only candidate of an unmarked one-candidate set; anything
-  else is skipped and counted in `skippedCount`. This supersedes the
+  `"proposed"`, or the only candidate of a one-candidate set whatever its role
+  (one candidate leaves no pick to confuse with a proposal); a multi-candidate
+  set without exactly one `"proposed"` marker is skipped and counted in
+  `skippedCount`. This supersedes the
   `selectedCandidateId` rule in the Decision section above.
 - **Threshold needs evidence.** `suggestedThreshold` requires each contributing
   decile to have at least `minBinSamples` samples (default raised from 1 to 30)
@@ -110,7 +112,9 @@ The first cut overstated what the numbers support, so calibration is now marked
   as a number to wire into `autoAcceptMinConfidence`.
 - **`conclusionConfidence.value` is opt-in and named experimental.** It is a
   group base rate, not a per-claim probability, so `buildSurveyTrustBundle` sets
-  it only with `calibration: { experimentalConclusionValue: true }`.
+  it only with `calibration: { experimentalConclusionValue: true }`; asking for
+  calibration without the flag logs a once-per-process `console.warn`, the same
+  channel as the `defineProductVocabulary` deprecation notice.
 
 ## Deferred work
 

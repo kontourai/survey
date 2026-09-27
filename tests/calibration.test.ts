@@ -226,17 +226,44 @@ describe("deriveCalibration — label source (#279)", () => {
     assert.equal(m.overall.correctCount, 0);
   });
 
-  it("skips a role-marked set with no single proposed candidate", () => {
+  it("skips a multi-candidate set with no single proposed candidate", () => {
     const m = deriveCalibration({
       extractions: [{ id: "e", sourceId: "s", target: "fee", value: 1, confidence: 0.9, extractor: "llm", extractedAt: at }],
       candidateSets: [{
         id: "cs", target: "fee", status: "resolved", selectedCandidateId: "current",
-        candidates: [{ id: "current", extractionId: "e", value: 1, confidence: 0.9, metadata: { candidateRole: "current" } }],
+        candidates: [
+          { id: "current", extractionId: "e", value: 1, confidence: 0.9, metadata: { candidateRole: "current" } },
+          { id: "alt", extractionId: "e", value: 2, confidence: 0.5, metadata: { role: "alternative" } },
+        ],
       }],
       reviewOutcomes: [{ id: "r", candidateSetId: "cs", candidateId: "current", status: "verified", actor: "alice", reviewedAt: at }],
     });
     assert.equal(m.sampleCount, 0);
     assert.equal(m.skippedCount, 1);
+  });
+
+  it("samples a one-candidate set whatever its role", () => {
+    // One candidate leaves no reviewer pick to confuse with a proposal: the
+    // review affirmed or rejected that value. Covers CandidateRole values and a
+    // free-form producer role.
+    const roles: Array<Record<string, unknown> | undefined> = [
+      { role: "computed" }, { role: "source-version" }, { role: "current" },
+      { candidateRole: "primary" }, { role: "proposed" }, undefined,
+    ];
+    const m = deriveCalibration({
+      extractions: [{ id: "e", sourceId: "s", target: "fee", value: 1, confidence: 0.9, extractor: "llm", extractedAt: at }],
+      candidateSets: roles.map((metadata, i) => ({
+        id: `cs${i}`, target: "fee", status: "resolved" as const, selectedCandidateId: `c${i}`,
+        candidates: [{ id: `c${i}`, extractionId: "e", value: 1, confidence: 0.9, ...(metadata ? { metadata } : {}) }],
+      })),
+      reviewOutcomes: roles.map((_, i) => ({
+        id: `r${i}`, candidateSetId: `cs${i}`, candidateId: `c${i}`,
+        status: i === 0 ? ("rejected" as const) : ("verified" as const), actor: "alice", reviewedAt: at,
+      })),
+    });
+    assert.equal(m.sampleCount, 6);
+    assert.equal(m.skippedCount, 0);
+    assert.equal(m.overall.correctCount, 5);
   });
 });
 

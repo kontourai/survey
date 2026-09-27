@@ -205,14 +205,14 @@ export interface CalibrationMetrics {
  * `CandidateSet.selectedCandidateId` (which records the reviewer's pick on the
  * builder and canonical review paths, #279): the single candidate whose
  * `metadata.candidateRole` or `metadata.role` is `"proposed"`, or the only
- * candidate of an unmarked one-candidate set. A sample is skipped (and counted
+ * candidate of a one-candidate set (whatever its role). A sample is skipped (and counted
  * in `skippedCount`) when it carries no human label or no prediction:
  *
  * - status "proposed" (not yet reviewed);
  * - resolution "could_not_confirm" (no human correctness label);
  * - a machine auto-accept, unless `includeAutoAccepted` is set;
- * - the proposed candidate cannot be determined (several candidates without a
- *   single `"proposed"` role), or its confidence is missing or non-finite.
+ * - the proposed candidate cannot be determined (several candidates without
+ *   exactly one `"proposed"` role), or its confidence is missing or non-finite.
  *
  * A sample is "correct" when the outcome status is verified/assumed AND the
  * reviewer's pick (`ReviewOutcome.candidateId`, else `selectedCandidateId`) is
@@ -363,18 +363,21 @@ function toSample(
 }
 
 /**
- * The candidate the producer proposed for review, by role. Returns undefined
- * when it cannot be determined, so the outcome is skipped rather than labeled
- * against the reviewer's own pick.
+ * The candidate whose confidence is the prediction. Returns undefined when it
+ * cannot be determined, so the outcome is skipped rather than labeled against
+ * the reviewer's own pick.
+ *
+ * A one-candidate set is sampled whatever the candidate's role ("computed",
+ * "source-version", "current", free-form roles, or none): with one candidate
+ * there is no pick to confuse with a proposal, and the review either affirmed
+ * or rejected that candidate's value. Only a multi-candidate set needs a
+ * single "proposed" role marker.
  */
 function proposedCandidateOf(candidateSet: CandidateSet): Candidate | undefined {
+  if (candidateSet.candidates.length === 1) return candidateSet.candidates[0];
   const roleOf = (c: Candidate): unknown => c.metadata?.candidateRole ?? c.metadata?.role;
-  const marked = candidateSet.candidates.filter((c) => roleOf(c) !== undefined);
-  if (marked.length > 0) {
-    const proposed = marked.filter((c) => roleOf(c) === "proposed");
-    return proposed.length === 1 ? proposed[0] : undefined;
-  }
-  return candidateSet.candidates.length === 1 ? candidateSet.candidates[0] : undefined;
+  const proposed = candidateSet.candidates.filter((c) => roleOf(c) === "proposed");
+  return proposed.length === 1 ? proposed[0] : undefined;
 }
 
 // ---------------------------------------------------------------------------

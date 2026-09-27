@@ -453,15 +453,20 @@ Calibration output is now experimental and guarded. If you use
 - **`conclusionConfidence.value` needs an explicit opt-in.** `calibration: true`
   (or an object without the flag) no longer sets a value. Pass
   `calibration: { experimentalConclusionValue: true, ... }` to keep it, knowing
-  it is a group base rate, not a per-claim probability.
+  it is a group base rate, not a per-claim probability. Passing `calibration`
+  without the flag logs one `console.warn` per process; pass
+  `experimentalConclusionValue: false` (or drop the option) to silence it.
 - **`suggestedThreshold` is withheld more often.** The default `minBinSamples`
   rose from 1 to 30, and each contributing decile's one-sided 95% Wilson lower
   bound (`CalibrationBin.accuracyLowerBound`) must meet `targetAccuracy`. An
   explicit `minBinSamples` does not bypass the bound.
-- **Labels follow the proposer role.** The prediction is the candidate marked
-  `"proposed"` (`metadata.candidateRole` or `metadata.role`), or the only
-  candidate of an unmarked set; unmarked multi-candidate sets are skipped. Mark
-  your proposed candidate if you hand-build multi-candidate sets.
+- **Labels follow the proposer role.** In a multi-candidate set the prediction
+  is the one candidate marked `"proposed"` (`metadata.candidateRole` or
+  `metadata.role`); a multi-candidate set without exactly one such marker is
+  skipped. Mark your proposed candidate if you hand-build multi-candidate sets.
+  A one-candidate set is still sampled whatever its role (`computed`,
+  `source-version`, `current`, a free-form role, or none), as before: with one
+  candidate there is no reviewer pick to mistake for the proposal.
 
 ## See also
 
