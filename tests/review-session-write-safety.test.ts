@@ -267,9 +267,12 @@ describe("shared session write lock (#281)", () => {
         });
         const mcpWrite = mcp.call(2, "survey_review_decide", { itemName: "public-directory-phone", decision: "accept" });
 
-        await new Promise((r) => setTimeout(r, HELD_MS));
-        assert.equal(await readFile(sessionPath, "utf8"), before, "a writer modified the session while another writer held the lock");
-        await release();
+        try {
+          await new Promise((r) => setTimeout(r, HELD_MS));
+          assert.equal(await readFile(sessionPath, "utf8"), before, "a writer modified the session while another writer held the lock");
+        } finally {
+          await release();
+        }
 
         const [consoleResult, mcpResult] = await Promise.all([consoleWrite, mcpWrite]);
         assert.equal(mcpResult.isError, false, mcpResult.text);
@@ -298,9 +301,12 @@ describe("shared session write lock (#281)", () => {
         const a = first.call(2, "survey_review_decide", { itemName: "public-directory-hours", decision: "accept" });
         const b = second.call(2, "survey_review_decide", { itemName: "public-directory-phone", decision: "hold" });
 
-        await new Promise((r) => setTimeout(r, HELD_MS));
-        assert.equal(await readFile(sessionPath, "utf8"), before, "an MCP decide modified the session while the lock was held");
-        await release();
+        try {
+          await new Promise((r) => setTimeout(r, HELD_MS));
+          assert.equal(await readFile(sessionPath, "utf8"), before, "an MCP decide modified the session while the lock was held");
+        } finally {
+          await release();
+        }
 
         const results = await Promise.all([a, b]);
         for (const result of results) assert.equal(result.isError, false, result.text);
