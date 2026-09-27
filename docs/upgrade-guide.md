@@ -62,7 +62,7 @@ decision, not just the outcome:
 | `stableId` | Yes | Matches our existing slugification exactly (see `docs/consumer-integration-guide.md`'s reference algorithm parity test). |
 | `defineProductVocabulary` | Yes | Discoverable, frozen vocabulary beats scattered top-level constants; no runtime behavior change to reconcile. |
 | `confidenceBasisForReview` | **No — kept our own mapping** | See worked example below. |
-| `deriveCalibration` / `buildSurveyTrustBundle({ calibration })` (1.10.0) | Optional | Opt-in. Turns your review outcomes into an empirical calibration curve and, when enabled, produces `conclusionConfidence.value` on affirmed claims. Backward-compatible: omit it and behavior is unchanged. Adopt it to ground auto-accept thresholds and emit calibrated confidence; the `suggestedThreshold` it computes is advisory input to your policy's `minConfidence`, never a decision. See [record-contracts.md](record-contracts.md#confidence-calibration). |
+| `deriveCalibration` / `buildSurveyTrustBundle({ calibration })` (1.10.0) | Optional, experimental | Opt-in. Turns your review outcomes into a descriptive calibration curve and, only with `experimentalConclusionValue: true`, attaches a group affirmation rate as `conclusionConfidence.value` on affirmed claims. `suggestedThreshold` is not an evaluated auto-accept gate (see [Calibration guards](#calibration-guards-279)). See [record-contracts.md](record-contracts.md#confidence-calibration). |
 | `buildSurveyTrustBundle({ projectionContextId })` | Required for repeated append-only projections | Supply one stable producer-owned context id per review session, proposal, or resolution when the same claim can be projected more than once. It scopes generated evidence/event ids without changing claim identity; omission preserves legacy ids. See [record-contracts.md](record-contracts.md#repeated-projection-identity). |
 
 ### Worked example: when *not* to adopt `confidenceBasisForReview`
@@ -444,6 +444,24 @@ is yours.
 `empty-queue` and `ambiguous-item-identity` as issues and
 `assertReviewQueueBinding` throws on any issue. A malformed binding fails
 closed with `binding-malformed` rather than skipping the checks it cannot run.
+
+## Calibration guards (#279)
+
+Calibration output is now experimental and guarded. If you use
+`deriveCalibration` or `buildSurveyTrustBundle({ calibration })`:
+
+- **`conclusionConfidence.value` needs an explicit opt-in.** `calibration: true`
+  (or an object without the flag) no longer sets a value. Pass
+  `calibration: { experimentalConclusionValue: true, ... }` to keep it, knowing
+  it is a group base rate, not a per-claim probability.
+- **`suggestedThreshold` is withheld more often.** The default `minBinSamples`
+  rose from 1 to 30, and each contributing decile's one-sided 95% Wilson lower
+  bound (`CalibrationBin.accuracyLowerBound`) must meet `targetAccuracy`. An
+  explicit `minBinSamples` does not bypass the bound.
+- **Labels follow the proposer role.** The prediction is the candidate marked
+  `"proposed"` (`metadata.candidateRole` or `metadata.role`), or the only
+  candidate of an unmarked set; unmarked multi-candidate sets are skipped. Mark
+  your proposed candidate if you hand-build multi-candidate sets.
 
 ## See also
 

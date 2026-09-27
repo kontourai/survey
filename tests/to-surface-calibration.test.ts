@@ -54,7 +54,7 @@ function fixture(samples: Sample[]): SurveyInput {
       status: "resolved",
       selectedCandidateId: `cand-${i}`,
       candidates: [
-        { id: `cand-${i}`, extractionId: `ext-${i}`, value: `v-${i}`, confidence },
+        { id: `cand-${i}`, extractionId: `ext-${i}`, value: `v-${i}`, confidence, metadata: { candidateRole: "proposed" } },
         { id: `cand-${i}-alt`, extractionId: `ext-${i}`, value: `v-${i}-alt`, confidence: 0.3 },
       ],
     });
@@ -96,6 +96,19 @@ describe("buildSurveyTrustBundle — conclusionConfidence.value (produce side, #
     assert.deepEqual(ccs, [undefined, undefined]);
   });
 
+  it("sets no value without the experimental opt-in, even with calibration enabled (#279)", () => {
+    const input = fixture([{ status: "verified" }, { status: "verified" }]);
+    // Before #279, `calibration: true` alone set a group base rate as the value.
+    assert.deepEqual(ccOf(input, { calibration: true }), [undefined, undefined]);
+    assert.deepEqual(ccOf(input, { calibration: { minSamples: 2 } }), [undefined, undefined]);
+    assert.deepEqual(ccOf(input, { calibration: { minSamples: 2, experimentalConclusionValue: false } }), [undefined, undefined]);
+    // The opt-in is what turns it on (same input, same floor).
+    assert.deepEqual(
+      ccOf(input, { calibration: { minSamples: 2, experimentalConclusionValue: true } }).map((cc) => cc?.value),
+      [1, 1],
+    );
+  });
+
   it("produces value = empirical affirmation rate on affirmed claims, none on the rejected one", () => {
     // 4 samples for one (extractor, field): 3 affirmed, 1 rejected → group rate 0.75.
     const input = fixture([
@@ -104,7 +117,7 @@ describe("buildSurveyTrustBundle — conclusionConfidence.value (produce side, #
       { status: "assumed" },
       { status: "rejected" },
     ]);
-    const ccs = ccOf(input, { calibration: { minSamples: 4 } });
+    const ccs = ccOf(input, { calibration: { experimentalConclusionValue: true, minSamples: 4 } });
     // The three affirmed conclusions carry the calibrated rate...
     for (const cc of ccs.slice(0, 3)) {
       assert.equal(cc?.value, 0.75);
@@ -119,14 +132,14 @@ describe("buildSurveyTrustBundle — conclusionConfidence.value (produce side, #
     // 2 samples: one affirmed, one overridden → 0.5.
     const ccs = ccOf(
       fixture([{ status: "verified" }, { status: "verified", override: true }]),
-      { calibration: { minSamples: 2 } },
+      { calibration: { experimentalConclusionValue: true, minSamples: 2 } },
     );
     assert.equal(ccs[0]?.value, 0.5);
   });
 
   it("leaves value unset when the group is below the sample floor", () => {
     const ccs = ccOf(fixture([{ status: "verified" }, { status: "verified" }]), {
-      calibration: { minSamples: 20 },
+      calibration: { experimentalConclusionValue: true, minSamples: 20 },
     });
     assert.deepEqual(ccs, [undefined, undefined]);
   });
@@ -138,7 +151,7 @@ describe("buildSurveyTrustBundle — conclusionConfidence.value (produce side, #
       { extractor: "shared", field: "f1", status: "verified" },
       { extractor: "shared", field: "f2", status: "rejected" },
     ]);
-    const ccs = ccOf(input, { calibration: { minSamples: 2 } });
+    const ccs = ccOf(input, { calibration: { experimentalConclusionValue: true, minSamples: 2 } });
     // The affirmed f1 claim falls back to the extractor-level rate (1 of 2 = 0.5).
     assert.equal(ccs[0]?.value, 0.5);
     assert.equal(ccs[0]?.method, "empirical-review-calibration:extractor");
@@ -163,7 +176,7 @@ describe("buildSurveyTrustBundle — conclusionConfidence.value (produce side, #
 
     // Current batch has a single new claim from the same extractor/field.
     const current = fixture([{ extractor: "h", field: "field.a", status: "verified" }]);
-    const ccs = ccOf(current, { calibration: { metrics, minSamples: 10 } });
+    const ccs = ccOf(current, { calibration: { experimentalConclusionValue: true, metrics, minSamples: 10 } });
     assert.equal(ccs[0]?.value, 0.8);
     assert.equal(ccs[0]?.method, "empirical-review-calibration:extractor-field");
   });
@@ -172,7 +185,7 @@ describe("buildSurveyTrustBundle — conclusionConfidence.value (produce side, #
     const input = fixture([{ status: "assumed" }, { status: "assumed" }]);
     // Give the first outcome a comfort-zone signal.
     input.reviewOutcomes[0]!.withinComfortZone = true;
-    const ccs = ccOf(input, { calibration: { minSamples: 2 } });
+    const ccs = ccOf(input, { calibration: { experimentalConclusionValue: true, minSamples: 2 } });
     assert.equal(ccs[0]?.value, 1);
     assert.deepEqual(ccs[0]?.comfortZone, { within: true });
     // The second claim has a value but no comfortZone.

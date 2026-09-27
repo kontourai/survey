@@ -29,6 +29,14 @@ const DEFAULT_CALIBRATION_MIN_SAMPLES = 20;
 
 export interface SurveyCalibrationOptions {
   /**
+   * EXPERIMENTAL opt-in, required for any `conclusionConfidence.value` to be
+   * set (#279). The value is the affirmation rate of the claim's whole
+   * extractor/field GROUP — a base rate every affirmed claim in the group
+   * shares — not a per-claim probability. Without this flag the `calibration`
+   * option sets no value.
+   */
+  experimentalConclusionValue?: boolean;
+  /**
    * Precomputed calibration to source the value from — typically derived over a
    * LONGER history than the current batch (a better-grounded curve, and it avoids
    * the mild self-reference of a claim's own review outcome feeding its value).
@@ -57,12 +65,13 @@ export interface BuildSurveyTrustBundleOptions {
    */
   projectionContextId?: string;
   /**
-   * Populate `conclusionConfidence.value` from empirical review calibration —
-   * "how often this extractor's proposals at this confidence were affirmed by a
-   * human reviewer" (the produce side of the confidence loop; see #114/#137).
-   * `true` derives calibration from this batch; an object supplies precomputed
-   * metrics and/or a `minSamples` floor. Absent → `value` stays unset and only
-   * the comfort-zone signal is carried (unchanged behavior).
+   * EXPERIMENTAL. Populate `conclusionConfidence.value` from empirical review
+   * calibration — the affirmation rate of the claim's extractor/field group
+   * (a group base rate, not a per-claim probability; see #114/#137/#279).
+   * A value is set ONLY with `{ experimentalConclusionValue: true }`; `true` or
+   * an object without that flag sets no value. The object may also supply
+   * precomputed `metrics` and/or a `minSamples` floor. Absent → `value` stays
+   * unset and only the comfort-zone signal is carried.
    *
    * ADVISORY (ADR 0003 §4): this only enriches the emitted conclusion confidence;
    * it never changes a claim's `status`.
@@ -77,6 +86,7 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
   const candidateSets = indexById(input.candidateSets, "candidate set");
   const reviewsByCandidateSet = groupBy(input.reviewOutcomes, (review) => review.candidateSetId);
 
+  // Only the explicit experimental opt-in produces a value (#279).
   const calibrationOptions = normalizeCalibrationOptions(options.calibration);
   const calibrationMetrics = calibrationOptions
     ? (calibrationOptions.metrics ?? deriveCalibration({
@@ -145,15 +155,17 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
       },
     };
 
-    // Promote the review's comfort-zone signal — and, when calibration is
-    // enabled, an empirically-calibrated conclusion probability — into the
+    // Promote the review's comfort-zone signal — and, under the experimental
+    // calibration opt-in, the group affirmation rate — into the
     // first-class conclusionConfidence field (Surface 2.9 / Hachure 0.14) so the
     // signal is portable and comparable, not buried in producer metadata.
     //
-    // comfortZone is CARRIED from the review. `value` is PRODUCED from empirical
-    // review calibration (#114/#137): the affirmation rate of this extractor's
-    // proposals at this confidence — a calibrated conclusion probability, distinct
-    // from the extraction-confidence ingredient in confidenceBasis.
+    // comfortZone is CARRIED from the review. `value` is PRODUCED, only under the
+    // experimental opt-in, from empirical review calibration (#114/#137/#279):
+    // the affirmation rate of this claim's extractor/field GROUP. It is a group
+    // base rate shared by every affirmed claim in the group, not a per-claim
+    // probability, and distinct from the extraction-confidence ingredient in
+    // confidenceBasis.
     //
     // A value is produced only for an AFFIRMED conclusion (status verified/assumed)
     // that clears the sample floor. conclusionConfidence.value is "probability the
@@ -665,9 +677,8 @@ function selectReview(reviews: ReviewOutcome[], candidateId: string): ReviewOutc
 function normalizeCalibrationOptions(
   calibration: BuildSurveyTrustBundleOptions["calibration"],
 ): SurveyCalibrationOptions | undefined {
-  if (calibration === undefined || calibration === false) return undefined;
-  if (calibration === true) return {};
-  return calibration;
+  if (calibration === undefined || typeof calibration === "boolean") return undefined;
+  return calibration.experimentalConclusionValue === true ? calibration : undefined;
 }
 
 /**
