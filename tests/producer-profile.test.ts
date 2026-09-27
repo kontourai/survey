@@ -370,3 +370,35 @@ describe("evaluateAutoAccept", () => {
     assert.equal(decision.withinComfortZone, true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// evaluateAutoAccept range validation (#280)
+// ---------------------------------------------------------------------------
+
+describe("evaluateAutoAccept range validation", () => {
+  const fallbackTimestamp = "2026-06-11T00:00:00.000Z";
+
+  for (const confidence of [7, -5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    it(`does not accept out-of-range confidence ${confidence} and reports a warning`, () => {
+      const decision = evaluateAutoAccept({ confidence }, false, { minConfidence: 0.5 }, fallbackTimestamp);
+      assert.equal(decision.accepted, false);
+      assert.equal(decision.warning, "confidence-out-of-range");
+    });
+  }
+
+  it("accepts in-range boundary confidences 0 and 1 against a threshold they clear, without a warning", () => {
+    assert.equal(evaluateAutoAccept({ confidence: 1 }, false, { minConfidence: 1 }, fallbackTimestamp).accepted, true);
+    const low = evaluateAutoAccept({ confidence: 0 }, false, { minConfidence: 0.1 }, fallbackTimestamp);
+    assert.equal(low.accepted, false);
+    assert.equal(low.warning, undefined);
+  });
+
+  for (const minConfidence of [0, -1, 1.5, Number.NaN]) {
+    it(`throws RangeError for policy minConfidence ${minConfidence}`, () => {
+      assert.throws(
+        () => evaluateAutoAccept({ confidence: 0.9 }, false, { minConfidence }, fallbackTimestamp),
+        RangeError,
+      );
+    });
+  }
+});

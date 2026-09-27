@@ -9,6 +9,7 @@ import {
   deriveCalibration,
   calibrationToClaims,
   mergeTrustBundleWithCalibration,
+  reviewedCurrentProposedResolution,
   type CalibrationInput,
 } from "../src/index.js";
 import { AUTO_ACCEPT_ACTOR } from "../src/producer-profile.js";
@@ -30,8 +31,10 @@ interface ChainOpts {
   status?: ReviewStatus;
   /** When true the reviewer picks the alternative candidate (an override). */
   override?: boolean;
-  /** Omit selectedCandidateId (no system prediction). */
+  /** Omit selectedCandidateId (the reviewer pick then comes from the outcome). */
   noSelected?: boolean;
+  /** Omit the proposed-role marker, so the proposal cannot be determined. */
+  unmarked?: boolean;
   actor?: string;
   reviewedAt?: string;
 }
@@ -59,6 +62,7 @@ function chain(id: string, opts: ChainOpts = {}): Chain {
     extractionId: `ext-${id}`,
     value: `value-${id}`,
     confidence: opts.candidateConfidenceUnset ? undefined : (opts.confidence ?? 0.9),
+    ...(opts.unmarked ? {} : { metadata: { candidateRole: "proposed" } }),
   };
   const alt: Candidate = {
     id: `cand-${id}-alt`,
@@ -82,6 +86,12 @@ function chain(id: string, opts: ChainOpts = {}): Chain {
     reviewedAt: opts.reviewedAt ?? "2026-07-01T00:00:00.000Z",
   };
   return { extractions: [extraction], candidateSet, reviewOutcome };
+}
+
+/** `count` chains at one confidence; the last `rejected` of them are rejected. */
+function many(prefix: string, count: number, opts: ChainOpts, rejected = 0): Chain[] {
+  return Array.from({ length: count }, (_, i) =>
+    chain(`${prefix}${i}`, { ...opts, status: i < count - rejected ? "verified" : "rejected" }));
 }
 
 function inputFrom(chains: Chain[]): CalibrationInput {
@@ -132,14 +142,20 @@ describe("deriveCalibration — labeling", () => {
     assert.equal(included.overall.sampleCount, 2);
   });
 
-  it("skips outcomes with no prediction (no selected candidate or no confidence)", () => {
+  it("skips outcomes with no prediction (proposal not determinable or no confidence)", () => {
     const m = deriveCalibration(inputFrom([
       chain("1", { status: "verified" }),
-      chain("2", { status: "verified", noSelected: true }),
+      chain("2", { status: "verified", unmarked: true }),
       chain("3", { status: "verified", candidateConfidenceUnset: true }),
     ]));
     assert.equal(m.overall.sampleCount, 1);
     assert.equal(m.skippedCount, 2);
+  });
+
+  it("finds the proposal by role, not selectedCandidateId", () => {
+    const m = deriveCalibration(inputFrom([chain("1", { status: "verified", noSelected: true })]));
+    assert.equal(m.overall.sampleCount, 1);
+    assert.equal(m.overall.correctCount, 1);
   });
 
   it("falls back to extraction confidence when the candidate carries none", () => {
@@ -148,6 +164,106 @@ describe("deriveCalibration — labeling", () => {
     ]));
     assert.equal(m.overall.sampleCount, 1);
     assert.equal(m.overall.meanPredictedConfidence, 0.85);
+  });
+});
+
+describe("deriveCalibration — label source (#279)", () => {
+  const at = "2026-09-02T00:00:00.000Z";
+  const observation = (i: number, role: "current" | "proposed", confidence: number | undefined, value: number) => ({
+    id: `o${i}.${role}`,
+    rawSource: { kind: "api-record" as const, sourceRef: `records://${i}/${role}`, observedAt: at, locatorScheme: "structured-field" as const },
+    extraction: { target: "fee", value, confidence, locator: "json:$.fee", extractor: "llm", extractedAt: at },
+    claim: {
+      id: `claim.${i}.${role}`, subjectType: "entity", subjectId: `e${i}`, facet: "profile",
+      claimType: "field", fieldOrBehavior: "fee", impactLevel: "medium" as const, collectedBy: "llm",
+    },
+  });
+
+  it("scores keep-current as a miss for the proposal (25 accept / 25 keep-current → 0.5)", () => {
+    const builder = new SurveyInputBuilder({ source: "calibration.label-source", generatedAt: at });
+    for (let i = 0; i < 50; i++) {
+      builder.addClaimRecords(reviewedCurrentProposedResolution({
+        id: `resolution.${i}`,
+        target: "fee",
+        currentObservation: observation(i, "current", 0.99, 1),
+        proposedObservation: observation(i, "proposed", 0.95, 2),
+        selectedCandidateRole: i < 25 ? "proposed" : "current",
+        unselectedClaimStatus: "rejected",
+        reviewOutcome: { status: "verified", actor: "alice", reviewedAt: at },
+      }));
+    }
+    const input = builder.build();
+    // The builder records the reviewer's pick as selectedCandidateId.
+    assert.ok(input.candidateSets.slice(25).every((cs) => cs.selectedCandidateId?.endsWith(".current.candidate")));
+
+    const m = deriveCalibration(input);
+    assert.equal(m.sampleCount, 50);
+    assert.equal(m.overall.correctCount, 25);
+    assert.equal(m.overall.empiricalAccuracy, 0.5);
+    // Every prediction is the proposed candidate's confidence, never the current one's.
+    assert.equal(m.overall.meanPredictedConfidence, 0.95);
+    assert.equal(m.overall.suggestedThreshold, undefined);
+  });
+
+  it("reads the canonical projection's `role` marker the same way", () => {
+    const extraction: Extraction = { id: "e", sourceId: "s", target: "fee", value: 2, confidence: 0.95, extractor: "llm", extractedAt: at };
+    const candidateSet: CandidateSet = {
+      id: "cs",
+      target: "fee",
+      status: "resolved",
+      selectedCandidateId: "current", // the reviewer's pick on the canonical path
+      candidates: [
+        { id: "current", extractionId: "e", value: 1, metadata: { role: "current" } },
+        { id: "proposed", extractionId: "e", value: 2, confidence: 0.95, metadata: { role: "proposed" } },
+      ],
+    };
+    const m = deriveCalibration({
+      extractions: [extraction],
+      candidateSets: [candidateSet],
+      reviewOutcomes: [{ id: "r", candidateSetId: "cs", candidateId: "current", status: "verified", actor: "alice", reviewedAt: at }],
+    });
+    assert.equal(m.sampleCount, 1);
+    assert.equal(m.overall.correctCount, 0);
+  });
+
+  it("skips a multi-candidate set with no single proposed candidate", () => {
+    const m = deriveCalibration({
+      extractions: [{ id: "e", sourceId: "s", target: "fee", value: 1, confidence: 0.9, extractor: "llm", extractedAt: at }],
+      candidateSets: [{
+        id: "cs", target: "fee", status: "resolved", selectedCandidateId: "current",
+        candidates: [
+          { id: "current", extractionId: "e", value: 1, confidence: 0.9, metadata: { candidateRole: "current" } },
+          { id: "alt", extractionId: "e", value: 2, confidence: 0.5, metadata: { role: "alternative" } },
+        ],
+      }],
+      reviewOutcomes: [{ id: "r", candidateSetId: "cs", candidateId: "current", status: "verified", actor: "alice", reviewedAt: at }],
+    });
+    assert.equal(m.sampleCount, 0);
+    assert.equal(m.skippedCount, 1);
+  });
+
+  it("samples a one-candidate set whatever its role", () => {
+    // One candidate leaves no reviewer pick to confuse with a proposal: the
+    // review affirmed or rejected that value. Covers CandidateRole values and a
+    // free-form producer role.
+    const roles: Array<Record<string, unknown> | undefined> = [
+      { role: "computed" }, { role: "source-version" }, { role: "current" },
+      { candidateRole: "primary" }, { role: "proposed" }, undefined,
+    ];
+    const m = deriveCalibration({
+      extractions: [{ id: "e", sourceId: "s", target: "fee", value: 1, confidence: 0.9, extractor: "llm", extractedAt: at }],
+      candidateSets: roles.map((metadata, i) => ({
+        id: `cs${i}`, target: "fee", status: "resolved" as const, selectedCandidateId: `c${i}`,
+        candidates: [{ id: `c${i}`, extractionId: "e", value: 1, confidence: 0.9, ...(metadata ? { metadata } : {}) }],
+      })),
+      reviewOutcomes: roles.map((_, i) => ({
+        id: `r${i}`, candidateSetId: `cs${i}`, candidateId: `c${i}`,
+        status: i === 0 ? ("rejected" as const) : ("verified" as const), actor: "alice", reviewedAt: at,
+      })),
+    });
+    assert.equal(m.sampleCount, 6);
+    assert.equal(m.skippedCount, 0);
+    assert.equal(m.overall.correctCount, 5);
   });
 });
 
@@ -224,17 +340,44 @@ describe("deriveCalibration — bins and suggested threshold", () => {
   });
 
   it("suggests the threshold where the top-contiguous bins meet the target accuracy", () => {
-    // Top two deciles perfect; the 0.7 decile has a failure → threshold 0.8.
+    // Top two deciles: 60/60 affirmed (Wilson lower bound 0.9569 ≥ 0.95); the
+    // 0.7 decile is half affirmed → threshold 0.8.
     const chains = [
-      chain("h1", { confidence: 0.95, status: "verified" }),
-      chain("h2", { confidence: 0.95, status: "verified" }),
-      chain("m1", { confidence: 0.85, status: "verified" }),
-      chain("m2", { confidence: 0.85, status: "verified" }),
-      chain("l1", { confidence: 0.75, status: "verified" }),
-      chain("l2", { confidence: 0.75, status: "rejected" }), // 0.7-decile accuracy = 0.5
+      ...many("h", 60, { confidence: 0.95 }),
+      ...many("m", 60, { confidence: 0.85 }),
+      ...many("l", 60, { confidence: 0.75 }, 30),
     ];
     const m = deriveCalibration(inputFrom(chains), { targetAccuracy: 0.95 });
     assert.equal(m.overall.suggestedThreshold, 0.8);
+    assert.equal(m.overall.bins[9]!.sampleCount, 60);
+    assert.equal(m.overall.bins[9]!.accuracyLowerBound, 0.9569);
+  });
+
+  it("withholds a threshold grounded on one sample (#279 repro)", () => {
+    const m = deriveCalibration(inputFrom([chain("1", { confidence: 0.95, status: "verified" })]));
+    assert.equal(m.sampleCount, 1);
+    assert.equal(m.overall.empiricalAccuracy, 1);
+    assert.equal(m.overall.suggestedThreshold, undefined);
+  });
+
+  it("applies the default 30-sample bin floor", () => {
+    // A low target the Wilson bound clears easily, so only the floor decides.
+    const opts = { targetAccuracy: 0.5 };
+    assert.equal(deriveCalibration(inputFrom(many("a", 29, { confidence: 0.95 })), opts).overall.suggestedThreshold, undefined);
+    assert.equal(deriveCalibration(inputFrom(many("b", 30, { confidence: 0.95 })), opts).overall.suggestedThreshold, 0.9);
+  });
+
+  it("requires the Wilson lower bound, not the point estimate, to meet the target", () => {
+    // Floor disabled (1) so only the bound decides. All-affirmed bins have point
+    // accuracy 1; the one-sided 95% Wilson bound is n / (n + z²) = n / (n + 2.7055).
+    const opts = { targetAccuracy: 0.95, minBinSamples: 1 };
+    const at51 = deriveCalibration(inputFrom(many("a", 51, { confidence: 0.95 })), opts).overall;
+    assert.equal(at51.bins[9]!.empiricalAccuracy, 1);
+    assert.equal(at51.bins[9]!.accuracyLowerBound, 0.9496);
+    assert.equal(at51.suggestedThreshold, undefined);
+    const at52 = deriveCalibration(inputFrom(many("b", 52, { confidence: 0.95 })), opts).overall;
+    assert.equal(at52.bins[9]!.accuracyLowerBound, 0.9505);
+    assert.equal(at52.suggestedThreshold, 0.9);
   });
 
   it("returns undefined when even the top populated bin misses the target", () => {
@@ -249,8 +392,9 @@ describe("deriveCalibration — bins and suggested threshold", () => {
       chain("h1", { confidence: 0.95, status: "verified" }),
       chain("h2", { confidence: 0.95, status: "verified" }),
     ];
-    // minBinSamples 3 means the 2-sample top bin cannot vouch for a threshold.
-    const m = deriveCalibration(inputFrom(chains), { minBinSamples: 3 });
+    // minBinSamples 3 means the 2-sample top bin cannot vouch for a threshold
+    // (a target of 0 takes the Wilson bound out of play).
+    const m = deriveCalibration(inputFrom(chains), { minBinSamples: 3, targetAccuracy: 0 });
     assert.equal(m.overall.suggestedThreshold, undefined);
   });
 });
@@ -302,10 +446,7 @@ describe("calibrationToClaims", () => {
   };
 
   it("projects advisory proposed claims per extractor", () => {
-    const m = deriveCalibration(inputFrom([
-      chain("h1", { extractor: "a", confidence: 0.95, status: "verified" }),
-      chain("h2", { extractor: "a", confidence: 0.95, status: "verified" }),
-    ]));
+    const m = deriveCalibration(inputFrom(many("h", 60, { extractor: "a", confidence: 0.95 })));
     const claims = calibrationToClaims(m, subject);
 
     assert.ok(claims.length >= 2); // empiricalAccuracy + suggestedThreshold at least
@@ -315,6 +456,13 @@ describe("calibrationToClaims", () => {
     }
     assert.ok(claims.some((c) => c.claim.fieldOrBehavior === "empiricalAccuracy"));
     assert.ok(claims.some((c) => c.claim.fieldOrBehavior === "suggestedThreshold"));
+  });
+
+  it("emits no suggestedThreshold claim when the evidence is too thin", () => {
+    const m = deriveCalibration(inputFrom(many("h", 2, { extractor: "a", confidence: 0.95 })));
+    const claims = calibrationToClaims(m, subject);
+    assert.ok(claims.some((c) => c.claim.fieldOrBehavior === "empiricalAccuracy"));
+    assert.ok(!claims.some((c) => c.claim.fieldOrBehavior === "suggestedThreshold"));
   });
 
   it("produces a bundle that validates when merged", () => {

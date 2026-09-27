@@ -11,6 +11,8 @@ evidence:
     ref: docs/adr/0003-inquiry-mapping-and-producer-proposals.md
   - kind: doc
     ref: src/calibration.ts
+  - kind: issue
+    ref: "https://github.com/kontourai/survey/issues/279"
 ---
 # Confidence Calibration from Review Outcomes
 
@@ -88,6 +90,31 @@ Two honesty constraints hold here too:
   and carries a mild self-reference (a claim's own outcome is one sample in the
   group that sets its value). Either way this only enriches the emitted
   confidence; it never changes claim `status` (ADR 0003 §4).
+
+## Guards (#279)
+
+The first cut overstated what the numbers support, so calibration is now marked
+**experimental** and guarded rather than redesigned:
+
+- **Label source is the proposer role.** On the builder and canonical review
+  paths `selectedCandidateId` records the reviewer's pick, so reading it as "the
+  system proposal" scored keep-current decisions as correct. The prediction is now
+  the single candidate whose `metadata.candidateRole` or `metadata.role` is
+  `"proposed"`, or the only candidate of a one-candidate set whatever its role
+  (one candidate leaves no pick to confuse with a proposal); a multi-candidate
+  set without exactly one `"proposed"` marker is skipped and counted in
+  `skippedCount`. This supersedes the
+  `selectedCandidateId` rule in the Decision section above.
+- **Threshold needs evidence.** `suggestedThreshold` requires each contributing
+  decile to have at least `minBinSamples` samples (default raised from 1 to 30)
+  and a one-sided 95% Wilson lower bound on accuracy that meets `targetAccuracy`;
+  each bin reports that bound as `accuracyLowerBound`. It is no longer described
+  as a number to wire into `autoAcceptMinConfidence`.
+- **`conclusionConfidence.value` is opt-in and named experimental.** It is a
+  group base rate, not a per-claim probability, so `buildSurveyTrustBundle` sets
+  it only with `calibration: { experimentalConclusionValue: true }`; asking for
+  calibration without the flag logs a once-per-process `console.warn`, the same
+  channel as the `defineProductVocabulary` deprecation notice.
 
 ## Deferred work
 

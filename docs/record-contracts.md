@@ -980,7 +980,9 @@ const reviewOutcome = {
 };
 const mapping = applyMappingReview(candidateSet, reviewOutcome);
 
-// 4b. Auto-accept policy path (proposals at or above threshold → "assumed")
+// 4b. Auto-accept policy path (proposals at or above threshold → "assumed").
+// Experimental: minConfidence must be in (0, 1] (else RangeError); a proposal
+// whose confidence is not a finite number in [0, 1] is never auto-accepted.
 const autoMappings = applyAutoAcceptPolicy(proposals, { minConfidence: 0.85 });
 
 // 5. Resolve — looks up mapping by exact normalized text; answer always live
@@ -1232,6 +1234,9 @@ The function runs the extractor and projects proposals into the standard Survey 
   - `status: "conflict"` when proposals for the same pair disagree on `relation`.
   - `status: "needs-review"` otherwise.
 - One `ReviewOutcome` (`status: "assumed"`, `actor: "auto-accept-policy"`) per non-conflicting candidate set whose *selected* candidate (`candidates[0]`, first-proposal-wins within the group) has its own confidence at or above `autoAcceptMinConfidence`.  Conflicting sets are never auto-accepted.
+- **Range validation.** `autoAcceptMinConfidence` must be a finite number in (0, 1]; any other value throws `RangeError`. A proposal whose confidence is not a finite number in [0, 1] (for example `7`, `-5`, `NaN`) is never auto-accepted and stays `needs-review`; each one is reported in the result's optional `autoAcceptWarnings` array (`{ code: "confidence-out-of-range", proposalId, confidence }`), which is omitted when empty. `applyAutoAcceptPolicy` reports the same warning through its optional third argument, `{ onWarning }`.
+- **Projected authority.** A claim whose review actor is `"auto-accept-policy"` projects `confidenceBasis.reviewerAuthority: "system"` and `evidenceStrength: "weak"`: the policy checked nothing but the proposer's own self-reported confidence. Human-reviewed `verified`/`assumed` claims keep `"operator"`/`"moderate"`. (Before survey#280, auto-accepted claims projected `"operator"`/`"moderate"`; consumers that count claims by `reviewerAuthority` will see them move to `"system"`.)
+- **Experimental.** Auto-accept stays opt-in. Self-reported confidence is not a calibrated probability, and the policy does not check that a proposal's evidence excerpt occurs in the named schema.
 
 ### mappingReviewToSurface
 
@@ -1285,7 +1290,7 @@ const record = resolveInquiry(bundle, {
 - `IdentityLink.subjects` use `subjectType: "system-field"` and `subjectId` in the form `"<system>::<entity>::<field>"`.
 - `IdentityLink.mappingClaimId` must point at a claim present in the same bundle; `resolveInquiry` uses it to compute the weakest-link ceiling.
 - The `SchemaMappingExtractor` interface is synchronous or async; `surveySchemaMapping` always awaits it.
-- Auto-accept shares its gate/rationale/`reviewedAt` decision with `applyAutoAcceptPolicy` in `inquiry-mapping` via the core `evaluateAutoAccept` function (`src/producer-profile.ts`, see `docs/decisions/producer-profile.md`): the non-conflicting selected candidate is accepted as `"assumed"` when its own confidence is above the threshold, never as `"verified"`.  Conflicts require explicit human review.
+- Auto-accept shares its gate/rationale/`reviewedAt` decision with `applyAutoAcceptPolicy` in `inquiry-mapping` via the core `evaluateAutoAccept` function (`src/producer-profile.ts`, see `docs/decisions/producer-profile.md`): the non-conflicting selected candidate is accepted as `"assumed"` when its own confidence, a finite number in [0, 1], is at or above the threshold, never as `"verified"`.  Both profiles throw `RangeError` for a threshold outside (0, 1].  Conflicts require explicit human review.
 - `referenceSchemaExtractor` is deterministic and test-only.  Its matching strategy (exact field-name, optional type-token match) is intentionally simple and transparent.
 
 
@@ -1358,9 +1363,18 @@ These metrics are **indicators, not proof of reviewer cognition**:
 
 ## Confidence calibration
 
+> **Experimental.** `deriveCalibration`, `suggestedThreshold`, and the
+> `conclusionConfidence.value` it can feed are descriptive statistics over past
+> reviews, not validated probabilities or auto-accept gates (#279).
+
 Every reviewed candidate is a labeled sample: the system-proposed candidate carried
 a stated confidence (the prediction), and the human review affirmed or overturned
-that value (the label). `deriveCalibration` turns those samples into an empirical
+that value (the label). The proposed candidate is found by its producer role — the
+one candidate whose `metadata.candidateRole` or `metadata.role` is `"proposed"`, or
+the only candidate of a one-candidate set (whatever its role) — never by
+`selectedCandidateId`, which records the reviewer's pick. A set whose proposal
+cannot be determined is skipped and counted in `skippedCount`; a reviewer who kept
+the current value scores the proposal as a miss. `deriveCalibration` turns those samples into an empirical
 calibration curve — per extractor and per `(extractor, field)` — so you can answer
 "how often are this extractor's proposals at this confidence actually affirmed?".
 See the [calibration decision record](https://github.com/kontourai/survey/blob/main/docs/decisions/calibration.md)
@@ -1379,8 +1393,8 @@ const calibration = deriveCalibration(
     // now + windowDays are optional; windowDays requires now (else it throws).
     now: new Date(),
     windowDays: 90,
-    targetAccuracy: 0.95,   // the accuracy suggestedThreshold must clear
-    minBinSamples: 20,      // a decile needs this many samples to ground a threshold
+    targetAccuracy: 0.95,   // a decile's Wilson lower bound must clear this
+    minBinSamples: 30,      // default; a decile needs this many samples to count
     // includeAutoAccepted defaults false — see Honest limits.
   },
 );
@@ -1388,7 +1402,10 @@ const calibration = deriveCalibration(
 // calibration.overall / byExtractor / byExtractorField: each a group with
 //   sampleCount, correctCount, empiricalAccuracy?, meanPredictedConfidence?,
 //   calibrationGap? (mean confidence − empirical accuracy; >0 = overconfident),
-//   bins (per-decile empirical accuracy), and suggestedThreshold?.
+//   bins (per-decile sampleCount, empiricalAccuracy, and accuracyLowerBound —
+//   a one-sided 95% Wilson lower bound), and suggestedThreshold?: set only when
+//   each contributing decile has ≥ minBinSamples samples AND its
+//   accuracyLowerBound ≥ targetAccuracy (≈52 all-affirmed samples at 0.95).
 
 // Surface the curve as advisory claims (claimType "calibration", status "proposed"):
 const subject = {
@@ -1402,21 +1419,27 @@ const subject = {
 const bundle = mergeTrustBundleWithCalibration(existingBundle, calibrationToClaims(calibration, subject));
 ```
 
-### Producing `conclusionConfidence.value`
+### Producing `conclusionConfidence.value` (experimental)
 
-The calibrated accuracy is the natural conclusion probability, so
-`buildSurveyTrustBundle` can *produce* it on the emitted claims. Opt in with the
-`calibration` option; without it, behavior is unchanged (`value` stays unset and
-only the review's `comfortZone` is carried):
+`buildSurveyTrustBundle` can attach a group affirmation rate to the emitted claims,
+but only under an explicit experimental opt-in. `calibration: true`, or an object
+without `experimentalConclusionValue`, sets no value and logs one `console.warn`
+per process; `experimentalConclusionValue: false` sets no value silently (#279):
 
 ```ts
 // Derive the curve from this batch...
-buildSurveyTrustBundle(input, { calibration: true });
+buildSurveyTrustBundle(input, { calibration: { experimentalConclusionValue: true } });
 
 // ...or pass a curve computed over a LONGER history (recommended: better grounded,
 // and avoids the mild self-reference of a claim's own outcome feeding its value).
-buildSurveyTrustBundle(input, { calibration: { metrics: history, minSamples: 20 } });
+buildSurveyTrustBundle(input, {
+  calibration: { experimentalConclusionValue: true, metrics: history, minSamples: 20 },
+});
 ```
+
+The value is the affirmation rate of the claim's whole extractor/field group: every
+affirmed claim in the group gets the same number whatever its own confidence, so it
+is a base rate, not a per-claim probability.
 
 For each **affirmed** claim (status `verified`/`assumed`) whose extractor clears the
 sample floor, `conclusionConfidence.value` is set to the group's empirical
@@ -1429,19 +1452,21 @@ is the produce side of the confidence loop — Survey previously only *carried*
 
 Calibration is **advisory**, and honest about what it does not know:
 
-- **It never decides (ADR 0003 §4).** `suggestedThreshold` is a number an operator
-  *may* wire into an auto-accept policy's `minConfidence`; calibration itself sets
-  nothing, and calibration claims are always status `"proposed"`.
+- **It never decides (ADR 0003 §4).** Calibration sets no policy, and calibration
+  claims are always status `"proposed"`. `suggestedThreshold` is not an evaluated
+  auto-accept gate; do not wire it into `minConfidence` without your own evaluation.
 - **Human labels only.** Machine auto-accepts are excluded by default — an
   auto-accepted outcome is the threshold accepting its own guess, so counting it as
   "correct" would let the policy validate itself. `includeAutoAccepted` overrides
   this for offline analysis.
-- **Affirmed conclusions only get a value.** `conclusionConfidence.value` is
-  "probability the conclusion is correct"; attaching an affirmation rate to a
+- **Affirmed conclusions only get a value.** `conclusionConfidence.value` is read
+  as "probability the conclusion is correct"; attaching an affirmation rate to a
   `rejected` conclusion would assert the opposite of the human decision, so those
   claims get no value.
 - **Below the sample floor, no number.** A group with too few samples leaves
-  `value`/`suggestedThreshold` unset rather than emitting a poorly-grounded estimate.
+  `value` unset, and a decile below `minBinSamples` or whose Wilson lower bound
+  misses the target leaves `suggestedThreshold` unset, rather than emitting a
+  poorly-grounded estimate.
 - **Prefer a longer history.** Deriving from the current batch folds a claim's own
   outcome into the group that sets its value; pass precomputed `metrics` over more
   than the batch when you can.

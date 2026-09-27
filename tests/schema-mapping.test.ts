@@ -16,6 +16,7 @@ import { describe, it } from "node:test";
 import type { IdentityLink, TrustBundle } from "@kontourai/surface";
 import { resolveInquiry } from "@kontourai/surface";
 import {
+  buildSurveyTrustBundle,
   mappingReviewToSurface,
   referenceSchemaExtractor,
   surveySchemaMapping,
@@ -391,7 +392,7 @@ describe("surveySchemaMapping — evaluateAutoAccept delegation", () => {
     assert.notEqual(autoReview?.reviewedAt, batchGeneratedAt, "reviewedAt should NOT be the batch-level generatedAt");
   });
 
-  it("fails closed: does not auto-accept when the selected candidate's confidence is missing, even at threshold 0", async () => {
+  it("fails closed: does not auto-accept when the selected candidate's confidence is missing, even at the lowest valid threshold", async () => {
     // Candidate.confidence is `number | undefined` (src/types.ts), but
     // MappingProposalRecord.confidence is a required `number` (src/schema-mapping.ts)
     // that is always copied straight through to Candidate.confidence at
@@ -428,10 +429,118 @@ describe("surveySchemaMapping — evaluateAutoAccept delegation", () => {
     const result = await surveySchemaMapping(
       { systems: [{ system: "crm", schemaText: "" }, { system: "erp", schemaText: "" }] },
       missingConfidenceExtractor,
-      { autoAcceptMinConfidence: 0 },
+      // A threshold of 0 is now refused outright (#280); the smallest usable
+      // threshold still must not let a missing confidence through.
+      { autoAcceptMinConfidence: Number.MIN_VALUE },
     );
 
-    assert.equal(result.surveyInput.reviewOutcomes.length, 0, "missing confidence must fail closed even at threshold 0");
+    assert.equal(result.surveyInput.reviewOutcomes.length, 0, "missing confidence must fail closed even at the lowest threshold");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 2c. Auto-accept range validation and projected authority (#280)
+// ---------------------------------------------------------------------------
+
+describe("surveySchemaMapping — auto-accept range validation and projection (#280)", () => {
+  const at = "2026-09-20T00:00:00.000Z";
+  const systems = [
+    { system: "a", schemaText: "Contact.email:string" },
+    { system: "b", schemaText: "Customer.mail:string" },
+  ];
+  const extractorWithConfidence = (confidence: number) => ({
+    name: "mapper",
+    extract(): MappingProposalRecord[] {
+      return [{
+        id: "p1",
+        sourceField: { system: "a", entity: "Contact", field: "email" },
+        targetField: { system: "b", entity: "Customer", field: "mail" },
+        relation: "equivalent",
+        evidence: [{ system: "a", excerpt: "Contact.email:string" }],
+        confidence,
+        rationale: "r",
+        proposedBy: "mapper",
+        proposedAt: at,
+      }];
+    },
+  });
+
+  for (const confidence of [7, -5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    it(`does not auto-accept an out-of-range self-reported confidence (${confidence})`, async () => {
+      const out = await surveySchemaMapping({ systems }, extractorWithConfidence(confidence), {
+        autoAcceptMinConfidence: 0.5,
+        generatedAt: at,
+      });
+      assert.equal(out.surveyInput.reviewOutcomes.length, 0);
+      assert.equal(out.candidateSets[0]?.status, "needs-review");
+      assert.deepEqual(out.autoAcceptWarnings, [{ code: "confidence-out-of-range", proposalId: "p1", confidence }]);
+    });
+  }
+
+  it("omits autoAcceptWarnings when every confidence is in range", async () => {
+    const out = await surveySchemaMapping({ systems }, extractorWithConfidence(0.2), {
+      autoAcceptMinConfidence: 0.5,
+      generatedAt: at,
+    });
+    assert.equal(out.surveyInput.reviewOutcomes.length, 0);
+    assert.equal("autoAcceptWarnings" in out, false);
+  });
+
+  for (const minConfidence of [0, -1, 1.5, Number.NaN]) {
+    it(`throws RangeError for an invalid autoAcceptMinConfidence (${minConfidence}), even with no proposals`, async () => {
+      const empty = { name: "empty", extract: (): MappingProposalRecord[] => [] };
+      await assert.rejects(
+        surveySchemaMapping({ systems }, empty, { autoAcceptMinConfidence: minConfidence, generatedAt: at }),
+        RangeError,
+      );
+    });
+  }
+
+  it("accepts an in-range confidence at a valid threshold of exactly 1", async () => {
+    const out = await surveySchemaMapping({ systems }, extractorWithConfidence(1), {
+      autoAcceptMinConfidence: 1,
+      generatedAt: at,
+    });
+    assert.equal(out.surveyInput.reviewOutcomes[0]?.status, "assumed");
+  });
+
+  it("projects an auto-accepted claim with system authority and weak evidence, still within the comfort zone", async () => {
+    const out = await surveySchemaMapping({ systems }, extractorWithConfidence(0.95), {
+      autoAcceptMinConfidence: 0.9,
+      generatedAt: at,
+    });
+    const outcome = out.surveyInput.reviewOutcomes[0];
+    assert.equal(outcome?.actor, "auto-accept-policy");
+    // Documented producer-profile policy: an auto-accept is within the comfort zone.
+    assert.equal(outcome?.withinComfortZone, true);
+    const claim = buildSurveyTrustBundle(out.surveyInput).claims[0];
+    assert.equal(claim?.status, "assumed");
+    assert.equal(claim?.confidenceBasis?.reviewerAuthority, "system");
+    assert.equal(claim?.confidenceBasis?.evidenceStrength, "weak");
+    assert.equal(claim?.conclusionConfidence?.comfortZone?.within, true);
+  });
+
+  it("keeps operator authority and moderate evidence for a human-reviewed claim", async () => {
+    const out = await surveySchemaMapping({ systems }, extractorWithConfidence(0.95), { generatedAt: at });
+    const set = out.candidateSets[0]!;
+    for (const status of ["verified", "assumed"] as const) {
+      const input = {
+        ...out.surveyInput,
+        reviewOutcomes: [{
+          id: "human-review",
+          candidateSetId: set.id,
+          candidateId: set.candidates[0]!.id,
+          status,
+          actor: "alice",
+          reviewedAt: at,
+        }],
+        claims: out.surveyInput.claims.map((t) => ({ ...t, status })),
+      };
+      const claim = buildSurveyTrustBundle(input).claims[0];
+      assert.equal(claim?.status, status);
+      assert.equal(claim?.confidenceBasis?.reviewerAuthority, "operator");
+      assert.equal(claim?.confidenceBasis?.evidenceStrength, "moderate");
+    }
   });
 });
 

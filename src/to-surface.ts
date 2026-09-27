@@ -3,6 +3,7 @@ import type { Claim, Evidence, TrustBundle, TrustStatus, VerificationEvent } fro
 import { buildReviewProofAnchor } from "./review-proof.js";
 import { assertReviewOutcomeDiscipline } from "./producer-discipline.js";
 import { deriveCalibration, type CalibrationMetrics } from "./calibration.js";
+import { AUTO_ACCEPT_ACTOR } from "./producer-profile.js";
 import type {
   Candidate,
   CandidateSet,
@@ -28,6 +29,14 @@ type PolicyStandardFields = {
 const DEFAULT_CALIBRATION_MIN_SAMPLES = 20;
 
 export interface SurveyCalibrationOptions {
+  /**
+   * EXPERIMENTAL opt-in, required for any `conclusionConfidence.value` to be
+   * set (#279). The value is the affirmation rate of the claim's whole
+   * extractor/field GROUP — a base rate every affirmed claim in the group
+   * shares — not a per-claim probability. Without this flag the `calibration`
+   * option sets no value.
+   */
+  experimentalConclusionValue?: boolean;
   /**
    * Precomputed calibration to source the value from — typically derived over a
    * LONGER history than the current batch (a better-grounded curve, and it avoids
@@ -57,12 +66,13 @@ export interface BuildSurveyTrustBundleOptions {
    */
   projectionContextId?: string;
   /**
-   * Populate `conclusionConfidence.value` from empirical review calibration —
-   * "how often this extractor's proposals at this confidence were affirmed by a
-   * human reviewer" (the produce side of the confidence loop; see #114/#137).
-   * `true` derives calibration from this batch; an object supplies precomputed
-   * metrics and/or a `minSamples` floor. Absent → `value` stays unset and only
-   * the comfort-zone signal is carried (unchanged behavior).
+   * EXPERIMENTAL. Populate `conclusionConfidence.value` from empirical review
+   * calibration — the affirmation rate of the claim's extractor/field group
+   * (a group base rate, not a per-claim probability; see #114/#137/#279).
+   * A value is set ONLY with `{ experimentalConclusionValue: true }`; `true` or
+   * an object without that flag sets no value. The object may also supply
+   * precomputed `metrics` and/or a `minSamples` floor. Absent → `value` stays
+   * unset and only the comfort-zone signal is carried.
    *
    * ADVISORY (ADR 0003 §4): this only enriches the emitted conclusion confidence;
    * it never changes a claim's `status`.
@@ -77,6 +87,7 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
   const candidateSets = indexById(input.candidateSets, "candidate set");
   const reviewsByCandidateSet = groupBy(input.reviewOutcomes, (review) => review.candidateSetId);
 
+  // Only the explicit experimental opt-in produces a value (#279).
   const calibrationOptions = normalizeCalibrationOptions(options.calibration);
   const calibrationMetrics = calibrationOptions
     ? (calibrationOptions.metrics ?? deriveCalibration({
@@ -108,6 +119,7 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
     const createdAt = projection.createdAt ?? extraction.extractedAt;
     const updatedAt = projection.updatedAt ?? projectionReview?.reviewedAt ?? input.generatedAt;
     const evidenceId = projectionRecordId(projection.id, projectionContextId, "claim-evidence", "evidence.source");
+    const autoAccepted = projectionReview?.actor === AUTO_ACCEPT_ACTOR;
 
     const claim: Claim = {
       id: projection.id,
@@ -126,8 +138,13 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
       confidenceBasis: {
         sourceQuality: "moderate",
         extractionConfidence: candidate.confidence ?? extraction.confidence,
-        reviewerAuthority: status === "verified" || status === "assumed" ? "operator" : "none",
-        evidenceStrength: status === "verified" || status === "assumed" ? "moderate" : "weak",
+        // An auto-accept policy checked nothing but the proposer's own
+        // confidence, so its claims carry system authority and weak evidence;
+        // only a human review earns operator authority.
+        reviewerAuthority: status === "verified" || status === "assumed"
+          ? (autoAccepted ? "system" : "operator")
+          : "none",
+        evidenceStrength: (status === "verified" || status === "assumed") && !autoAccepted ? "moderate" : "weak",
         impactLevel: projection.impactLevel,
         ...projection.confidenceBasis,
       },
@@ -145,15 +162,17 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
       },
     };
 
-    // Promote the review's comfort-zone signal — and, when calibration is
-    // enabled, an empirically-calibrated conclusion probability — into the
+    // Promote the review's comfort-zone signal — and, under the experimental
+    // calibration opt-in, the group affirmation rate — into the
     // first-class conclusionConfidence field (Surface 2.9 / Hachure 0.14) so the
     // signal is portable and comparable, not buried in producer metadata.
     //
-    // comfortZone is CARRIED from the review. `value` is PRODUCED from empirical
-    // review calibration (#114/#137): the affirmation rate of this extractor's
-    // proposals at this confidence — a calibrated conclusion probability, distinct
-    // from the extraction-confidence ingredient in confidenceBasis.
+    // comfortZone is CARRIED from the review. `value` is PRODUCED, only under the
+    // experimental opt-in, from empirical review calibration (#114/#137/#279):
+    // the affirmation rate of this claim's extractor/field GROUP. It is a group
+    // base rate shared by every affirmed claim in the group, not a per-claim
+    // probability, and distinct from the extraction-confidence ingredient in
+    // confidenceBasis.
     //
     // A value is produced only for an AFFIRMED conclusion (status verified/assumed)
     // that clears the sample floor. conclusionConfidence.value is "probability the
@@ -666,8 +685,38 @@ function normalizeCalibrationOptions(
   calibration: BuildSurveyTrustBundleOptions["calibration"],
 ): SurveyCalibrationOptions | undefined {
   if (calibration === undefined || calibration === false) return undefined;
-  if (calibration === true) return {};
-  return calibration;
+  if (calibration === true || calibration.experimentalConclusionValue === undefined) {
+    // Callers written before #279 asked for a value this way; tell them it is
+    // now ignored instead of silently dropping it. An explicit `false` is a
+    // deliberate opt-out and stays quiet.
+    warnCalibrationOptInMissingOnce();
+    return undefined;
+  }
+  return calibration.experimentalConclusionValue === true ? calibration : undefined;
+}
+
+let warnedCalibrationOptInMissing = false;
+
+/**
+ * Warn once per process, matching the `defineProductVocabulary` deprecation
+ * notice: `buildSurveyTrustBundle` has no diagnostics channel in its return
+ * value (it returns a TrustBundle), and a per-call warning would flood batch
+ * projections.
+ */
+function warnCalibrationOptInMissingOnce(): void {
+  if (warnedCalibrationOptInMissing) return;
+  warnedCalibrationOptInMissing = true;
+  console.warn(
+    "[@kontourai/survey] buildSurveyTrustBundle: the `calibration` option no longer sets " +
+      "conclusionConfidence.value without `calibration: { experimentalConclusionValue: true }` (#279). " +
+      "The value is an experimental extractor/field group base rate, not a per-claim probability. " +
+      "Pass the flag to keep it, or `experimentalConclusionValue: false` / omit `calibration` to silence this warning.",
+  );
+}
+
+/** Test-only: re-arm the once-per-process calibration opt-in warning. Not exported from the package index. */
+export function resetCalibrationOptInWarningForTests(): void {
+  warnedCalibrationOptInMissing = false;
 }
 
 /**
