@@ -475,6 +475,10 @@ describe("session lock robustness (#281)", () => {
     const holder = spawn(process.execPath, ["--input-type=module", "-e", holderScript, sessionPath, marker, String(HOLD_MS)], {
       stdio: ["ignore", "ignore", "inherit"],
     });
+    // Captured immediately: `once` only sees an event fired after it starts
+    // listening, so awaiting this later (once the holder may already have
+    // exited) would hang forever.
+    const holderExit = once(holder, "exit");
     try {
       // Wait for the holder to actually take the lock before racing it.
       const holderStarted = Date.now();
@@ -501,7 +505,7 @@ describe("session lock robustness (#281)", () => {
       );
       assert.ok(waitedMs >= HOLD_MS - 50, `acquired too early (${waitedMs}ms) for a lock held by a live process for ${HOLD_MS}ms`);
     } finally {
-      await once(holder, "exit");
+      await holderExit;
       await rm(dir, { recursive: true, force: true });
     }
   });
