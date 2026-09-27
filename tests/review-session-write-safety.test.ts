@@ -9,12 +9,12 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { request } from "node:http";
 import { createInterface } from "node:readline";
-import { copyFile, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 import { startReviewConsoleServer, type ReviewConsoleServerHandle } from "../src/console/review-console-server.js";
-import { acquireReviewSessionFileLock } from "../src/review-session-file.js";
+import { acquireReviewSessionFileLock, ReviewSessionFileLockTimeoutError } from "../src/review-session-file.js";
 import {
   buildReviewSessionEvents,
   defaultReviewSessionName,
@@ -508,6 +508,77 @@ describe("session lock robustness (#281)", () => {
       await holderExit;
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  describe("pid reuse (#298)", () => {
+    const withLockDir = async (run: (sessionPath: string) => Promise<void>): Promise<void> => {
+      const dir = await mkdtemp(join(tmpdir(), "survey-lock-reuse-"));
+      try {
+        await run(join(dir, "session.json"));
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    };
+    // A lock whose pid is alive (this test process) but whose recorded start
+    // time belongs to an earlier process: its holder died and the pid was reused.
+    const writeReusedPidLock = async (sessionPath: string, ageMs: number): Promise<void> => {
+      const lockPath = `${sessionPath}.lock`;
+      await writeFile(lockPath, JSON.stringify({
+        pid: process.pid,
+        startIdentity: "ps-lstart:Thu Jan 1 00:00:00 1970",
+        token: "dead-holder",
+        acquiredAt: new Date(Date.now() - ageMs).toISOString(),
+      }));
+      const past = new Date(Date.now() - ageMs);
+      await utimes(lockPath, past, past);
+    };
+
+    test("a lock naming a live pid with a different start time is broken after staleMs, for every contending writer", async (t) => {
+      if (process.platform === "win32") t.skip("no process start time on this platform");
+      await withLockDir(async (sessionPath) => {
+        for (let round = 0; round < 3; round += 1) {
+          await writeReusedPidLock(sessionPath, 5_000);
+          const holders = await Promise.all(Array.from({ length: 10 }, async () => {
+            const release = await acquireReviewSessionFileLock(sessionPath, { staleMs: 1_000, timeoutMs: 5_000 });
+            await release();
+            return true;
+          }));
+          assert.equal(holders.length, 10);
+        }
+      });
+    });
+
+    test("a reused-pid lock younger than staleMs is still waited for (age rule)", async (t) => {
+      if (process.platform === "win32") t.skip("no process start time on this platform");
+      await withLockDir(async (sessionPath) => {
+        await writeReusedPidLock(sessionPath, 0);
+        await assert.rejects(
+          acquireReviewSessionFileLock(sessionPath, { staleMs: 30_000, timeoutMs: 300 }),
+          ReviewSessionFileLockTimeoutError,
+        );
+      });
+    });
+
+    test("a live holder whose recorded start time matches is never broken, however old its lock", async (t) => {
+      if (process.platform === "win32") t.skip("no process start time on this platform");
+      await withLockDir(async (sessionPath) => {
+        const lockPath = `${sessionPath}.lock`;
+        const release = await acquireReviewSessionFileLock(sessionPath);
+        try {
+          const holder = JSON.parse(await readFile(lockPath, "utf8")) as { pid?: number; startIdentity?: unknown };
+          assert.equal(holder.pid, process.pid);
+          assert.equal(typeof holder.startIdentity, "string", "the holder records its start time");
+          const past = new Date(Date.now() - 60_000);
+          await utimes(lockPath, past, past);
+          await assert.rejects(
+            acquireReviewSessionFileLock(sessionPath, { staleMs: 50, timeoutMs: 500 }),
+            ReviewSessionFileLockTimeoutError,
+          );
+        } finally {
+          await release();
+        }
+      });
+    });
   });
 
   test("orphan temp files from a crashed writer are removed on the next write", async () => {
