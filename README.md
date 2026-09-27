@@ -40,6 +40,10 @@ The Review Workbench rendering a real example queue — current vs proposed valu
 npm install @kontourai/survey @kontourai/surface
 ```
 
+Survey supports `@kontourai/surface` 2.13 and later 2.x, and 3.x, and CI tests
+the lowest 2.x and the newest 3.x. Install either major and your project and
+Survey share one Surface copy (`npm ls @kontourai/surface` shows one entry).
+
 Requires Node.js >=22. TypeScript >=5.0 is required to compile against
 Survey's published type declarations (`defineProductVocabulary`'s `const`
 type parameters are TS 5.0+ syntax) — JavaScript consumers are unaffected;

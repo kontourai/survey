@@ -51,6 +51,69 @@ jobs:
         run: npm run verify
         working-directory: survey
 
+  # One leg per supported @kontourai/surface major: the lowest version the
+  # dependency range admits and the newest 3.x pnpm will resolve (it honours
+  # minimumReleaseAge). Keep the 2.x pin equal to the range's lower bound in
+  # package.json. The lockfile's own Surface version is covered by `verify`.
+  surface-compat:
+    name: Surface ${{ matrix.surface }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - surface: '2.13.0'
+            expect: '^2\.13\.0$'
+            consumer: '^2.13.0'
+          - surface: '^3'
+            expect: '^3\.'
+            consumer: '^3'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          path: survey
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          package_json_file: survey/package.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: survey/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+        working-directory: survey
+
+      # Runs against the declared range, before the pin below rewrites package.json.
+      - name: A consumer on Surface ${{ matrix.consumer }} installs one Surface copy
+        run: node scripts/check-surface-single-copy.mjs '${{ matrix.consumer }}'
+        working-directory: survey
+
+      - name: Pin Surface ${{ matrix.surface }}
+        run: |
+          pnpm add --save-exact '@kontourai/surface@${{ matrix.surface }}'
+          RESOLVED="$(node -p 'require("./node_modules/@kontourai/surface/package.json").version')"
+          echo "Resolved @kontourai/surface ${RESOLVED}"
+          if ! printf '%s\n' "${RESOLVED}" | grep -Eq '${{ matrix.expect }}'; then
+            echo "::error::Resolved @kontourai/surface ${RESOLVED}, expected ${{ matrix.expect }}." >&2
+            exit 1
+          fi
+        working-directory: survey
+
+      - name: Unit tests
+        run: npm test
+        working-directory: survey
+
+      - name: Package smoke tests
+        run: npm run test:package-smoke
+        working-directory: survey
+
   docs:
     name: Docs site build and links
     runs-on: ubuntu-latest
