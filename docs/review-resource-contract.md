@@ -66,10 +66,19 @@ Replay validation (`validateReviewSessionEventsForSnapshot`, and so every
 server apply helper) refuses an edit on an item with `editable: false`
 (`edited-value-not-editable`) and an edit that does not satisfy the item's
 `valueDescriptor` (`edited-value-type-mismatch`: a finite number, a boolean, a
-`YYYY-MM-DD` date, a declared enum member, or a string). Sessions saved before
-typed storage hold number/boolean edits as text; replay converts text that
-parses cleanly to the typed value and reports an
-`edited-value-converted-from-text` entry in the apply result's `warnings`. A decision that moves off
+`YYYY-MM-DD` string naming a real calendar day, a declared enum member, or a
+string). Only the edit on an item's final decision event is checked; a refused
+edit that a later decision for the same item superseded is reported as a
+`superseded-edited-value-refused` warning instead of failing the session.
+Number text (in the editor, and in the conversion below) must be a plain
+decimal (`-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?`) with at most 15 significant
+digits, so it is stored as a JSON number exactly; hex/binary forms, leading
+zeros and longer values are refused rather than rounded, and `-0` is stored as
+`0`. Sessions saved before typed storage hold number/boolean edits as text;
+replay converts text that parses cleanly under those rules to the typed value
+and reports an `edited-value-converted-from-text` entry in the apply result's
+`warnings`. This conversion is permanent, with no end date: any writer that
+still sends `"42"` for a number field gets `42` and a warning, not a refusal. A decision that moves off
 accept-proposed, or an accept with no carried edit, clears any prior edit for
 that item on replay. See
 [`consumer-integration-guide.md`](consumer-integration-guide.md) for the full

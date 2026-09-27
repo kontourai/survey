@@ -1772,6 +1772,10 @@ describe("review workbench prototype", () => {
       assert.equal(validateProposedValue({ type: "number" }, "42"), undefined);
       assert.equal(validateProposedValue({ type: "number" }, "3.14"), undefined);
       assert.match(validateProposedValue({ type: "number" }, "abc") ?? "", /not a number/);
+      // Plain decimal only, and no silent precision loss (kontourai/survey#278).
+      assert.match(validateProposedValue({ type: "number" }, "0x1F") ?? "", /not a number/);
+      assert.match(validateProposedValue({ type: "number" }, "007") ?? "", /not a number/);
+      assert.match(validateProposedValue({ type: "number" }, "12345678901234567890") ?? "", /not a number/);
       assert.match(validateProposedValue({ type: "number" }, "  ") ?? "", /Enter a number/);
     });
 
@@ -1784,6 +1788,7 @@ describe("review workbench prototype", () => {
     it("accepts an ISO calendar date and rejects other shapes for type date", () => {
       assert.equal(validateProposedValue({ type: "date" }, "2026-03-03"), undefined);
       assert.match(validateProposedValue({ type: "date" }, "March 3") ?? "", /valid date/);
+      assert.match(validateProposedValue({ type: "date" }, "2026-02-31") ?? "", /valid date/);
       assert.match(validateProposedValue({ type: "date" }, "2026-13-40") ?? "", /valid date/);
     });
 

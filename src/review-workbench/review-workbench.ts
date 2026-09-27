@@ -51,7 +51,7 @@ import {
 } from "../review-resource.js";
 import { validateAuthorizing, buildAuthorizedActionAuthorizing } from "../review-authorizing.js";
 import { humanizeIdentifier } from "./review-presentation.js";
-import { editedValueFromEditorText } from "./edited-value.js";
+import { editedValueFromEditorText, isIsoCalendarDate, parsePlainDecimal } from "./edited-value.js";
 import {
   createAuditFactTrace,
   reviewAuditRowKeys,
@@ -1329,13 +1329,15 @@ export function validateProposedValue(
   switch (descriptor.type) {
     case "number":
       if (value === "") return "Enter a number.";
-      return Number.isFinite(Number(value)) ? undefined : `"${rawValue}" is not a number.`;
+      return parsePlainDecimal(value) !== undefined
+        ? undefined
+        : `"${rawValue}" is not a number (use plain decimal digits, at most 15 significant).`;
     case "boolean":
       if (value === "") return "Choose true or false.";
       return value === "true" || value === "false" ? undefined : `"${rawValue}" is not true or false.`;
     case "date":
       if (value === "") return "Enter a date.";
-      return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value))
+      return isIsoCalendarDate(value)
         ? undefined
         : `"${rawValue}" is not a valid date (YYYY-MM-DD).`;
     case "enum": {

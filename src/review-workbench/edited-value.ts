@@ -19,10 +19,43 @@ export type EditedValueCheck =
       readonly message: string;
     };
 
-const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
+const isoDatePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-function isIsoDate(value: string): boolean {
-  return isoDatePattern.test(value) && !Number.isNaN(Date.parse(value));
+/**
+ * True for a `YYYY-MM-DD` string naming a real calendar day. The Y/M/D must
+ * round-trip through a UTC date, so an impossible day such as `2026-02-31`
+ * (which `Date.parse` silently rolls over to March) is refused.
+ */
+export function isIsoCalendarDate(value: string): boolean {
+  const match = isoDatePattern.exec(value);
+  if (!match) return false;
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+// Plain decimal only: optional minus, no leading zeros, optional fraction and
+// exponent. Refuses hex/binary/octal forms, "Infinity", "+1", ".5" and "007".
+const plainDecimalPattern = /^-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?$/;
+
+/** A JSON number keeps at most 15 significant decimal digits exactly (IEEE 754 double). */
+const maxSignificantDigits = 15;
+
+/**
+ * Parses number-field editor text, or returns `undefined` when it is not a
+ * plain decimal or would not survive storage as a JSON number exactly: more
+ * than 15 significant digits is refused rather than silently rounded, and a
+ * value that overflows to Infinity is refused. `-0` is stored as `0` (JSON has
+ * no negative zero).
+ */
+export function parsePlainDecimal(text: string): number | undefined {
+  const match = plainDecimalPattern.exec(text);
+  if (!match) return undefined;
+  const digits = `${match[1]}${(match[2] ?? "").slice(1)}`.replace(/^0+/, "").replace(/0+$/, "");
+  if (digits.length > maxSignificantDigits) return undefined;
+  const parsed = Number(text);
+  if (!Number.isFinite(parsed)) return undefined;
+  return parsed === 0 ? 0 : parsed;
 }
 
 /**
@@ -39,15 +72,12 @@ export function editedValueFromEditorText(
   if (!descriptor) return text;
   const trimmed = text.trim();
   switch (descriptor.type) {
-    case "number": {
-      if (trimmed === "") return undefined;
-      const parsed = Number(trimmed);
-      return Number.isFinite(parsed) ? parsed : undefined;
-    }
+    case "number":
+      return parsePlainDecimal(trimmed);
     case "boolean":
       return trimmed === "true" ? true : trimmed === "false" ? false : undefined;
     case "date":
-      return isIsoDate(trimmed) ? trimmed : undefined;
+      return isIsoCalendarDate(trimmed) ? trimmed : undefined;
     case "enum": {
       const allowed = descriptor.enumValues ?? [];
       return allowed.length === 0 || allowed.includes(trimmed) ? trimmed : undefined;
@@ -64,7 +94,7 @@ function valueMatchesDescriptor(descriptor: ReviewValueDescriptor, value: unknow
     case "boolean":
       return typeof value === "boolean";
     case "date":
-      return typeof value === "string" && isIsoDate(value);
+      return typeof value === "string" && isIsoCalendarDate(value);
     case "enum": {
       if (typeof value !== "string") return false;
       const allowed = descriptor.enumValues ?? [];
