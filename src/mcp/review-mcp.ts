@@ -1,4 +1,4 @@
-import { readFile, writeFile, rename } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 
 import { McpServer, type CallToolResult } from "@modelcontextprotocol/server";
@@ -22,6 +22,12 @@ import {
   deriveServerReviewSessionApplyResult,
 } from "../review-workbench/server-review-session.js";
 import type { ReviewItem, ReviewSession, ReviewSessionEvent } from "../review-resource.js";
+import {
+  appendReviewSessionEvents,
+  readReviewSessionFile,
+  storedReviewSessionName,
+  updateReviewSessionFile,
+} from "../review-session-file.js";
 
 const SESSION_NAME = "mcp-review-session";
 
@@ -54,14 +60,7 @@ interface SessionFileContent {
 }
 
 async function readSessionFile(path: string): Promise<SessionFileContent> {
-  const raw = await readFile(path, "utf8");
-  return JSON.parse(raw) as SessionFileContent;
-}
-
-async function writeSessionFileAtomic(path: string, content: SessionFileContent): Promise<void> {
-  const tmp = `${path}.tmp`;
-  await writeFile(tmp, JSON.stringify(content, null, 2), "utf8");
-  await rename(tmp, path);
+  return readReviewSessionFile<SessionFileContent>(path);
 }
 
 // ---- Queue helpers -------------------------------------------------------
@@ -439,73 +438,91 @@ async function toolDecide(
     throw new DomainError("survey_review_decide requires a non-empty reason for could-not-confirm");
   }
 
-  const file = await readSessionFile(options.sessionPath);
-  const { snapshot, events } = file;
-  const current = currentSessionState(snapshot, events);
+  // Read, validate and write inside the shared session lock so a concurrent
+  // decide or console save cannot interleave and drop this decision (#281).
+  const { snapshot, sessionWithDecision, newEvents } = await updateReviewSessionFile<SessionFileContent, {
+    snapshot: ReviewQueueSessionState;
+    sessionWithDecision: ReviewQueueSessionState;
+    newEvents: ReviewSessionEvent[];
+  }>(options.sessionPath, (file) => {
+    const { snapshot, events } = file;
+    const current = currentSessionState(snapshot, events);
 
-  const item = current.items.find((i) => i.metadata.name === itemName);
-  if (!item) {
-    throw new DomainError(`Unknown review item: ${itemName}`);
-  }
+    const item = current.items.find((i) => i.metadata.name === itemName);
+    if (!item) {
+      throw new DomainError(`Unknown review item: ${itemName}`);
+    }
 
-  const existingDecision = current.decisionsByItemName[item.metadata.name];
-  if (existingDecision) {
-    throw new DomainError(`Item ${itemName} already has a decision: ${existingDecision}. Use a new session to re-decide.`);
-  }
+    const existingDecision = current.decisionsByItemName[item.metadata.name];
+    if (existingDecision) {
+      throw new DomainError(`Item ${itemName} already has a decision: ${existingDecision}. Use a new session to re-decide.`);
+    }
 
-  // Build the updated session state with the decision
-  const sessionWithDecision: ReviewQueueSessionState = {
-    ...current,
-    decisionsByItemName: {
-      ...current.decisionsByItemName,
-      [itemName]: wbDecision,
-    },
-    ...(note !== undefined
-      ? {
-          notesByItemName: {
-            ...current.notesByItemName,
-            [itemName]: note,
-          },
-        }
-      : {}),
-    ...(attemptEvidenceIds?.length
-      ? {
-          attemptEvidenceIdsByItemName: {
-            ...current.attemptEvidenceIdsByItemName,
-            [itemName]: [...attemptEvidenceIds],
-          },
-        }
-      : {}),
-  };
+    // Build the updated session state with the decision
+    const sessionWithDecision: ReviewQueueSessionState = {
+      ...current,
+      decisionsByItemName: {
+        ...current.decisionsByItemName,
+        [itemName]: wbDecision,
+      },
+      ...(note !== undefined
+        ? {
+            notesByItemName: {
+              ...current.notesByItemName,
+              [itemName]: note,
+            },
+          }
+        : {}),
+      ...(attemptEvidenceIds?.length
+        ? {
+            attemptEvidenceIdsByItemName: {
+              ...current.attemptEvidenceIdsByItemName,
+              [itemName]: [...attemptEvidenceIds],
+            },
+          }
+        : {}),
+    };
 
-  // Use the server session APIs for apply-path validation
-  const record = createServerReviewSessionRecord({
-    sessionName: SESSION_NAME,
-    snapshot,
-    eventCount: events.length,
-    updatedAt: new Date(),
-  });
-
-  const newEvents = buildReviewSessionEvents(sessionWithDecision, SESSION_NAME);
-  const applyResult = deriveServerReviewSessionApplyResult({
-    record,
-    events: newEvents,
-    requiredResolvedItems: "none",
-  });
-
-  if (!applyResult.ok) {
-    throw new DomainError(
-      `Decision validation failed: ${applyResult.issues.map((issue) => "message" in issue ? issue.message : String(issue)).join("; ")}`,
+    // Append only this decision's events (its note, then the decision) to the
+    // stored log. Regenerating the whole log from state would erase earlier
+    // reversals and note changes recorded by the console (#281).
+    const sessionName = storedReviewSessionName(file, SESSION_NAME);
+    const decisionEvents = buildReviewSessionEvents(sessionWithDecision, sessionName).filter(
+      (event) =>
+        event.spec.reviewItemName === itemName
+        && (event.spec.eventType === "decision-changed"
+          || event.spec.eventType === "decision-submitted"
+          || (event.spec.eventType === "note-changed" && note !== undefined)),
     );
-  }
+    const newEvents = appendReviewSessionEvents(file, decisionEvents);
 
-  // Persist atomically
-  const updatedFile: SessionFileContent = {
-    session: file.session,
-    snapshot,
-    events: newEvents,
-  };
-  await writeSessionFileAtomic(options.sessionPath, updatedFile);
+    // Use the server session APIs for apply-path validation
+    const record = createServerReviewSessionRecord({
+      sessionName,
+      snapshot,
+      eventCount: events.length,
+      updatedAt: new Date(),
+    });
+
+    const applyResult = deriveServerReviewSessionApplyResult({
+      record,
+      events: newEvents,
+      requiredResolvedItems: "none",
+    });
+
+    if (!applyResult.ok) {
+      throw new DomainError(
+        `Decision validation failed: ${applyResult.issues.map((issue) => "message" in issue ? issue.message : String(issue)).join("; ")}`,
+      );
+    }
+
+    const updatedFile: SessionFileContent = {
+      session: file.session,
+      snapshot,
+      events: newEvents,
+    };
+    return { next: updatedFile, result: { snapshot, sessionWithDecision, newEvents } };
+  });
 
   // Summarize the result
   const updatedItem = sessionWithDecision.items.find((i) => i.metadata.name === itemName);

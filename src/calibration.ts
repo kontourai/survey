@@ -9,10 +9,16 @@
  * from extractor X was affirmed 17/20 times" — plus a calibration gap and an
  * empirically-grounded auto-accept threshold suggestion.
  *
- * ADVISORY ONLY (ADR 0003 §4, proposals-only). Calibration INFORMS policy — the
- * suggested threshold an operator MAY wire into `autoAcceptMinConfidence` — it
- * never decides a claim or mutates a status. Projected claims carry status
- * "proposed", exactly like every other producer proposal.
+ * EXPERIMENTAL. The curve is a descriptive summary of past review outcomes, not
+ * a validated probability model. `suggestedThreshold` is withheld unless every
+ * contributing bin clears a sample floor AND a one-sided 95% Wilson lower bound
+ * on its accuracy clears the target (#279); even then it is not an auto-accept
+ * gate — do not wire it into `autoAcceptMinConfidence` without your own
+ * evaluation.
+ *
+ * ADVISORY ONLY (ADR 0003 §4, proposals-only). Calibration never decides a claim
+ * or mutates a status. Projected claims carry status "proposed", exactly like
+ * every other producer proposal.
  *
  * Machine auto-accepts are EXCLUDED by default: an auto-accepted outcome is the
  * threshold accepting its own guess, so counting it as a "correct" label would
@@ -61,15 +67,19 @@ export interface DeriveCalibrationOptions {
   /** Number of equal-width confidence bins over [0,1]. Default 10 (deciles). */
   readonly binCount?: number;
   /**
-   * The empirical accuracy the suggested threshold must clear. Default 0.95.
-   * A `suggestedThreshold` is the lowest bin lower-bound at/above which every
-   * populated bin's empirical accuracy meets this target.
+   * The accuracy the suggested threshold must clear. Default 0.95. A
+   * `suggestedThreshold` is the lowest bin lower-bound at/above which every bin
+   * has ≥ `minBinSamples` samples and a one-sided 95% Wilson lower confidence
+   * bound on its accuracy (`CalibrationBin.accuracyLowerBound`) that meets this
+   * target — the point estimate alone is not enough.
    */
   readonly targetAccuracy?: number;
   /**
    * A bin needs at least this many samples to count toward `suggestedThreshold`
-   * (both to qualify and to disqualify). Default 1. Raise it to avoid grounding
-   * a threshold on a bin with too little evidence.
+   * (an under-sampled bin ends the qualifying run). Default
+   * {@link DEFAULT_MIN_BIN_SAMPLES} (30). The Wilson bound applies on top of this
+   * floor, so an all-affirmed bin needs more samples than the floor when the
+   * target is high (≈52 all-affirmed samples for the default 0.95 target).
    */
   readonly minBinSamples?: number;
   /**
@@ -81,7 +91,10 @@ export interface DeriveCalibrationOptions {
 
 const DEFAULT_BIN_COUNT = 10;
 const DEFAULT_TARGET_ACCURACY = 0.95;
-const DEFAULT_MIN_BIN_SAMPLES = 1;
+/** Default per-bin sample floor for `suggestedThreshold` (#279; was 1). */
+const DEFAULT_MIN_BIN_SAMPLES = 30;
+/** z for a one-sided 95% lower confidence bound. */
+const ONE_SIDED_95_Z = 1.6448536269514722;
 
 // ---------------------------------------------------------------------------
 // Output shapes
@@ -117,6 +130,13 @@ export interface CalibrationBin {
   readonly empiricalAccuracy: number | undefined;
   /** Mean predicted confidence of samples in the bin; undefined when empty. */
   readonly meanPredictedConfidence: number | undefined;
+  /**
+   * One-sided 95% Wilson lower confidence bound on the bin's accuracy; undefined
+   * when the bin is empty. `suggestedThreshold` requires this bound, not the
+   * point estimate, to meet `targetAccuracy`. Optional in the type so metrics
+   * built by hand before this field existed still type-check.
+   */
+  readonly accuracyLowerBound?: number;
 }
 
 /** A calibration rollup for one extractor (and optionally one field). */
@@ -139,11 +159,12 @@ export interface CalibrationGroup {
   /** Per-bin empirical accuracy, ascending by lowerBound. */
   readonly bins: readonly CalibrationBin[];
   /**
-   * Lowest bin lowerBound at/above which every populated bin (≥ minBinSamples)
-   * meets `targetAccuracy`, scanning the top-contiguous run of qualifying bins.
-   * undefined when no bin qualifies — the data does not yet support an empirical
-   * auto-accept threshold at that target. ADVISORY: an operator wires this into
-   * `autoAcceptMinConfidence`; calibration never sets it.
+   * EXPERIMENTAL. Lowest bin lowerBound of the top-contiguous run of bins that
+   * each have ≥ minBinSamples samples and an `accuracyLowerBound` ≥
+   * `targetAccuracy`. undefined when no bin qualifies — the data does not
+   * support an empirical threshold at that target. Each contributing bin reports
+   * its `sampleCount` and `accuracyLowerBound`. This is a descriptive summary,
+   * not a validated auto-accept gate; calibration never sets any policy.
    */
   readonly suggestedThreshold: number | undefined;
 }
@@ -174,20 +195,29 @@ export interface CalibrationMetrics {
 /**
  * Derives extractor/field confidence calibration from review outcomes.
  *
+ * EXPERIMENTAL — see the module note.
+ *
  * Each reviewed candidate set contributes one labeled sample: the confidence of
- * the SYSTEM-proposed candidate (`CandidateSet.selectedCandidateId`) as the
- * prediction, and whether the human review affirmed that proposed value as the
- * label. A sample is skipped when it carries no human label or no prediction:
+ * the SYSTEM-proposed candidate as the prediction, and whether the human review
+ * affirmed that proposed value as the label.
+ *
+ * The proposed candidate is identified by its producer role, never by
+ * `CandidateSet.selectedCandidateId` (which records the reviewer's pick on the
+ * builder and canonical review paths, #279): the single candidate whose
+ * `metadata.candidateRole` or `metadata.role` is `"proposed"`, or the only
+ * candidate of a one-candidate set (whatever its role). A sample is skipped (and counted
+ * in `skippedCount`) when it carries no human label or no prediction:
  *
  * - status "proposed" (not yet reviewed);
  * - resolution "could_not_confirm" (no human correctness label);
  * - a machine auto-accept, unless `includeAutoAccepted` is set;
- * - no `selectedCandidateId`, or the selected candidate / its confidence is
- *   missing or non-finite (no prediction to calibrate).
+ * - the proposed candidate cannot be determined (several candidates without
+ *   exactly one `"proposed"` role), or its confidence is missing or non-finite.
  *
  * A sample is "correct" when the outcome status is verified/assumed AND the
- * reviewer did not switch to a different candidate; "incorrect" when the status
- * is rejected or the reviewer overrode the proposed candidate.
+ * reviewer's pick (`ReviewOutcome.candidateId`, else `selectedCandidateId`) is
+ * the proposed candidate; "incorrect" when the status is rejected or the
+ * reviewer picked a different candidate (for example, kept the current value).
  */
 export function deriveCalibration(
   input: CalibrationInput,
@@ -199,10 +229,6 @@ export function deriveCalibration(
   const includeAutoAccepted = options.includeAutoAccepted ?? false;
 
   const candidateSetById = new Map(input.candidateSets.map((cs) => [cs.id, cs]));
-  const candidateById = new Map<string, Candidate>();
-  for (const cs of input.candidateSets) {
-    for (const c of cs.candidates) candidateById.set(c.id, c);
-  }
   const extractionById = new Map(input.extractions.map((e) => [e.id, e]));
 
   if (options.windowDays !== undefined && options.now === undefined) {
@@ -228,7 +254,7 @@ export function deriveCalibration(
       }
     }
 
-    const sample = toSample(outcome, candidateSetById, candidateById, extractionById, includeAutoAccepted);
+    const sample = toSample(outcome, candidateSetById, extractionById, includeAutoAccepted);
     if (sample === undefined) {
       skippedCount++;
       continue;
@@ -290,7 +316,6 @@ export function deriveCalibration(
 function toSample(
   outcome: ReviewOutcome,
   candidateSetById: Map<string, CandidateSet>,
-  candidateById: Map<string, Candidate>,
   extractionById: Map<string, Extraction>,
   includeAutoAccepted: boolean,
 ): CalibrationSample | undefined {
@@ -302,11 +327,10 @@ function toSample(
   const candidateSet = candidateSetById.get(outcome.candidateSetId);
   if (candidateSet === undefined) return undefined;
 
-  // The prediction is the SYSTEM-proposed candidate's confidence.
-  const proposedId = candidateSet.selectedCandidateId;
-  if (proposedId === undefined) return undefined;
-  const proposed = candidateById.get(proposedId);
+  // The prediction is the SYSTEM-proposed candidate's confidence, found by role.
+  const proposed = proposedCandidateOf(candidateSet);
   if (proposed === undefined) return undefined;
+  const proposedId = proposed.id;
 
   const extraction = proposed.extractionId ? extractionById.get(proposed.extractionId) : undefined;
   const rawConfidence = proposed.confidence ?? extraction?.confidence;
@@ -321,10 +345,10 @@ function toSample(
   if (outcome.status === "rejected") {
     correct = false;
   } else {
-    // verified | assumed — an override to a different candidate means the
-    // proposed value did NOT stand.
-    const overrode = outcome.candidateId !== undefined && outcome.candidateId !== proposedId;
-    correct = !overrode;
+    // verified | assumed — the proposed value stood only if the reviewer's pick
+    // is the proposed candidate.
+    const pickedId = outcome.candidateId ?? candidateSet.selectedCandidateId;
+    correct = pickedId === undefined || pickedId === proposedId;
   }
 
   return {
@@ -336,6 +360,24 @@ function toSample(
     candidateSetId: outcome.candidateSetId,
     reviewedAt: outcome.reviewedAt,
   };
+}
+
+/**
+ * The candidate whose confidence is the prediction. Returns undefined when it
+ * cannot be determined, so the outcome is skipped rather than labeled against
+ * the reviewer's own pick.
+ *
+ * A one-candidate set is sampled whatever the candidate's role ("computed",
+ * "source-version", "current", free-form roles, or none): with one candidate
+ * there is no pick to confuse with a proposal, and the review either affirmed
+ * or rejected that candidate's value. Only a multi-candidate set needs a
+ * single "proposed" role marker.
+ */
+function proposedCandidateOf(candidateSet: CandidateSet): Candidate | undefined {
+  if (candidateSet.candidates.length === 1) return candidateSet.candidates[0];
+  const roleOf = (c: Candidate): unknown => c.metadata?.candidateRole ?? c.metadata?.role;
+  const proposed = candidateSet.candidates.filter((c) => roleOf(c) === "proposed");
+  return proposed.length === 1 ? proposed[0] : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -395,15 +437,26 @@ function computeBins(samples: readonly CalibrationSample[], binCount: number): C
     correctCount: b.correct,
     empiricalAccuracy: b.n > 0 ? round(b.correct / b.n) : undefined,
     meanPredictedConfidence: b.n > 0 ? round(b.sum / b.n) : undefined,
+    ...(b.n > 0 ? { accuracyLowerBound: round(wilsonLowerBound(b.correct, b.n)) } : {}),
   }));
+}
+
+/** One-sided 95% Wilson score lower bound for `correct` successes out of `n`. */
+function wilsonLowerBound(correct: number, n: number): number {
+  const z = ONE_SIDED_95_Z;
+  const p = correct / n;
+  const z2 = z * z;
+  const centre = p + z2 / (2 * n);
+  const margin = z * Math.sqrt((p * (1 - p)) / n + z2 / (4 * n * n));
+  return Math.max(0, (centre - margin) / (1 + z2 / n));
 }
 
 /**
  * The suggested threshold is the lowerBound of the lowest bin in the
- * top-contiguous run of bins that each (a) have ≥ minBinSamples and (b) meet
- * targetAccuracy. Scanning from the highest bin down, a populated bin that
- * fails the target — or an under-sampled bin we cannot vouch for — ends the run.
- * undefined when even the top populated bin does not qualify.
+ * top-contiguous run of bins that each (a) have ≥ minBinSamples and (b) have a
+ * one-sided 95% Wilson lower bound on accuracy ≥ targetAccuracy. Scanning from
+ * the highest bin down, a bin that fails the bound — or an under-sampled bin we
+ * cannot vouch for — ends the run. undefined when the top bin does not qualify.
  */
 function computeSuggestedThreshold(
   bins: readonly CalibrationBin[],
@@ -414,7 +467,7 @@ function computeSuggestedThreshold(
   for (let i = bins.length - 1; i >= 0; i--) {
     const bin = bins[i]!;
     if (bin.sampleCount < minBinSamples) break;
-    if (bin.empiricalAccuracy === undefined || bin.empiricalAccuracy < targetAccuracy) break;
+    if (bin.sampleCount === 0 || wilsonLowerBound(bin.correctCount, bin.sampleCount) < targetAccuracy) break;
     threshold = bin.lowerBound;
   }
   return threshold;

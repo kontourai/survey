@@ -1363,9 +1363,18 @@ These metrics are **indicators, not proof of reviewer cognition**:
 
 ## Confidence calibration
 
+> **Experimental.** `deriveCalibration`, `suggestedThreshold`, and the
+> `conclusionConfidence.value` it can feed are descriptive statistics over past
+> reviews, not validated probabilities or auto-accept gates (#279).
+
 Every reviewed candidate is a labeled sample: the system-proposed candidate carried
 a stated confidence (the prediction), and the human review affirmed or overturned
-that value (the label). `deriveCalibration` turns those samples into an empirical
+that value (the label). The proposed candidate is found by its producer role — the
+one candidate whose `metadata.candidateRole` or `metadata.role` is `"proposed"`, or
+the only candidate of a one-candidate set (whatever its role) — never by
+`selectedCandidateId`, which records the reviewer's pick. A set whose proposal
+cannot be determined is skipped and counted in `skippedCount`; a reviewer who kept
+the current value scores the proposal as a miss. `deriveCalibration` turns those samples into an empirical
 calibration curve — per extractor and per `(extractor, field)` — so you can answer
 "how often are this extractor's proposals at this confidence actually affirmed?".
 See the [calibration decision record](https://github.com/kontourai/survey/blob/main/docs/decisions/calibration.md)
@@ -1384,8 +1393,8 @@ const calibration = deriveCalibration(
     // now + windowDays are optional; windowDays requires now (else it throws).
     now: new Date(),
     windowDays: 90,
-    targetAccuracy: 0.95,   // the accuracy suggestedThreshold must clear
-    minBinSamples: 20,      // a decile needs this many samples to ground a threshold
+    targetAccuracy: 0.95,   // a decile's Wilson lower bound must clear this
+    minBinSamples: 30,      // default; a decile needs this many samples to count
     // includeAutoAccepted defaults false — see Honest limits.
   },
 );
@@ -1393,7 +1402,10 @@ const calibration = deriveCalibration(
 // calibration.overall / byExtractor / byExtractorField: each a group with
 //   sampleCount, correctCount, empiricalAccuracy?, meanPredictedConfidence?,
 //   calibrationGap? (mean confidence − empirical accuracy; >0 = overconfident),
-//   bins (per-decile empirical accuracy), and suggestedThreshold?.
+//   bins (per-decile sampleCount, empiricalAccuracy, and accuracyLowerBound —
+//   a one-sided 95% Wilson lower bound), and suggestedThreshold?: set only when
+//   each contributing decile has ≥ minBinSamples samples AND its
+//   accuracyLowerBound ≥ targetAccuracy (≈52 all-affirmed samples at 0.95).
 
 // Surface the curve as advisory claims (claimType "calibration", status "proposed"):
 const subject = {
@@ -1407,21 +1419,27 @@ const subject = {
 const bundle = mergeTrustBundleWithCalibration(existingBundle, calibrationToClaims(calibration, subject));
 ```
 
-### Producing `conclusionConfidence.value`
+### Producing `conclusionConfidence.value` (experimental)
 
-The calibrated accuracy is the natural conclusion probability, so
-`buildSurveyTrustBundle` can *produce* it on the emitted claims. Opt in with the
-`calibration` option; without it, behavior is unchanged (`value` stays unset and
-only the review's `comfortZone` is carried):
+`buildSurveyTrustBundle` can attach a group affirmation rate to the emitted claims,
+but only under an explicit experimental opt-in. `calibration: true`, or an object
+without `experimentalConclusionValue`, sets no value and logs one `console.warn`
+per process; `experimentalConclusionValue: false` sets no value silently (#279):
 
 ```ts
 // Derive the curve from this batch...
-buildSurveyTrustBundle(input, { calibration: true });
+buildSurveyTrustBundle(input, { calibration: { experimentalConclusionValue: true } });
 
 // ...or pass a curve computed over a LONGER history (recommended: better grounded,
 // and avoids the mild self-reference of a claim's own outcome feeding its value).
-buildSurveyTrustBundle(input, { calibration: { metrics: history, minSamples: 20 } });
+buildSurveyTrustBundle(input, {
+  calibration: { experimentalConclusionValue: true, metrics: history, minSamples: 20 },
+});
 ```
+
+The value is the affirmation rate of the claim's whole extractor/field group: every
+affirmed claim in the group gets the same number whatever its own confidence, so it
+is a base rate, not a per-claim probability.
 
 For each **affirmed** claim (status `verified`/`assumed`) whose extractor clears the
 sample floor, `conclusionConfidence.value` is set to the group's empirical
@@ -1434,19 +1452,21 @@ is the produce side of the confidence loop — Survey previously only *carried*
 
 Calibration is **advisory**, and honest about what it does not know:
 
-- **It never decides (ADR 0003 §4).** `suggestedThreshold` is a number an operator
-  *may* wire into an auto-accept policy's `minConfidence`; calibration itself sets
-  nothing, and calibration claims are always status `"proposed"`.
+- **It never decides (ADR 0003 §4).** Calibration sets no policy, and calibration
+  claims are always status `"proposed"`. `suggestedThreshold` is not an evaluated
+  auto-accept gate; do not wire it into `minConfidence` without your own evaluation.
 - **Human labels only.** Machine auto-accepts are excluded by default — an
   auto-accepted outcome is the threshold accepting its own guess, so counting it as
   "correct" would let the policy validate itself. `includeAutoAccepted` overrides
   this for offline analysis.
-- **Affirmed conclusions only get a value.** `conclusionConfidence.value` is
-  "probability the conclusion is correct"; attaching an affirmation rate to a
+- **Affirmed conclusions only get a value.** `conclusionConfidence.value` is read
+  as "probability the conclusion is correct"; attaching an affirmation rate to a
   `rejected` conclusion would assert the opposite of the human decision, so those
   claims get no value.
 - **Below the sample floor, no number.** A group with too few samples leaves
-  `value`/`suggestedThreshold` unset rather than emitting a poorly-grounded estimate.
+  `value` unset, and a decile below `minBinSamples` or whose Wilson lower bound
+  misses the target leaves `suggestedThreshold` unset, rather than emitting a
+  poorly-grounded estimate.
 - **Prefer a longer history.** Deriving from the current batch folds a claim's own
   outcome into the group that sets its value; pass precomputed `metrics` over more
   than the batch when you can.

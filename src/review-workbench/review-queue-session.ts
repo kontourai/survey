@@ -1,5 +1,6 @@
 import { publicDirectoryReviewItemExample, reviewWorkbenchQueueExamples } from "./review-workbench-data.js";
 import { assertReviewResolutionConsistency } from "../producer-discipline.js";
+import { checkEditedValueForItem } from "./edited-value.js";
 import {
   assertSoleCandidateId,
   reviewResourceApiVersion,
@@ -486,7 +487,13 @@ export function replayReviewSessionEvents(
       const editedValuesByItemName = { ...session.editedValuesByItemName };
       const attemptEvidenceIdsByItemName = { ...session.attemptEvidenceIdsByItemName };
       if (decision === "accept-proposed" && editedValue !== undefined) {
-        editedValuesByItemName[itemName] = editedValue;
+        // Legacy sessions stored typed edits as editor text ("42"); store the
+        // descriptor-typed value so effectiveValue is 42. An edit the item does
+        // not allow is left as carried: validated replay refuses it before this
+        // point (kontourai/survey#278).
+        const item = session.items.find((entry) => entry.metadata.name === itemName);
+        const check = item ? checkEditedValueForItem(item, editedValue) : undefined;
+        editedValuesByItemName[itemName] = check?.ok ? check.value : editedValue;
       } else {
         delete editedValuesByItemName[itemName];
       }
