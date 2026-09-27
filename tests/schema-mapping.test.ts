@@ -473,8 +473,18 @@ describe("surveySchemaMapping — auto-accept range validation and projection (#
       });
       assert.equal(out.surveyInput.reviewOutcomes.length, 0);
       assert.equal(out.candidateSets[0]?.status, "needs-review");
+      assert.deepEqual(out.autoAcceptWarnings, [{ code: "confidence-out-of-range", proposalId: "p1", confidence }]);
     });
   }
+
+  it("omits autoAcceptWarnings when every confidence is in range", async () => {
+    const out = await surveySchemaMapping({ systems }, extractorWithConfidence(0.2), {
+      autoAcceptMinConfidence: 0.5,
+      generatedAt: at,
+    });
+    assert.equal(out.surveyInput.reviewOutcomes.length, 0);
+    assert.equal("autoAcceptWarnings" in out, false);
+  });
 
   for (const minConfidence of [0, -1, 1.5, Number.NaN]) {
     it(`throws RangeError for an invalid autoAcceptMinConfidence (${minConfidence}), even with no proposals`, async () => {

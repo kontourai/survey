@@ -163,7 +163,8 @@ whose review actor is the auto-accept policy (`"auto-accept-policy"`) projects
 checked nothing but the proposer's self-reported confidence. Auto-accept
 (`autoAcceptMinConfidence`, `applyAutoAcceptPolicy`) is opt-in and experimental:
 thresholds outside (0, 1] throw `RangeError`, and proposals whose confidence is
-not a finite number in [0, 1] are never auto-accepted.
+not a finite number in [0, 1] are never auto-accepted (they are reported as
+`confidence-out-of-range` warnings).
 
 ## Server-Owned Review Sessions
 

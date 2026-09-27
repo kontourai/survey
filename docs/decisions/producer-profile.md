@@ -36,7 +36,7 @@ Auto-accept still only ever yields `"assumed"` (never `"verified"`) with `within
 
 ## Auto-accept input range and projected authority (2026-09-27)
 
-`withinComfortZone: true` holds only if the threshold and the gated confidence are meaningful numbers. `evaluateAutoAccept` therefore throws `RangeError` unless `minConfidence` is a finite number in (0, 1], and never accepts a proposal whose confidence is not a finite number in [0, 1]. Both profile entry points (`surveySchemaMapping`, `applyAutoAcceptPolicy`) validate the threshold up front. The comfort-zone rule itself is unchanged.
+`withinComfortZone: true` holds only if the threshold and the gated confidence are meaningful numbers. `evaluateAutoAccept` therefore throws `RangeError` unless `minConfidence` is a finite number in (0, 1], and never accepts a proposal whose confidence is not a finite number in [0, 1]; the refusal is reported as a `confidence-out-of-range` warning (`autoAcceptWarnings` on the `surveySchemaMapping` result, `onWarning` on `applyAutoAcceptPolicy`). Both profile entry points (`surveySchemaMapping`, `applyAutoAcceptPolicy`) validate the threshold up front. The comfort-zone rule itself is unchanged.
 
 `buildSurveyTrustBundle` projects a claim whose review actor is `AUTO_ACCEPT_ACTOR` with `reviewerAuthority: "system"` and `evidenceStrength: "weak"`, since the policy checked only the proposer's self-report. Human-reviewed claims keep `"operator"`/`"moderate"`. Checking that a proposal's evidence excerpt occurs in the schema is a separate, undecided gate.
 

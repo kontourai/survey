@@ -29,7 +29,7 @@ import {
   hasCandidateConflict,
   projectProposalsToCandidateSet,
 } from "./producer-profile.js";
-import type { CandidateSetProposal } from "./producer-profile.js";
+import type { AutoAcceptWarning, CandidateSetProposal } from "./producer-profile.js";
 import type { ReviewItem } from "./review-resource.js";
 import { reviewResourceApiVersion } from "./review-resource.js";
 
@@ -282,6 +282,16 @@ export interface AutoAcceptPolicy {
   minConfidence: number;
 }
 
+/** Optional hooks for {@link applyAutoAcceptPolicy}. */
+export interface AutoAcceptPolicyOptions {
+  /**
+   * Called once for each proposal the policy refused because its confidence
+   * is not a finite number in [0, 1]. The proposal gets no mapping and stays
+   * in human review.
+   */
+  onWarning?: (warning: AutoAcceptWarning) => void;
+}
+
 /**
  * Apply an auto-accept policy to a list of proposals, returning InquiryMappings.
  *
@@ -289,7 +299,8 @@ export interface AutoAcceptPolicy {
  * Proposals below minConfidence → return a "needs-review" mapping (not yet durable)
  * Proposals whose confidence is not a finite number in [0, 1] are never
  * auto-accepted. Throws `RangeError` unless `policy.minConfidence` is a finite
- * number in (0, 1].
+ * number in (0, 1]. Refused out-of-range proposals are reported through
+ * `options.onWarning`.
  *
  * Only non-conflicting proposals are auto-accepted. If proposals disagree, they
  * need human review regardless of confidence.
@@ -299,6 +310,7 @@ export interface AutoAcceptPolicy {
 export function applyAutoAcceptPolicy(
   proposals: MappingProposal[],
   policy: AutoAcceptPolicy,
+  options: AutoAcceptPolicyOptions = {},
 ): InquiryMapping[] {
   assertValidAutoAcceptThreshold(policy.minConfidence);
   if (proposals.length === 0) return [];
@@ -313,6 +325,9 @@ export function applyAutoAcceptPolicy(
       policy,
       proposal.proposedAt,
     );
+    if (decision.warning) {
+      options.onWarning?.({ code: decision.warning, proposalId: proposal.id, confidence: decision.confidence });
+    }
     if (!decision.accepted) return [];
     return [
       {

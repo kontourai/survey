@@ -251,6 +251,19 @@ export interface AutoAcceptEvidence {
   proposedAt?: string;
 }
 
+/**
+ * A proposal the auto-accept policy refused because its self-reported
+ * confidence is not a finite number in [0, 1]. The proposal is left for human
+ * review; the warning records why it was not auto-accepted.
+ */
+export interface AutoAcceptWarning {
+  code: "confidence-out-of-range";
+  /** The refused proposal's id. */
+  proposalId: string;
+  /** The out-of-range confidence exactly as reported. */
+  confidence: number;
+}
+
 /** The auto-accept policy `evaluateAutoAccept` gates against. */
 export interface AutoAcceptPolicy {
   /** Minimum confidence (inclusive) a proposal must clear to auto-accept. */
