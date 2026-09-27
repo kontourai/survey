@@ -63,6 +63,26 @@ identities, non-ascending PDF page offsets, malformed or out-of-range PDF page
 geometry/elements/table cells, non-finite or negative-zero numbers, sparse arrays,
 accessors, symbols, cycles, and other non-lossless JSON object inputs.
 
+Optional keys are named, not open-ended. Besides the original v1 keys the
+importer accepts:
+
+- `result.providerFailures[].code`: the upstream error code, a credential-free
+  stable identity of at most 128 characters. It is informational; `kind` stays
+  authoritative. It is kept in the imported envelope.
+- `result.proposals[].producedBy`: `{ model, modelSource, requestDigest }`,
+  where `modelSource` is `"provider-reported"` or `"configured"` and
+  `requestDigest` is a `sha256:` digest. It is copied into the candidate's
+  `survey.kontourai.io/extraction-envelope` producer metadata. The candidate's
+  `extraction.model` is still `result.model`.
+- `result.proposals[].evidenceMatch`: `{ checkerVersion, schema,
+  valueInExcerpt, tokenBoundary? }` with closed `schema` (`ok`,
+  `type-mismatch`, `enum-mismatch`, `format-invalid`) and `valueInExcerpt`
+  (`match`, `mismatch`, `not-evaluated`, `not-applicable`) values. It is copied
+  into the same producer metadata as an annotation; it does not change the
+  candidate-set status or routing.
+
+Any other key is still rejected.
+
 The portable format excludes prepared text, raw provider responses, native
 failures, and configuration by design. Candidate values and excerpts remain
 intentional review data. Treat every retained field as potentially visible to a

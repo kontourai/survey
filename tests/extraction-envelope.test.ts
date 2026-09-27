@@ -263,6 +263,100 @@ describe("portable extraction envelope import", () => {
   });
 });
 
+describe("new optional envelope keys (#288)", () => {
+  const producedBy = { model: "served-model-2", modelSource: "provider-reported" as const, requestDigest: `sha256:${"c".repeat(64)}` };
+  const evidenceMatch = { checkerVersion: "evidence-match-v1", schema: "ok" as const, valueInExcerpt: "match" as const, tokenBoundary: true };
+  const producerOf = (imported: ReturnType<typeof importExtractionEnvelope>, index = 0) =>
+    imported.reviewItems[index]!.spec.candidates[0]!.producer?.["survey.kontourai.io/extraction-envelope"] as Record<string, unknown>;
+
+  it("imports a provider failure carrying the upstream error code and preserves it", async () => {
+    const envelope = await fixture();
+    envelope.result.providerFailures = [{ provider: "portable-fixture", kind: "unknown", retryable: false, code: "authorization_exhausted" }];
+    const imported = importExtractionEnvelope(envelope, options());
+    const restored = reimportExtractionEnvelope(exportExtractionEnvelopeImport(imported.record));
+    assert.equal(restored.spec.envelope.result.providerFailures?.[0]?.code, "authorization_exhausted");
+    const longest = await fixture();
+    longest.result.providerFailures = [{ provider: "portable-fixture", kind: "unknown", retryable: false, code: "E".repeat(128) }];
+    assert.doesNotThrow(() => importExtractionEnvelope(longest, options()));
+  });
+
+  it("rejects an empty, non-string, credential-shaped or over-long failure code", async () => {
+    for (const code of ["", 42, "ghp_abcdefghijklmnop", "E".repeat(129)]) {
+      const envelope = await fixture();
+      envelope.result.providerFailures = [{ provider: "portable-fixture", kind: "unknown", retryable: false, code } as never];
+      assert.throws(() => importExtractionEnvelope(envelope, options()), /failure\.code/, `code ${JSON.stringify(code)} must be refused`);
+    }
+  });
+
+  it("imports producedBy and carries it into the candidate's producer metadata", async () => {
+    const envelope = await fixture();
+    envelope.result.proposals[0]!.producedBy = producedBy;
+    const imported = importExtractionEnvelope(envelope, options());
+    assert.deepEqual(producerOf(imported).producedBy, producedBy);
+    assert.equal(producerOf(imported, 1).producedBy, undefined);
+    // The run-level model stays the candidate's extraction model; per-proposal
+    // attribution is additive.
+    assert.equal(imported.reviewItems[0]!.spec.candidates[0]!.extraction.model, "generic-model");
+    const restored = reimportExtractionEnvelope(exportExtractionEnvelopeImport(imported.record));
+    assert.deepEqual(restored.spec.envelope.result.proposals[0]!.producedBy, producedBy);
+  });
+
+  it("rejects a malformed producedBy", async () => {
+    const cases: Array<[unknown, RegExp]> = [
+      [{ model: "m", requestDigest: producedBy.requestDigest }, /producedBy\.modelSource is required/],
+      [{ ...producedBy, modelSource: "guessed" }, /producedBy\.modelSource is invalid/],
+      [{ ...producedBy, requestDigest: "sha256:abc" }, /producedBy\.requestDigest is invalid/],
+      [{ ...producedBy, requestDigest: "c".repeat(64) }, /producedBy\.requestDigest is invalid/],
+      [{ ...producedBy, model: "" }, /producedBy\.model/],
+      [{ ...producedBy, extra: true }, /producedBy\.extra is unexpected/],
+    ];
+    for (const [value, expected] of cases) {
+      const envelope = await fixture();
+      (envelope.result.proposals[0] as unknown as Record<string, unknown>).producedBy = value;
+      assert.throws(() => importExtractionEnvelope(envelope, options()), expected);
+    }
+  });
+
+  it("imports evidenceMatch and carries it into the candidate's producer metadata", async () => {
+    const envelope = await fixture();
+    envelope.result.proposals[0]!.evidenceMatch = evidenceMatch;
+    envelope.result.proposals[1]!.evidenceMatch = { checkerVersion: "evidence-match-v1", schema: "enum-mismatch", valueInExcerpt: "not-applicable" };
+    const imported = importExtractionEnvelope(envelope, options());
+    assert.deepEqual(producerOf(imported).evidenceMatch, evidenceMatch);
+    assert.deepEqual(producerOf(imported, 1).evidenceMatch, envelope.result.proposals[1]!.evidenceMatch);
+    // Annotation only: no routing change.
+    assert.equal(imported.reviewItems[0]!.spec.candidateSetStatus, "needs-review");
+  });
+
+  it("rejects an unknown evidenceMatch check or result value", async () => {
+    const cases: Array<[unknown, RegExp]> = [
+      [{ ...evidenceMatch, spelling: "ok" }, /evidenceMatch\.spelling is unexpected/],
+      [{ ...evidenceMatch, schema: "close-enough" }, /evidenceMatch\.schema is invalid/],
+      [{ ...evidenceMatch, valueInExcerpt: "partial" }, /evidenceMatch\.valueInExcerpt is invalid/],
+      [{ ...evidenceMatch, tokenBoundary: "yes" }, /evidenceMatch\.tokenBoundary must be a boolean/],
+      [{ schema: "ok", valueInExcerpt: "match" }, /evidenceMatch\.checkerVersion is required/],
+    ];
+    for (const [value, expected] of cases) {
+      const envelope = await fixture();
+      (envelope.result.proposals[0] as unknown as Record<string, unknown>).evidenceMatch = value;
+      assert.throws(() => importExtractionEnvelope(envelope, options()), expected);
+    }
+  });
+
+  it("still rejects every other unknown proposal, failure and result key", async () => {
+    const mutations: Array<[(envelope: PortableExtractionResultEnvelope) => void, RegExp]> = [
+      [(e) => { (e.result.proposals[0] as unknown as Record<string, unknown>).producedByModel = "m"; }, /proposal\[0\]\.producedByModel is unexpected/],
+      [(e) => { (e.result.providerFailures![0] as unknown as Record<string, unknown>).message = "boom"; }, /providerFailure\.message is unexpected/],
+      [(e) => { (e.result as unknown as Record<string, unknown>).evidenceMatch = evidenceMatch; }, /result\.evidenceMatch is unexpected/],
+    ];
+    for (const [mutate, expected] of mutations) {
+      const envelope = await fixture();
+      mutate(envelope);
+      assert.throws(() => importExtractionEnvelope(envelope, options()), expected);
+    }
+  });
+});
+
 async function fixture(): Promise<PortableExtractionResultEnvelope> { return JSON.parse(await readFile(fixtureUrl, "utf8")) as PortableExtractionResultEnvelope; }
 function options(overrides: Partial<ExtractionEnvelopeImportOptions> = {}): ExtractionEnvelopeImportOptions { return { importName: "fixture-import", producerNamespace: "fixture-producer", sourceKind: "api-record", claimTarget: (proposal) => ({ subjectType: "fixture", subjectId: "one", facet: "fixture.record", claimType: "fixture.field", fieldOrBehavior: proposal.fieldPath, impactLevel: "medium" }), ...overrides }; }
 function evidenceId(item: ReturnType<typeof importExtractionEnvelope>["reviewItems"][number]): unknown { return (item.spec.candidates[0]!.producer?.["survey.kontourai.io/extraction-envelope"] as Record<string, unknown>).evidenceId; }
