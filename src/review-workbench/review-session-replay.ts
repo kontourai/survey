@@ -6,6 +6,7 @@ import {
   type ReviewQueueSessionState,
   type ReviewWorkbenchDecision,
 } from "./review-queue-session.js";
+import { checkEditedValueForItem } from "./edited-value.js";
 
 export type ReviewSessionReplayIssueCode =
   | "invalid-sequence"
@@ -19,7 +20,9 @@ export type ReviewSessionReplayIssueCode =
   | "decision-candidate-mismatch"
   | "decision-status-mismatch"
   | "decision-resolution-mismatch"
-  | "missing-resolution-reason";
+  | "missing-resolution-reason"
+  | "edited-value-not-editable"
+  | "edited-value-type-mismatch";
 
 export interface ReviewSessionReplayIssue {
   readonly code: ReviewSessionReplayIssueCode;
@@ -127,6 +130,19 @@ export function validateReviewSessionEventsForSnapshot(
             message: `ReviewSessionEvent ${event.metadata.name} decision ${decision} expects resolution ${expectedResolution ?? "none"}, but references ${event.spec.resolution ?? "no resolution"}.`,
           });
         }
+        const editedValue = editedValueFromDecisionEvent(event);
+        if (item && decision === "accept-proposed" && editedValue !== undefined) {
+          const check = checkEditedValueForItem(item, editedValue);
+          if (!check.ok) {
+            issues.push({
+              ...eventRef,
+              code: check.code,
+              reviewItemName: itemName,
+              candidateId: event.spec.candidateId,
+              message: `ReviewSessionEvent ${event.metadata.name}: ${check.message}`,
+            });
+          }
+        }
         if (decision === "could-not-confirm" && !event.spec.resolutionReason?.trim()) {
           issues.push({
             ...eventRef,
@@ -157,6 +173,62 @@ export function validateReviewSessionEventsForSnapshot(
   });
 
   return [...sequenceIssues, ...replayIssues];
+}
+
+/**
+ * A ReviewSessionEvent whose `data.workbenchEditedValue` was rewritten from
+ * legacy editor text to its descriptor-typed value during replay (see
+ * checkEditedValueForItem). Not an error: the apply result still succeeds, and
+ * the warning lets a consumer see that a saved session was normalized.
+ */
+export interface ReviewSessionReplayWarning {
+  readonly code: "edited-value-converted-from-text";
+  readonly eventName: string;
+  readonly sequence: number;
+  readonly reviewItemName: string;
+  readonly originalValue: string;
+  readonly convertedValue: unknown;
+  readonly message: string;
+}
+
+/**
+ * Lists the legacy text edits replay converts to typed values. Call it only on
+ * an event stream that validateReviewSessionEventsForSnapshot accepted.
+ */
+export function reviewSessionReplayWarningsForSnapshot(
+  snapshot: ReviewQueueSessionState,
+  events: readonly ReviewSessionEvent[],
+): ReviewSessionReplayWarning[] {
+  const itemsByName = new Map(snapshot.items.map((item) => [item.metadata.name, item]));
+  return events.flatMap((event) => {
+    const itemName = event.spec.reviewItemName;
+    const item = itemName ? itemsByName.get(itemName) : undefined;
+    const editedValue = editedValueFromDecisionEvent(event);
+    if (!item || !itemName || editedValue === undefined
+      || replayableWorkbenchDecision(event.spec.data?.workbenchDecision) !== "accept-proposed") {
+      return [];
+    }
+    const check = checkEditedValueForItem(item, editedValue);
+    if (!check.ok || !check.convertedFromText || typeof editedValue !== "string") {
+      return [];
+    }
+    return [{
+      code: "edited-value-converted-from-text" as const,
+      eventName: event.metadata.name,
+      sequence: event.spec.sequence,
+      reviewItemName: itemName,
+      originalValue: editedValue,
+      convertedValue: check.value,
+      message: `ReviewSessionEvent ${event.metadata.name} stores edited value ${JSON.stringify(editedValue)} as text; replay converted it to ${JSON.stringify(check.value)} per ReviewItem ${itemName}'s value descriptor.`,
+    }];
+  });
+}
+
+function editedValueFromDecisionEvent(event: ReviewSessionEvent): unknown {
+  return (event.spec.eventType === "decision-changed" || event.spec.eventType === "decision-submitted")
+    && event.spec.data && "workbenchEditedValue" in event.spec.data
+    ? event.spec.data.workbenchEditedValue
+    : undefined;
 }
 
 function replayableWorkbenchDecision(value: unknown): ReviewWorkbenchDecision | undefined {

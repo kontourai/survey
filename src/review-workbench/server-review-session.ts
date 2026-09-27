@@ -18,6 +18,7 @@ import {
 import {
   validateReviewSessionEventsForSnapshot,
   type ReviewSessionReplayIssue,
+  type ReviewSessionReplayWarning,
 } from "./review-session-replay.js";
 import type { ReviewDecision, ReviewSessionEvent } from "../review-resource.js";
 import { assertReviewQueueBinding, type ReviewQueueBinding } from "./queue-binding.js";
@@ -317,6 +318,8 @@ export type ApplyReviewSessionResult<TAction = never> =
   | {
       readonly ok: true;
       readonly issues: readonly [];
+      /** Non-fatal replay notes, e.g. a legacy text edit converted to its typed value. */
+      readonly warnings?: readonly ReviewSessionReplayWarning[];
       readonly decisions: readonly ReviewDecision[];
       readonly results: readonly ReviewWorkbenchResult[];
       readonly actions: readonly ReviewApplyActionMapping<TAction>[];
@@ -422,6 +425,7 @@ export function applyReviewSession<TAction = never>(
   return {
     ok: true,
     issues: [],
+    warnings: derived.warnings ?? [],
     decisions: derived.decisions,
     results: derived.results,
     actions,

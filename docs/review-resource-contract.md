@@ -60,7 +60,16 @@ proposed value (an accept-proposed decision), the edit is carried on the
 decision event as `spec.data.workbenchEditedValue`, and `replayReviewSessionEvents`
 reconstructs `editedValuesByItemName` from it — so `snapshot + persisted events`
 is a complete record of reviewer intent and the derived `effectiveValue`
-reflects the edit with no separate edit channel. A decision that moves off
+reflects the edit with no separate edit channel. The workbench stores the edit as
+the item's declared JSON type (a `number` field's `42` is the number `42`).
+Replay validation (`validateReviewSessionEventsForSnapshot`, and so every
+server apply helper) refuses an edit on an item with `editable: false`
+(`edited-value-not-editable`) and an edit that does not satisfy the item's
+`valueDescriptor` (`edited-value-type-mismatch`: a finite number, a boolean, a
+`YYYY-MM-DD` date, a declared enum member, or a string). Sessions saved before
+typed storage hold number/boolean edits as text; replay converts text that
+parses cleanly to the typed value and reports an
+`edited-value-converted-from-text` entry in the apply result's `warnings`. A decision that moves off
 accept-proposed, or an accept with no carried edit, clears any prior edit for
 that item on replay. See
 [`consumer-integration-guide.md`](consumer-integration-guide.md) for the full

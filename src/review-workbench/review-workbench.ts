@@ -24,8 +24,10 @@ import {
   type ReviewWorkbenchState,
 } from "./review-queue-session.js";
 import {
+  reviewSessionReplayWarningsForSnapshot,
   validateReviewSessionEventsForSnapshot,
   type ReviewSessionReplayIssue,
+  type ReviewSessionReplayWarning,
 } from "./review-session-replay.js";
 import {
   buildSurfaceProjectionPreview,
@@ -49,6 +51,7 @@ import {
 } from "../review-resource.js";
 import { validateAuthorizing, buildAuthorizedActionAuthorizing } from "../review-authorizing.js";
 import { humanizeIdentifier } from "./review-presentation.js";
+import { editedValueFromEditorText } from "./edited-value.js";
 import {
   createAuditFactTrace,
   reviewAuditRowKeys,
@@ -146,10 +149,17 @@ export {
   type SurfaceProjectionPreview,
 } from "./review-surface-preview.js";
 export {
+  reviewSessionReplayWarningsForSnapshot,
   validateReviewSessionEventsForSnapshot,
   type ReviewSessionReplayIssue,
   type ReviewSessionReplayIssueCode,
+  type ReviewSessionReplayWarning,
 } from "./review-session-replay.js";
+export {
+  checkEditedValueForItem,
+  editedValueFromEditorText,
+  type EditedValueCheck,
+} from "./edited-value.js";
 export {
   assertReviewDecisionModeAllows,
   DecisionModeViolationError,
@@ -322,6 +332,8 @@ export type DeriveReviewSessionApplyResultForSnapshotResult =
   | {
       readonly ok: true;
       readonly issues: readonly [];
+      /** Non-fatal replay notes, e.g. a legacy text edit converted to its typed value. */
+      readonly warnings?: readonly ReviewSessionReplayWarning[];
       readonly unresolvedItemNames: readonly string[];
       readonly replayedSession: ReviewQueueSessionState;
       readonly sessionExport: ReviewWorkbenchSessionExport;
@@ -331,6 +343,7 @@ export type DeriveReviewSessionApplyResultForSnapshotResult =
   | {
       readonly ok: false;
       readonly issues: readonly ReviewSessionApplyIssue[];
+      readonly warnings?: readonly ReviewSessionReplayWarning[];
       readonly unresolvedItemNames: readonly string[];
       readonly replayedSession?: ReviewQueueSessionState;
       readonly sessionExport?: ReviewWorkbenchSessionExport;
@@ -759,6 +772,7 @@ export function deriveReviewSessionApplyResultForSnapshot(
     };
   }
 
+  const warnings = reviewSessionReplayWarningsForSnapshot(options.snapshot, options.events);
   const replayedSession = replayReviewSessionEvents(options.snapshot, options.events);
   const sessionExport = buildReviewWorkbenchSessionExport(replayedSession, options.events);
   const resolvedItemNames = new Set(sessionExport.results.map((result) => result.reviewItemName));
@@ -786,6 +800,7 @@ export function deriveReviewSessionApplyResultForSnapshot(
     return {
       ok: false,
       issues,
+      warnings,
       unresolvedItemNames,
       replayedSession,
       sessionExport,
@@ -797,6 +812,7 @@ export function deriveReviewSessionApplyResultForSnapshot(
   return {
     ok: true,
     issues: [],
+    warnings,
     unresolvedItemNames,
     replayedSession,
     sessionExport,
@@ -1301,8 +1317,8 @@ function toDateInputValue(text: string): string {
  * error message when the value violates the declared type/enum constraint, or
  * `undefined` when it is acceptable — including when there is no descriptor or
  * the type carries no single-line constraint (string/array/object). This is a
- * FORMAT check only: it never coerces or rewrites the value (the workbench
- * stores the reviewer's string edit unchanged, as it did before typed editors).
+ * FORMAT check on the editor text; on accept the workbench stores the text
+ * converted to the descriptor's JSON type (`editedValueFromEditorText`).
  */
 export function validateProposedValue(
   descriptor: ReviewValueDescriptor | undefined,
@@ -1818,7 +1834,12 @@ function createReviewWorkbenchController(
     const nextEditedValuesByItemName: Record<string, unknown> = { ...session.editedValuesByItemName };
 
     if (decision === "accept-proposed" && rawEditedValue !== undefined && rawEditedValue !== originalText) {
-      nextEditedValuesByItemName[itemName] = rawEditedValue;
+      // Store the edit as the descriptor's JSON type (a number field's "42" is
+      // 42), so the decision event and effectiveValue carry a typed value the
+      // server apply boundary accepts (kontourai/survey#278). Text that does not
+      // parse is kept as typed; the apply boundary refuses it.
+      const typedValue = editedValueFromEditorText(item?.spec.valueDescriptor, rawEditedValue);
+      nextEditedValuesByItemName[itemName] = typedValue === undefined ? rawEditedValue : typedValue;
     } else {
       delete nextEditedValuesByItemName[itemName];
     }

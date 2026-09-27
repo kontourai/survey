@@ -1059,6 +1059,11 @@ record: the derived `effectiveValue` reflects the edit without any separate
 edit channel. Persist the events (which the workbench emits) and you have the
 edit; you do not need to capture `editedValuesByItemName` out of band.
 
+The server apply helpers do not trust the carried edit: an edit on an item with
+`spec.editable: false`, or one that does not satisfy the item's
+`spec.valueDescriptor`, is an invalid event (see the review resource contract
+for the rules and the legacy text-edit conversion).
+
 For server-side replay, prefer the snapshot-safe apply preparation helper:
 
 ```ts

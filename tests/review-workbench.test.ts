@@ -1742,19 +1742,25 @@ describe("review workbench prototype", () => {
       assert.match(field.valueError.textContent, /not a number/);
     });
 
-    it("accepts a value that satisfies the typed descriptor", () => {
+    it("accepts a value that satisfies the typed descriptor and records it as the descriptor's JSON type", () => {
       const item = withDescriptor(reviewWorkbenchQueueExamples[0]!, { type: "number" });
       const itemName = item.metadata.name;
+      const store = createInMemoryReviewSessionEventStore();
       const root = new ReviewWorkbenchTestRoot();
-      mountReviewWorkbench(root as unknown as HTMLElement, initialReviewQueueSessionState([item]));
+      mountReviewWorkbench(root as unknown as HTMLElement, initialReviewQueueSessionState([item]), { eventStore: store });
 
       const field = root.field(itemName);
       field.editInput!.value = "42";
       field.useButton.click();
 
       assert.match(root.html, new RegExp(`data-item-name="${itemName}"[\\s\\S]*?data-state="accepted"`));
-      assert.match(root.field(itemName).payloadText, /"editedValue": "42"/);
+      // kontourai/survey#278: the edit is stored as the number 42, not the editor text "42".
+      assert.match(root.field(itemName).payloadText, /"editedValue": 42\b/);
+      const decisionEvent = store.events().find((event) => event.spec.eventType === "decision-changed"
+        && event.spec.reviewItemName === itemName);
+      assert.equal(decisionEvent?.spec.data?.workbenchEditedValue, 42);
     });
+
   });
 
   describe("validateProposedValue", () => {
