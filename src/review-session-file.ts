@@ -117,7 +117,11 @@ export async function acquireReviewSessionFileLock(
     }
 
     if (await lockIsStale(lockPath, staleMs)) {
-      // Move the stale lock aside atomically so only one breaker removes it.
+      // Rename-then-remove so two waiters that both judged it stale do not
+      // both delete it. Residual race (accepted): if another waiter breaks the
+      // stale lock and a third process acquires a fresh one between our check
+      // and this rename, we move the fresh lock aside. This needs a crashed
+      // writer plus three contenders within a few milliseconds.
       const aside = `${lockPath}.stale-${token}`;
       try {
         await rename(lockPath, aside);
