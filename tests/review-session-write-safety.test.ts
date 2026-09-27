@@ -538,12 +538,14 @@ describe("session lock robustness (#281)", () => {
       await withLockDir(async (sessionPath) => {
         for (let round = 0; round < 3; round += 1) {
           await writeReusedPidLock(sessionPath, 5_000);
-          const holders = await Promise.all(Array.from({ length: 10 }, async () => {
+          // allSettled: every writer finishes before the directory is removed,
+          // so a timeout is reported as itself.
+          const results = await Promise.allSettled(Array.from({ length: 10 }, async () => {
             const release = await acquireReviewSessionFileLock(sessionPath, { staleMs: 1_000, timeoutMs: 5_000 });
             await release();
-            return true;
           }));
-          assert.equal(holders.length, 10);
+          const failed = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+          assert.equal(failed.length, 0, `round ${round}: ${failed.length}/10 writers failed, first: ${String(failed[0]?.reason)}`);
         }
       });
     });
