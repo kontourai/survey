@@ -247,6 +247,28 @@ describe("applyAutoAcceptPolicy", () => {
     assert.equal(applyAutoAcceptPolicy([], { minConfidence: 0.8 }).length, 0);
   });
 
+  it("throws RangeError for an invalid minConfidence even with no proposals (#280)", () => {
+    for (const minConfidence of [0, -1, 1.5, Number.NaN]) {
+      assert.throws(() => applyAutoAcceptPolicy([], { minConfidence }), RangeError);
+    }
+  });
+
+  it("does not auto-accept an out-of-range proposal confidence and reports a warning (#280)", () => {
+    for (const confidence of [7, -5, Number.NaN]) {
+      const proposal = { ...makeProposal({ id: "p-range", question: "is entity-1 active" }), confidence };
+      const warnings: unknown[] = [];
+      assert.equal(applyAutoAcceptPolicy([proposal], { minConfidence: 0.5 }, { onWarning: (w) => warnings.push(w) }).length, 0);
+      assert.deepEqual(warnings, [{ code: "confidence-out-of-range", proposalId: "p-range", confidence }]);
+    }
+  });
+
+  it("reports no warning for an in-range proposal below the threshold (#280)", () => {
+    const proposal = makeProposal({ id: "p-low", question: "is entity-1 active", confidence: 0.2 });
+    const warnings: unknown[] = [];
+    assert.equal(applyAutoAcceptPolicy([proposal], { minConfidence: 0.5 }, { onWarning: (w) => warnings.push(w) }).length, 0);
+    assert.deepEqual(warnings, []);
+  });
+
   it("composes the exact rationale string and reviewedAt (pins byte-identical output post-core-delegation)", () => {
     const proposal = makeProposal({
       id: "p1",

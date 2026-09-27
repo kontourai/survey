@@ -155,6 +155,17 @@ const domainAwareBasis = confidenceBasisForReview({
 });
 ```
 
+`buildSurveyTrustBundle` applies its own projection defaults, which differ from
+this helper: a human-reviewed `verified` or `assumed` claim projects
+`reviewerAuthority: "operator"` and `evidenceStrength: "moderate"`, and a claim
+whose review actor is the auto-accept policy (`"auto-accept-policy"`) projects
+`reviewerAuthority: "system"` and `evidenceStrength: "weak"`, because the policy
+checked nothing but the proposer's self-reported confidence. Auto-accept
+(`autoAcceptMinConfidence`, `applyAutoAcceptPolicy`) is opt-in and experimental:
+thresholds outside (0, 1] throw `RangeError`, and proposals whose confidence is
+not a finite number in [0, 1] are never auto-accepted (they are reported as
+`confidence-out-of-range` warnings).
+
 ## Server-Owned Review Sessions
 
 For browser-backed review flows, the server should own the review snapshot. A
@@ -1059,6 +1070,11 @@ record: the derived `effectiveValue` reflects the edit without any separate
 edit channel. Persist the events (which the workbench emits) and you have the
 edit; you do not need to capture `editedValuesByItemName` out of band.
 
+The server apply helpers do not trust the carried edit: an edit on an item with
+`spec.editable: false`, or one that does not satisfy the item's
+`spec.valueDescriptor`, is an invalid event (see the review resource contract
+for the rules and the legacy text-edit conversion).
+
 For server-side replay, prefer the snapshot-safe apply preparation helper:
 
 ```ts
@@ -1193,11 +1209,11 @@ For source-authority claims, prefer
 multi-candidate cases, prefer `candidateReviewRecord` or the lower-level record
 contract when current/proposed semantics do not fit.
 
-To emit an empirically-calibrated conclusion probability on affirmed claims, pass
-the opt-in `calibration` option (added in 1.10.0). It sets
-`conclusionConfidence.value` from the affirmation rate of each extractor's proposals
-— the produce side of the confidence loop. It is backward-compatible: omit it and
-`value` stays unset, exactly as before.
+**Experimental:** to attach an extractor/field group's review affirmation rate to
+affirmed claims, pass `calibration: { experimentalConclusionValue: true }`. It sets
+`conclusionConfidence.value` to the group's base rate (the same number for every
+affirmed claim in the group), not a per-claim probability. Without the
+experimental flag, including `calibration: true`, `value` stays unset (#279).
 
 ```ts
 // Recommended: pass a curve derived over a longer history than this batch.
@@ -1206,14 +1222,15 @@ const history = deriveCalibration({
   candidateSets,    // from more than the current batch
   extractions,
 });
-buildSurveyTrustBundle(surveyInput, { calibration: { metrics: history, minSamples: 20 } });
+buildSurveyTrustBundle(surveyInput, {
+  calibration: { experimentalConclusionValue: true, metrics: history, minSamples: 20 },
+});
 ```
 
 Calibration is advisory only — it enriches `conclusionConfidence`, never a claim's
 `status`. See [record-contracts.md](record-contracts.md#confidence-calibration) for
-`deriveCalibration`, the advisory `suggestedThreshold` for auto-accept policies, and
-the honest limits. A runnable end-to-end walkthrough — history → grounded threshold
-→ produced value — is in
+`deriveCalibration`, the experimental `suggestedThreshold` (not an auto-accept
+gate), and the honest limits. A runnable walkthrough of both experimental outputs is in
 [`examples/calibrated-auto-accept.ts`](https://github.com/kontourai/survey/blob/main/examples/calibrated-auto-accept.ts).
 
 ## Boundary Checklist

@@ -277,8 +277,10 @@ export {
   referenceMappingProposer,
   resolveQuestion,
 } from "./inquiry-mapping.js";
+export type { AutoAcceptWarning } from "./producer-profile.js";
 export type {
   AutoAcceptPolicy,
+  AutoAcceptPolicyOptions,
   InquiryMapping,
   MappingProposal,
   MappingProposer,

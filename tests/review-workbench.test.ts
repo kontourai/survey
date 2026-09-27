@@ -1742,19 +1742,25 @@ describe("review workbench prototype", () => {
       assert.match(field.valueError.textContent, /not a number/);
     });
 
-    it("accepts a value that satisfies the typed descriptor", () => {
+    it("accepts a value that satisfies the typed descriptor and records it as the descriptor's JSON type", () => {
       const item = withDescriptor(reviewWorkbenchQueueExamples[0]!, { type: "number" });
       const itemName = item.metadata.name;
+      const store = createInMemoryReviewSessionEventStore();
       const root = new ReviewWorkbenchTestRoot();
-      mountReviewWorkbench(root as unknown as HTMLElement, initialReviewQueueSessionState([item]));
+      mountReviewWorkbench(root as unknown as HTMLElement, initialReviewQueueSessionState([item]), { eventStore: store });
 
       const field = root.field(itemName);
       field.editInput!.value = "42";
       field.useButton.click();
 
       assert.match(root.html, new RegExp(`data-item-name="${itemName}"[\\s\\S]*?data-state="accepted"`));
-      assert.match(root.field(itemName).payloadText, /"editedValue": "42"/);
+      // kontourai/survey#278: the edit is stored as the number 42, not the editor text "42".
+      assert.match(root.field(itemName).payloadText, /"editedValue": 42\b/);
+      const decisionEvent = store.events().find((event) => event.spec.eventType === "decision-changed"
+        && event.spec.reviewItemName === itemName);
+      assert.equal(decisionEvent?.spec.data?.workbenchEditedValue, 42);
     });
+
   });
 
   describe("validateProposedValue", () => {
@@ -1766,7 +1772,24 @@ describe("review workbench prototype", () => {
       assert.equal(validateProposedValue({ type: "number" }, "42"), undefined);
       assert.equal(validateProposedValue({ type: "number" }, "3.14"), undefined);
       assert.match(validateProposedValue({ type: "number" }, "abc") ?? "", /not a number/);
+      // Plain decimal only, and no silent precision loss (kontourai/survey#278).
+      assert.match(validateProposedValue({ type: "number" }, "0x1F") ?? "", /not a number/);
+      assert.match(validateProposedValue({ type: "number" }, "007") ?? "", /not a number/);
+      assert.match(validateProposedValue({ type: "number" }, "12345678901234567890") ?? "", /not a number/);
       assert.match(validateProposedValue({ type: "number" }, "  ") ?? "", /Enter a number/);
+    });
+
+    it("accepts any safe integer (16 digits), refusing only past the safe-integer boundary (kontourai/survey#278 fix round 2)", () => {
+      // Number.MAX_SAFE_INTEGER: 16 digits, more than the 15-significant-digit
+      // rule for fractions would allow, but exact as a JSON number.
+      assert.equal(validateProposedValue({ type: "number" }, "9007199254740991"), undefined);
+      // One past MAX_SAFE_INTEGER: Number(...) rounds it to a different
+      // integer (9007199254740992), so it must be refused, not silently
+      // stored as the wrong value.
+      assert.match(validateProposedValue({ type: "number" }, "9007199254740993") ?? "", /not a number/);
+      // The 15-significant-digit rule still governs fractions: this has 16
+      // significant digits and Number.isSafeInteger does not apply to it.
+      assert.match(validateProposedValue({ type: "number" }, "1.234567890123456") ?? "", /not a number/);
     });
 
     it("accepts only true/false for type boolean", () => {
@@ -1778,6 +1801,7 @@ describe("review workbench prototype", () => {
     it("accepts an ISO calendar date and rejects other shapes for type date", () => {
       assert.equal(validateProposedValue({ type: "date" }, "2026-03-03"), undefined);
       assert.match(validateProposedValue({ type: "date" }, "March 3") ?? "", /valid date/);
+      assert.match(validateProposedValue({ type: "date" }, "2026-02-31") ?? "", /valid date/);
       assert.match(validateProposedValue({ type: "date" }, "2026-13-40") ?? "", /valid date/);
     });
 
