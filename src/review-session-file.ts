@@ -81,7 +81,8 @@ function isPidAlive(pid: number): boolean {
  * only proves the holder is alive when the start time also matches the one
  * the holder recorded (kontourai/survey#298). Linux reads `/proc/<pid>/stat`
  * field 22 (start time in clock ticks since boot); elsewhere `ps -o lstart=`
- * (one-second resolution). Resolves `undefined` when the platform offers
+ * (one-second resolution), rendered in UTC with the C locale so every reader
+ * spells the same instant the same way whatever its own TZ or locale. Resolves `undefined` when the platform offers
  * neither or the process is gone, which leaves the pid-only rule in force.
  */
 async function processStartIdentity(pid: number): Promise<string | undefined> {
@@ -98,7 +99,7 @@ async function processStartIdentity(pid: number): Promise<string | undefined> {
   }
   if (process.platform === "win32") return undefined;
   return new Promise((resolveIdentity) => {
-    execFile("ps", ["-o", "lstart=", "-p", String(pid)], { env: { ...process.env, LC_ALL: "C" }, timeout: 2_000 }, (error, stdout) => {
+    execFile("ps", ["-o", "lstart=", "-p", String(pid)], { env: { ...process.env, LC_ALL: "C", TZ: "UTC" }, timeout: 2_000 }, (error, stdout) => {
       const started = error ? "" : stdout.trim().replace(/\s+/g, " ");
       resolveIdentity(started ? `ps-lstart:${started}` : undefined);
     });

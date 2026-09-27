@@ -581,6 +581,58 @@ describe("session lock robustness (#281)", () => {
         }
       });
     });
+
+    test("a live holder is never broken by a contender that runs in a different time zone", async (t) => {
+      if (process.platform === "win32") t.skip("no process start time on this platform");
+      await withLockDir(async (sessionPath) => {
+        const lockPath = `${sessionPath}.lock`;
+        const ready = `${sessionPath}.holder-ready`;
+        const holderScript = `
+          import { writeFile } from "node:fs/promises";
+          const { acquireReviewSessionFileLock } = await import(${JSON.stringify(moduleUrl)});
+          const [sessionPath, ready] = process.argv.slice(1);
+          const release = await acquireReviewSessionFileLock(sessionPath, { timeoutMs: 5000 });
+          await writeFile(ready, "1");
+          await new Promise((r) => setTimeout(r, 4000));
+          await release();
+        `;
+        const contenderScript = `
+          const { acquireReviewSessionFileLock } = await import(${JSON.stringify(moduleUrl)});
+          try {
+            const release = await acquireReviewSessionFileLock(process.argv[1], { staleMs: 50, timeoutMs: 1000 });
+            await release();
+            process.exit(4);
+          } catch (error) {
+            process.exit(error?.name === "ReviewSessionFileLockTimeoutError" ? 0 : 5);
+          }
+        `;
+        // Same instant, different wall-clock renderings: the holder's recorded
+        // start time must still match what the contender reads.
+        const holder = spawn(process.execPath, ["--input-type=module", "-e", holderScript, sessionPath, ready], {
+          stdio: ["ignore", "ignore", "inherit"], env: { ...process.env, TZ: "Asia/Tokyo" },
+        });
+        const holderExit = once(holder, "exit");
+        try {
+          const started = Date.now();
+          for (;;) {
+            try { await stat(ready); break; } catch { /* not yet */ }
+            if (Date.now() - started > 5_000) throw new Error("holder never acquired the lock");
+            await new Promise((r) => setTimeout(r, 10));
+          }
+          const past = new Date(Date.now() - 60_000);
+          await utimes(lockPath, past, past);
+          const contender = spawn(process.execPath, ["--input-type=module", "-e", contenderScript, sessionPath], {
+            stdio: ["ignore", "ignore", "inherit"], env: { ...process.env, TZ: "UTC" },
+          });
+          const [code] = await once(contender, "exit");
+          assert.equal(code, 0, code === 4
+            ? "a contender in another time zone broke a live holder's lock"
+            : `contender exited ${code}`);
+        } finally {
+          await holderExit;
+        }
+      });
+    });
   });
 
   test("orphan temp files from a crashed writer are removed on the next write", async () => {
