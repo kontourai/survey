@@ -23,6 +23,12 @@ async function makeIsolatedServer(): Promise<{ handle: ReviewConsoleServerHandle
   return { handle, sessionPath, tmpDir };
 }
 
+async function currentRevision(handle: ReviewConsoleServerHandle): Promise<string> {
+  const res = await fetch(`${handle.url}api/session`);
+  const body = await res.json() as { revision: string };
+  return body.revision;
+}
+
 async function teardown(handle: ReviewConsoleServerHandle, tmpDir: string): Promise<void> {
   await handle.close();
   await rm(tmpDir, { recursive: true, force: true });
@@ -144,22 +150,25 @@ describe("survey-review-console server", () => {
         [item.metadata.name]: "accept-proposed",
       },
     };
-    const newEvents = buildReviewSessionEvents(sessionWithDecision, defaultReviewSessionName);
+    // The console appends the reviewer's new events to the stored log.
+    const storedCount = (JSON.parse(raw) as { events: unknown[] }).events.length;
+    const newEvents = buildReviewSessionEvents(sessionWithDecision, defaultReviewSessionName)
+      .filter((event) => event.spec.eventType.startsWith("decision-"));
 
     const postRes = await fetch(`${handle.url}api/events`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ events: newEvents }),
+      body: JSON.stringify({ events: newEvents, baseRevision: await currentRevision(handle) }),
     });
     assert.equal(postRes.status, 200);
     const postBody = await postRes.json() as Record<string, unknown>;
     assert.equal(postBody.ok, true);
-    assert.equal(postBody.eventCount, newEvents.length);
+    assert.equal(postBody.eventCount, storedCount + newEvents.length);
 
     // Verify the file was actually mutated
     const afterRaw = await readFile(sessionPath, "utf8");
     const after = JSON.parse(afterRaw) as { events: unknown[] };
-    assert.equal(after.events.length, newEvents.length);
+    assert.equal(after.events.length, storedCount + newEvents.length);
 
     // Verify /api/session reflects the change
     const sessionRes = await fetch(`${handle.url}api/session`);
@@ -217,7 +226,7 @@ describe("survey-review-console server", () => {
     await fetch(`${handle.url}api/events`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ events }),
+      body: JSON.stringify({ events, baseRevision: await currentRevision(handle) }),
     });
 
     await updateReceived;
@@ -263,7 +272,7 @@ describe("survey-review-console server", () => {
       await fetch(`${h2.url}api/events`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ events }),
+        body: JSON.stringify({ events, baseRevision: await currentRevision(h2) }),
       });
 
       await Promise.all([first, second]);
