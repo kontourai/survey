@@ -150,7 +150,10 @@ describe("survey-review-console server", () => {
         [item.metadata.name]: "accept-proposed",
       },
     };
-    const newEvents = buildReviewSessionEvents(sessionWithDecision, defaultReviewSessionName);
+    // The console appends the reviewer's new events to the stored log.
+    const storedCount = (JSON.parse(raw) as { events: unknown[] }).events.length;
+    const newEvents = buildReviewSessionEvents(sessionWithDecision, defaultReviewSessionName)
+      .filter((event) => event.spec.eventType.startsWith("decision-"));
 
     const postRes = await fetch(`${handle.url}api/events`, {
       method: "POST",
@@ -160,12 +163,12 @@ describe("survey-review-console server", () => {
     assert.equal(postRes.status, 200);
     const postBody = await postRes.json() as Record<string, unknown>;
     assert.equal(postBody.ok, true);
-    assert.equal(postBody.eventCount, newEvents.length);
+    assert.equal(postBody.eventCount, storedCount + newEvents.length);
 
     // Verify the file was actually mutated
     const afterRaw = await readFile(sessionPath, "utf8");
     const after = JSON.parse(afterRaw) as { events: unknown[] };
-    assert.equal(after.events.length, newEvents.length);
+    assert.equal(after.events.length, storedCount + newEvents.length);
 
     // Verify /api/session reflects the change
     const sessionRes = await fetch(`${handle.url}api/session`);

@@ -22,7 +22,12 @@ import {
   deriveServerReviewSessionApplyResult,
 } from "../review-workbench/server-review-session.js";
 import type { ReviewItem, ReviewSession, ReviewSessionEvent } from "../review-resource.js";
-import { readReviewSessionFile, updateReviewSessionFile } from "../review-session-file.js";
+import {
+  appendReviewSessionEvents,
+  readReviewSessionFile,
+  storedReviewSessionName,
+  updateReviewSessionFile,
+} from "../review-session-file.js";
 
 const SESSION_NAME = "mcp-review-session";
 
@@ -478,15 +483,27 @@ async function toolDecide(
         : {}),
     };
 
+    // Append only this decision's events (its note, then the decision) to the
+    // stored log. Regenerating the whole log from state would erase earlier
+    // reversals and note changes recorded by the console (#281).
+    const sessionName = storedReviewSessionName(file, SESSION_NAME);
+    const decisionEvents = buildReviewSessionEvents(sessionWithDecision, sessionName).filter(
+      (event) =>
+        event.spec.reviewItemName === itemName
+        && (event.spec.eventType === "decision-changed"
+          || event.spec.eventType === "decision-submitted"
+          || (event.spec.eventType === "note-changed" && note !== undefined)),
+    );
+    const newEvents = appendReviewSessionEvents(file, decisionEvents);
+
     // Use the server session APIs for apply-path validation
     const record = createServerReviewSessionRecord({
-      sessionName: SESSION_NAME,
+      sessionName,
       snapshot,
       eventCount: events.length,
       updatedAt: new Date(),
     });
 
-    const newEvents = buildReviewSessionEvents(sessionWithDecision, SESSION_NAME);
     const applyResult = deriveServerReviewSessionApplyResult({
       record,
       events: newEvents,

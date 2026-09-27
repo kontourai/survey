@@ -5,8 +5,9 @@
  * Routes:
  *   GET  /              HTML shell that mounts the workbench
  *   GET  /api/session   Current session state (snapshot + replayed events)
- *   POST /api/events    Replace the event log (same validation as MCP server),
- *                       compare-and-swap on the revision the client last read
+ *   POST /api/events    Append review session events to the stored log (same
+ *                       validation as MCP server), compare-and-swap on the
+ *                       revision the client last read
  *   GET  /api/stream    SSE stream: emits "update" events when the session file changes
  *   GET  /api/health    Health check
  *   GET  /dist/*        Compiled assets served from the dist tree (traversal-safe)
@@ -19,9 +20,6 @@ import { resolve, join, dirname, extname, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  defaultReviewSessionName,
-} from "../review-workbench/review-workbench.js";
-import {
   createServerReviewSessionRecord,
   currentSessionState,
   deriveServerReviewSessionApplyResult,
@@ -29,8 +27,10 @@ import {
 import type { ReviewQueueSessionState } from "../review-workbench/review-queue-session.js";
 import type { ReviewSessionEvent } from "../review-resource.js";
 import {
+  appendReviewSessionEvents,
   readReviewSessionFile,
   reviewSessionRevision,
+  storedReviewSessionName,
   updateReviewSessionFile,
 } from "../review-session-file.js";
 
@@ -385,13 +385,13 @@ import { mountReviewWorkbench, replayReviewSessionEvents, defaultReviewSessionNa
 
 // ---- persistence adapter: POST events to /api/events ----
 // One store per mount, bound to the server revision the mount was built from.
-// Each save posts the full log regenerated from the workbench's session state
-// (which starts from the stored state, so decisions another writer such as the
-// MCP server made are carried forward, not replaced by the workbench's own
-// incremental events). Saves are serialized so each one carries the revision
+// Each save sends only the workbench events of this mount that are not stored
+// yet; the server appends them to the stored log, so reversals and note
+// changes stay on record and decisions another writer stored (for example the
+// MCP server) are kept. Saves are serialized so each one carries the revision
 // the previous save produced. A save the server refuses (409 conflict or any
 // other failure) is never kept as local truth: the console re-fetches the
-// stored session, re-mounts from it and tells the reviewer.
+// stored session, re-mounts from it and tells the reviewer once.
 let saveChain = Promise.resolve();
 
 function showSaveStatus(message) {
@@ -408,49 +408,57 @@ function showSaveStatus(message) {
 
 function createConsoleEventStore(baseRevision) {
   let revision = baseRevision;
+  // Local events of this mount already appended to the stored log.
+  let persistedCount = 0;
+  // Set once a save from this mount is refused. Saves still queued from this
+  // mount were built on the view the server just refused, and the page has
+  // re-mounted from the stored session and told the reviewer: drop them
+  // instead of reporting the same conflict again.
+  let abandoned = false;
 
-  async function persist(events) {
+  async function refused(message) {
+    abandoned = true;
+    showSaveStatus(message);
+    await fetchAndMount();
+  }
+
+  async function persist(localEvents) {
+    if (abandoned) return;
+    const pending = localEvents.slice(persistedCount);
+    if (pending.length === 0) return;
     let res;
     try {
       res = await fetch("/api/events", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ events, baseRevision: revision }),
+        body: JSON.stringify({ events: pending, baseRevision: revision }),
       });
     } catch (err) {
       console.error("[console] Failed to persist events:", err);
-      showSaveStatus("Your last change was not saved: the console could not reach the server.");
-      await fetchAndMount();
+      await refused("Your last change was not saved: the console could not reach the server.");
       return;
     }
     if (res.ok) {
       const body = await res.json().catch(() => ({}));
       if (typeof body.revision === "string") revision = body.revision;
+      persistedCount = localEvents.length;
       showSaveStatus("");
       return;
     }
     if (res.status === 409) {
-      showSaveStatus("Your last change was not saved because the session changed (another tab, reviewer or agent wrote to it). The console reloaded the current session.");
+      await refused("Your last change was not saved because the session changed (another tab, reviewer or agent wrote to it). The console reloaded the current session.");
     } else {
       const body = await res.json().catch(() => ({}));
-      showSaveStatus("Your last change was not saved (HTTP " + res.status + (body.error ? ": " + body.error : "") + "). The console reloaded the stored session.");
+      await refused("Your last change was not saved (HTTP " + res.status + (body.error ? ": " + body.error : "") + "). The console reloaded the stored session.");
     }
-    await fetchAndMount();
   }
 
   return {
     // The mount state is already replayed from the stored log.
     load: () => undefined,
-    save: (session) => {
-      let toSave;
-      try {
-        toSave = buildReviewSessionEvents(session, defaultReviewSessionName);
-      } catch (err) {
-        showSaveStatus("Your last change was not saved: " + (err && err.message ? err.message : String(err)));
-        saveChain = saveChain.then(() => fetchAndMount());
-        return saveChain;
-      }
-      saveChain = saveChain.then(() => persist(toSave));
+    save: (_session, events) => {
+      const localEvents = [...events];
+      saveChain = saveChain.then(() => persist(localEvents));
       return saveChain;
     },
   };
@@ -711,43 +719,51 @@ export async function startReviewConsoleServer(
             const { snapshot, events: existingEvents } = content;
             const revision = reviewSessionRevision(existingEvents);
 
-            // Compare-and-swap: the write replaces the whole log, so it is only
-            // safe when it was built on the log that is stored right now.
+            // Compare-and-swap: the appended events express decisions made on
+            // the reviewer's view of the log, so they are only safe to append
+            // when that view is the log that is stored right now.
             if (typeof baseRevision !== "string") {
               return { result: { status: 428, body: { error: "baseRevision is required: send the revision from GET /api/session", revision, eventCount: existingEvents.length } } };
             }
             if (baseRevision !== revision) {
               return { result: { status: 409, body: { error: "Session changed since it was read; reload and retry", revision, eventCount: existingEvents.length } } };
             }
-            if (incomingEvents.length === 0 && existingEvents.length > 0) {
-              return { result: { status: 422, body: { error: "Refusing to replace a non-empty event log with an empty one", revision, eventCount: existingEvents.length } } };
+            if (incomingEvents.length === 0) {
+              return { result: { status: 422, body: { error: "events must contain at least one event to append", revision, eventCount: existingEvents.length } } };
             }
 
+            // Append, never replace: the stored log stays a complete record of
+            // reviewer intent (reversals and note changes included).
+            const nextEvents = appendReviewSessionEvents(content, incomingEvents);
             const record = createServerReviewSessionRecord({
-              sessionName: defaultReviewSessionName,
+              sessionName: storedReviewSessionName(content),
               snapshot,
               eventCount: existingEvents.length,
               updatedAt: new Date(),
             });
 
-            const applyResult = deriveServerReviewSessionApplyResult({
-              record,
-              events: incomingEvents,
-              requiredResolvedItems: "none",
-            });
-
-            if (!applyResult.ok) {
-              const issueMessages = applyResult.issues.map((issue) =>
-                "message" in issue ? issue.message : String(issue),
-              );
+            let issueMessages: string[];
+            try {
+              const applyResult = deriveServerReviewSessionApplyResult({
+                record,
+                events: nextEvents,
+                requiredResolvedItems: "none",
+              });
+              issueMessages = applyResult.ok
+                ? []
+                : applyResult.issues.map((issue) => ("message" in issue ? issue.message : String(issue)));
+            } catch (error) {
+              issueMessages = [error instanceof Error ? error.message : String(error)];
+            }
+            if (issueMessages.length > 0) {
               return { result: { status: 422, body: { error: `Validation failed: ${issueMessages.join("; ")}` } } };
             }
 
             return {
-              next: { session: content.session, snapshot, events: incomingEvents },
+              next: { session: content.session, snapshot, events: nextEvents },
               result: {
                 status: 200,
-                body: { ok: true, eventCount: incomingEvents.length, revision: reviewSessionRevision(incomingEvents) },
+                body: { ok: true, eventCount: nextEvents.length, revision: reviewSessionRevision(nextEvents) },
               },
             };
           },

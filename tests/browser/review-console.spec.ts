@@ -197,3 +197,53 @@ test("console page: a decision another writer (MCP) stored is kept when the revi
   expect(decisions[mcpItem]).toBe("keep-current");
   expect(decisions[consoleItem!]).toBe("accept-proposed");
 });
+
+test("console page: saves queued from a refused mount do not report the conflict a second time", async ({ page }) => {
+  await gotoConsole(page);
+  let posts = 0;
+  await page.route("**/api/events", async (route) => {
+    posts += 1;
+    await new Promise((r) => setTimeout(r, 400));
+    await route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "stale" }) });
+  });
+
+  const open = page.locator("[data-testid='review-field']:not([data-state='accepted']):not([data-state='kept'])");
+  const [firstName, secondName] = [await open.nth(0).getAttribute("data-item-name"), await open.nth(1).getAttribute("data-item-name")];
+  await page.locator(`[data-testid='review-field'][data-item-name='${firstName}']`).getByTestId("keep-current").click();
+  // Queued behind the first save, built on the same (soon refused) view.
+  await page.locator(`[data-testid='review-field'][data-item-name='${secondName}']`).getByTestId("keep-current").click();
+
+  await expect(page.getByTestId("console-save-status")).toHaveText(/not saved because the session changed/);
+  await page.waitForTimeout(1500);
+  expect(posts).toBe(1);
+});
+
+test("console page: a reversed decision stays on record in the stored log", async ({ page }) => {
+  await gotoConsole(page);
+  const field = page.locator("[data-testid='review-field']:not([data-state='accepted']):not([data-state='kept'])").first();
+  const itemName = await field.getAttribute("data-item-name");
+  const target = page.locator(`[data-testid='review-field'][data-item-name='${itemName}']`);
+
+  const saved = () => page.waitForResponse(
+    (resp) => resp.url().includes("/api/events") && resp.request().method() === "POST",
+    { timeout: 5000 },
+  );
+  let response = saved();
+  await target.getByTestId("use-proposed").click();
+  expect((await response).status()).toBe(200);
+  await expect(target).toHaveAttribute("data-state", "accepted");
+
+  // Reverse it: undo, then keep the current value instead.
+  response = saved();
+  await target.getByTestId("undo-decision").click();
+  expect((await response).status()).toBe(200);
+  response = saved();
+  await target.getByTestId("keep-current").click();
+  expect((await response).status()).toBe(200);
+
+  const stored = JSON.parse(await readFile(sessionPath, "utf8")) as { events: Array<{ spec: { reviewItemName?: string; eventType: string; data?: { workbenchDecision?: string | null } } }> };
+  const trail = stored.events
+    .filter((e) => e.spec.reviewItemName === itemName && e.spec.eventType === "decision-changed")
+    .map((e) => e.spec.data?.workbenchDecision);
+  expect(trail).toEqual(["accept-proposed", null, "keep-current"]);
+});

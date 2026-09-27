@@ -10,10 +10,12 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import { open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { open, readdir, readFile, rename, rm, stat } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 
 import type { ReviewQueueSessionState } from "./review-workbench/review-queue-session.js";
 import type { ReviewSessionEvent } from "./review-resource.js";
+import { defaultReviewSessionName } from "./review-workbench/review-queue-session.js";
 
 export interface ReviewSessionFileContent {
   readonly session: unknown;
@@ -37,6 +39,10 @@ export class ReviewSessionFileLockTimeoutError extends Error {
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_STALE_MS = 30_000;
+/** A lock file that is still empty this long after creation was left by an acquirer that died between create and write. */
+const EMPTY_LOCK_STALE_MS = 1_000;
+/** The break mutex is held for a few milliseconds; older means its holder died mid-break. */
+const BREAK_MUTEX_STALE_MS = 5_000;
 const RETRY_MIN_MS = 10;
 const RETRY_MAX_MS = 50;
 
@@ -71,12 +77,53 @@ function isPidAlive(pid: number): boolean {
 async function lockIsStale(lockPath: string, staleMs: number): Promise<boolean> {
   try {
     const info = await stat(lockPath);
-    if (Date.now() - info.mtimeMs > staleMs) return true;
-    const holder = JSON.parse(await readFile(lockPath, "utf8")) as { pid?: unknown };
+    const age = Date.now() - info.mtimeMs;
+    if (age > staleMs) return true;
+    const raw = await readFile(lockPath, "utf8");
+    if (raw.trim() === "") return age > EMPTY_LOCK_STALE_MS;
+    const holder = JSON.parse(raw) as { pid?: unknown };
     return typeof holder.pid === "number" && !isPidAlive(holder.pid);
   } catch {
     // Vanished (released) or half-written by a live acquirer: not stale.
     return false;
+  }
+}
+
+/**
+ * Remove a stale lock without ever removing a live one.
+ *
+ * Breakers serialize on a separate `<lock>.break` mutex and re-judge the lock
+ * inside it. While a breaker holds the mutex, the lock file can only change if
+ * its owner releases it, and a stale lock's owner is dead (or has held it for
+ * `staleMs`), so the file the breaker removes is the one it judged stale. The
+ * earlier rename-aside scheme let two waiters that both judged the same lock
+ * stale each remove it, the second removing the first's fresh lock
+ * (kontourai/survey#281 review). Residual (accepted): a breaker that dies
+ * inside the few-millisecond break section leaves a mutex that is removed
+ * after BREAK_MUTEX_STALE_MS, and pid liveness means nothing across hosts or
+ * containers that share the session volume (only the age rule applies there).
+ */
+async function breakStaleLock(lockPath: string, staleMs: number): Promise<void> {
+  const breakPath = `${lockPath}.break`;
+  try {
+    await (await open(breakPath, "wx")).close();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    try {
+      if (Date.now() - (await stat(breakPath)).mtimeMs > BREAK_MUTEX_STALE_MS) {
+        await rm(breakPath, { force: true });
+      }
+    } catch {
+      // Released meanwhile.
+    }
+    return;
+  }
+  try {
+    if (await lockIsStale(lockPath, staleMs)) {
+      await rm(lockPath, { force: true });
+    }
+  } finally {
+    await rm(breakPath, { force: true });
   }
 }
 
@@ -117,18 +164,7 @@ export async function acquireReviewSessionFileLock(
     }
 
     if (await lockIsStale(lockPath, staleMs)) {
-      // Rename-then-remove so two waiters that both judged it stale do not
-      // both delete it. Residual race (accepted): if another waiter breaks the
-      // stale lock and a third process acquires a fresh one between our check
-      // and this rename, we move the fresh lock aside. This needs a crashed
-      // writer plus three contenders within a few milliseconds.
-      const aside = `${lockPath}.stale-${token}`;
-      try {
-        await rename(lockPath, aside);
-        await rm(aside, { force: true });
-      } catch {
-        // Another waiter broke it first.
-      }
+      await breakStaleLock(lockPath, staleMs);
       continue;
     }
 
@@ -140,10 +176,39 @@ export async function acquireReviewSessionFileLock(
   }
 }
 
+function tempFilePattern(sessionPath: string): RegExp {
+  const escaped = basename(sessionPath).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^${escaped}\\.\\d+\\.[0-9a-f-]{36}\\.tmp$`);
+}
+
+/**
+ * Remove temp files a crashed writer left between write and rename. Called
+ * only while holding the lock, when no other writer can have a temp file in
+ * flight, so every match is an orphan.
+ */
+async function removeOrphanTempFiles(sessionPath: string): Promise<void> {
+  const pattern = tempFilePattern(sessionPath);
+  let entries: string[];
+  try {
+    entries = await readdir(dirname(sessionPath));
+  } catch {
+    return;
+  }
+  await Promise.all(entries.filter((entry) => pattern.test(entry)).map((entry) => rm(join(dirname(sessionPath), entry), { force: true })));
+}
+
 async function writeReviewSessionFileAtomic(sessionPath: string, content: ReviewSessionFileContent): Promise<void> {
   const tmp = `${sessionPath}.${process.pid}.${randomUUID()}.tmp`;
   try {
-    await writeFile(tmp, JSON.stringify(content, null, 2), "utf8");
+    const handle = await open(tmp, "wx");
+    try {
+      await handle.writeFile(JSON.stringify(content, null, 2), "utf8");
+      // Durable before it becomes visible: a crash after the rename must not
+      // leave a renamed but empty or partial session file.
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
     await rename(tmp, sessionPath);
   } catch (error) {
     await rm(tmp, { force: true });
@@ -164,6 +229,7 @@ export async function updateReviewSessionFile<T extends ReviewSessionFileContent
 ): Promise<R> {
   const release = await acquireReviewSessionFileLock(sessionPath, options);
   try {
+    await removeOrphanTempFiles(sessionPath);
     const current = await readReviewSessionFile<T>(sessionPath);
     const { next, result } = await mutate(current);
     if (next !== undefined) {
@@ -173,4 +239,43 @@ export async function updateReviewSessionFile<T extends ReviewSessionFileContent
   } finally {
     await release();
   }
+}
+
+/**
+ * The session name the stored log is recorded under: the name its events
+ * already carry, else the stored ReviewSession's name, else `fallback` (the
+ * writer's own default). Appended events are renamed into it so one log never mixes names.
+ */
+export function storedReviewSessionName(
+  content: ReviewSessionFileContent,
+  fallback: string = defaultReviewSessionName,
+): string {
+  const fromEvents = content.events[0]?.spec.sessionName;
+  if (fromEvents) return fromEvents;
+  const session = content.session as { metadata?: { name?: unknown } } | undefined;
+  return typeof session?.metadata?.name === "string" ? session.metadata.name : fallback;
+}
+
+/**
+ * Append events to the stored log, renumbering them after the stored events
+ * and renaming them into the stored session. The stored log is never
+ * rewritten, so decision reversals and note changes stay on record.
+ */
+export function appendReviewSessionEvents(
+  content: ReviewSessionFileContent,
+  appended: readonly ReviewSessionEvent[],
+): ReviewSessionEvent[] {
+  const sessionName = storedReviewSessionName(content);
+  const start = content.events.length;
+  const renumbered = [...appended]
+    .sort((left, right) => left.spec.sequence - right.spec.sequence)
+    .map((event, index): ReviewSessionEvent => {
+      const sequence = start + index + 1;
+      return {
+        ...event,
+        metadata: { ...event.metadata, name: `${sessionName}-${String(sequence).padStart(4, "0")}-${event.spec.eventType}` },
+        spec: { ...event.spec, sessionName, sequence },
+      };
+    });
+  return [...content.events, ...renumbered];
 }

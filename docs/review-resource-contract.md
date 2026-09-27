@@ -66,6 +66,12 @@ that item on replay. See
 [`consumer-integration-guide.md`](consumer-integration-guide.md) for the full
 replay and apply boundary.
 
+The bundled session-file writers (`survey-review-console` and
+`survey-review-mcp`) keep the persisted event log append-only: new events are
+renumbered after the stored ones and renamed into the stored session, and
+stored events are never rewritten, so decision reversals and note changes stay
+on record (details: `docs/review-console.md`, "Concurrent writers").
+
 ## Ownership
 
 Producers own acquisition, parsing, candidate ranking, review UX, vertical

@@ -9,8 +9,8 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { request } from "node:http";
 import { createInterface } from "node:readline";
-import { copyFile, mkdtemp, readFile, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { copyFile, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 import { startReviewConsoleServer, type ReviewConsoleServerHandle } from "../src/console/review-console-server.js";
@@ -21,6 +21,7 @@ import {
   type ReviewQueueSessionState,
 } from "../src/review-workbench/review-workbench.js";
 import type { ReviewSessionEvent } from "../src/review-resource.js";
+import { currentSessionState } from "../src/review-workbench/server-review-session.js";
 
 const SAMPLE_SESSION = "example-data/mcp-review-session.json";
 
@@ -94,11 +95,12 @@ async function readSessionState(handle: ReviewConsoleServerHandle): Promise<{ sn
   return res.body as unknown as { snapshot: ReviewQueueSessionState; events: ReviewSessionEvent[]; revision: string };
 }
 
-function eventsDeciding(snapshot: ReviewQueueSessionState, decisions: Record<string, "accept-proposed" | "keep-current">): ReviewSessionEvent[] {
+/** The decision events a workbench appends for these decisions (what the console client posts). */
+function eventsDeciding(snapshot: ReviewQueueSessionState, decisions: Record<string, "accept-proposed" | "keep-current" | "reject-proposed">): ReviewSessionEvent[] {
   return buildReviewSessionEvents(
     { ...snapshot, decisionsByItemName: { ...snapshot.decisionsByItemName, ...decisions } },
     defaultReviewSessionName,
-  );
+  ).filter((event) => event.spec.eventType.startsWith("decision-") && event.spec.reviewItemName! in decisions);
 }
 
 function postEvents(
@@ -109,12 +111,13 @@ function postEvents(
   return rawRequest(handle, "POST", "/api/events", headers, JSON.stringify(payload));
 }
 
+async function decisionsOnDisk(sessionPath: string): Promise<Record<string, string>> {
+  const parsed = JSON.parse(await readFile(sessionPath, "utf8")) as { snapshot: ReviewQueueSessionState; events: ReviewSessionEvent[] };
+  return currentSessionState(parsed.snapshot, parsed.events).decisionsByItemName;
+}
+
 async function decidedItemsOnDisk(sessionPath: string): Promise<string[]> {
-  const parsed = JSON.parse(await readFile(sessionPath, "utf8")) as { events: ReviewSessionEvent[] };
-  return parsed.events
-    .filter((event) => event.spec.eventType === "decision-submitted")
-    .map((event) => event.spec.reviewItemName ?? "")
-    .sort();
+  return Object.keys(await decisionsOnDisk(sessionPath)).sort();
 }
 
 // ---- MCP child process helpers -------------------------------------------
@@ -196,7 +199,7 @@ describe("review console compare-and-swap (#281)", () => {
       const before = await readFile(sessionPath, "utf8");
       const res = await postEvents(handle, { events: [], baseRevision: revision });
       assert.equal(res.status, 422, JSON.stringify(res.body));
-      assert.match(String(res.body.error), /empty/);
+      assert.match(String(res.body.error), /at least one event/);
       assert.equal(await readFile(sessionPath, "utf8"), before);
     });
   });
@@ -326,6 +329,134 @@ describe("shared session write lock (#281)", () => {
       const res = await postEvents(handle, { events: eventsDeciding(snapshot, { "public-directory-hours": "accept-proposed" }), baseRevision: revision });
       assert.equal(res.status, 200, JSON.stringify(res.body));
       assert.deepEqual(await decidedItemsOnDisk(sessionPath), ["public-directory-hours"]);
+    });
+  });
+});
+
+describe("session event history is kept (#281)", () => {
+  function decisionTrail(events: ReviewSessionEvent[], itemName: string): string[] {
+    return events
+      .filter((event) => event.spec.reviewItemName === itemName && event.spec.eventType === "decision-changed")
+      .map((event) => String(event.spec.data?.workbenchDecision));
+  }
+
+  test("a console reversal is appended, renumbered and renamed into the stored session, not collapsed", async () => {
+    await withConsole(async ({ handle, sessionPath }) => {
+      const first = await readSessionState(handle);
+      const storedName = first.events[0].spec.sessionName;
+      const item = first.snapshot.items[0].metadata.name;
+
+      const accept = await postEvents(handle, { events: eventsDeciding(first.snapshot, { [item]: "accept-proposed" }), baseRevision: first.revision });
+      assert.equal(accept.status, 200, JSON.stringify(accept.body));
+      const second = await readSessionState(handle);
+      const reject = await postEvents(handle, { events: eventsDeciding(first.snapshot, { [item]: "reject-proposed" }), baseRevision: second.revision });
+      assert.equal(reject.status, 200, JSON.stringify(reject.body));
+
+      const { events } = await readSessionState(handle);
+      assert.deepEqual(decisionTrail(events, item), ["accept-proposed", "reject-proposed"], "the reversal must stay on record");
+      assert.deepEqual(events.slice(0, first.events.length), first.events, "the stored prefix is never rewritten");
+      assert.deepEqual(events.map((event) => event.spec.sequence), events.map((_, index) => index + 1));
+      assert.ok(events.every((event) => event.spec.sessionName === storedName), "appended events carry the stored session name");
+      assert.ok(events.every((event) => event.metadata.name.startsWith(`${storedName}-`)));
+      assert.equal((await decisionsOnDisk(sessionPath))[item], "reject-proposed");
+    });
+  });
+
+  test("an MCP decide appends its decision and keeps the console's reversal history", async () => {
+    await withConsole(async ({ handle, sessionPath }) => {
+      const first = await readSessionState(handle);
+      const item = "public-directory-hours";
+      assert.equal((await postEvents(handle, { events: eventsDeciding(first.snapshot, { [item]: "accept-proposed" }), baseRevision: first.revision })).status, 200);
+      const second = await readSessionState(handle);
+      assert.equal((await postEvents(handle, { events: eventsDeciding(first.snapshot, { [item]: "keep-current" }), baseRevision: second.revision })).status, 200);
+      const beforeMcp = (await readSessionState(handle)).events;
+
+      const mcp = await startMcp(sessionPath);
+      try {
+        const result = await mcp.call(2, "survey_review_decide", { itemName: "public-directory-phone", decision: "reject", note: "Wrong number." });
+        assert.equal(result.isError, false, result.text);
+      } finally {
+        await mcp.close();
+      }
+
+      const after = JSON.parse(await readFile(sessionPath, "utf8")) as { events: ReviewSessionEvent[] };
+      assert.deepEqual(after.events.slice(0, beforeMcp.length), beforeMcp, "MCP must not rewrite the stored log");
+      assert.deepEqual(decisionTrail(after.events, item), ["accept-proposed", "keep-current"]);
+      const decisions = await decisionsOnDisk(sessionPath);
+      assert.equal(decisions[item], "keep-current");
+      assert.equal(decisions["public-directory-phone"], "reject-proposed");
+    });
+  });
+});
+
+describe("session lock robustness (#281)", () => {
+  const moduleUrl = new URL("../src/review-session-file.js", import.meta.url).href;
+
+  test("breaking a dead-pid lock admits exactly one holder at a time across processes", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "survey-lock-race-"));
+    const sessionPath = join(dir, "session.json");
+    const marker = join(dir, "holder.marker");
+    const contenders = 5;
+    const rounds = 20;
+    // Each child waits for a shared start instant, acquires the lock, then
+    // proves exclusivity by creating an O_EXCL marker it holds for 30 ms.
+    const child = `
+      import { open, rm } from "node:fs/promises";
+      const { acquireReviewSessionFileLock } = await import(${JSON.stringify(moduleUrl)});
+      const [sessionPath, marker, startAt] = process.argv.slice(1);
+      await new Promise((r) => setTimeout(r, Math.max(0, Number(startAt) - Date.now())));
+      const release = await acquireReviewSessionFileLock(sessionPath, { timeoutMs: 20000 });
+      try {
+        let handle;
+        try { handle = await open(marker, "wx"); } catch { process.exit(3); }
+        await new Promise((r) => setTimeout(r, 30));
+        await handle.close();
+        await rm(marker);
+      } finally { await release(); }
+    `;
+    try {
+      let overlaps = 0;
+      for (let round = 0; round < rounds; round += 1) {
+        await writeFile(`${sessionPath}.lock`, JSON.stringify({ pid: 4_194_400, token: "dead", acquiredAt: new Date().toISOString() }));
+        const startAt = String(Date.now() + 400);
+        const exits = await Promise.all(Array.from({ length: contenders }, async () => {
+          const proc = spawn(process.execPath, ["--input-type=module", "-e", child, sessionPath, marker, startAt], { stdio: ["ignore", "ignore", "inherit"] });
+          const [code] = await once(proc, "exit");
+          return code as number;
+        }));
+        overlaps += exits.filter((code) => code === 3).length;
+        assert.ok(exits.every((code) => code === 0 || code === 3), `unexpected child exit codes ${exits}`);
+        await rm(marker, { force: true });
+      }
+      assert.equal(overlaps, 0, `${overlaps} holders found the lock already held by another holder`);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a lock file left empty by a crashed acquirer is broken quickly, not after the 30s age limit", async () => {
+    await withConsole(async ({ handle, sessionPath }) => {
+      await writeFile(`${sessionPath}.lock`, "");
+      const { snapshot, revision } = await readSessionState(handle);
+      const started = Date.now();
+      const res = await postEvents(handle, { events: eventsDeciding(snapshot, { "public-directory-hours": "accept-proposed" }), baseRevision: revision });
+      assert.equal(res.status, 200, JSON.stringify(res.body));
+      assert.ok(Date.now() - started < 5_000, `took ${Date.now() - started}ms`);
+    });
+  });
+
+  test("orphan temp files from a crashed writer are removed on the next write", async () => {
+    await withConsole(async ({ handle, sessionPath, tmpDir }) => {
+      const orphan = `${sessionPath}.4194400.00000000-0000-4000-8000-000000000000.tmp`;
+      const unrelated = join(tmpDir, "notes.tmp");
+      await writeFile(orphan, "{");
+      await writeFile(unrelated, "keep");
+      const { snapshot, revision } = await readSessionState(handle);
+      const res = await postEvents(handle, { events: eventsDeciding(snapshot, { "public-directory-hours": "accept-proposed" }), baseRevision: revision });
+      assert.equal(res.status, 200, JSON.stringify(res.body));
+      const entries = await readdir(tmpDir);
+      assert.ok(!entries.includes(resolve(orphan).split("/").pop()!), `orphan still present: ${entries}`);
+      assert.ok(entries.includes("notes.tmp"), "unrelated files are left alone");
     });
   });
 });
