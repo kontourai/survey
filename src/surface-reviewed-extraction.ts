@@ -65,19 +65,38 @@ const ABSENT_CONFIDENCE_SINCE: readonly [number, number] = [4, 1];
 
 let resolvedSurfaceVersion: string | undefined;
 
-/** The version of the `@kontourai/surface` this module resolves. Surface does not export its package.json, so walk up from its entry point. */
-function installedSurfaceVersion(): string {
-  if (resolvedSurfaceVersion !== undefined) return resolvedSurfaceVersion;
-  let dir = dirname(fileURLToPath(import.meta.resolve("@kontourai/surface")));
+const UNKNOWN_SURFACE_VERSION = "Cannot determine the installed @kontourai/surface version; refusing to export proposals without confidence.";
+
+/**
+ * The version of the `@kontourai/surface` package whose entry point
+ * `resolveEntry` returns. Surface does not export its package.json, so this
+ * walks up from the entry to the nearest package.json named
+ * `@kontourai/surface`; other package.json files on the way (a nested
+ * `{ "type": "module" }`, say) are skipped. Throws a Survey error when the
+ * entry cannot be resolved, as in a bundle without `import.meta.resolve`, or
+ * no such package.json exists.
+ */
+export function surfaceVersionFromEntry(resolveEntry: () => string): string {
+  let dir: string;
+  try {
+    dir = dirname(fileURLToPath(resolveEntry()));
+  } catch (error) {
+    throw new Error(UNKNOWN_SURFACE_VERSION, { cause: error });
+  }
   for (;;) {
     try {
       const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as { name?: unknown; version?: unknown };
-      if (pkg.name === "@kontourai/surface" && typeof pkg.version === "string") return (resolvedSurfaceVersion = pkg.version);
-    } catch { /* no package.json here; keep walking up */ }
+      if (pkg.name === "@kontourai/surface" && typeof pkg.version === "string") return pkg.version;
+    } catch { /* no readable package.json here; keep walking up */ }
     const parent = dirname(dir);
-    if (parent === dir) throw new Error("Cannot find the installed @kontourai/surface package.json.");
+    if (parent === dir) throw new Error(UNKNOWN_SURFACE_VERSION);
     dir = parent;
   }
+}
+
+/** The version of the `@kontourai/surface` copy this module resolves, cached once found. */
+function installedSurfaceVersion(): string {
+  return resolvedSurfaceVersion ??= surfaceVersionFromEntry(() => import.meta.resolve("@kontourai/surface"));
 }
 
 /** Whether a Surface version accepts proposals without confidence. An unparseable version does not. */
@@ -93,6 +112,11 @@ export function surfaceAcceptsAbsentConfidence(version: string): boolean {
  * without confidence passes through without one; no number is substituted.
  * On a Surface older than 4.1.0, which rejects such a proposal, the record is
  * refused by name instead.
+ *
+ * The version checked is that of the Surface copy Survey itself resolves. A
+ * consumer that projects with a different copy (for example Surface 4.0.0 of
+ * its own next to Survey's 4.2.0) gets Surface's own refusal instead of this
+ * one; dedupe Surface so that one copy is installed.
  */
 export function toSurfaceReviewedExtractionImport(record: ExtractionEnvelopeImport): SurveyExtractionEnvelopeImport {
   const unreported = record.spec.envelope.result.proposals.findIndex((proposal) => proposal.confidence === undefined);

@@ -235,7 +235,13 @@ function extractionEnvelopeBinding(item: ReviewItem): Record<string, unknown> | 
  */
 function excludedProposalsOf(item: ReviewItem, binding: Record<string, unknown> | undefined, adapter: ReviewPresentationAdapter): Pick<ReviewItemPresentation, "excludedProposals" | "excludedProposalsUnreadable"> {
   const metadata = item.metadata?.producer?.[EXTRACTION_ENVELOPE_PRODUCER];
-  const stored = metadata && typeof metadata === "object" && !Array.isArray(metadata) ? (metadata as Record<string, unknown>).excludedProposals : undefined;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    // Candidates that still carry the envelope binding came from an import,
+    // whose item metadata is gone or replaced: what it stored is unknown.
+    const candidatesBound = item.spec.candidates.some((candidate) => candidate.producer?.[EXTRACTION_ENVELOPE_PRODUCER] !== undefined);
+    return candidatesBound ? { excludedProposals: [], excludedProposalsUnreadable: { reason: "binding-broken" } } : { excludedProposals: [] };
+  }
+  const stored = (metadata as Record<string, unknown>).excludedProposals;
   if (stored === undefined) return { excludedProposals: [] };
   const count = Array.isArray(stored) ? stored.length : undefined;
   if (!binding) return count === 0 ? { excludedProposals: [] } : { excludedProposals: [], excludedProposalsUnreadable: { reason: "binding-broken", ...(count !== undefined ? { count } : {}) } };

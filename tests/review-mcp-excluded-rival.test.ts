@@ -25,6 +25,7 @@ import {
 } from "../src/review-workbench/review-workbench.js";
 import { buildReviewItemPresentation, type ReviewPresentationAdapter } from "../src/review-workbench/review-presentation.js";
 import { buildReviewSessionEvents } from "../src/review-workbench/review-queue-session.js";
+import { createServerReviewSessionRecord, deriveServerReviewSessionApplyResult } from "../src/review-workbench/server-review-session.js";
 import type { ReviewDecision, ReviewItem } from "../src/review-resource.js";
 
 const ENVELOPE_PRODUCER = "survey.kontourai.io/extraction-envelope";
@@ -165,6 +166,15 @@ describe("an excluded rival value on the MCP decision path", () => {
     assert.match(unboundCard, /data-testid="excluded-proposals-unreadable" data-reason="binding-broken"[\s\S]*1 stored excluded entry is not shown because this item&#39;s extraction binding is broken\./);
     assert.match(renderedPrompt(buildReviewDecision({ ...initialReviewWorkbenchState(unbound), decision: "accept-proposed" })), /1 stored excluded entry is not shown because this item's extraction binding is broken\./);
 
+    // Item metadata replaced by a non-object, or removed, while the candidates still carry the envelope binding: binding broken, count unknown.
+    for (const replacement of ["tampered", ["tampered"], undefined]) {
+      const replaced = edited(item!, (_meta, copy) => { copy.metadata.producer[ENVELOPE_PRODUCER] = replacement; });
+      assert.deepEqual(buildReviewItemPresentation(replaced).excludedProposalsUnreadable, { reason: "binding-broken" }, JSON.stringify(replacement));
+      assert.match(renderedPrompt(buildReviewDecision({ ...initialReviewWorkbenchState(replaced), decision: "accept-proposed" })), /Stored excluded proposals are not shown because this item's extraction binding is broken\./);
+    }
+    // An item from another producer (no envelope binding anywhere) says nothing.
+    const foreign = edited(item!, (_meta, copy) => { delete copy.metadata.producer[ENVELOPE_PRODUCER]; for (const c of copy.spec.candidates) delete c.producer[ENVELOPE_PRODUCER]; });
+    assert.equal(buildReviewItemPresentation(foreign).excludedProposalsUnreadable, undefined);
     // A stored field that is not a list is unreadable, count unknown.
     assert.deepEqual(buildReviewItemPresentation(edited(item!, (meta) => { meta.excludedProposals = "tampered"; })).excludedProposalsUnreadable, { reason: "malformed-entries" });
     // An intact item hides nothing and says nothing extra.
@@ -216,5 +226,17 @@ describe("an excluded rival value on the MCP decision path", () => {
     const applied = deriveReviewSessionApplyResultForSnapshot({ snapshot, events: buildReviewSessionEvents(decided), presentationAdapter: adapter });
     assert.equal(renderedPrompt(applied.decisions[0]), renderedPrompt(buildReviewDecision({ ...initialReviewWorkbenchState(item!), decision: "accept-proposed", reviewedAt: applied.decisions[0]!.spec.reviewedAt!, actorId: applied.decisions[0]!.spec.actor!.id }, { presentationAdapter: adapter })));
     assert.match(renderedPrompt(applied.decisions[0]), /USD 52001/);
+  });
+
+  test("the server apply boundary records the card-adapted prompt when given the card's adapter", async () => {
+    const [item] = await verifiedItemsWithExcludedRival();
+    const adapter: ReviewPresentationAdapter = { labelForTarget: () => "Annual fee", summarizeValue: (value) => `USD ${String(value)}` };
+    const snapshot = initialReviewQueueSessionState([item!]);
+    const events = buildReviewSessionEvents({ ...snapshot, decisionsByItemName: { [item!.metadata.name]: "accept-proposed" } });
+    const record = createServerReviewSessionRecord({ sessionName: events[0]!.spec.sessionName, snapshot });
+    const adapted = renderedPrompt(deriveServerReviewSessionApplyResult({ record, events, presentationAdapter: adapter }).decisions[0]);
+    assert.match(adapted, /^For Annual fee, decide whether USD 48000 should replace /);
+    assert.match(adapted, /USD 52001 \(proposal 2, chars:54-59\)/);
+    assert.equal(adapted, renderedPrompt(deriveReviewSessionApplyResultForSnapshot({ snapshot, events, presentationAdapter: adapter }).decisions[0]));
   });
 });

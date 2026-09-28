@@ -83,7 +83,10 @@ the recorded decision prompt. The prompt is rebuilt from the item when the
 decision is built, so it records what the card states for that item, not
 proof that a reviewer read it. Stored entries that cannot be shown, because
 they are malformed or the item's extraction binding is broken, are never
-dropped silently: the same surfaces say how many are not shown and why. The candidate set is judged on the candidates that
+dropped silently: the same surfaces say how many are not shown and why.
+An entry deleted outright leaves nothing to flag;
+`validateReviewQueueAgainstExtractionImport` catches that, because it requires
+each stored item to match its import byte for byte. The candidate set is judged on the candidates that
 remain: a rival value whose excerpt failed does not keep the set in
 `conflict`, because a conflict item offers only decisions that trust no
 value, and an unverifiable citation would then be enough to block the value
