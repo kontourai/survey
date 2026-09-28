@@ -224,7 +224,10 @@ kind is `authorized-action` with:
 - `promptRef`: `"review-workbench/decision-card@v1"` — a stable versioned identifier
   for the decision card control.
 - `renderedPrompt`: the review question rendered for that item, including the target
-  label and both candidate values, so the block is self-contained.
+  label and both candidate values, so the block is self-contained. It is rebuilt
+  from the item when the decision is built, with the presentation adapter passed
+  to `buildReviewDecision` (the mounted workbench passes its own), so it records
+  what the card states for that item, not a capture of what the reviewer saw.
 - `action`: `"affirmed-control"` for a pure button click, `"typed"` when the
   reviewer also supplied a rationale note.
 - `authorityRef`: `"actor:<actorId>"` — the actor identity already on the outcome.

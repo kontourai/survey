@@ -53,7 +53,7 @@ import {
   type ReviewValueDescriptor,
 } from "../review-resource.js";
 import { validateAuthorizing, buildAuthorizedActionAuthorizing } from "../review-authorizing.js";
-import { candidateVerificationNotes, excludedProposalsSentence, humanizeIdentifier, type CandidateVerificationNote } from "./review-presentation.js";
+import { candidateVerificationNotes, excludedProposalsSentence, excludedProposalsUnreadableSentence, humanizeIdentifier, type CandidateVerificationNote } from "./review-presentation.js";
 import { editedValueFromEditorText, isIsoCalendarDate, parsePlainDecimal } from "./edited-value.js";
 import {
   createAuditFactTrace,
@@ -131,6 +131,8 @@ export {
   buildReviewItemPresentation,
   buildReviewResultPresentation,
   humanizeIdentifier,
+  type ExcludedProposalPresentation,
+  type ExcludedProposalsUnreadable,
   type ReviewCandidatePresentation,
   type ReviewCandidatePresentationContext,
   type ReviewItemPresentation,
@@ -174,7 +176,16 @@ export {
   type ReviewDecisionModeResult,
 } from "./producer-decision-mode.js";
 
-export function buildReviewDecision(state: ReviewWorkbenchState): ReviewDecision | undefined {
+/**
+ * Options for building review decisions. The decision prompt is rendered from
+ * the item when the decision is built, so pass the same presentation adapter
+ * the card used, or the recorded prompt renders values its own way.
+ */
+export interface ReviewDecisionBuildOptions {
+  readonly presentationAdapter?: ReviewPresentationAdapter;
+}
+
+export function buildReviewDecision(state: ReviewWorkbenchState, options: ReviewDecisionBuildOptions = {}): ReviewDecision | undefined {
   if (!state.decision) {
     return undefined;
   }
@@ -193,7 +204,7 @@ export function buildReviewDecision(state: ReviewWorkbenchState): ReviewDecision
       ?? `${state.item.metadata.name}:${state.decision}:review-outcome`,
   };
   const candidateProjection = selectsNone ? undefined : candidate.projection;
-  const authorizing = buildDecisionCardAuthorizing(state);
+  const authorizing = buildDecisionCardAuthorizing(state, options.presentationAdapter);
 
   const reviewDecision: ReviewDecision = {
     apiVersion: reviewResourceApiVersion,
@@ -253,13 +264,13 @@ const DECISION_CARD_PROMPT_REF = "review-workbench/decision-card@v1";
  */
 function buildDecisionCardAuthorizing(
   state: ReviewWorkbenchState,
+  adapter: ReviewPresentationAdapter | undefined,
 ): ReviewDecision["spec"]["authorizing"] {
   if (!state.decision) {
     return undefined;
   }
 
-  const targetLabel = humanizeIdentifier(state.item.spec.target);
-  const renderedPrompt = decisionCardRenderedPrompt(state, targetLabel);
+  const renderedPrompt = decisionCardRenderedPrompt(state, buildReviewItemPresentation(state.item, adapter), adapter);
   // Reviewer note present means the reviewer also typed a rationale — "typed".
   // Control-only affirmation (no note) is "affirmed-control".
   const action: "affirmed-control" | "typed" = state.note?.trim() ? "typed" : "affirmed-control";
@@ -293,23 +304,28 @@ function buildDecisionCardAuthorizing(
 }
 
 /**
- * Derives the exact decision prompt rendered on the workbench decision card
- * for a given review item and decision.
+ * Renders the decision card's prompt for a review item and decision.
+ *
+ * It is rebuilt from the item when the decision is built, not captured from
+ * what a reviewer's screen showed: it records what the card states for this
+ * item, with the same presentation adapter, target label and value text.
  *
  * Format mirrors the review question shown in the workbench header:
  * "For {target}, decide whether {proposed} should replace {current}."
  * followed by the selected decision label so the block is self-contained.
  */
-function decisionCardRenderedPrompt(state: ReviewWorkbenchState, targetLabel: string): string {
-  // The card shows proposals excluded at import; the recorded prompt must say
-  // the reviewer was told about them.
-  const excluded = excludedProposalsSentence(buildReviewItemPresentation(state.item).excludedProposals);
-  // Likewise the verifier records the card showed, read against the same value.
+function decisionCardRenderedPrompt(state: ReviewWorkbenchState, presentation: ReviewItemPresentation, adapter: ReviewPresentationAdapter | undefined): string {
+  // The card states proposals excluded at import, and stored ones it cannot
+  // show; so does the prompt.
+  const excluded = excludedProposalsSentence(presentation.excludedProposals);
+  const unreadable = excludedProposalsUnreadableSentence(presentation.excludedProposalsUnreadable);
+  // Likewise the verifier records the card shows, read against the same value.
   const verification = candidateVerificationNotes(state.item, state.decision === "accept-proposed" ? state.editedValue : undefined).map((note) => note.sentence);
-  return [decisionCardBasePrompt(state, targetLabel), ...(excluded ? [excluded] : []), ...verification].join(" ");
+  return [decisionCardBasePrompt(state, presentation.targetLabel, adapter), ...(excluded ? [excluded] : []), ...(unreadable ? [unreadable] : []), ...verification].join(" ");
 }
 
-function decisionCardBasePrompt(state: ReviewWorkbenchState, targetLabel: string): string {
+function decisionCardBasePrompt(state: ReviewWorkbenchState, targetLabel: string, adapter: ReviewPresentationAdapter | undefined): string {
+  const valueText = (candidate: ReviewCandidate) => buildReviewCandidatePresentation(state.item, candidate, adapter, targetLabel).valueText;
   const currentCandidate = state.item.spec.candidates.find((c) => c.role === "current");
   const proposedCandidates = state.item.spec.candidates.filter((c) => c.role === "proposed");
   // A conflict card lists every proposed value and offers reject-all or could
@@ -318,11 +334,11 @@ function decisionCardBasePrompt(state: ReviewWorkbenchState, targetLabel: string
     const decisionLabel = state.decision === "reject-proposed"
       ? "Reject all values"
       : state.decision ? workbenchDecisionDefinitions[state.decision].label : "";
-    return `For ${targetLabel}, ${proposedCandidates.length} different values were proposed: ${proposedCandidates.map((c) => formatValue(c.value)).join(", ")}. Selected decision: ${decisionLabel}.`;
+    return `For ${targetLabel}, ${proposedCandidates.length} different values were proposed: ${proposedCandidates.map(valueText).join(", ")}. Selected decision: ${decisionLabel}.`;
   }
   const proposedCandidate = proposedCandidates[0];
-  const currentValue = formatValue(currentCandidate?.value ?? "");
-  const proposedValue = formatValue(proposedCandidate?.value ?? "");
+  const currentValue = currentCandidate ? valueText(currentCandidate) : formatValue("");
+  const proposedValue = proposedCandidate ? valueText(proposedCandidate) : formatValue("");
   const decisionLabel = state.decision ? workbenchDecisionDefinitions[state.decision].label : "";
 
   return `For ${targetLabel}, decide whether ${proposedValue} should replace ${currentValue}. Selected decision: ${decisionLabel}.`;
@@ -353,6 +369,8 @@ export interface DeriveReviewSessionApplyResultForSnapshotOptions {
   readonly snapshot: ReviewQueueSessionState;
   readonly events: readonly ReviewSessionEvent[];
   readonly requiredResolvedItems?: ReviewSessionApplyResolutionRequirement;
+  /** The adapter the reviewer's card used; the recorded decision prompts render values with it. */
+  readonly presentationAdapter?: ReviewPresentationAdapter;
 }
 
 export type DeriveReviewSessionApplyResultForSnapshotResult =
@@ -549,7 +567,7 @@ export interface MapReviewWorkbenchResultsToApplyActionsOptions<TAction> {
   readonly map: (context: ReviewApplyActionContext) => TAction | readonly TAction[] | undefined;
 }
 
-export function buildReviewDecisionsFromSession(session: ReviewQueueSessionState): ReviewDecision[] {
+export function buildReviewDecisionsFromSession(session: ReviewQueueSessionState, options: ReviewDecisionBuildOptions = {}): ReviewDecision[] {
   return session.items.flatMap((item) => {
     const decision = session.decisionsByItemName[item.metadata.name];
     if (!decision) {
@@ -559,7 +577,7 @@ export function buildReviewDecisionsFromSession(session: ReviewQueueSessionState
     const reviewDecision = buildReviewDecision(currentReviewWorkbenchState({
       ...session,
       activeItemName: item.metadata.name,
-    }));
+    }), options);
 
     return reviewDecision ? [reviewDecision] : [];
   });
@@ -721,7 +739,7 @@ function structuralEqual(left: unknown, right: unknown): boolean {
   return canonicalJson(left) === canonicalJson(right);
 }
 
-export function buildReviewWorkbenchResultsFromSession(session: ReviewQueueSessionState): ReviewWorkbenchResult[] {
+export function buildReviewWorkbenchResultsFromSession(session: ReviewQueueSessionState, options: ReviewDecisionBuildOptions = {}): ReviewWorkbenchResult[] {
   return session.items.flatMap((item) => {
     const decision = session.decisionsByItemName[item.metadata.name];
     if (!decision) {
@@ -732,7 +750,7 @@ export function buildReviewWorkbenchResultsFromSession(session: ReviewQueueSessi
       ...session,
       activeItemName: item.metadata.name,
     });
-    const reviewDecision = buildReviewDecision(state);
+    const reviewDecision = buildReviewDecision(state, options);
     if (!reviewDecision) {
       return [];
     }
@@ -775,12 +793,13 @@ export function buildReviewWorkbenchResultsFromSession(session: ReviewQueueSessi
 export function buildReviewWorkbenchSessionExport(
   session: ReviewQueueSessionState,
   events: readonly ReviewSessionEvent[] = buildReviewSessionEvents(session),
+  options: ReviewDecisionBuildOptions = {},
 ): ReviewWorkbenchSessionExport {
   return {
     session: buildReviewSessionResource(session, events),
     events,
-    decisions: buildReviewDecisionsFromSession(session),
-    results: buildReviewWorkbenchResultsFromSession(session),
+    decisions: buildReviewDecisionsFromSession(session, options),
+    results: buildReviewWorkbenchResultsFromSession(session, options),
   };
 }
 
@@ -799,9 +818,10 @@ export function replayReviewSessionEventsForSnapshot(
 export function buildReviewWorkbenchSessionExportForSnapshot(
   snapshot: ReviewQueueSessionState,
   events: readonly ReviewSessionEvent[],
+  options: ReviewDecisionBuildOptions = {},
 ): ReviewWorkbenchSessionExport {
   const replayedSession = replayReviewSessionEventsForSnapshot(snapshot, events);
-  return buildReviewWorkbenchSessionExport(replayedSession, events);
+  return buildReviewWorkbenchSessionExport(replayedSession, events, options);
 }
 
 export function deriveReviewSessionApplyResultForSnapshot(
@@ -821,7 +841,7 @@ export function deriveReviewSessionApplyResultForSnapshot(
 
   const warnings = reviewSessionReplayWarningsForSnapshot(options.snapshot, options.events);
   const replayedSession = replayReviewSessionEvents(options.snapshot, options.events);
-  const sessionExport = buildReviewWorkbenchSessionExport(replayedSession, options.events);
+  const sessionExport = buildReviewWorkbenchSessionExport(replayedSession, options.events, { presentationAdapter: options.presentationAdapter });
   const resolvedItemNames = new Set(sessionExport.results.map((result) => result.reviewItemName));
   const unresolvedItemNames = options.snapshot.items
     .map((item) => item.metadata.name)
@@ -1476,7 +1496,8 @@ function renderProvenanceRow(
  */
 function renderExtractionImportNotes(presentation: ReviewItemPresentation): string {
   const { excerptVerification: verification, excludedProposals: excluded } = presentation;
-  if (verification === undefined && excluded.length === 0) return "";
+  const unreadable = excludedProposalsUnreadableSentence(presentation.excludedProposalsUnreadable);
+  if (verification === undefined && excluded.length === 0 && unreadable === undefined) return "";
   const excludedHtml = excluded.length === 0 ? "" : `
       <div class="noprov" data-testid="excluded-proposals" role="note">
         ${WARNING_SVG}
@@ -1485,12 +1506,18 @@ function renderExtractionImportNotes(presentation: ReviewItemPresentation): stri
           ${excluded.map((entry) => `<span data-testid="excluded-proposal" data-proposal-index="${escapeHtml(String(entry.proposalIndex))}"><q>${escapeHtml(entry.valueText)}</q> (proposal ${escapeHtml(String(entry.proposalIndex))}, ${escapeHtml(entry.locator)})</span>`).join(", ")}.
           Unverifiable is not disproven: check the source before deciding.</span>
       </div>`;
+  const unreadableHtml = unreadable === undefined ? "" : `
+      <div class="noprov" data-testid="excluded-proposals-unreadable" data-reason="${escapeHtml(presentation.excludedProposalsUnreadable!.reason)}" role="note">
+        ${WARNING_SVG}
+        <span class="tag">${presentation.excludedProposalsUnreadable!.reason === "binding-broken" ? "Binding broken" : "Unreadable"}</span>
+        <span>${escapeHtml(unreadable)} Check the source before deciding.</span>
+      </div>`;
   const verificationHtml = verification === undefined ? "" : `
       <p class="excerpt-verification" data-testid="excerpt-verification" data-verified="${verification === "verified" ? "true" : "false"}">${verification === "verified"
         ? "Excerpts checked against the prepared source text at import."
         : "Excerpts not checked against the prepared source text at import."}</p>`;
   return `
-    <div class="prov import-notes">${excludedHtml}${verificationHtml}
+    <div class="prov import-notes">${excludedHtml}${unreadableHtml}${verificationHtml}
     </div>
   `;
 }
@@ -1548,7 +1575,7 @@ function renderAuditDetails(
     reviewedAt: session.reviewedAt,
     actorId: session.actorId,
   };
-  const reviewDecisionPayload = buildReviewDecision(state);
+  const reviewDecisionPayload = buildReviewDecision(state, { presentationAdapter });
   const preview = buildSurfaceProjectionPreview(item, reviewDecisionPayload, presentationAdapter);
   // Seeded with what the card face already shows, so the audit surface never
   // reprints it. Passed down through every section: the sections render in DOM
@@ -1576,7 +1603,12 @@ function renderAuditDetails(
           ${proposed?.extraction.model ? fieldItem("model", "Model", proposed.extraction.model) : ""}
           ${proposed ? placementItem(trace, { of: proposed.id, property: "extraction.extractor" }, "extractor", "Extractor", proposed.extraction.extractor ?? "unknown") : ""}
           ${proposed ? fieldItem("extracted-at", "Extracted at", proposed.extraction.extractedAt ?? "unknown") : ""}
-          ${buildReviewItemPresentation(item, presentationAdapter).excludedProposals.map((entry) => fieldItem("excluded-proposal", `Excluded proposal ${entry.proposalIndex}`, `${entry.valueText} at ${entry.locator}: excerpt not at the cited span`)).join("")}
+          ${(() => {
+            const itemPresentation = buildReviewItemPresentation(item, presentationAdapter);
+            const unreadable = excludedProposalsUnreadableSentence(itemPresentation.excludedProposalsUnreadable);
+            return itemPresentation.excludedProposals.map((entry) => fieldItem("excluded-proposal", `Excluded proposal ${entry.proposalIndex}`, `${entry.valueText} at ${entry.locator}: excerpt not at the cited span`)).join("")
+              + (unreadable ? fieldItem("excluded-proposals-unreadable", "Excluded proposals not shown", unreadable) : "");
+          })()}
         </dl>
         ${preview
           ? `<div class="preview-section-grid">${renderSurfacePreviewSections(preview, trace)}</div><p class="preview-disclaimer preview-disclaimer-footer">${escapeHtml(preview.postureDisclaimer)}</p>`
@@ -1862,6 +1894,7 @@ interface ReviewWorkbenchController {
 interface ReviewWorkbenchControllerBindings extends ReviewWorkbenchController {
   currentSession(): ReviewQueueSessionState;
   currentSessionExport(): ReviewWorkbenchSessionExport;
+  readonly presentationAdapter: ReviewPresentationAdapter | undefined;
   setDecision(itemName: string, decision: ReviewWorkbenchDecision, rawEditedValue?: string): void;
   clearDecision(itemName: string): void;
   updateReviewerNote(itemName: string, note: string): void;
@@ -2006,7 +2039,8 @@ function createReviewWorkbenchController(
 
   const controller: ReviewWorkbenchControllerBindings = {
     currentSession: () => session,
-    currentSessionExport: () => buildReviewWorkbenchSessionExport(session, events),
+    currentSessionExport: () => buildReviewWorkbenchSessionExport(session, events, { presentationAdapter: options.presentationAdapter }),
+    presentationAdapter: options.presentationAdapter,
     renderCurrentState: () => renderCurrentState(root, session, controller, options.presentationAdapter, queueView),
     setDecision,
     clearDecision,
@@ -2279,7 +2313,7 @@ function refreshAuditPayloadForItem(
     reviewedAt: session.reviewedAt,
     actorId: session.actorId,
   };
-  payload.textContent = JSON.stringify(buildReviewDecision(state) ?? null, null, 2);
+  payload.textContent = JSON.stringify(buildReviewDecision(state, { presentationAdapter: controller.presentationAdapter }) ?? null, null, 2);
 }
 
 function bindClampToggles(root: HTMLElement): void {

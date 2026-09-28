@@ -629,8 +629,8 @@ Everything else changes only when you pass `artifact`:
   candidates, so a conflict whose rival was excluded becomes `needs-review`.
   Every decision surface shows the excluded rival: the workbench card and its
   audit rows (new key `excluded-proposal`), the MCP item text, data and card,
-  and the recorded decision prompt (`authorizing.renderedPrompt`), so the
-  audit trail shows the reviewer was told. `ReviewItemPresentation` gains
+  and the recorded decision prompt (`authorizing.renderedPrompt`).
+  `ReviewItemPresentation` gains
   `excludedProposals` and `excerptVerification`, read only from an item whose
   envelope binding is intact. Neither is projected into Surface trust
   inputs yet: that needs a Surface field.
@@ -646,6 +646,36 @@ stored record cannot prove its verification without the text, so
 stored-record integrity is still the caller's job, as for
 `validateReviewQueueAgainstExtractionImport`. A reloaded record is checked
 only for carrying verification results that an import could have written.
+
+## Confidence-less exports to Surface; unreadable excluded entries are flagged (#315, #310)
+
+- **`toSurfaceReviewedExtractionImport` exports proposals without
+  confidence** when the `@kontourai/surface` installed next to Survey is
+  4.1.0 or later. The proposal stays without one: no number is substituted.
+  With an older Surface, which rejects such a proposal, it still refuses the
+  record by name, and the message now names the installed Surface version.
+  To export these records, upgrade Surface to 4.1.0 or later.
+- **`buildSurveyTrustBundle` omits absent confidences.** A candidate without
+  confidence produces a claim with no `confidenceBasis.extractionConfidence`
+  key and evidence with no `metadata.confidence` key. They used to be present
+  with the value `undefined`, which JSON already dropped.
+- **Unreadable excluded entries are flagged, not hidden.** When an item stores
+  `excludedProposals` that cannot be shown (malformed entries, or any entries
+  when the item's extraction binding is broken),
+  `ReviewItemPresentation.excludedProposalsUnreadable` says why and how many
+  (`{ reason: "malformed-entries" | "binding-broken", count? }`). The
+  workbench card, its audit rows (new key `excluded-proposals-unreadable`),
+  the MCP item text, data and card, and the recorded decision prompt all state
+  it. Only a tampered or hand-edited queue reaches this.
+- **The recorded prompt renders values like the card.** The decision prompt
+  is rebuilt from the item when the decision is built; it records what the card
+  states for that item, not a capture of what a reviewer saw. It now uses the
+  presentation adapter's `labelForTarget` and `summarizeValue`, as the card
+  does. Pass the card's adapter as `presentationAdapter` to `buildReviewDecision`,
+  `buildReviewDecisionsFromSession`, `buildReviewWorkbenchResultsFromSession`,
+  `buildReviewWorkbenchSessionExport`, `buildReviewWorkbenchSessionExportForSnapshot`,
+  and `deriveReviewSessionApplyResultForSnapshot`; the mounted workbench passes
+  its own. Without an adapter the prompt text is unchanged.
 
 ## See also
 

@@ -272,6 +272,8 @@ export {
 export type {
   CandidateVerificationNote,
   CandidateVerificationRecordPresentation,
+  ExcludedProposalPresentation,
+  ExcludedProposalsUnreadable,
   InterpretationReadingPresentation,
   InterpretationReadingSource,
   ReviewCandidatePresentation,

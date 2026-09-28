@@ -37,6 +37,7 @@ export const reviewAuditRowKeys = [
   "extractor",
   "extracted-at",
   "excluded-proposal",
+  "excluded-proposals-unreadable",
   // Unselected candidate history
   "history-value",
   "candidate-id",
