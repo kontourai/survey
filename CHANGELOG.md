@@ -1,5 +1,16 @@
 # Changelog
 
+## [5.0.0](https://github.com/kontourai/survey/compare/v4.0.0...v5.0.0) (2026-09-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* envelope ReviewItem names are derived from the claim slot instead of the proposal index, and envelopes that repeat a claim produce fewer items; proposals sharing a claim must return identical claim targets. PortableExtractionProposal.confidence is optional. candidateForDecision and keepActionDecision refuse ambiguous roles.
+
+### Features
+
+* envelope partial coverage, optional confidence, one candidate set per claim ([#303](https://github.com/kontourai/survey/issues/303)) ([fa33ce2](https://github.com/kontourai/survey/commit/fa33ce296cb56804704b038d84e72634e04ebd32)), closes [#286](https://github.com/kontourai/survey/issues/286)
+
 ## [4.0.0](https://github.com/kontourai/survey/compare/v3.0.0...v4.0.0) (2026-09-28)
 
 
