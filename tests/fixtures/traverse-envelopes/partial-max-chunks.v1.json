@@ -23,7 +23,7 @@
         "status": "unread"
       }
     ],
-    "extractedAt": "2026-09-28T13:45:52.587Z",
+    "extractedAt": "2026-09-28T14:22:56.325Z",
     "model": "fixture-model",
     "outcome": {
       "reason": "max-chunks",
@@ -73,7 +73,7 @@
     "raw": {
       "tokensUsed": 5
     },
-    "runId": "traverse-extraction-run:ec3157e6-3910-43b1-9847-a11ec7c57deb",
+    "runId": "traverse-extraction-run:d6e91acd-6ee3-461d-8b48-529daeffc371",
     "totalTokensUsed": 5,
     "warningClassifications": [
       {

@@ -9,7 +9,7 @@
         "status": "output-truncated"
       }
     ],
-    "extractedAt": "2026-09-28T13:45:52.583Z",
+    "extractedAt": "2026-09-28T14:22:56.321Z",
     "model": "fixture-relay-model",
     "outcome": {
       "reason": "output-truncated",
@@ -58,7 +58,7 @@
     "raw": {
       "tokensUsed": 3
     },
-    "runId": "traverse-extraction-run:a9d52133-d634-4f73-88d7-ba24febabbb9",
+    "runId": "traverse-extraction-run:9f21c3f1-a4e2-4721-ad9e-492f585c9c8b",
     "totalTokensUsed": 3,
     "warningClassifications": [
       {

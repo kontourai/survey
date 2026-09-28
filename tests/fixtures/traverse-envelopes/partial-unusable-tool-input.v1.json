@@ -4,40 +4,75 @@
     "coverage": [
       {
         "chunk": 1,
-        "end": 7,
-        "reason": "provider-failure",
+        "end": 40,
         "start": 0,
+        "status": "complete"
+      },
+      {
+        "chunk": 2,
+        "end": 70,
+        "reason": "provider-failure",
+        "start": 30,
         "status": "unread"
+      },
+      {
+        "chunk": 3,
+        "end": 88,
+        "start": 60,
+        "status": "complete"
       }
     ],
-    "extractedAt": "2026-09-28T13:45:52.589Z",
+    "extractedAt": "2026-09-28T14:22:56.328Z",
     "model": "fixture-relay-model",
     "outcome": {
       "reason": "provider-failure",
       "status": "partial"
     },
     "partial": {
-      "completedChunks": 1,
+      "completedChunks": 3,
       "reason": "provider-failure",
       "remainingChunks": 0
     },
     "preparedArtifact": {
-      "contentLength": 7,
-      "digest": "f17553f7c748dc56b4287a3b74f825cc7fe019f7a8e1aa2c936c27471d9fdbf2",
+      "contentLength": 88,
+      "digest": "2f3b6641786b261641a107d1357e8d844d457329bf6a3db843676b5c26feceac",
       "format": "traverse-prepared-artifact",
       "preparationMode": "text",
       "preparationVersion": "3",
-      "ref": "traverse-prepared-artifact:v1:sha256:01303a2c8d347a1735d5da50bdc6950dae1815b49e063283a1304fe5bfde1a38",
+      "ref": "traverse-prepared-artifact:v1:sha256:3dada6fd19895a057d4ca7ca228cfe0ffae113a9247e1302c3e4fb87508fb38e",
       "version": 1
     },
-    "proposals": [],
+    "proposals": [
+      {
+        "candidateValue": 48000,
+        "extractor": "relay-extraction-provider:fake",
+        "fieldPath": "fee",
+        "provenance": {
+          "excerpt": "48000",
+          "locator": "chars:19-24",
+          "occurrence": {
+            "ambiguous": false,
+            "count": 1,
+            "hintUsed": false,
+            "resolverVersion": "exact-occurrence-v1",
+            "selected": {
+              "end": 24,
+              "index": 0,
+              "start": 19
+            },
+            "selection": "source-order"
+          }
+        },
+        "valueType": "number"
+      }
+    ],
     "provider": "relay-extraction-provider:fake",
-    "providerCalls": 1,
+    "providerCalls": 3,
     "raw": {
       "tokensUsed": 3
     },
-    "runId": "traverse-extraction-run:eef2c47b-77a7-49ff-9dfe-5204ce22dfb9",
-    "totalTokensUsed": 3,
+    "runId": "traverse-extraction-run:b601c79a-2675-4868-88a5-b425aa319928",
+    "totalTokensUsed": 9,
     "warningClassifications": [
       {
         "category": "provider",
@@ -46,6 +81,10 @@
       {
         "category": "provider",
         "code": "unusable-answer"
+      },
+      {
+        "category": "content",
+        "code": "content-chunking"
       }
     ]
   },

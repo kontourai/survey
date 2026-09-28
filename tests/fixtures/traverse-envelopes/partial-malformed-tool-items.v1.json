@@ -11,7 +11,7 @@
       {
         "chunk": 2,
         "end": 70,
-        "reason": "missing-tool-call",
+        "reason": "provider-failure",
         "start": 30,
         "status": "unread"
       },
@@ -22,8 +22,8 @@
         "status": "complete"
       }
     ],
-    "extractedAt": "2026-09-28T14:22:56.324Z",
-    "model": "fixture-relay-model",
+    "extractedAt": "2026-09-28T14:22:56.334Z",
+    "model": "fixture-model",
     "outcome": {
       "reason": "provider-failure",
       "status": "partial"
@@ -45,7 +45,8 @@
     "proposals": [
       {
         "candidateValue": 48000,
-        "extractor": "relay-extraction-provider:fake",
+        "confidence": 0.8,
+        "extractor": "fixture-fee-scanner",
         "fieldPath": "fee",
         "provenance": {
           "excerpt": "48000",
@@ -66,17 +67,28 @@
         "valueType": "number"
       }
     ],
-    "provider": "relay-extraction-provider:fake",
+    "provider": "fixture-fee-scanner",
     "providerCalls": 3,
+    "providerFailures": [
+      {
+        "kind": "unavailable",
+        "provider": "fixture-fee-scanner",
+        "retryable": true
+      }
+    ],
     "raw": {
-      "tokensUsed": 3
+      "tokensUsed": 5
     },
-    "runId": "traverse-extraction-run:c14ca862-e888-460b-976d-5b18f5d53dd4",
-    "totalTokensUsed": 9,
+    "runId": "traverse-extraction-run:024c17c0-fd18-42de-8409-524219d004a1",
+    "totalTokensUsed": 10,
     "warningClassifications": [
       {
+        "category": "normalization",
+        "code": "malformed-tool-items"
+      },
+      {
         "category": "provider",
-        "code": "missing-tool-call"
+        "code": "chunk-provider-failure"
       },
       {
         "category": "content",

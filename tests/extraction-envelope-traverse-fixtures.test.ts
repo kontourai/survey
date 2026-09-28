@@ -91,12 +91,40 @@ describe("typed partial reasons and per-chunk coverage (#286)", () => {
     });
   }
 
-  it("imports a missing-tool-call envelope: the loss is recorded and no candidate is invented", async () => {
+  it("imports a missing-tool-call envelope: the lost chunk is recorded on the answered chunk's candidate", async () => {
     const envelope = await traverseFixture("partial-missing-tool-call");
-    assert.deepEqual(envelope.result.coverage, [{ chunk: 1, start: 0, end: 7, status: "unread", reason: "missing-tool-call" }]);
+    assert.deepEqual(envelope.result.coverage![1], { chunk: 2, start: 30, end: 70, status: "unread", reason: "missing-tool-call" });
+    const imported = importExtractionEnvelope(envelope, options());
+    assert.deepEqual(imported.reviewItems.map((item) => item.spec.candidates.map((candidate) => candidate.value)), [[48000]]);
+    assert.deepEqual(producer(imported.reviewItems[0]!.spec.candidates[0]).coverage, envelope.result.coverage);
+  });
+
+  it("imports a failure with no usable answer: no candidates, the failure and its warnings kept", async () => {
+    const envelope = await traverseFixture("failure-no-usable-answer");
+    assert.deepEqual(envelope.result.outcome, { status: "failure", category: "provider", code: "no-usable-answer" });
+    assert.ok(envelope.result.warningClassifications?.some((warning) => warning.code === "unusable-answer"));
     const imported = importExtractionEnvelope(envelope, options());
     assert.deepEqual(imported.reviewItems, []);
-    assert.deepEqual(imported.record.spec.envelope.result.coverage, envelope.result.coverage);
+    assert.deepEqual(imported.record.spec.envelope.result.outcome, envelope.result.outcome);
+    assert.deepEqual(imported.record.spec.envelope.result.warningClassifications, envelope.result.warningClassifications);
+  });
+
+  it("accepts a failure that carries unread coverage, while a success still may not", async () => {
+    const failure = await traverseFixture("failure-no-usable-answer");
+    failure.result.coverage = [{ chunk: 1, start: 0, end: failure.result.preparedArtifact!.contentLength, status: "unread", reason: "provider-failure" }];
+    const imported = importExtractionEnvelope(failure, options());
+    assert.deepEqual(imported.reviewItems, []);
+    assert.deepEqual(imported.record.spec.envelope.result.coverage, failure.result.coverage);
+    const success = structuredClone(failure);
+    success.result.outcome = { status: "success" };
+    assert.throws(() => importExtractionEnvelope(success, options()), /outcome is success/);
+  });
+
+  it("imports a partial run whose answered chunk dropped malformed tool items, and carries the warning", async () => {
+    const envelope = await traverseFixture("partial-malformed-tool-items");
+    assert.ok(envelope.result.warningClassifications?.some((warning) => warning.category === "normalization" && warning.code === "malformed-tool-items"));
+    const imported = importExtractionEnvelope(envelope, options());
+    assert.deepEqual(producer(imported.reviewItems[0]!.spec.candidates[0]).warnings, envelope.result.warningClassifications);
   });
 
   it("accepts coverage whose chunk ranges overlap by the chunk overlap", async () => {
@@ -154,10 +182,10 @@ describe("typed partial reasons and per-chunk coverage (#286)", () => {
 
   it("imports a bundled adapter's unusable tool input and the new warning codes", async () => {
     const envelope = await traverseFixture("partial-unusable-tool-input");
-    assert.deepEqual(envelope.result.coverage, [{ chunk: 1, start: 0, end: 7, status: "unread", reason: "provider-failure" }]);
+    assert.deepEqual(envelope.result.coverage![1], { chunk: 2, start: 30, end: 70, status: "unread", reason: "provider-failure" });
     assert.ok(envelope.result.warningClassifications?.some((warning) => warning.category === "provider" && warning.code === "unusable-answer"));
     const imported = importExtractionEnvelope(envelope, options());
-    assert.deepEqual(imported.reviewItems, []);
+    assert.deepEqual(imported.reviewItems.map((item) => item.spec.candidates.map((candidate) => candidate.value)), [[48000]]);
     assert.deepEqual(imported.record.spec.envelope.result.warningClassifications, envelope.result.warningClassifications);
     const normalization = await traverseFixture("partial-unusable-answer");
     normalization.result.warningClassifications = [...normalization.result.warningClassifications!, { category: "normalization", code: "proposal-normalization" }];

@@ -2,7 +2,7 @@
 // Traverse build, so the fixtures have exactly the shape Traverse's serializer
 // produces rather than a hand-written approximation.
 //
-// The envelopes were produced from kontourai/traverse at commit bb99abd
+// The envelopes were produced from kontourai/traverse at commit b9cb7e3
 // (branch fix/envelope-partial-confidence, the producer side of typed partial
 // reasons, per-chunk coverage and optional confidence), built with
 // `pnpm install --frozen-lockfile && pnpm run build`. Every run goes through
@@ -61,14 +61,17 @@ function feeScanner({ failCalls = [], confidence, indexed = false } = {}) {
   };
 }
 
-function relayProvider(response) {
+/** A relay adapter answering each call, in order, with one of `responses`. */
+function relayProvider(...responses) {
   return createRelayExtractionProvider({
-    runtime: new FakeModelRuntime([{
+    runtime: new FakeModelRuntime(responses.map((response) => ({
       provider: "fixture", model: "fixture-relay-model", outputText: response.outputText ?? "", toolCalls: response.toolCalls ?? [],
       usage: { totalTokens: 3 }, latencyMs: 0, stopReason: response.stopReason,
-    }]),
+    }))),
   });
 }
+const relayAnswer = (proposals) => ({ stopReason: "tool_use", toolCalls: [{ id: "1", name: "submit_extraction_proposals", input: { proposals } }] });
+const relayFee = relayAnswer([{ fieldPath: "fee", value: 48000, excerpt: "48000" }]);
 
 // 88 characters: with chunkSize 40 / chunkOverlap 10 that is three chunks,
 // [0,40), [30,70), [60,88), each overlapping its neighbour by 10.
@@ -90,10 +93,11 @@ const cases = {
     sourceRef: "fixture://vendor-contract", contentType: "text", targetSchema: feeSchema, content: "Fee: 5.",
     provider: relayProvider({ stopReason: "max_tokens", toolCalls: [{ id: "1", name: "submit_extraction_proposals", input: { proposals: [{ fieldPath: "fee", value: 5, excerpt: "5" }] } }] }),
   }),
-  // The provider answers in prose with no tool call: partial/provider-failure, unread/missing-tool-call.
+  // Chunk 2 is answered in prose with no tool call: partial/provider-failure,
+  // unread/missing-tool-call.
   "partial-missing-tool-call": () => extract({
-    sourceRef: "fixture://vendor-contract", contentType: "text", targetSchema: feeSchema, content: "Fee: 5.",
-    provider: relayProvider({ stopReason: "end_turn", outputText: "The fee is 5." }),
+    sourceRef: "fixture://vendor-contract", contentType: "text", targetSchema: feeSchema, content: threeChunkText, chunkSize: 40, chunkOverlap: 10,
+    provider: relayProvider(relayFee, { stopReason: "end_turn", outputText: "No fee here." }, relayAnswer([])),
   }),
   // An early stop (only the first chunk is dispatched) still carries coverage.
   "partial-max-chunks": () => extract({
@@ -109,12 +113,31 @@ const cases = {
       provider: { name: scanner.name, async extract(input) { return input.chunkIndex === 1 ? { proposals: "garbage", raw: { response: "", model: "fixture-model" } } : scanner.extract(input); } },
     });
   },
-  // A bundled adapter (relay) whose tool call carries no usable proposals
-  // array: partial/provider-failure with the chunk unread, unusable-answer.
+  // A bundled adapter (relay) whose tool call for chunk 2 carries no usable
+  // proposals array: partial/provider-failure with that chunk unread,
+  // unusable-answer.
   "partial-unusable-tool-input": () => extract({
-    sourceRef: "fixture://vendor-contract", contentType: "text", targetSchema: feeSchema, content: "Fee: 5.",
-    provider: relayProvider({ stopReason: "tool_use", toolCalls: [{ id: "1", name: "submit_extraction_proposals", input: { proposals: "not-a-list" } }] }),
+    sourceRef: "fixture://vendor-contract", contentType: "text", targetSchema: feeSchema, content: threeChunkText, chunkSize: 40, chunkOverlap: 10,
+    provider: relayProvider(relayFee, relayAnswer("not-a-list"), relayAnswer([])),
   }),
+  // The only chunk gets an unusable answer, so no dispatched chunk was
+  // answered: a failure outcome (provider/no-usable-answer), no proposals.
+  "failure-no-usable-answer": () => extract({
+    sourceRef: "fixture://vendor-contract", contentType: "text", targetSchema: feeSchema, content: "Fee: 5.",
+    provider: relayProvider(relayAnswer("not-a-list")),
+  }),
+  // Chunk 1's answer had one malformed tool item dropped (a normalization
+  // warning, coverage unaffected) and chunk 2's call failed: partial.
+  "partial-malformed-tool-items": () => {
+    const scanner = feeScanner({ failCalls: [2], confidence: 0.8 });
+    return extract({
+      sourceRef: "fixture://vendor-contract", contentType: "text", targetSchema: feeSchema, content: threeChunkText, chunkSize: 40, chunkOverlap: 10,
+      provider: { name: scanner.name, async extract(input) {
+        const output = await scanner.extract(input);
+        return input.chunkIndex === 0 ? { ...output, malformedToolItems: { dropped: 1, total: 2 } } : output;
+      } },
+    });
+  },
   // A complete run whose provider reports no confidence.
   "success-no-confidence": () => extract({
     sourceRef: "fixture://vendor-contract", contentType: "text", targetSchema: feeSchema, content: "Vendor: Acme. Fee: 48000 per year.",

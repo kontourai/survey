@@ -22,7 +22,7 @@
         "status": "complete"
       }
     ],
-    "extractedAt": "2026-09-28T13:45:52.572Z",
+    "extractedAt": "2026-09-28T14:22:56.313Z",
     "model": "fixture-model",
     "outcome": {
       "reason": "provider-failure",
@@ -79,7 +79,7 @@
     "raw": {
       "tokensUsed": 5
     },
-    "runId": "traverse-extraction-run:83249823-98b5-4ef2-9ea2-783e5822f5dc",
+    "runId": "traverse-extraction-run:cac40d26-ecb9-47ed-be8d-8959a687ca8b",
     "totalTokensUsed": 10,
     "warningClassifications": [
       {
