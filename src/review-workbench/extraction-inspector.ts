@@ -1,5 +1,6 @@
 import { buildReviewItemsFromExtractionEnvelopeImport, validateExtractionEnvelopeImport, type ExtractionEnvelopeImport, type ExtractionEnvelopeImportResult, type PortableExtractionProposal } from "../extraction-envelope.js";
 import { canonicalJson } from "./canonical.js";
+import type { ReviewItem } from "../review-resource.js";
 import { sha256Hex } from "../sha256.js";
 import {
   resolvePortablePdfRegion,
@@ -176,12 +177,16 @@ export function buildExtractionInspectorModel(input: ExtractionInspectorInput): 
     );
     sources.push(source);
     const candidateStart = candidates.length;
+    const itemByProposalIndex = new Map<number, string>();
+    for (const item of entry.importResult.reviewItems) {
+      for (const proposalIndex of envelopeItemProposalIndices(item)) itemByProposalIndex.set(proposalIndex, item.metadata.name);
+    }
     envelope.result.proposals.forEach((proposal, proposalIndex) => {
-      const item = entry.importResult.reviewItems[proposalIndex];
-      if (!item) return; // unresolved imports legitimately produce no ReviewItems
+      const itemName = itemByProposalIndex.get(proposalIndex);
+      if (!itemName) return; // unresolved imports legitimately produce no ReviewItems
       candidates.push(candidateModel(
         source,
-        item.metadata.name,
+        itemName,
         proposal,
         proposalIndex,
         envelope.result.provider,
@@ -295,21 +300,35 @@ function assertImportedResult(result: ExtractionEnvelopeImportResult, record: Ex
   if (record.apiVersion !== "survey.kontourai.io/v1alpha1" || record.kind !== "ExtractionEnvelopeImport") throw new Error("Invalid extraction import resource identity.");
   if (!record.metadata?.name || !record.metadata.producerNamespace || !record.spec?.envelope?.result || !Array.isArray(record.spec.envelope.result.proposals)) throw new Error("Malformed extraction import result.");
   const grounded = record.status?.state === "grounded";
-  if ((!grounded && reviewItems.length !== 0) || (grounded && reviewItems.length !== record.spec.envelope.result.proposals.length)) throw new Error("Extraction import ReviewItems do not match its grounding state.");
+  const proposals = record.spec.envelope.result.proposals;
+  const covered = reviewItems.flatMap(envelopeItemProposalIndices).sort((left, right) => left - right);
+  if ((!grounded && reviewItems.length !== 0) || (grounded && canonicalJson(covered) !== canonicalJson(proposals.map((_proposal, index) => index)))) throw new Error("Extraction import ReviewItems do not match its grounding state.");
   const canonicalItems = buildReviewItemsFromExtractionEnvelopeImport(record);
   if (canonicalJson(reviewItems) !== canonicalJson(canonicalItems)) throw new Error("Extraction import ReviewItems do not match their canonical identities and bindings.");
-  reviewItems.forEach((item, index) => {
-    const proposal = record.spec.envelope.result.proposals[index]!;
+  reviewItems.forEach((item, itemIndex) => {
     const metadata = item.metadata?.producer?.["survey.kontourai.io/extraction-envelope"] as { importName?: unknown } | undefined;
-    const candidate = item.spec?.candidates?.[0];
-    const binding = candidate?.producer?.["survey.kontourai.io/extraction-envelope"] as { importName?: unknown; proposalIndex?: unknown; runId?: unknown; provider?: unknown } | undefined;
-    if (item.kind !== "ReviewItem" || !item.metadata.name || item.spec.candidates.length !== 1
-      || metadata?.importName !== record.metadata.name || binding?.importName !== record.metadata.name
-      || binding.proposalIndex !== index || binding.runId !== record.spec.envelope.result.runId || binding.provider !== record.spec.envelope.result.provider
-      || item.spec.target !== proposal.fieldPath || candidate?.locator?.locator !== proposal.provenance.locator || candidate.locator.excerpt !== proposal.provenance.excerpt) {
-      throw new Error(`Extraction import ReviewItem ${index} is inconsistent with its validated proposal.`);
+    if (item.kind !== "ReviewItem" || !item.metadata.name || item.spec.candidates.length === 0 || metadata?.importName !== record.metadata.name) {
+      throw new Error(`Extraction import ReviewItem ${itemIndex} is inconsistent with its validated proposals.`);
+    }
+    for (const candidate of item.spec.candidates) {
+      const binding = candidate.producer?.["survey.kontourai.io/extraction-envelope"] as { importName?: unknown; proposalIndex?: unknown; runId?: unknown; provider?: unknown } | undefined;
+      const proposal = typeof binding?.proposalIndex === "number" ? proposals[binding.proposalIndex] : undefined;
+      if (!proposal || binding?.importName !== record.metadata.name || binding.runId !== record.spec.envelope.result.runId || binding.provider !== record.spec.envelope.result.provider
+        || candidate.extraction.target !== proposal.fieldPath || candidate.locator?.locator !== proposal.provenance.locator || candidate.locator.excerpt !== proposal.provenance.excerpt) {
+        throw new Error(`Extraction import ReviewItem ${itemIndex} is inconsistent with its validated proposals.`);
+      }
     }
   });
+}
+
+/** The proposal indices one imported ReviewItem stands for, as its producer metadata records them. */
+function envelopeItemProposalIndices(item: ReviewItem): number[] {
+  const metadata = item.metadata?.producer?.["survey.kontourai.io/extraction-envelope"] as { proposalIndices?: unknown } | undefined;
+  const indices = metadata?.proposalIndices;
+  if (!Array.isArray(indices) || indices.length === 0 || !indices.every((index) => Number.isSafeInteger(index) && index >= 0)) {
+    throw new Error(`Extraction import ReviewItem ${item.metadata?.name ?? "(unnamed)"} does not record its proposals.`);
+  }
+  return indices as number[];
 }
 
 function sourceModel(

@@ -1108,7 +1108,10 @@ function renderFieldCard(
   const state = fieldCardState(item, decision);
   const decided = decision !== undefined;
   const current = item.spec.candidates.find((candidate) => candidate.role === "current");
-  const proposed = item.spec.candidates.find((candidate) => candidate.role === "proposed");
+  const proposedCandidates = item.spec.candidates.filter((candidate) => candidate.role === "proposed");
+  // Several proposed values for one claim are a conflict no decision control
+  // can settle (each control names a role, not a value), so none is offered.
+  const proposed = proposedCandidates.length === 1 ? proposedCandidates[0] : undefined;
   const presentation = buildReviewItemPresentation(item, presentationAdapter);
   const hasCurrentValue = current !== undefined && !isEmptyValue(current.value);
   const kind = hasCurrentValue ? "Update" : "New";
@@ -1148,7 +1151,9 @@ function renderFieldCard(
         </div>
         ${proposed
           ? renderDiffRow(item, current, proposed, presentation.targetLabel, decided, effectiveProposedText, currentPresentationText)
-          : "<p class=\"field-value\">No proposed value is available for this field.</p>"}
+          : proposedCandidates.length > 1
+            ? renderConflictingProposals(item, proposedCandidates, presentationAdapter, presentation.targetLabel)
+            : "<p class=\"field-value\">No proposed value is available for this field.</p>"}
         ${proposed ? renderProvenanceRow(item, proposed, presentationAdapter) : ""}
         <div class="decide">
           ${keepDecision === undefined ? "" : `<button class="btn keep" type="button" data-testid="keep-current" data-item-name="${escapeHtml(item.metadata.name)}">${keepLabel}</button>`}
@@ -1174,6 +1179,30 @@ function renderFieldCard(
         ${renderAuditDetails(item, current, proposed, session, presentationAdapter)}
       </div>
     </section>
+  `;
+}
+
+/**
+ * The card body for an item whose candidate set holds several proposed values.
+ * Lists every value with its excerpt; the workbench records a decision against
+ * a role, so it cannot pick one of them, and says so.
+ */
+function renderConflictingProposals(
+  item: ReviewItem,
+  candidates: readonly ReviewCandidate[],
+  presentationAdapter: ReviewPresentationAdapter | undefined,
+  targetLabel: string,
+): string {
+  const values = candidates.map((candidate) => {
+    const text = buildReviewCandidatePresentation(item, candidate, presentationAdapter, targetLabel).valueText;
+    const excerpt = candidate.locator?.excerpt;
+    return `<li data-testid="conflicting-value"><span class="vtext">${escapeHtml(text)}</span>${excerpt ? ` <q>${escapeHtml(excerpt)}</q>` : ""}</li>`;
+  }).join("");
+  return `
+    <div class="field-value" data-testid="conflicting-proposals">
+      <p>${candidates.length} different values were proposed for this field. This queue cannot choose between them.</p>
+      <ul>${values}</ul>
+    </div>
   `;
 }
 

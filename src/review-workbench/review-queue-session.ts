@@ -223,14 +223,16 @@ export function reviewSessionSummary(session: ReviewQueueSessionState): ReviewSe
  * would invent a prior value, with provenance, that the source never had.
  */
 export function keepActionDecision(item: ReviewItem, flaggedWrong: boolean): ReviewWorkbenchDecision | undefined {
-  const hasRole = (role: ReviewCandidate["role"]): boolean =>
-    item.spec.candidates.some((candidate) => candidate.role === role);
+  // A decision is recordable only when its role names exactly one candidate
+  // (see candidateForDecision).
+  const count = (role: ReviewCandidate["role"]): number =>
+    item.spec.candidates.filter((candidate) => candidate.role === role).length;
 
-  if (flaggedWrong || !hasRole("current")) {
-    return hasRole("proposed") ? "reject-proposed" : undefined;
+  if (flaggedWrong || count("current") === 0) {
+    return count("proposed") === 1 ? "reject-proposed" : undefined;
   }
 
-  return "keep-current";
+  return count("current") === 1 ? "keep-current" : undefined;
 }
 
 /**
@@ -246,10 +248,17 @@ export function keepActionDecision(item: ReviewItem, flaggedWrong: boolean): Rev
  */
 export function candidateForDecision(item: ReviewItem, decision: ReviewWorkbenchDecision): ReviewCandidate {
   const definition = workbenchDecisionDefinitions[decision];
-  const candidate = item.spec.candidates.find((entry) => entry.role === definition.candidateRole);
+  const matches = item.spec.candidates.filter((entry) => entry.role === definition.candidateRole);
+  const candidate = matches[0];
 
   if (!candidate) {
     throw new Error(`ReviewItem ${item.metadata.name} has no ${definition.candidateRole} candidate.`);
+  }
+  // A decision names a role, not a value. With several candidates in that role
+  // (conflicting values for one claim) picking the first would settle the
+  // conflict for the reviewer without showing it, so the decision is refused.
+  if (matches.length > 1) {
+    throw new Error(`ReviewItem ${item.metadata.name} has ${matches.length} ${definition.candidateRole} candidates; the ${decision} decision cannot choose between them.`);
   }
   assertSoleCandidateId(item, candidate.id);
 

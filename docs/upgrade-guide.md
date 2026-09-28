@@ -512,6 +512,39 @@ The projected claim value is unchanged for mappings built by
 `surveySchemaMapping`. If you hand-build a `ReviewedMapping`, give its
 `selectedCandidate.value` the same four keys.
 
+## Envelope imports: one item per claim, partial coverage, optional confidence
+
+`importExtractionEnvelope` changed in three ways
+([extraction-envelope-import.md](extraction-envelope-import.md)):
+
+- **One `ReviewItem` per claim.** Proposals whose claim targets name the same
+  claim at the same `pathIndices` are one candidate set, with one candidate per
+  distinct value; two or more values make it `conflict`. Item names are now
+  derived from that claim slot rather than the proposal index, so every
+  imported item name changes and envelopes that repeat a claim yield fewer
+  items. Stored review rounds keyed by the old names do not carry over. Read
+  `metadata.producer["survey.kontourai.io/extraction-envelope"].proposalIndices`
+  to map proposals to items instead of assuming item `i` is proposal `i`.
+  Proposals that share a claim must now return identical claim targets. To keep
+  a multi-valued field as separate items, give each value its own claim id or
+  subject in `claimTarget`, or use an array field so each value has its own
+  `pathIndices`.
+- **Role-based decisions refuse ambiguity.** `candidateForDecision` (and so the
+  workbench, the session event builders, and the MCP decide tool) throws when
+  the decision's role names more than one candidate, instead of using the
+  first. A `conflict` item from the importer cannot be decided in the workbench.
+- **Partial runs and confidence.** The importer accepts the partial reasons
+  `provider-failure`, `content-truncated`, and `output-truncated`, an optional
+  `result.coverage` list, and proposals without `confidence`. Candidates carry
+  `partial` and `coverage` next to `outcome` in their producer metadata. A
+  candidate from a proposal without confidence has no `confidence` on the
+  candidate or its extraction; code that read `candidate.confidence` as a
+  number must handle `undefined`. Imported candidates now carry
+  `extraction.extractedAt`, so they project through
+  `buildCanonicalReviewedTrustInput`. `toSurfaceReviewedExtractionImport`
+  refuses a record with a proposal that has no confidence, because Surface's
+  reviewed-extraction profile still requires one.
+
 ## See also
 
 - [consumer-integration-guide.md](consumer-integration-guide.md) — first-time

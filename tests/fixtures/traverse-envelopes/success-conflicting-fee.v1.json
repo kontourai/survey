@@ -1,0 +1,101 @@
+{
+  "format": "traverse-extraction-result",
+  "result": {
+    "extractedAt": "2026-09-28T06:24:58.467Z",
+    "model": "fixture-model",
+    "outcome": {
+      "status": "success"
+    },
+    "preparedArtifact": {
+      "contentLength": 60,
+      "digest": "5a21be71908d56d6e2fd040ac01dba40e3aa1925afd05e71d38d145d587ffa73",
+      "format": "traverse-prepared-artifact",
+      "preparationMode": "text",
+      "preparationVersion": "3",
+      "ref": "traverse-prepared-artifact:v1:sha256:1ea2aa01e19e3644e7bb092758c5ea3bebdf795e5be405aca005ad8c8e8da15b",
+      "version": 1
+    },
+    "proposals": [
+      {
+        "candidateValue": 48000,
+        "confidence": 0.9,
+        "extractor": "fixture-fee-scanner",
+        "fieldPath": "fee",
+        "provenance": {
+          "excerpt": "48000",
+          "locator": "chars:5-10",
+          "occurrence": {
+            "ambiguous": true,
+            "count": 2,
+            "hintUsed": false,
+            "resolverVersion": "exact-occurrence-v1",
+            "selected": {
+              "end": 10,
+              "index": 0,
+              "start": 5
+            },
+            "selection": "source-order"
+          }
+        },
+        "valueType": "number"
+      },
+      {
+        "candidateValue": 48000,
+        "confidence": 0.9,
+        "extractor": "fixture-fee-scanner",
+        "fieldPath": "fee",
+        "provenance": {
+          "excerpt": "48000",
+          "locator": "chars:34-39",
+          "occurrence": {
+            "ambiguous": true,
+            "count": 2,
+            "hintUsed": false,
+            "resolverVersion": "exact-occurrence-v1",
+            "selected": {
+              "end": 39,
+              "index": 1,
+              "start": 34
+            },
+            "selection": "source-order"
+          }
+        },
+        "valueType": "number"
+      },
+      {
+        "candidateValue": 52000,
+        "confidence": 0.9,
+        "extractor": "fixture-fee-scanner",
+        "fieldPath": "fee",
+        "provenance": {
+          "excerpt": "52000",
+          "locator": "chars:54-59",
+          "occurrence": {
+            "ambiguous": false,
+            "count": 1,
+            "hintUsed": false,
+            "resolverVersion": "exact-occurrence-v1",
+            "selected": {
+              "end": 59,
+              "index": 0,
+              "start": 54
+            },
+            "selection": "source-order"
+          }
+        },
+        "valueType": "number"
+      }
+    ],
+    "provider": "fixture-fee-scanner",
+    "providerCalls": 1,
+    "raw": {
+      "tokensUsed": 5
+    },
+    "runId": "traverse-extraction-run:8612fa31-7c74-4a0f-88f0-406e488c4994",
+    "totalTokensUsed": 5
+  },
+  "source": {
+    "ref": "fixture://vendor-contract"
+  },
+  "version": 1
+}

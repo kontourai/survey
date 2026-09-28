@@ -9,6 +9,12 @@ evidence:
     ref: docs/extraction-envelope-import.md
   - kind: doc
     ref: src/extraction-envelope.ts
+  - kind: issue
+    ref: "https://github.com/kontourai/survey/issues/286"
+  - kind: issue
+    ref: "https://github.com/kontourai/survey/issues/287"
+  - kind: issue
+    ref: "https://github.com/kontourai/survey/issues/289"
 ---
 # Extraction Envelope Import
 
@@ -36,6 +42,14 @@ The adapter rejects malformed or non-lossless representations before grounding,
 and documentation treats all retained proposal values, excerpts, and identities
 as potentially review-host-visible.
 
+Proposals are grouped into one review item per claim slot (the claim target's
+subject, facet, claim type, field or behavior and claim id, plus the
+proposal's path indices), with one candidate per distinct value; two or more
+values make the set a conflict, so conflicting values for one claim cannot both
+be verified. Typed partial reasons and per-chunk coverage are validated and
+carried to candidates as producer metadata, and a missing proposer confidence
+stays missing.
+
 Validated parser-neutral PDF layout and OCR-derived posture are preserved
 without changing the exact prepared-text locator. PDF layout requires a prepared
 artifact and fails closed when page geometry, ranges, elements, or table cells
@@ -44,4 +58,6 @@ are malformed or out of range.
 ## Compatibility
 
 The adapter is additive. Existing Survey source, extraction, review, workbench,
-and producer-policy workflows remain unchanged.
+and producer-policy workflows remain unchanged. Grouping by claim slot changed
+item names and item counts for envelopes that repeat a claim (a breaking change
+for stored review rounds); single-proposal candidate identities are unchanged.

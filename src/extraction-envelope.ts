@@ -42,7 +42,12 @@ export interface PortableExtractionEvidenceMatch {
 export interface PortableExtractionProposal {
   fieldPath: string;
   candidateValue: unknown;
-  confidence: number;
+  /**
+   * The proposer's own uncalibrated self-report in `0..1`, absent when the
+   * proposer reported none. Survey carries it only when present and never
+   * substitutes a default.
+   */
+  confidence?: number;
   provenance: { excerpt: string; locator: string; occurrence: PortableExtractionOccurrence };
   extractor: string;
   pathIndices?: number[];
@@ -59,6 +64,29 @@ export type PortablePreparedArtifactState =
   | { status: "invalid-artifact"; reason: string; canonicalRef: string }
   | { status: "digest-mismatch"; requestedRef: string; canonicalRef: string; actualDigest: string; actualContentLength: number };
 
+/**
+ * Why a run stopped short. The first four are early stops; the last three mean
+ * a dispatched chunk was not (fully) read or answered, and such an envelope
+ * names the affected ranges in `result.coverage`.
+ */
+export type PortableExtractionPartialReason =
+  | "cancelled" | "max-provider-calls" | "max-total-tokens" | "max-chunks"
+  | "provider-failure" | "content-truncated" | "output-truncated";
+
+/**
+ * One prepared-text range (UTF-16 offsets, the space of `chars:` locators) and
+ * whether it was read and answered. `reason` is present exactly when `status`
+ * is `unread`, and then covers exactly the unread span.
+ */
+export interface PortableExtractionCoverageEntry {
+  /** 1-based chunk number. */
+  chunk: number;
+  start: number;
+  end: number;
+  status: "complete" | "unread" | "output-truncated";
+  reason?: "provider-failure" | "content-truncated" | "missing-tool-call" | "not-dispatched";
+}
+
 export interface PortableExtractionResultEnvelope {
   format: typeof portableExtractionResultFormat;
   version: typeof portableExtractionResultVersion;
@@ -71,13 +99,15 @@ export interface PortableExtractionResultEnvelope {
     raw: { tokensUsed?: number };
     outcome:
       | { status: "success" }
-      | { status: "partial"; reason: "cancelled" | "max-provider-calls" | "max-total-tokens" | "max-chunks" }
+      | { status: "partial"; reason: PortableExtractionPartialReason }
       | { status: "failure"; category: "invalid-config" | "invalid-task" | "preparation" | "provider" | "unexpected"; code: string };
     warningClassifications?: Array<{ category: "provider" | "normalization" | "preparation" | "limit" | "storage" | "content" | "other"; code: string }>;
     extractedAt: string;
     providerCalls: number;
     totalTokensUsed: number;
-    partial?: { reason: "cancelled" | "max-provider-calls" | "max-total-tokens" | "max-chunks"; completedChunks: number; remainingChunks: number; tokenOvershoot?: number };
+    partial?: { reason: PortableExtractionPartialReason; completedChunks: number; remainingChunks: number; tokenOvershoot?: number };
+    /** Per-chunk read coverage, ordered by `start`; ranges may overlap. Requires `preparedArtifact`. */
+    coverage?: PortableExtractionCoverageEntry[];
     /** `code` is the upstream error code, informational only; `kind` stays authoritative. */
     providerFailures?: Array<{ provider: string; kind: "authentication" | "rate-limit" | "timeout" | "invalid-request" | "unavailable" | "unknown"; retryable: boolean; code?: string }>;
     taskDigest?: string;
@@ -148,10 +178,52 @@ export function importExtractionEnvelope(serialized: string | PortableExtraction
   return { record, reviewItems: buildReviewItemsFromExtractionEnvelopeImport(record) };
 }
 
+/**
+ * One ReviewItem per claim slot: every proposal whose claim target names the
+ * same claim (subject, facet, claim type, field or behavior, and claim id when
+ * one is set) at the same `pathIndices` is one candidate set, so two values for
+ * one claim can never be accepted as two separate verified claims. The slot is
+ * the claim the proposal would project to, not the upstream `fieldPath` (two
+ * field paths mapped to one claim are one slot) and not the value.
+ *
+ * Within a slot there is one candidate per distinct canonical value; further
+ * proposals of an already-seen value are recorded on that candidate as
+ * `sameValueProposals`. Two or more distinct values make the set `conflict`.
+ * Distinct `pathIndices` (array items) or distinct claim ids are separate slots,
+ * which is how a producer declares a multi-valued field.
+ */
 export function buildReviewItemsFromExtractionEnvelopeImport(record: ExtractionEnvelopeImport): ReviewItem[] {
   validateImport(record);
   if (record.status.state !== "grounded") return [];
-  return record.spec.envelope.result.proposals.map((proposal, index) => buildReviewItem(record, proposal, index));
+  return claimSlotGroups(record).map((group) => buildReviewItem(record, group));
+}
+
+interface IndexedProposal { proposal: PortableExtractionProposal; index: number }
+interface ClaimSlotGroup { slot: ClaimSlot; members: IndexedProposal[] }
+interface ClaimSlot {
+  subjectType: string; subjectId: string; facet: string; claimType: string; fieldOrBehavior: string;
+  claimId: string | null; pathIndices: number[] | null;
+}
+
+function claimSlotGroups(record: ExtractionEnvelopeImport): ClaimSlotGroup[] {
+  const groups = new Map<string, ClaimSlotGroup>();
+  record.spec.envelope.result.proposals.forEach((proposal, index) => {
+    const target = record.spec.claimTargets[index]!;
+    const slot: ClaimSlot = {
+      subjectType: target.subjectType, subjectId: target.subjectId, facet: target.facet, claimType: target.claimType,
+      fieldOrBehavior: target.fieldOrBehavior, claimId: target.claimId ?? null, pathIndices: proposal.pathIndices ?? null,
+    };
+    const key = canonicalJson(slot);
+    const group = groups.get(key);
+    if (!group) { groups.set(key, { slot, members: [{ proposal, index }] }); return; }
+    const first = group.members[0]!.index;
+    // One claim cannot carry two impact levels or evidence descriptions.
+    if (canonicalJson(record.spec.claimTargets[first]) !== canonicalJson(target)) {
+      throw new Error(`Proposals ${first} and ${index} map to the same claim with different claim targets.`);
+    }
+    group.members.push({ proposal, index });
+  });
+  return [...groups.values()];
 }
 
 export function exportExtractionEnvelopeImport(record: ExtractionEnvelopeImport): string {
@@ -176,15 +248,51 @@ export function createExtractionEnvelopeResolutionIdentity(record: ExtractionEnv
   return { evidenceId: `survey.extraction.${base}.resolution-evidence.${nonce}`, eventId: `survey.extraction.${base}.resolution-event.${nonce}` };
 }
 
-function buildReviewItem(record: ExtractionEnvelopeImport, proposal: PortableExtractionProposal, index: number): ReviewItem {
+function buildReviewItem(record: ExtractionEnvelopeImport, group: ClaimSlotGroup): ReviewItem {
   const envelope = record.spec.envelope;
-  const identity = identityHash(identityInputs(record, proposal, index));
+  const byValue = new Map<string, IndexedProposal[]>();
+  for (const member of group.members) {
+    const key = canonicalJson(member.proposal.candidateValue);
+    byValue.set(key, [...(byValue.get(key) ?? []), member]);
+  }
+  const candidates = [...byValue.values()].map((members) => buildCandidate(record, members));
+  const lead = group.members[0]!.proposal;
+  const valueType = lead.valueType ?? inferValueType(lead.candidateValue);
+  const identity = identityHash({ producerNamespace: record.metadata.producerNamespace, importName: record.metadata.name, source: envelope.source,
+    preparedArtifact: envelope.result.preparedArtifact, pdfLayout: envelope.result.pdfLayout, runId: envelope.result.runId, claimSlot: group.slot });
+  return {
+    apiVersion: reviewResourceApiVersion, kind: "ReviewItem",
+    metadata: { name: `extraction-envelope.${identity}`, producer: { "survey.kontourai.io/extraction-envelope": {
+      importName: record.metadata.name,
+      evidenceId: `survey.extraction.${identityHash(evidenceInputs(record, lead))}.source-evidence`,
+      proposalIndices: group.members.map((member) => member.index),
+      source: envelope.source,
+      ...(envelope.result.preparedArtifact ? { preparedArtifact: envelope.result.preparedArtifact } : {}),
+    } } },
+    spec: {
+      target: lead.fieldPath, candidates,
+      candidateSetStatus: candidates.length > 1 ? "conflict" : "needs-review",
+      valueDescriptor: { type: valueType }, editable: false,
+    },
+    status: { observedCandidateCount: candidates.length },
+  };
+}
+
+/** One candidate for one distinct value; `members` are that value's proposals in envelope order. */
+function buildCandidate(record: ExtractionEnvelopeImport, members: IndexedProposal[]): ReviewCandidate {
+  const envelope = record.spec.envelope;
+  const { proposal, index } = members[0]!;
+  const others = members.slice(1);
+  // A candidate commits to every proposal it stands for; a single-proposal
+  // candidate keeps exactly the identity it had before grouping.
+  const identity = identityHash(others.length === 0 ? identityInputs(record, proposal, index)
+    : { ...identityInputs(record, proposal, index) as Record<string, unknown>, sameValueProposals: others.map((other) => ({ proposalIndex: other.index, proposal: other.proposal })) });
   const evidence = identityHash(evidenceInputs(record, proposal));
   const target = record.spec.claimTargets[index]!;
   const valueType = proposal.valueType ?? inferValueType(proposal.candidateValue);
-  const candidate: ReviewCandidate = {
+  return {
     id: `extraction-envelope.${identity}.proposed`, role: "proposed", value: proposal.candidateValue,
-    confidence: proposal.confidence,
+    ...(proposal.confidence !== undefined ? { confidence: proposal.confidence } : {}),
     source: {
       sourceRef: envelope.source.ref,
       sourceId: envelope.source.snapshotRef ?? envelope.source.ref,
@@ -197,8 +305,9 @@ function buildReviewItem(record: ExtractionEnvelopeImport, proposal: PortableExt
     extraction: {
       extractionId: `extraction-envelope.${identity}`,
       target: proposal.fieldPath,
-      confidence: proposal.confidence,
+      ...(proposal.confidence !== undefined ? { confidence: proposal.confidence } : {}),
       extractor: proposal.extractor,
+      extractedAt: envelope.result.extractedAt,
       // The proposal's own served model when recorded; in a multi-chunk run
       // `result.model` names only the last chunk's model.
       ...(proposal.producedBy ? { model: proposal.producedBy.model } : envelope.result.model ? { model: envelope.result.model } : {}),
@@ -215,21 +324,20 @@ function buildReviewItem(record: ExtractionEnvelopeImport, proposal: PortableExt
       ...(proposal.producedBy ? { producedBy: proposal.producedBy } : {}),
       ...(proposal.evidenceMatch ? { evidenceMatch: proposal.evidenceMatch } : {}),
       occurrence: proposal.provenance.occurrence,
+      ...(others.length ? { sameValueProposals: others.map((other) => ({
+        proposalIndex: other.index,
+        evidenceId: `survey.extraction.${identityHash(evidenceInputs(record, other.proposal))}.source-evidence`,
+        locator: other.proposal.provenance.locator,
+        excerpt: other.proposal.provenance.excerpt,
+      })) } : {}),
       attempt: { id: envelope.result.runId, providerCalls: envelope.result.providerCalls },
       ...(envelope.result.warningClassifications ? { warnings: envelope.result.warningClassifications } : {}),
       outcome: envelope.result.outcome,
+      // A partial run may have left this field's other values unread: the
+      // reason and the per-chunk coverage travel with every candidate.
+      ...(envelope.result.partial ? { partial: envelope.result.partial } : {}),
+      ...(envelope.result.coverage ? { coverage: envelope.result.coverage } : {}),
     } },
-  };
-  return {
-    apiVersion: reviewResourceApiVersion, kind: "ReviewItem",
-    metadata: { name: `extraction-envelope.${identity}`, producer: { "survey.kontourai.io/extraction-envelope": {
-      importName: record.metadata.name,
-      evidenceId: `survey.extraction.${evidence}.source-evidence`,
-      source: envelope.source,
-      ...(envelope.result.preparedArtifact ? { preparedArtifact: envelope.result.preparedArtifact } : {}),
-    } } },
-    spec: { target: proposal.fieldPath, candidates: [candidate], candidateSetStatus: "needs-review", valueDescriptor: { type: valueType }, editable: false },
-    status: { observedCandidateCount: 1 },
   };
 }
 
@@ -286,7 +394,7 @@ function validateEnvelope(input: unknown): PortableExtractionResultEnvelope {
   if (e.format !== portableExtractionResultFormat || e.version !== portableExtractionResultVersion) throw new Error("Unsupported portable extraction envelope format or version.");
   const source = obj(e.source, "source"); exact(source, ["ref"], "source", ["snapshotRef"]); safeReference(source.ref, "source.ref"); if (source.snapshotRef !== undefined) safeReference(source.snapshotRef, "source.snapshotRef");
   const r = obj(e.result, "result");
-  exact(r, ["proposals", "provider", "runId", "raw", "outcome", "extractedAt", "providerCalls", "totalTokensUsed"], "result", ["model", "warningClassifications", "partial", "providerFailures", "taskDigest", "exampleDigests", "pdfPageOffsets", "pdfLayout", "ocrDerived", "preparedArtifact", "preparedArtifactState"]);
+  exact(r, ["proposals", "provider", "runId", "raw", "outcome", "extractedAt", "providerCalls", "totalTokensUsed"], "result", ["model", "warningClassifications", "partial", "coverage", "providerFailures", "taskDigest", "exampleDigests", "pdfPageOffsets", "pdfLayout", "ocrDerived", "preparedArtifact", "preparedArtifactState"]);
   stableIdentity(r.provider, "result.provider"); if (r.model !== undefined) stableIdentity(r.model, "result.model"); if (typeof r.runId !== "string" || !RUN_ID.test(r.runId)) throw new Error("result.runId is invalid."); wireNonEmpty(r.extractedAt, "result.extractedAt"); integer(r.providerCalls, "result.providerCalls"); integer(r.totalTokensUsed, "result.totalTokensUsed");
   const raw = obj(r.raw, "result.raw"); exact(raw, [], "result.raw", ["tokensUsed"]); if (raw.tokensUsed !== undefined) integer(raw.tokensUsed, "result.raw.tokensUsed");
   validateOutcome(r.outcome, r.partial);
@@ -301,6 +409,8 @@ function validateEnvelope(input: unknown): PortableExtractionResultEnvelope {
     : artifact === undefined
       ? (() => { throw new Error("result.pdfLayout requires result.preparedArtifact."); })()
       : validatePortablePdfLayout(r.pdfLayout, artifact.contentLength);
+  if (r.coverage !== undefined) validateCoverage(r.coverage, artifact);
+  validateCoverageAgreement(r.outcome as PortableExtractionResultEnvelope["result"]["outcome"], r.coverage as PortableExtractionCoverageEntry[] | undefined);
   const state = r.preparedArtifactState === undefined ? undefined : validateArtifactState(r.preparedArtifactState, artifact);
   if (source.snapshotRef !== undefined && artifact?.sourceSnapshotRef !== undefined && source.snapshotRef !== artifact.sourceSnapshotRef) throw new Error("Source snapshot identity mismatch.");
   const proposals = array(r.proposals, "result.proposals").map((p, i) => validateProposal(p, i, artifact?.contentLength));
@@ -308,8 +418,10 @@ function validateEnvelope(input: unknown): PortableExtractionResultEnvelope {
 }
 
 function validateProposal(input: unknown, index: number, contentLength?: number): PortableExtractionProposal {
-  const p = obj(input, `proposal[${index}]`); exact(p, ["fieldPath", "candidateValue", "confidence", "provenance", "extractor"], `proposal[${index}]`, ["pathIndices", "inferenceType", "valueType", "enumValues", "producedBy", "evidenceMatch"]);
-  wireNonEmpty(p.fieldPath, "proposal.fieldPath"); stableIdentity(p.extractor, "proposal.extractor"); finite(p.confidence, "proposal.confidence", 0, 1);
+  const p = obj(input, `proposal[${index}]`); exact(p, ["fieldPath", "candidateValue", "provenance", "extractor"], `proposal[${index}]`, ["confidence", "pathIndices", "inferenceType", "valueType", "enumValues", "producedBy", "evidenceMatch"]);
+  wireNonEmpty(p.fieldPath, "proposal.fieldPath"); stableIdentity(p.extractor, "proposal.extractor");
+  // Absent means the proposer reported none; `null` is not absent and is rejected.
+  if (Object.hasOwn(p, "confidence")) finite(p.confidence, "proposal.confidence", 0, 1);
   const provenance = obj(p.provenance, "proposal.provenance"); exact(provenance, ["excerpt", "locator", "occurrence"], "proposal.provenance"); wireNonEmpty(provenance.excerpt, "proposal.provenance.excerpt");
   if (typeof provenance.locator !== "string") throw new Error("proposal locator must be chars:start-end.");
   const match = /^chars:(0|[1-9]\d*)-(0|[1-9]\d*)$/.exec(provenance.locator); if (!match) throw new Error("proposal locator must be chars:start-end.");
@@ -328,6 +440,29 @@ function validateOccurrence(input: unknown, start: number, end: number): void { 
 function validateArtifact(input: unknown): PortableExtractionResultEnvelope["result"]["preparedArtifact"] { const a = obj(input, "preparedArtifact"); exact(a, ["format", "version", "digest", "ref", "preparationMode", "preparationVersion", "contentLength"], "preparedArtifact", ["sourceSnapshotRef"]); if (a.format !== "traverse-prepared-artifact" || a.version !== 1) throw new Error("prepared artifact format is invalid."); digest(a.digest, "artifact.digest", false); if (!PREPARATION_MODES.has(a.preparationMode as string)) throw new Error("artifact.preparationMode is invalid."); nonEmpty(a.preparationVersion, "artifact.preparationVersion"); integer(a.contentLength, "artifact.contentLength"); if (a.sourceSnapshotRef !== undefined) wireNonEmpty(a.sourceSnapshotRef, "artifact.sourceSnapshotRef"); const binding = JSON.stringify({ format: a.format, version: a.version, digest: a.digest, preparationMode: a.preparationMode, preparationVersion: a.preparationVersion, contentLength: a.contentLength, sourceSnapshotRef: a.sourceSnapshotRef ?? null }); const expectedRef = `traverse-prepared-artifact:v1:sha256:${sha256Hex(binding)}`; if (a.ref !== expectedRef) throw new Error("prepared artifact ref does not match its identity binding."); return cloneJson(a) as PortableExtractionResultEnvelope["result"]["preparedArtifact"]; }
 function validateArtifactState(input: unknown, artifact?: PortableExtractionResultEnvelope["result"]["preparedArtifact"]): PortablePreparedArtifactState { if (!artifact) throw new Error("prepared artifact state requires prepared artifact."); const s = obj(input, "preparedArtifactState"); const status = s.status; if (status === "digest-mismatch") { exact(s, ["status", "requestedRef", "canonicalRef", "actualDigest", "actualContentLength"], "preparedArtifactState"); digest(s.actualDigest, "actualDigest", false); integer(s.actualContentLength, "actualContentLength"); } else if (status === "invalid-artifact") { exact(s, ["status", "reason", "canonicalRef"], "preparedArtifactState"); if (!ARTIFACT_INVALID_REASONS.has(s.reason as string)) throw new Error("prepared artifact invalid reason is invalid."); } else if (["available", "unavailable", "storage-error", "identity-mismatch"].includes(status as string)) exact(s, ["status", "requestedRef", "canonicalRef"], "preparedArtifactState"); else throw new Error("prepared artifact state is invalid."); preparedReference(s.canonicalRef, "canonicalRef"); if (s.canonicalRef !== artifact.ref) throw new Error("prepared artifact canonical ref mismatch."); if (s.requestedRef !== undefined) { safeReference(s.requestedRef, "requestedRef"); if (status !== "identity-mismatch") preparedReference(s.requestedRef, "requestedRef"); if (status === "identity-mismatch" ? s.requestedRef === s.canonicalRef : s.requestedRef !== s.canonicalRef) throw new Error(`prepared artifact ${status} requestedRef relationship is invalid.`); } return cloneJson(s) as PortablePreparedArtifactState; }
 function validateOutcome(input: unknown, partial: unknown): void { const o = obj(input, "outcome"); if (o.status === "success") exact(o, ["status"], "outcome"); else if (o.status === "partial") { exact(o, ["status", "reason"], "outcome"); if (!PARTIAL.has(o.reason as string)) throw new Error("partial reason is invalid."); const p = obj(partial, "partial"); exact(p, ["reason", "completedChunks", "remainingChunks"], "partial", ["tokenOvershoot"]); if (p.reason !== o.reason) throw new Error("partial reason mismatch."); integer(p.completedChunks, "completedChunks"); integer(p.remainingChunks, "remainingChunks"); if (p.tokenOvershoot !== undefined) { integer(p.tokenOvershoot, "tokenOvershoot"); if (p.tokenOvershoot === 0) throw new Error("tokenOvershoot must be positive."); } } else if (o.status === "failure") { exact(o, ["status", "category", "code"], "outcome"); if (!FAILURE_CATEGORIES.has(o.category as string)) throw new Error("failure category is invalid."); stableIdentity(o.code, "failure code"); } else throw new Error("outcome status is invalid."); if (o.status !== "partial" && partial !== undefined) throw new Error("partial requires partial outcome."); }
+function validateCoverage(input: unknown, artifact: PortableExtractionResultEnvelope["result"]["preparedArtifact"]): void {
+  if (!artifact) throw new Error("result.coverage requires result.preparedArtifact.");
+  const entries = array(input, "result.coverage");
+  entries.forEach((value, index) => {
+    const subject = `result.coverage[${index}]`;
+    const c = obj(value, subject); exact(c, ["chunk", "start", "end", "status"], subject, ["reason"]);
+    integer(c.chunk, `${subject}.chunk`); if (c.chunk === 0) throw new Error(`${subject}.chunk must be positive.`);
+    integer(c.start, `${subject}.start`); integer(c.end, `${subject}.end`);
+    if ((c.end as number) <= (c.start as number)) throw new Error(`${subject} must have start < end.`);
+    if ((c.end as number) > artifact.contentLength) throw new Error(`${subject}.end exceeds the prepared artifact contentLength.`);
+    if (!COVERAGE_STATUSES.has(c.status as string)) throw new Error(`${subject}.status is invalid.`);
+    if ((c.status === "unread") !== (c.reason !== undefined)) throw new Error(`${subject}.reason is required exactly when status is unread.`);
+    if (c.reason !== undefined && !COVERAGE_REASONS.has(c.reason as string)) throw new Error(`${subject}.reason is invalid.`);
+    // Chunks overlap by design, so ranges may overlap; only the order is fixed.
+    if (index > 0 && (c.start as number) < ((entries[index - 1] as Record<string, number>).start)) throw new Error("result.coverage entries must be ordered by start.");
+  });
+}
+/** The outcome and the coverage must tell the same story about unread text. */
+function validateCoverageAgreement(outcome: PortableExtractionResultEnvelope["result"]["outcome"], coverage: PortableExtractionCoverageEntry[] | undefined): void {
+  const lost = coverage?.some((entry) => entry.status !== "complete") ?? false;
+  if (outcome.status === "success" && lost) throw new Error("result.coverage names unread or unanswered text, but the outcome is success.");
+  if (outcome.status === "partial" && LOSS_PARTIAL.has(outcome.reason) && !lost) throw new Error(`partial reason ${outcome.reason} requires a result.coverage entry that was not read or answered.`);
+}
 function validateWarning(v: unknown): void { const w = obj(v, "warning"); exact(w, ["category", "code"], "warning"); if (!WARNING_CATEGORIES.has(w.category as string)) throw new Error("warning category invalid."); stableIdentity(w.code, "warning.code"); }
 function validateFailure(v: unknown): void { const f = obj(v, "providerFailure"); exact(f, ["provider", "kind", "retryable"], "providerFailure", ["code"]); stableIdentity(f.provider, "failure.provider"); if (!FAILURE_KINDS.has(f.kind as string) || typeof f.retryable !== "boolean") throw new Error("provider failure invalid."); if (f.code !== undefined) { stableIdentity(f.code, "failure.code"); if (f.code.length > 128) throw new Error("failure.code must be at most 128 characters."); } }
 function validateProducedBy(v: unknown): void { const b = obj(v, "proposal.producedBy"); exact(b, ["model", "modelSource", "requestDigest"], "proposal.producedBy"); stableIdentity(b.model, "proposal.producedBy.model"); if (!MODEL_SOURCES.has(b.modelSource as string)) throw new Error("proposal.producedBy.modelSource is invalid."); digest(b.requestDigest, "proposal.producedBy.requestDigest"); }
@@ -357,7 +492,11 @@ function isWellFormedUnicode(value: string): boolean { for (let index = 0; index
 
 const RAW_SOURCE_KINDS = new Set<RawSource["kind"]>(["uploaded-document", "web-page", "api-record", "manual-entry", "policy-standard", "inquiry-question", "agent-utterance", "system-schema"]);
 const VALUE_TYPES = new Set<ReviewValueType>(["string", "number", "boolean", "date", "enum", "array", "object"]);
-const PARTIAL = new Set(["cancelled", "max-provider-calls", "max-total-tokens", "max-chunks"]);
+/** Partial reasons meaning a dispatched chunk was not (fully) read or answered. */
+const LOSS_PARTIAL = new Set<string>(["provider-failure", "content-truncated", "output-truncated"]);
+const PARTIAL = new Set<string>(["cancelled", "max-provider-calls", "max-total-tokens", "max-chunks", ...LOSS_PARTIAL]);
+const COVERAGE_STATUSES = new Set(["complete", "unread", "output-truncated"]);
+const COVERAGE_REASONS = new Set(["provider-failure", "content-truncated", "missing-tool-call", "not-dispatched"]);
 const FAILURE_CATEGORIES = new Set(["invalid-config", "invalid-task", "preparation", "provider", "unexpected"]);
 const WARNING_CATEGORIES = new Set(["provider", "normalization", "preparation", "limit", "storage", "content", "other"]);
 const FAILURE_KINDS = new Set(["authentication", "rate-limit", "timeout", "invalid-request", "unavailable", "unknown"]);

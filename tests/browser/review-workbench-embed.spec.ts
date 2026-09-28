@@ -12,8 +12,10 @@ import { expect, test, type Page } from "@playwright/test";
 
 import {
   envelopeInspectorEntry,
+  envelopeQueueSeeds,
   envelopeReviewQueueSession,
   paginatingEnvelopeSeeds,
+  type EnvelopeProposalSeed,
 } from "../envelope-review-fixture.js";
 
 const fixturePath = "/tests/browser/fixtures/review-workbench-embed.html";
@@ -26,6 +28,8 @@ interface LoadedEmbed {
 interface EmbedOptions {
   /** Seed count and page size, to mount a queue that actually paginates. */
   readonly candidates?: number;
+  /** Explicit proposal seeds; overrides `candidates`. */
+  readonly seeds?: readonly EnvelopeProposalSeed[];
   readonly pageSize?: number;
   /** Overrides the resolved artifact, to mount a non-grounded posture. */
   readonly artifact?: unknown;
@@ -49,7 +53,7 @@ async function loadEmbed(page: Page, options: EmbedOptions = {}): Promise<Loaded
     if (message.type() === "error") consoleErrors.push(message.text());
   });
 
-  const seeds = options.candidates ? paginatingEnvelopeSeeds(options.candidates) : undefined;
+  const seeds = options.seeds ?? (options.candidates ? paginatingEnvelopeSeeds(options.candidates) : undefined);
   const inspectorEntry = seeds ? envelopeInspectorEntry(seeds) : envelopeInspectorEntry();
   const fixture = {
     session: JSON.parse(JSON.stringify(seeds ? envelopeReviewQueueSession(seeds) : envelopeReviewQueueSession())),
@@ -560,6 +564,30 @@ test.describe("embedded workbench: envelope-imported decisions", () => {
 
     await expect(field).toHaveAttribute("data-decision", "could-not-confirm");
     await expect(field.getByTestId("decided-chip")).toHaveText("Could not confirm");
+
+    expect(pageErrors).toEqual([]);
+    expect(consoleErrors).toEqual([]);
+  });
+
+  test("a field with conflicting proposed values lists them and offers no decision", async ({ page }) => {
+    const seeds: EnvelopeProposalSeed[] = [
+      ...envelopeQueueSeeds,
+      { fieldPath: "commercial.annualFeeUsd", candidateValue: 52000, excerpt: "52000", valueType: "number" },
+    ];
+    const { pageErrors, consoleErrors } = await loadEmbed(page, { seeds });
+
+    const conflict = fieldByTarget(page, "commercial.annualFeeUsd");
+    await expect(conflict.getByTestId("conflicting-proposals")).toBeVisible();
+    await expect(conflict.getByTestId("conflicting-value")).toHaveCount(2);
+    await expect(conflict.getByTestId("use-proposed")).toHaveCount(0);
+    await expect(conflict.getByTestId("keep-current")).toHaveCount(0);
+    await expect(conflict.getByTestId("could-not-confirm")).toHaveCount(0);
+
+    // The rest of the queue still decides.
+    const other = fieldByTarget(page, "renewal.date");
+    await other.getByTestId("use-proposed").click();
+    await expect(other.getByTestId("decided-chip")).toHaveText("Accepted");
+    await expect(page.getByTestId("fields-changed-count")).toHaveText("4");
 
     expect(pageErrors).toEqual([]);
     expect(consoleErrors).toEqual([]);

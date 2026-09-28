@@ -45,6 +45,7 @@ describe("portable extraction envelope import", () => {
       attempt: { id: owningEnvelope.result.runId, providerCalls: 2 },
       warnings: [{ category: "provider", code: "provider-warning" }],
       outcome: { status: "partial", reason: "max-provider-calls" },
+      partial: owningEnvelope.result.partial,
     });
   });
 
@@ -77,7 +78,9 @@ describe("portable extraction envelope import", () => {
 
   it("keeps same-span different fields distinct while sharing source evidence", async () => {
     const envelope = await fixture();
-    envelope.result.proposals.push({ ...envelope.result.proposals[0]!, fieldPath: "alias" });
+    // A field of its own: sharing "alias" (and its value) with proposal 1
+    // would make the two one claim slot with one value.
+    envelope.result.proposals.push({ ...envelope.result.proposals[0]!, fieldPath: "nickname" });
     const imported = importExtractionEnvelope(envelope, options());
     const a = imported.reviewItems[0]!, b = imported.reviewItems[2]!;
     assert.notEqual(a.metadata.name, b.metadata.name);

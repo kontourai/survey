@@ -1,0 +1,142 @@
+{
+  "format": "traverse-extraction-result",
+  "result": {
+    "extractedAt": "2026-09-28T06:24:58.471Z",
+    "model": "fixture-model",
+    "outcome": {
+      "status": "success"
+    },
+    "preparedArtifact": {
+      "contentLength": 130,
+      "digest": "4289ed89a58242258a10cc58922eae6478d86e01681c1dd131c5ddd9a4f0b04f",
+      "format": "traverse-prepared-artifact",
+      "preparationMode": "markdown",
+      "preparationVersion": "3+linkedom@0.18.13+turndown@7.2.4",
+      "ref": "traverse-prepared-artifact:v1:sha256:2f8656714f157ebd289d458f37b9d6a89c3f180c5c647ba57eef73368ab1733f",
+      "version": 1
+    },
+    "proposals": [
+      {
+        "candidateValue": 1000,
+        "confidence": 0.7,
+        "extractor": "fixture-fee-scanner",
+        "fieldPath": "plans[].fee",
+        "pathIndices": [
+          0
+        ],
+        "provenance": {
+          "excerpt": "1000",
+          "locator": "chars:33-37",
+          "occurrence": {
+            "ambiguous": false,
+            "count": 1,
+            "hintUsed": false,
+            "resolverVersion": "exact-occurrence-v1",
+            "selected": {
+              "end": 37,
+              "index": 0,
+              "start": 33
+            },
+            "selection": "source-order"
+          }
+        },
+        "valueType": "number"
+      },
+      {
+        "candidateValue": 2000,
+        "confidence": 0.7,
+        "extractor": "fixture-fee-scanner",
+        "fieldPath": "plans[].fee",
+        "pathIndices": [
+          1
+        ],
+        "provenance": {
+          "excerpt": "2000",
+          "locator": "chars:64-68",
+          "occurrence": {
+            "ambiguous": false,
+            "count": 1,
+            "hintUsed": false,
+            "resolverVersion": "exact-occurrence-v1",
+            "selected": {
+              "end": 68,
+              "index": 0,
+              "start": 64
+            },
+            "selection": "source-order"
+          }
+        },
+        "valueType": "number"
+      },
+      {
+        "candidateValue": 3000,
+        "confidence": 0.7,
+        "extractor": "fixture-fee-scanner",
+        "fieldPath": "plans[].fee",
+        "pathIndices": [
+          2
+        ],
+        "provenance": {
+          "excerpt": "3000",
+          "locator": "chars:95-99",
+          "occurrence": {
+            "ambiguous": false,
+            "count": 1,
+            "hintUsed": false,
+            "resolverVersion": "exact-occurrence-v1",
+            "selected": {
+              "end": 99,
+              "index": 0,
+              "start": 95
+            },
+            "selection": "source-order"
+          }
+        },
+        "valueType": "number"
+      },
+      {
+        "candidateValue": 4000,
+        "confidence": 0.7,
+        "extractor": "fixture-fee-scanner",
+        "fieldPath": "plans[].fee",
+        "pathIndices": [
+          3
+        ],
+        "provenance": {
+          "excerpt": "4000",
+          "locator": "chars:126-130",
+          "occurrence": {
+            "ambiguous": false,
+            "count": 1,
+            "hintUsed": false,
+            "resolverVersion": "exact-occurrence-v1",
+            "selected": {
+              "end": 130,
+              "index": 0,
+              "start": 126
+            },
+            "selection": "source-order"
+          }
+        },
+        "valueType": "number"
+      }
+    ],
+    "provider": "fixture-fee-scanner",
+    "providerCalls": 1,
+    "raw": {
+      "tokensUsed": 5
+    },
+    "runId": "traverse-extraction-run:a54e406a-d7bc-4fb7-98bd-d6faca1e1654",
+    "totalTokensUsed": 5,
+    "warningClassifications": [
+      {
+        "category": "preparation",
+        "code": "navigation-pruned"
+      }
+    ]
+  },
+  "source": {
+    "ref": "fixture://vendor-page"
+  },
+  "version": 1
+}

@@ -1,0 +1,54 @@
+{
+  "format": "traverse-extraction-result",
+  "result": {
+    "extractedAt": "2026-09-28T06:24:58.463Z",
+    "model": "fixture-model",
+    "outcome": {
+      "status": "success"
+    },
+    "preparedArtifact": {
+      "contentLength": 34,
+      "digest": "8a6a191181da8b9b9c45635edc20a864b30a80d8fa243e1c00b1be8d5ebf6f74",
+      "format": "traverse-prepared-artifact",
+      "preparationMode": "text",
+      "preparationVersion": "3",
+      "ref": "traverse-prepared-artifact:v1:sha256:d546332eff0e23e23824d6f6529881ec96d0279b399b324e0976bae0b091a374",
+      "version": 1
+    },
+    "proposals": [
+      {
+        "candidateValue": 48000,
+        "extractor": "fixture-fee-scanner",
+        "fieldPath": "fee",
+        "provenance": {
+          "excerpt": "48000",
+          "locator": "chars:19-24",
+          "occurrence": {
+            "ambiguous": false,
+            "count": 1,
+            "hintUsed": false,
+            "resolverVersion": "exact-occurrence-v1",
+            "selected": {
+              "end": 24,
+              "index": 0,
+              "start": 19
+            },
+            "selection": "source-order"
+          }
+        },
+        "valueType": "number"
+      }
+    ],
+    "provider": "fixture-fee-scanner",
+    "providerCalls": 1,
+    "raw": {
+      "tokensUsed": 5
+    },
+    "runId": "traverse-extraction-run:d29b7c39-0360-4921-8f75-9c73a1be42b6",
+    "totalTokensUsed": 5
+  },
+  "source": {
+    "ref": "fixture://vendor-contract"
+  },
+  "version": 1
+}

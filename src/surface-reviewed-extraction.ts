@@ -3,7 +3,7 @@ import type {
   SurveyExtractionReviewDecision,
   SurveyExtractionReviewItem,
 } from "@kontourai/surface";
-import type { ExtractionEnvelopeImport } from "./extraction-envelope.js";
+import type { ExtractionEnvelopeImport, PortableExtractionProposal, PortableExtractionResultEnvelope } from "./extraction-envelope.js";
 import type { ReviewDecision, ReviewItem } from "./review-resource.js";
 
 /**
@@ -30,11 +30,32 @@ type DeepKnown<T> = T extends readonly (infer U)[]
 type FieldsAssignable<A, B> = [A] extends [DeepKnown<B>] ? true : false;
 type Assert<T extends true> = T;
 
-type _ImportBridgeHolds = Assert<FieldsAssignable<ExtractionEnvelopeImport, SurveyExtractionEnvelopeImport>>;
+/**
+ * Surface's reviewed-extraction profile still requires a proposer confidence on
+ * every proposal, while the envelope now allows it to be absent. The bridge
+ * therefore only covers records whose proposals all carry one, and
+ * {@link toSurfaceReviewedExtractionImport} refuses the rest by name instead of
+ * casting them into a type they do not satisfy.
+ */
+type WithReportedConfidence = Omit<ExtractionEnvelopeImport, "spec"> & {
+  spec: Omit<ExtractionEnvelopeImport["spec"], "envelope"> & {
+    envelope: Omit<PortableExtractionResultEnvelope, "result"> & {
+      result: Omit<PortableExtractionResultEnvelope["result"], "proposals"> & {
+        proposals: Array<PortableExtractionProposal & { confidence: number }>;
+      };
+    };
+  };
+};
+
+type _ImportBridgeHolds = Assert<FieldsAssignable<WithReportedConfidence, SurveyExtractionEnvelopeImport>>;
 type _ItemBridgeHolds = Assert<FieldsAssignable<ReviewItem, SurveyExtractionReviewItem>>;
 type _DecisionBridgeHolds = Assert<FieldsAssignable<ReviewDecision, SurveyExtractionReviewDecision>>;
 
 export function toSurfaceReviewedExtractionImport(record: ExtractionEnvelopeImport): SurveyExtractionEnvelopeImport {
+  const unreported = record.spec.envelope.result.proposals.findIndex((proposal) => proposal.confidence === undefined);
+  if (unreported !== -1) {
+    throw new Error(`Surface's reviewed-extraction profile requires a proposer confidence on every proposal; proposal ${unreported} of ${record.metadata.name} reports none.`);
+  }
   return record as unknown as SurveyExtractionEnvelopeImport;
 }
 
