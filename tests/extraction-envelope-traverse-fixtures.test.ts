@@ -107,7 +107,7 @@ describe("typed partial reasons and per-chunk coverage (#286)", () => {
     const imported = importExtractionEnvelope(envelope, options());
     assert.deepEqual(imported.reviewItems, []);
     assert.deepEqual(imported.record.status, { state: "unresolved", diagnostics: [{ kind: "extraction-failed", category: "provider", code: "no-usable-answer",
-      message: "Extraction failed (provider/no-usable-answer); no usable answer was recorded for this source, so the import has no candidates." }] });
+      message: "Extraction failed (provider/no-usable-answer); no usable answer was recorded for this source, so the import has no candidates." }], provenance: "unverified" });
     assert.deepEqual(reimportExtractionEnvelope(exportExtractionEnvelopeImport(imported.record)), imported.record);
     assert.deepEqual(imported.record.spec.envelope.result.outcome, envelope.result.outcome);
     assert.deepEqual(imported.record.spec.envelope.result.warningClassifications, envelope.result.warningClassifications);
@@ -124,10 +124,10 @@ describe("typed partial reasons and per-chunk coverage (#286)", () => {
     const emptyImport = importExtractionEnvelope(empty, options());
     const failedImport = importExtractionEnvelope(failed, options());
     const stoppedImport = importExtractionEnvelope(stopped, options());
-    assert.deepEqual(emptyImport.record.status, { state: "grounded", diagnostics: [] });
+    assert.deepEqual(emptyImport.record.status, { state: "grounded", diagnostics: [], provenance: "unverified" });
     assert.equal(failedImport.record.status.state, "unresolved");
     assert.deepEqual(stoppedImport.record.status, { state: "unresolved", diagnostics: [{ kind: "extraction-incomplete", reason: "max-chunks",
-      message: "Extraction stopped short (max-chunks) without proposing any value; unread text may hold values." }] });
+      message: "Extraction stopped short (max-chunks) without proposing any value; unread text may hold values." }], provenance: "unverified" });
 
     const emptySource = buildExtractionInspectorModel({ importResult: emptyImport, artifact: artifactFor(empty, "Fee: 5.") }).sources[0]!;
     const failedSource = buildExtractionInspectorModel({ importResult: failedImport, artifact: artifactFor(failed, "Fee: 5.") }).sources[0]!;
@@ -149,7 +149,7 @@ describe("typed partial reasons and per-chunk coverage (#286)", () => {
 
   it("keeps a partial run that proposed values grounded, with its reason on the candidates", async () => {
     const imported = importExtractionEnvelope(await traverseFixture("partial-max-chunks"), options());
-    assert.deepEqual(imported.record.status, { state: "grounded", diagnostics: [] });
+    assert.deepEqual(imported.record.status, { state: "grounded", diagnostics: [], provenance: "unverified" });
     assert.deepEqual(producer(imported.reviewItems[0]!.spec.candidates[0]).outcome, { status: "partial", reason: "max-chunks" });
   });
 

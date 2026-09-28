@@ -60,6 +60,26 @@ export interface ReviewItemPresentation {
   readonly reviewItemLink?: ReviewPresentationLink;
   readonly traceRefs: readonly ReviewTraceRef[];
   readonly candidates: readonly ReviewCandidatePresentation[];
+  /**
+   * Proposals for this claim that an envelope import left out because the
+   * source text at their cited span is not their excerpt. Unverifiable, not
+   * disproven: every decision surface shows them. Empty for other items.
+   */
+  readonly excludedProposals: readonly ExcludedProposalPresentation[];
+  /**
+   * For an envelope-imported item, whether its import checked excerpts
+   * against the prepared artifact. Absent for other items, and for an item
+   * whose envelope binding is missing, which cannot claim either.
+   */
+  readonly excerptVerification?: "verified" | "unverified";
+}
+
+export interface ExcludedProposalPresentation {
+  readonly proposalIndex: number;
+  readonly value: unknown;
+  readonly valueText: string;
+  readonly locator: string;
+  readonly excerpt: string;
 }
 
 export interface ReviewResultPresentation {
@@ -169,6 +189,48 @@ export function buildInterpretationReadingPresentation(
   };
 }
 
+const EXTRACTION_ENVELOPE_PRODUCER = "survey.kontourai.io/extraction-envelope";
+
+/**
+ * The envelope-import binding an item carries, or undefined when it has none.
+ * A binding names its import and proposals, and every candidate points back
+ * at the same import; anything less cannot vouch for what the import checked.
+ */
+function extractionEnvelopeBinding(item: ReviewItem): Record<string, unknown> | undefined {
+  const metadata = item.metadata?.producer?.[EXTRACTION_ENVELOPE_PRODUCER];
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return undefined;
+  const binding = metadata as Record<string, unknown>;
+  if (typeof binding.importName !== "string" || !binding.importName || !Array.isArray(binding.proposalIndices) || binding.proposalIndices.length === 0) return undefined;
+  const bound = item.spec.candidates.length > 0 && item.spec.candidates.every((candidate) => {
+    const own = candidate.producer?.[EXTRACTION_ENVELOPE_PRODUCER] as { importName?: unknown } | undefined;
+    return own?.importName === binding.importName;
+  });
+  return bound ? binding : undefined;
+}
+
+/** The well-formed `excludedProposals` entries of a bound envelope item; malformed entries are ignored, never rendered. */
+function excludedProposalsOf(item: ReviewItem, binding: Record<string, unknown> | undefined, adapter: ReviewPresentationAdapter): ExcludedProposalPresentation[] {
+  if (!binding || !Array.isArray(binding.excludedProposals)) return [];
+  return binding.excludedProposals.flatMap((entry: unknown) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+    const e = entry as Record<string, unknown>;
+    if (!Number.isSafeInteger(e.proposalIndex) || typeof e.locator !== "string" || typeof e.excerpt !== "string" || !("value" in e)) return [];
+    const proposed = item.spec.candidates.find((candidate) => candidate.role === "proposed");
+    const valueText = (proposed ? adapter.summarizeValue?.(e.value, { item, candidate: proposed, value: e.value }) : undefined) ?? formatValue(e.value);
+    return [{ proposalIndex: e.proposalIndex as number, value: e.value, valueText, locator: e.locator, excerpt: e.excerpt }];
+  });
+}
+
+/**
+ * One sentence naming every excluded proposal, for surfaces that speak in
+ * text (the MCP item, the recorded decision prompt). Undefined when none.
+ */
+export function excludedProposalsSentence(excluded: readonly ExcludedProposalPresentation[]): string | undefined {
+  if (excluded.length === 0) return undefined;
+  const named = excluded.map((entry) => `${entry.valueText} (proposal ${entry.proposalIndex}, ${entry.locator})`).join(", ");
+  return `${excluded.length === 1 ? "Another proposed value was" : `${excluded.length} other proposed values were`} excluded at import because the source text at the cited span is not the excerpt: ${named}. Unverifiable is not disproven.`;
+}
+
 export function buildReviewItemPresentation(
   item: ReviewItem,
   adapter: ReviewPresentationAdapter = {},
@@ -185,6 +247,15 @@ export function buildReviewItemPresentation(
     reviewItemLink: adapter.linkForReviewItem?.(item, context),
     traceRefs: traceRefsForReviewItem(item, adapter),
     candidates: item.spec.candidates.map((candidate) => buildReviewCandidatePresentation(item, candidate, adapter, targetLabel)),
+    ...extractionPresentation(item, adapter),
+  };
+}
+
+function extractionPresentation(item: ReviewItem, adapter: ReviewPresentationAdapter): Pick<ReviewItemPresentation, "excludedProposals" | "excerptVerification"> {
+  const binding = extractionEnvelopeBinding(item);
+  return {
+    excludedProposals: excludedProposalsOf(item, binding, adapter),
+    ...(binding ? { excerptVerification: binding.excerptVerification === "verified" ? "verified" as const : "unverified" as const } : {}),
   };
 }
 

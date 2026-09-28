@@ -52,6 +52,51 @@ message and exposes it as `extractionDiagnostic`. A partial run with proposals
 stays grounded and carries its reason on every candidate. Unresolved imports
 produce no `ReviewItem`.
 
+### Verifying excerpts at import
+
+Pass the resolved prepared artifact as the `artifact` option to check the
+envelope against the bytes at import instead of only in the source inspector:
+
+```ts
+const imported = importExtractionEnvelope(serializedEnvelope, {
+  ...options,
+  // actualDigest: the lowercase hex SHA-256 of the text, e.g. createHash("sha256").update(preparedText).digest("hex")
+  artifact: { status: "available", text: preparedText, actualDigest },
+});
+```
+
+The text must hash to `result.preparedArtifact.digest` and have its
+`contentLength`. If it does not, or the artifact is reported `unavailable` or
+`digest-mismatch`, the import is `unresolved` with a `digest-mismatch` or
+`artifact-unavailable` diagnostic. When it verifies, each proposal's
+`chars:start-end` slice must equal its excerpt. A proposal that fails this
+produces no `ReviewItem` and an `excerpt-mismatch` diagnostic that names its
+index and locator. The rest import unchanged and the import stays `grounded`,
+unless every proposal failed, which makes it `unresolved`. The text itself is
+not stored in the record.
+
+An excluded proposal is unverifiable, not disproven. When it shared a claim
+slot with proposals that did verify, the slot's item lists it in its producer
+metadata as `excludedProposals`. Every decision surface shows it with its
+value and span: the workbench card and audit rows, the MCP item and card, and
+the recorded decision prompt. The candidate set is judged on the candidates that
+remain: a rival value whose excerpt failed does not keep the set in
+`conflict`, because a conflict item offers only decisions that trust no
+value, and an unverifiable citation would then be enough to block the value
+that the source does support. The reviewer still sees the rival and can
+decline with Could not confirm. The source inspector names every excluded
+proposal, including ones whose slot has no other proposal and so no item, and
+shows the `proposals-excluded` posture instead of the aligned one.
+
+`status.provenance` is `"verified"` only when this check ran against text that
+matched the digest. Without the option, or when the text did not verify, it is
+`"unverified"`. Consumers that must not review unverified excerpts should
+require `"verified"`. Records written before this field existed have no
+`provenance`. Items from a verified import carry `excerptVerification:
+"verified"` in their producer metadata, and the inspector and workbench show
+whether a source's excerpts were checked. The field records what the import saw. It is not proof: a
+record taken from untrusted storage cannot prove it without the text.
+
 ### One candidate set per claim
 
 Proposals are grouped into one `ReviewItem` per **claim slot**: the claim the

@@ -90,6 +90,7 @@ export type {
   ExtractionEnvelopeImport,
   ExtractionEnvelopeImportDiagnostic,
   ExtractionEnvelopeImportOptions,
+  ExtractionEnvelopeImportProvenance,
   ExtractionEnvelopeImportResult,
   ExtractionEnvelopeResolutionIdentity,
   PortableExtractionCoverageEntry,

@@ -1,7 +1,6 @@
-import { buildReviewItemsFromExtractionEnvelopeImport, validateExtractionEnvelopeImport, type ExtractionEnvelopeImport, type ExtractionEnvelopeImportDiagnostic, type ExtractionEnvelopeImportResult, type PortableExtractionProposal } from "../extraction-envelope.js";
+import { assertResolvedExtractionArtifact, buildReviewItemsFromExtractionEnvelopeImport, checkPreparedArtifact, excerptMismatchProposalIndices, proposalSpanMatches, validateExtractionEnvelopeImport, type ExtractionEnvelopeImport, type ExtractionEnvelopeImportDiagnostic, type ExtractionEnvelopeImportResult, type PortableExtractionProposal, type ResolvedExtractionArtifact } from "../extraction-envelope.js";
 import { canonicalJson } from "./canonical.js";
 import type { ReviewItem } from "../review-resource.js";
-import { sha256Hex } from "../sha256.js";
 import {
   resolvePortablePdfRegion,
   type PortablePdfLayout,
@@ -9,12 +8,7 @@ import {
 } from "../pdf-layout.js";
 
 export type ExtractionAlignmentState = "aligned" | "excerpt-mismatch" | "artifact-unavailable" | "digest-mismatch";
-export type ArtifactUnavailableCode = "not-found" | "storage-error" | "access-denied" | "invalid-artifact" | "unknown";
-
-export type ResolvedExtractionArtifact =
-  | { status: "available"; text: string; actualDigest: string }
-  | { status: "unavailable"; code: ArtifactUnavailableCode }
-  | { status: "digest-mismatch"; actualDigest: string };
+export type { ArtifactUnavailableCode, ResolvedExtractionArtifact } from "../extraction-envelope.js";
 
 export interface ExtractionInspectorEntry {
   /** Result returned by importExtractionEnvelope; includes authoritative ReviewItem identities. */
@@ -99,6 +93,17 @@ export interface ExtractionInspectorSource {
    * diagnostic. An empty source with this set is not a run that found nothing.
    */
   extractionDiagnostic?: Extract<ExtractionEnvelopeImportDiagnostic, { kind: "extraction-failed" | "extraction-incomplete" }>;
+  /**
+   * Whether the import checked excerpts against the prepared artifact
+   * (`status.provenance`; a record without it is `unverified`). Always set by
+   * {@link buildExtractionInspectorModel}; optional for hand-authored models.
+   */
+  importProvenance?: "verified" | "unverified";
+  /**
+   * Proposals the import left out because the prepared text at their span is
+   * not their excerpt. They have no candidate row; this is where they are shown.
+   */
+  excludedProposals?: Array<{ proposalIndex: number; field: string; locator: string }>;
   message: string;
 }
 
@@ -167,7 +172,7 @@ export function buildExtractionInspectorModel(input: ExtractionInspectorInput): 
     if (!entry.importResult || typeof entry.importResult !== "object") throw new Error("Invalid extraction import result.");
     const record = validateExtractionEnvelopeImport(entry.importResult.record);
     assertImportedResult(entry.importResult, record);
-    assertResolvedArtifact(entry.artifact);
+    assertResolvedExtractionArtifact(entry.artifact);
     const envelope = record.spec.envelope;
     const prepared = envelope.result.preparedArtifact;
     const sourceKey = `${record.metadata.producerNamespace}:${record.metadata.name}:${entryIndex}`;
@@ -180,6 +185,8 @@ export function buildExtractionInspectorModel(input: ExtractionInspectorInput): 
       record.status.diagnostics,
       entry.artifact,
       envelope.result.ocrDerived,
+      envelope.result.proposals,
+      record.status.provenance ?? "unverified",
     );
     sources.push(source);
     const candidateStart = candidates.length;
@@ -288,18 +295,6 @@ function resolveHighlightElementIds(model: ExtractionInspectorModel): Map<Extrac
   return resolved;
 }
 
-function assertResolvedArtifact(artifact: ResolvedExtractionArtifact): void {
-  if (!artifact || typeof artifact !== "object" || Array.isArray(artifact)) throw new Error("Invalid resolved extraction artifact.");
-  const keys = Object.keys(artifact).sort();
-  if (artifact.status === "available") {
-    if (keys.join(",") !== "actualDigest,status,text" || typeof artifact.text !== "string" || !/^[a-f0-9]{64}$/.test(artifact.actualDigest)) throw new Error("Invalid available extraction artifact.");
-  } else if (artifact.status === "digest-mismatch") {
-    if (keys.join(",") !== "actualDigest,status" || !/^[a-f0-9]{64}$/.test(artifact.actualDigest)) throw new Error("Invalid digest-mismatch extraction artifact.");
-  } else if (artifact.status === "unavailable") {
-    if (keys.join(",") !== "code,status" || !["not-found", "storage-error", "access-denied", "invalid-artifact", "unknown"].includes(artifact.code)) throw new Error("Invalid unavailable extraction artifact.");
-  } else throw new Error("Invalid resolved extraction artifact status.");
-}
-
 function assertImportedResult(result: ExtractionEnvelopeImportResult, record: ExtractionEnvelopeImport): void {
   if (!result || typeof result !== "object" || !result.record || !Array.isArray(result.reviewItems)) throw new Error("Invalid extraction import result.");
   const { reviewItems } = result;
@@ -308,7 +303,9 @@ function assertImportedResult(result: ExtractionEnvelopeImportResult, record: Ex
   const grounded = record.status?.state === "grounded";
   const proposals = record.spec.envelope.result.proposals;
   const covered = reviewItems.flatMap(envelopeItemProposalIndices).sort((left, right) => left - right);
-  if ((!grounded && reviewItems.length !== 0) || (grounded && canonicalJson(covered) !== canonicalJson(proposals.map((_proposal, index) => index)))) throw new Error("Extraction import ReviewItems do not match its grounding state.");
+  const excluded = excerptMismatchProposalIndices(record);
+  const expectedCovered = proposals.map((_proposal, index) => index).filter((index) => !excluded.has(index));
+  if ((!grounded && reviewItems.length !== 0) || (grounded && canonicalJson(covered) !== canonicalJson(expectedCovered))) throw new Error("Extraction import ReviewItems do not match its grounding state.");
   const canonicalItems = buildReviewItemsFromExtractionEnvelopeImport(record);
   if (canonicalJson(reviewItems) !== canonicalJson(canonicalItems)) throw new Error("Extraction import ReviewItems do not match their canonical identities and bindings.");
   reviewItems.forEach((item, itemIndex) => {
@@ -342,7 +339,10 @@ function envelopeItemProposalIndices(item: ReviewItem): number[] {
  * stop when there is one, otherwise the artifact alignment. A failed
  * extraction over an aligned artifact must not show the aligned posture.
  */
-export function inspectorSourcePosture(source: Pick<ExtractionInspectorSource, "alignment" | "extractionDiagnostic">): ExtractionAlignmentState | "extraction-failed" | "extraction-incomplete" {
+export function inspectorSourcePosture(source: Pick<ExtractionInspectorSource, "alignment" | "extractionDiagnostic" | "excludedProposals">): ExtractionAlignmentState | "extraction-failed" | "extraction-incomplete" | "proposals-excluded" {
+  // Dropped proposals are a loss of evidence: they lead over an aligned
+  // artifact and over an extraction that merely stopped short.
+  if (source.alignment === "aligned" && source.excludedProposals?.length && source.extractionDiagnostic?.kind !== "extraction-failed") return "proposals-excluded";
   if (source.extractionDiagnostic) return source.extractionDiagnostic.kind;
   return source.alignment;
 }
@@ -354,28 +354,38 @@ function sourceModel(
   diagnostics: readonly ExtractionEnvelopeImportDiagnostic[],
   artifact: ResolvedExtractionArtifact,
   ocrDerived: true | undefined,
+  proposals: readonly PortableExtractionProposal[],
+  importProvenance: "verified" | "unverified",
 ): ExtractionInspectorSource {
   let alignment: ExtractionAlignmentState;
   let message: string;
   const artifactUnresolved = diagnostics.some((diagnostic) => diagnostic.kind === "artifact-unavailable" || diagnostic.kind === "digest-mismatch");
+  const excludedProposals = diagnostics.flatMap((diagnostic) => diagnostic.kind === "excerpt-mismatch"
+    ? [{ proposalIndex: diagnostic.proposalIndex, field: proposals[diagnostic.proposalIndex]?.fieldPath ?? "", locator: diagnostic.locator }]
+    : []);
   const extractionDiagnostic = diagnostics.find((diagnostic): diagnostic is NonNullable<ExtractionInspectorSource["extractionDiagnostic"]> =>
     diagnostic.kind === "extraction-failed" || diagnostic.kind === "extraction-incomplete");
-  if (artifactUnresolved || artifact.status === "unavailable") {
-    alignment = "artifact-unavailable"; message = `Prepared artifact unavailable (${artifact.status === "unavailable" ? artifact.code : "invalid-artifact"}). Candidates are not grounded.`;
-  } else if (artifact.status === "digest-mismatch" || !prepared || artifact.actualDigest !== prepared.digest
-    || sha256Hex(artifact.text) !== artifact.actualDigest) {
+  const check = checkPreparedArtifact(prepared, artifact);
+  if (artifactUnresolved || check.status === "unavailable") {
+    alignment = "artifact-unavailable"; message = `Prepared artifact unavailable (${check.status === "unavailable" ? check.code : "invalid-artifact"}). Candidates are not grounded.`;
+  } else if (check.status === "digest-mismatch") {
     alignment = "digest-mismatch"; message = "Prepared artifact digest does not match the extraction artifact. Candidates are not grounded.";
-  } else if (artifact.text.length !== prepared.contentLength) {
+  } else if (check.status === "wrong-length") {
     alignment = "artifact-unavailable"; message = "Prepared artifact content has the wrong length. Candidates are not grounded.";
   } else {
-    alignment = "aligned"; message = extractionDiagnostic
+    alignment = "aligned"; message = extractionDiagnostic || excludedProposals.length
       ? "Prepared artifact identity verified."
       : `Prepared artifact identity verified. Exact source spans are available.${ocrDerived ? " Prepared text is OCR-derived." : ""}`;
   }
+  if (excludedProposals.length) {
+    const named = excludedProposals.map((p) => `#${p.proposalIndex} ${p.field} (${p.locator})`).join(", ");
+    message = `${excludedProposals.length} proposal${excludedProposals.length === 1 ? " was" : "s were"} excluded at import because the prepared text at the span is not the excerpt: ${named}. ${message}`;
+  }
+  message = `${message} ${importProvenance === "verified" ? "Excerpts were checked against the prepared artifact at import." : "Excerpts were not checked against the prepared artifact at import."}`;
   // The extraction's own failure leads: an aligned artifact with no candidates
   // must not read as a complete run that found nothing.
   if (extractionDiagnostic) message = `${extractionDiagnostic.message} ${message}`;
-  return { key, importName, ...(extractionDiagnostic ? { extractionDiagnostic } : {}), ...(prepared?.ref ? { artifactRef: prepared.ref } : {}), ...(prepared?.digest ? { expectedDigest: prepared.digest } : {}), ...("actualDigest" in artifact ? { actualDigest: artifact.actualDigest } : {}), ...(alignment === "aligned" && artifact.status === "available" ? { artifactText: artifact.text } : {}), ...(ocrDerived ? { ocrDerived: true as const } : {}), alignment, message };
+  return { key, importName, importProvenance, ...(excludedProposals.length ? { excludedProposals } : {}), ...(extractionDiagnostic ? { extractionDiagnostic } : {}), ...(prepared?.ref ? { artifactRef: prepared.ref } : {}), ...(prepared?.digest ? { expectedDigest: prepared.digest } : {}), ...("actualDigest" in artifact ? { actualDigest: artifact.actualDigest } : {}), ...(alignment === "aligned" && artifact.status === "available" ? { artifactText: artifact.text } : {}), ...(ocrDerived ? { ocrDerived: true as const } : {}), alignment, message };
 }
 
 function candidateModel(
@@ -395,8 +405,8 @@ function candidateModel(
   if (!match) throw new Error(`Extraction proposal ${index} has an invalid text span.`);
   const start = Number(match[1]), end = Number(match[2]);
   if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start) throw new Error(`Extraction proposal ${index} has an invalid text span.`);
-  const alignment = source.alignment === "aligned" && source.artifactText!.slice(start, end) !== proposal.provenance.excerpt ? "excerpt-mismatch" : source.alignment;
-  if (alignment === "excerpt-mismatch") { source.alignment = alignment; source.message = "One or more source spans do not match their recorded excerpts. Affected candidates are not grounded."; }
+  const alignment = source.alignment === "aligned" && !proposalSpanMatches(source.artifactText!, proposal) ? "excerpt-mismatch" : source.alignment;
+  if (alignment === "excerpt-mismatch") { source.alignment = alignment; source.message = `One or more source spans do not match their recorded excerpts. Affected candidates are not grounded.${source.importProvenance === "unverified" ? " Excerpts were not checked against the prepared artifact at import." : ""}`; }
   let pdfRegion = pdfLayout ? resolvePortablePdfRegion(pdfLayout, proposal.provenance.locator) : undefined;
   const page = resolvePdfPage(pdfPageOffsets, start);
   if (page !== undefined) {
@@ -476,7 +486,7 @@ export function mountExtractionInspector(
     next.hidden = pageCount === 1;
     previous.disabled = page === 0;
     next.disabled = page >= pageCount - 1;
-    postures.innerHTML = model.sources.map(s => { const posture = inspectorSourcePosture(s); return `<div class="inspector-posture ${s.alignment}${posture !== s.alignment ? ` ${posture}` : ""}" role="status" data-posture="${escapeHtml(posture)}"><strong>${escapeHtml(s.importName)}: ${escapeHtml(posture)}</strong><span>${escapeHtml(s.message)}</span></div>`; }).join("");
+    postures.innerHTML = model.sources.map(s => { const posture = inspectorSourcePosture(s); const classes = [...new Set([s.alignment, s.extractionDiagnostic?.kind, s.excludedProposals?.length ? "proposals-excluded" : undefined, posture].filter(Boolean))].join(" "); return `<div class="inspector-posture ${classes}" role="status" data-posture="${escapeHtml(posture)}"><strong>${escapeHtml(s.importName)}: ${escapeHtml(posture)}</strong><span>${escapeHtml(s.message)}</span></div>`; }).join("");
     sourcesRoot.innerHTML = model.sources.map(s => { const anchored = model.candidates.filter(c => c.sourceKey === s.key); const marked = visible.filter(c => c.sourceKey === s.key); return `<div class="inspector-source" aria-label="Prepared source for ${escapeHtml(s.importName)}"><h3>${escapeHtml(s.importName)}</h3><pre tabindex="0">${s.artifactText === undefined ? `${anchored.map(c => anchorHtml(c, highlightIdFor(c))).join("")}<span class="source-unavailable">${escapeHtml(s.message)}</span>` : renderSource(s.artifactText, anchored, marked, highlightIdFor)}</pre></div>`; }).join("");
   };
   root.querySelectorAll<HTMLSelectElement>("select").forEach(select => select.addEventListener("change", event => { event.stopPropagation(); const key = select.dataset.filter as keyof ExtractionInspectorFilters; if (select.value) (filters as Record<string,string>)[key] = select.value; else delete (filters as Record<string,string>)[key]; page = 0; render(); }));
