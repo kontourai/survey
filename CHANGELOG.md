@@ -1,5 +1,16 @@
 # Changelog
 
+## [6.0.0](https://github.com/kontourai/survey/compare/v5.0.0...v6.0.0) (2026-09-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* every import record now carries status.provenance, and ExtractionEnvelopeImportDiagnostic gains the excerpt-mismatch member.
+
+### Features
+
+* verify excerpts against the prepared artifact at import; keep negative posture over incomplete extraction ([#309](https://github.com/kontourai/survey/issues/309)) ([521a5c7](https://github.com/kontourai/survey/commit/521a5c73bbc4fded018d221d29877e83800bbb19))
+
 ## [5.0.0](https://github.com/kontourai/survey/compare/v4.0.0...v5.0.0) (2026-09-28)
 
 
