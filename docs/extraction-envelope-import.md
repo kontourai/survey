@@ -52,6 +52,36 @@ message and exposes it as `extractionDiagnostic`. A partial run with proposals
 stays grounded and carries its reason on every candidate. Unresolved imports
 produce no `ReviewItem`.
 
+### Verifying excerpts at import
+
+Pass the resolved prepared artifact as the `artifact` option to check the
+envelope against the bytes at import instead of only in the source inspector:
+
+```ts
+const imported = importExtractionEnvelope(serializedEnvelope, {
+  ...options,
+  // actualDigest: the lowercase hex SHA-256 of the text, e.g. createHash("sha256").update(preparedText).digest("hex")
+  artifact: { status: "available", text: preparedText, actualDigest },
+});
+```
+
+The text must hash to `result.preparedArtifact.digest` and have its
+`contentLength`. If it does not, or the artifact is reported `unavailable` or
+`digest-mismatch`, the import is `unresolved` with a `digest-mismatch` or
+`artifact-unavailable` diagnostic. When it verifies, each proposal's
+`chars:start-end` slice must equal its excerpt. A proposal that fails this
+produces no `ReviewItem` and an `excerpt-mismatch` diagnostic that names its
+index and locator. The rest import unchanged and the import stays `grounded`,
+unless every proposal failed, which makes it `unresolved`. The text itself is
+not stored in the record.
+
+`status.provenance` is `"verified"` only when this check ran against text that
+matched the digest. Without the option, or when the text did not verify, it is
+`"unverified"`. Consumers that must not review unverified excerpts should
+require `"verified"`. Records written before this field existed have no
+`provenance`. The field records what the import saw. It is not proof: a
+record taken from untrusted storage cannot prove it without the text.
+
 ### One candidate set per claim
 
 Proposals are grouped into one `ReviewItem` per **claim slot**: the claim the

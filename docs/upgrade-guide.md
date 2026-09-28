@@ -585,6 +585,44 @@ used to look exactly like a complete run that found nothing. Code that treated
 diagnostics, and stored import records of such envelopes no longer validate
 until re-imported, because their stored status no longer matches.
 
+## Excerpt verification at envelope import (#293)
+
+`importExtractionEnvelope` takes an optional `artifact`, the same
+`ResolvedExtractionArtifact` the source inspector takes. Nothing changes until
+you pass it, apart from one new status field:
+
+- **`status.provenance` on every new import record.** It is `"unverified"`
+  when no artifact was passed, or when the one passed did not verify, and
+  `"verified"` when the text matched the envelope's prepared-artifact digest
+  and length and each proposal's span was checked against its excerpt. Code
+  that deep-compares `record.status` with `{ state, diagnostics }` must add the
+  field. Records stored before this release have no `provenance` and still
+  validate. Treat them as unverified. Older Survey versions reject records
+  that carry the field, so upgrade every reader before any writer.
+- **With `artifact`:** a proposal whose prepared text at its `chars:` span is
+  not its excerpt gets no `ReviewItem` and an `excerpt-mismatch` diagnostic
+  (`proposalIndex`, `locator`, `message`). The other proposals import as
+  before, and their item and candidate identities do not change. The import
+  stays `grounded` with that diagnostic in `status.diagnostics`. If every
+  proposal mismatches, it is `unresolved`. So `state === "grounded"` no longer
+  implies empty diagnostics: read them. Text that does not match the digest
+  gives a `digest-mismatch` diagnostic. A resolver failure or a wrong length
+  gives an `artifact-unavailable` diagnostic, which now can carry the
+  resolver's `code`. Any of these makes the import `unresolved` with no
+  items. The option throws when the envelope has no `result.preparedArtifact`
+  to verify against.
+- **Type changes.** `ExtractionEnvelopeImportDiagnostic` gains the
+  `excerpt-mismatch` member, and an exhaustive `switch` over `kind` needs a
+  case for it. `ResolvedExtractionArtifact` and `ArtifactUnavailableCode` are
+  now declared in the envelope module. They are still exported from the
+  package root and the inspector module.
+
+`provenance` records what the import saw. It is not an attestation: a
+stored record cannot prove its verification without the text, so
+stored-record integrity is still the caller's job, as for
+`validateReviewQueueAgainstExtractionImport`. A reloaded record is checked
+only for carrying verification results that an import could have written.
+
 ## See also
 
 - [consumer-integration-guide.md](consumer-integration-guide.md) — first-time

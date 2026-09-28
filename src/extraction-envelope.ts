@@ -137,7 +137,35 @@ export interface ExtractionEnvelopeImportOptions {
   sourceKind: RawSource["kind"];
   /** Survey meaning is supplied at the boundary; it is not added to the upstream wire contract. */
   claimTarget: (proposal: PortableExtractionProposal, index: number) => ClaimTargetHint;
+  /**
+   * The prepared artifact as the caller resolved it (the same shape the source
+   * inspector takes). When supplied, the import checks the text against the
+   * envelope's prepared-artifact digest and length, and every proposal's span
+   * against its excerpt: a proposal whose span does not match gets no
+   * ReviewItem and an `excerpt-mismatch` diagnostic, and an artifact that does
+   * not verify makes the import `unresolved`. The text is not stored in the
+   * record. Without it the import records `status.provenance: "unverified"`.
+   */
+  artifact?: ResolvedExtractionArtifact;
 }
+
+export type ArtifactUnavailableCode = "not-found" | "storage-error" | "access-denied" | "invalid-artifact" | "unknown";
+
+/** A prepared artifact as a caller resolved it: its text and digest, or why it could not be read. */
+export type ResolvedExtractionArtifact =
+  | { status: "available"; text: string; actualDigest: string }
+  | { status: "unavailable"; code: ArtifactUnavailableCode }
+  | { status: "digest-mismatch"; actualDigest: string };
+
+/**
+ * Whether the import checked its proposals' excerpts against the prepared
+ * artifact text. `verified` means the supplied text matched the envelope's
+ * digest and length and every proposal that produced a ReviewItem matched its
+ * span; `unverified` means no text was supplied, or the text did not verify
+ * (a diagnostic then says why). Records written before this field existed have
+ * no `provenance` and are unverified.
+ */
+export type ExtractionEnvelopeImportProvenance = "verified" | "unverified";
 
 /**
  * Why an import is `unresolved`: its prepared artifact did not resolve, or the
@@ -147,17 +175,21 @@ export interface ExtractionEnvelopeImportOptions {
  * a complete run that found no values.
  */
 export type ExtractionEnvelopeImportDiagnostic =
-  | { kind: "artifact-unavailable"; status: "unavailable" | "storage-error" | "identity-mismatch" | "invalid-artifact"; artifactRef?: string; message: string }
+  | { kind: "artifact-unavailable"; status: "unavailable" | "storage-error" | "identity-mismatch" | "invalid-artifact"; artifactRef?: string;
+    /** The caller's resolver code, present when the artifact supplied at import could not be read. */
+    code?: ArtifactUnavailableCode; message: string }
   | { kind: "digest-mismatch"; artifactRef: string; expectedDigest: string; actualDigest: string; message: string }
   | { kind: "extraction-failed"; category: string; code: string; message: string }
-  | { kind: "extraction-incomplete"; reason: PortableExtractionPartialReason; message: string };
+  | { kind: "extraction-incomplete"; reason: PortableExtractionPartialReason; message: string }
+  /** The prepared text at this proposal's span is not its excerpt; the proposal produced no ReviewItem. */
+  | { kind: "excerpt-mismatch"; proposalIndex: number; locator: string; message: string };
 
 export interface ExtractionEnvelopeImport {
   apiVersion: typeof extractionEnvelopeImportApiVersion;
   kind: "ExtractionEnvelopeImport";
   metadata: { name: string; producerNamespace: string };
   spec: { envelope: PortableExtractionResultEnvelope; sourceKind: RawSource["kind"]; claimTargets: ClaimTargetHint[] };
-  status: { state: "grounded" | "unresolved"; diagnostics: ExtractionEnvelopeImportDiagnostic[] };
+  status: { state: "grounded" | "unresolved"; diagnostics: ExtractionEnvelopeImportDiagnostic[]; provenance?: ExtractionEnvelopeImportProvenance };
 }
 
 export interface ExtractionEnvelopeImportResult { record: ExtractionEnvelopeImport; reviewItems: ReviewItem[] }
@@ -176,13 +208,16 @@ export function importExtractionEnvelope(serialized: string | PortableExtraction
   const producerNamespace = options.producerNamespace ?? envelope.result.provider;
   nonEmpty(name, "Extraction envelope import name");
   nonEmpty(producerNamespace, "Extraction envelope producer namespace");
-  const diagnostics = diagnosticsFor(envelope);
+  const verification = options.artifact === undefined
+    ? { provenance: "unverified" as const, diagnostics: [] }
+    : verifyAgainstArtifact(envelope, options.artifact);
+  const diagnostics = [...diagnosticsFor(envelope), ...verification.diagnostics];
   const record: ExtractionEnvelopeImport = {
     apiVersion: extractionEnvelopeImportApiVersion,
     kind: "ExtractionEnvelopeImport",
     metadata: { name, producerNamespace },
     spec: { envelope, sourceKind: options.sourceKind, claimTargets: cloneJson(claimTargets) as ClaimTargetHint[] },
-    status: { state: diagnostics.length ? "unresolved" : "grounded", diagnostics },
+    status: { state: stateFor(diagnostics, envelope.result.proposals.length), diagnostics, provenance: verification.provenance },
   };
   return { record, reviewItems: buildReviewItemsFromExtractionEnvelopeImport(record) };
 }
@@ -216,7 +251,9 @@ interface ClaimSlot {
 
 function claimSlotGroups(record: ExtractionEnvelopeImport): ClaimSlotGroup[] {
   const groups = new Map<string, ClaimSlotGroup>();
+  const excluded = excerptMismatchProposalIndices(record);
   record.spec.envelope.result.proposals.forEach((proposal, index) => {
+    if (excluded.has(index)) return;
     const target = record.spec.claimTargets[index]!;
     const slot: ClaimSlot = {
       subjectType: target.subjectType, subjectId: target.subjectId, facet: target.facet, claimType: target.claimType,
@@ -364,6 +401,132 @@ function evidenceInputs(record: ExtractionEnvelopeImport, proposal: PortableExtr
     provenance: proposal.provenance };
 }
 
+/** Proposals the import excluded because their span did not match their excerpt. */
+export function excerptMismatchProposalIndices(record: ExtractionEnvelopeImport): Set<number> {
+  return new Set(record.status.diagnostics.flatMap((diagnostic) => diagnostic.kind === "excerpt-mismatch" ? [diagnostic.proposalIndex] : []));
+}
+
+/**
+ * An import is grounded when nothing but excerpt mismatches was diagnosed and
+ * at least one proposal survived them. Every proposal excluded must not read as
+ * a complete run that found nothing.
+ */
+function stateFor(diagnostics: readonly ExtractionEnvelopeImportDiagnostic[], proposalCount: number): ExtractionEnvelopeImport["status"]["state"] {
+  const mismatches = diagnostics.filter((diagnostic) => diagnostic.kind === "excerpt-mismatch").length;
+  if (mismatches !== diagnostics.length) return "unresolved";
+  return mismatches > 0 && mismatches === proposalCount ? "unresolved" : "grounded";
+}
+
+/** Validate the caller-resolved artifact shape; resolver detail beyond the code is refused. */
+export function assertResolvedExtractionArtifact(artifact: unknown): asserts artifact is ResolvedExtractionArtifact {
+  if (!artifact || typeof artifact !== "object" || Array.isArray(artifact)) throw new Error("Invalid resolved extraction artifact.");
+  const a = artifact as Record<string, unknown>;
+  const keys = Object.keys(a).sort();
+  if (a.status === "available") {
+    if (keys.join(",") !== "actualDigest,status,text" || typeof a.text !== "string" || typeof a.actualDigest !== "string" || !/^[a-f0-9]{64}$/.test(a.actualDigest)) throw new Error("Invalid available extraction artifact.");
+  } else if (a.status === "digest-mismatch") {
+    if (keys.join(",") !== "actualDigest,status" || typeof a.actualDigest !== "string" || !/^[a-f0-9]{64}$/.test(a.actualDigest)) throw new Error("Invalid digest-mismatch extraction artifact.");
+  } else if (a.status === "unavailable") {
+    if (keys.join(",") !== "code,status" || !ARTIFACT_UNAVAILABLE_CODES.has(a.code as string)) throw new Error("Invalid unavailable extraction artifact.");
+  } else throw new Error("Invalid resolved extraction artifact status.");
+}
+
+export type PreparedArtifactCheck =
+  | { status: "aligned"; text: string }
+  | { status: "unavailable"; code: ArtifactUnavailableCode }
+  | { status: "digest-mismatch"; actualDigest: string }
+  | { status: "wrong-length" };
+
+/**
+ * Checks resolved text against the envelope's prepared-artifact identity: the
+ * caller's reported digest, the digest of the text itself, and the declared
+ * length. Shared by import-time verification and the source inspector.
+ */
+export function checkPreparedArtifact(prepared: PortableExtractionResultEnvelope["result"]["preparedArtifact"], artifact: ResolvedExtractionArtifact): PreparedArtifactCheck {
+  if (artifact.status === "unavailable") return { status: "unavailable", code: artifact.code };
+  if (artifact.status === "digest-mismatch") return { status: "digest-mismatch", actualDigest: artifact.actualDigest };
+  const textDigest = sha256Hex(artifact.text);
+  if (!prepared || artifact.actualDigest !== prepared.digest || textDigest !== artifact.actualDigest) return { status: "digest-mismatch", actualDigest: textDigest };
+  if (artifact.text.length !== prepared.contentLength) return { status: "wrong-length" };
+  return { status: "aligned", text: artifact.text };
+}
+
+/** Whether the verified prepared text at a proposal's `chars:` span is exactly its excerpt. */
+export function proposalSpanMatches(text: string, proposal: PortableExtractionProposal): boolean {
+  const match = /^chars:(\d+)-(\d+)$/.exec(proposal.provenance.locator);
+  if (!match) return false;
+  return text.slice(Number(match[1]), Number(match[2])) === proposal.provenance.excerpt;
+}
+
+function verifyAgainstArtifact(envelope: PortableExtractionResultEnvelope, artifact: unknown): { provenance: ExtractionEnvelopeImportProvenance; diagnostics: ExtractionEnvelopeImportDiagnostic[] } {
+  assertResolvedExtractionArtifact(artifact);
+  const prepared = envelope.result.preparedArtifact;
+  if (!prepared) throw new Error("The artifact option requires result.preparedArtifact to verify against.");
+  const check = checkPreparedArtifact(prepared, artifact);
+  if (check.status === "unavailable") return { provenance: "unverified", diagnostics: [unreadableArtifactDiagnostic(prepared.ref, check.code)] };
+  if (check.status === "wrong-length") return { provenance: "unverified", diagnostics: [wrongLengthDiagnostic(prepared.ref)] };
+  if (check.status === "digest-mismatch") return { provenance: "unverified", diagnostics: [suppliedDigestMismatchDiagnostic(prepared, check.actualDigest)] };
+  const diagnostics: ExtractionEnvelopeImportDiagnostic[] = [];
+  envelope.result.proposals.forEach((proposal, index) => {
+    if (!proposalSpanMatches(check.text, proposal)) diagnostics.push(excerptMismatchDiagnostic(index, proposal));
+  });
+  return { provenance: "verified", diagnostics };
+}
+
+function unreadableArtifactDiagnostic(artifactRef: string, code: ArtifactUnavailableCode): ExtractionEnvelopeImportDiagnostic {
+  const status = code === "storage-error" ? "storage-error" : code === "invalid-artifact" ? "invalid-artifact" : "unavailable";
+  return { kind: "artifact-unavailable", status, artifactRef, code, message: `Prepared artifact could not be read to verify excerpts (${code}); no candidate is grounded.` };
+}
+function wrongLengthDiagnostic(artifactRef: string): ExtractionEnvelopeImportDiagnostic {
+  return { kind: "artifact-unavailable", status: "invalid-artifact", artifactRef, message: "Prepared artifact text does not have the declared content length; no candidate is grounded." };
+}
+function suppliedDigestMismatchDiagnostic(prepared: NonNullable<PortableExtractionResultEnvelope["result"]["preparedArtifact"]>, actualDigest: string): ExtractionEnvelopeImportDiagnostic {
+  return { kind: "digest-mismatch", artifactRef: prepared.ref, expectedDigest: prepared.digest, actualDigest,
+    message: "Prepared artifact text supplied at import does not match the extraction artifact digest; no candidate is grounded." };
+}
+function excerptMismatchDiagnostic(index: number, proposal: PortableExtractionProposal): ExtractionEnvelopeImportDiagnostic {
+  return { kind: "excerpt-mismatch", proposalIndex: index, locator: proposal.provenance.locator,
+    message: `Proposal ${index} (${proposal.fieldPath}): the prepared text at ${proposal.provenance.locator} is not its excerpt, so it produced no review item.` };
+}
+
+/**
+ * The import-time verification diagnostics a record may carry after the
+ * envelope-derived ones. They cannot be recomputed without the artifact text,
+ * so a reloaded record is checked for being one the import could have
+ * written: each diagnostic is rebuilt from its own fields and must match.
+ */
+function verificationDiagnosticsAreCoherent(envelope: PortableExtractionResultEnvelope, provenance: unknown, diagnostics: readonly unknown[]): boolean {
+  if (provenance === undefined) return diagnostics.length === 0;
+  const prepared = envelope.result.preparedArtifact;
+  const rebuild = (value: unknown): ExtractionEnvelopeImportDiagnostic | undefined => {
+    if (!value || typeof value !== "object" || Array.isArray(value) || !prepared) return undefined;
+    const d = value as Record<string, unknown>;
+    if (provenance === "verified") {
+      const proposal = Number.isSafeInteger(d.proposalIndex) ? envelope.result.proposals[d.proposalIndex as number] : undefined;
+      return d.kind === "excerpt-mismatch" && proposal ? excerptMismatchDiagnostic(d.proposalIndex as number, proposal) : undefined;
+    }
+    if (d.kind === "artifact-unavailable") {
+      if (d.code === undefined) return wrongLengthDiagnostic(prepared.ref);
+      return ARTIFACT_UNAVAILABLE_CODES.has(d.code as string) ? unreadableArtifactDiagnostic(prepared.ref, d.code as ArtifactUnavailableCode) : undefined;
+    }
+    if (d.kind === "digest-mismatch" && typeof d.actualDigest === "string" && /^[a-f0-9]{64}$/.test(d.actualDigest)) return suppliedDigestMismatchDiagnostic(prepared, d.actualDigest);
+    return undefined;
+  };
+  if (provenance !== "verified" && provenance !== "unverified") return false;
+  if (provenance === "verified" && !prepared) return false;
+  if (provenance === "unverified" && diagnostics.length > 1) return false;
+  let previous = -1;
+  for (const diagnostic of diagnostics) {
+    const expected = rebuild(diagnostic);
+    if (!expected || canonicalJson(expected) !== canonicalJson(diagnostic)) return false;
+    if (expected.kind === "excerpt-mismatch") {
+      if (expected.proposalIndex <= previous) return false;
+      previous = expected.proposalIndex;
+    }
+  }
+  return true;
+}
+
 function diagnosticsFor(envelope: PortableExtractionResultEnvelope): ExtractionEnvelopeImportDiagnostic[] {
   return [...artifactDiagnostics(envelope), ...outcomeDiagnostics(envelope)];
 }
@@ -402,9 +565,12 @@ function validateImport(value: unknown): asserts value is ExtractionEnvelopeImpo
   if (!RAW_SOURCE_KINDS.has(spec.sourceKind as RawSource["kind"])) throw new Error("spec.sourceKind is invalid.");
   const targets = array(spec.claimTargets, "spec.claimTargets"); targets.forEach(validateClaimTarget);
   if (targets.length !== envelope.result.proposals.length) throw new Error("spec.claimTargets must align with proposals.");
-  const status = obj(record.status, "status"); exact(status, ["state", "diagnostics"], "status");
+  const status = obj(record.status, "status"); exact(status, ["state", "diagnostics"], "status", ["provenance"]);
+  const diagnostics = array(status.diagnostics, "status.diagnostics");
   const expected = diagnosticsFor(envelope);
-  if (canonicalJson(status.diagnostics) !== canonicalJson(expected) || status.state !== (expected.length ? "unresolved" : "grounded")) throw new Error("Import status does not match envelope state.");
+  if (canonicalJson(diagnostics.slice(0, expected.length)) !== canonicalJson(expected)
+    || !verificationDiagnosticsAreCoherent(envelope, status.provenance, diagnostics.slice(expected.length))
+    || status.state !== stateFor(diagnostics as ExtractionEnvelopeImportDiagnostic[], envelope.result.proposals.length)) throw new Error("Import status does not match envelope state.");
 }
 
 /** Validate and defensively clone a persisted or browser-delivered import. */
@@ -531,6 +697,7 @@ const FAILURE_KINDS = new Set(["authentication", "rate-limit", "timeout", "inval
 const MODEL_SOURCES = new Set(["provider-reported", "configured"]);
 const SCHEMA_MATCHES = new Set(["ok", "type-mismatch", "enum-mismatch", "format-invalid"]);
 const VALUE_IN_EXCERPT_MATCHES = new Set(["match", "mismatch", "not-evaluated", "not-applicable"]);
+const ARTIFACT_UNAVAILABLE_CODES = new Set<string>(["not-found", "storage-error", "access-denied", "invalid-artifact", "unknown"]);
 const PREPARATION_MODES = new Set(["text", "markdown", "transcript", "pdf-text", "image-ocr"]);
 const ARTIFACT_INVALID_REASONS = new Set(["not-an-object", "invalid-format", "invalid-version", "invalid-digest", "invalid-ref", "invalid-preparation-mode", "invalid-preparation-version", "invalid-content-length", "invalid-source-snapshot-ref", "ill-formed-unicode", "invalid-resolved-text"]);
 const STABLE_IDENTITY = /^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{0,255}$/;
