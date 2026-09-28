@@ -72,8 +72,13 @@ importer accepts:
 - `result.proposals[].producedBy`: `{ model, modelSource, requestDigest }`,
   where `modelSource` is `"provider-reported"` or `"configured"` and
   `requestDigest` is a `sha256:` digest. It is copied into the candidate's
-  `survey.kontourai.io/extraction-envelope` producer metadata. The candidate's
-  `extraction.model` is still `result.model`.
+  `survey.kontourai.io/extraction-envelope` producer metadata, and its `model`
+  becomes the candidate's `extraction.model`, so a candidate names the model
+  that served its own proposal. A proposal without `producedBy` keeps
+  `result.model`, and the producer metadata's `model` stays `result.model`.
+  Surface releases that bind the candidate model to `result.model` refuse a
+  candidate whose proposal was served by a different model than the last
+  chunk's; those that bind it to `producedBy.model` accept it.
 - `result.proposals[].evidenceMatch`: `{ checkerVersion, schema,
   valueInExcerpt, tokenBoundary? }` with closed `schema` (`ok`,
   `type-mismatch`, `enum-mismatch`, `format-invalid`) and `valueInExcerpt`

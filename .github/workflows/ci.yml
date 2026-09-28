@@ -52,8 +52,8 @@ jobs:
         working-directory: survey
 
   # One leg per supported @kontourai/surface major: the lowest version the
-  # dependency range admits and the newest 3.x pnpm will resolve (it honours
-  # minimumReleaseAge). Keep the 2.x pin equal to the range's lower bound in
+  # dependency range admits and the newest 3.x and 4.x pnpm will resolve (it
+  # honours minimumReleaseAge). Keep the 2.x pin equal to the range's lower bound in
   # package.json. The lockfile's own Surface version is covered by `verify`.
   surface-compat:
     name: Surface ${{ matrix.surface }}
@@ -68,6 +68,9 @@ jobs:
           - surface: '^3'
             expect: '^3\.'
             consumer: '^3'
+          - surface: '^4'
+            expect: '^4\.'
+            consumer: '^4'
     steps:
       - name: Checkout
         uses: actions/checkout@v7

@@ -199,7 +199,9 @@ function buildReviewItem(record: ExtractionEnvelopeImport, proposal: PortableExt
       target: proposal.fieldPath,
       confidence: proposal.confidence,
       extractor: proposal.extractor,
-      ...(envelope.result.model ? { model: envelope.result.model } : {}),
+      // The proposal's own served model when recorded; in a multi-chunk run
+      // `result.model` names only the last chunk's model.
+      ...(proposal.producedBy ? { model: proposal.producedBy.model } : envelope.result.model ? { model: envelope.result.model } : {}),
     },
     claimTarget: target,
     producer: { "survey.kontourai.io/extraction-envelope": {

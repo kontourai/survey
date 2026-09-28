@@ -294,9 +294,12 @@ describe("new optional envelope keys (#288)", () => {
     const imported = importExtractionEnvelope(envelope, options());
     assert.deepEqual(producerOf(imported).producedBy, producedBy);
     assert.equal(producerOf(imported, 1).producedBy, undefined);
-    // The run-level model stays the candidate's extraction model; per-proposal
-    // attribution is additive.
-    assert.equal(imported.reviewItems[0]!.spec.candidates[0]!.extraction.model, "generic-model");
+    // The candidate records the model that served its own proposal; a proposal
+    // without producedBy keeps the run-level model, and the producer block
+    // keeps the run-level model either way.
+    assert.equal(imported.reviewItems[0]!.spec.candidates[0]!.extraction.model, "served-model-2");
+    assert.equal(imported.reviewItems[1]!.spec.candidates[0]!.extraction.model, "generic-model");
+    assert.equal(producerOf(imported).model, "generic-model");
     const restored = reimportExtractionEnvelope(exportExtractionEnvelopeImport(imported.record));
     assert.deepEqual(restored.spec.envelope.result.proposals[0]!.producedBy, producedBy);
   });
