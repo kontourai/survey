@@ -152,7 +152,12 @@ export function buildCanonicalReviewedTrustInput(
       claimType: hint.claimType,
       fieldOrBehavior: hint.fieldOrBehavior,
       value: result.effectiveValue,
-      status: result.status,
+      // Could-not-confirm keeps the pre-review posture, and a conflicting or
+      // escalated candidate set is disputed before any review (see
+      // docs/decisions/could-not-confirm.md), never merely proposed.
+      status: result.decision === "could-not-confirm" && (candidateSet.status === "conflict" || candidateSet.status === "escalated")
+        ? "disputed"
+        : result.status,
       impactLevel: hint.impactLevel,
       updatedAt: decision.reviewedAt ?? options.generatedAt,
       ...(hint.evidenceType ? { evidenceType: hint.evidenceType } : {}),

@@ -530,9 +530,14 @@ The projected claim value is unchanged for mappings built by
   subject in `claimTarget`, or use an array field so each value has its own
   `pathIndices`.
 - **Role-based decisions refuse ambiguity.** `candidateForDecision` (and so the
-  workbench, the session event builders, and the MCP decide tool) throws when
-  the decision's role names more than one candidate, instead of using the
-  first. A `conflict` item from the importer cannot be decided in the workbench.
+  workbench, the session event builders, and the MCP decide tool) throws for
+  `accept-proposed` or `keep-current` when the decision's role names more than
+  one candidate, instead of using the first. `reject-proposed` and
+  `could-not-confirm` stay available on a `conflict` item and are recorded
+  against its first candidate; `keepActionDecision` returns `reject-proposed`
+  for such an item. `buildCanonicalReviewedTrustInput` now projects a
+  could-not-confirm on a `conflict` or `escalated` item as `disputed`, the
+  status Surface projection already required for it.
 - **Partial runs and confidence.** The importer accepts the partial reasons
   `provider-failure`, `content-truncated`, and `output-truncated`, an optional
   `result.coverage` list, and proposals without `confidence`. Candidates carry

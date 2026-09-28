@@ -23,7 +23,14 @@ import {
 import { deriveCalibration } from "../src/calibration.js";
 import { toSurfaceReviewedExtractionImport } from "../src/surface-reviewed-extraction.js";
 import { buildExtractionInspectorModel } from "../src/review-workbench/extraction-inspector.js";
-import { candidateForDecision, keepActionDecision } from "../src/review-workbench/review-queue-session.js";
+import { buildReviewSessionEvents, candidateForDecision, keepActionDecision, reviewSessionSummary, type ReviewWorkbenchDecision } from "../src/review-workbench/review-queue-session.js";
+import { createServerReviewSessionRecord, deriveServerReviewSessionApplyResult } from "../src/review-workbench/server-review-session.js";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { createInterface } from "node:readline";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   buildReviewWorkbenchResultsFromSession,
   initialReviewQueueSessionState,
@@ -268,12 +275,18 @@ describe("one candidate set per claim slot (#289)", () => {
     // choose one for the reviewer.
     assert.throws(() => candidateForDecision(item, "accept-proposed"), /has 2 proposed candidates; the accept-proposed decision cannot choose between them/);
     assert.throws(() => acceptAll(reviewItems), /cannot choose between them/);
-    assert.equal(keepActionDecision(item, false), undefined);
-    assert.equal(keepActionDecision(item, true), undefined);
+    // Decisions that trust no value stay available.
+    assert.equal(keepActionDecision(item, false), "reject-proposed");
+    assert.equal(keepActionDecision(item, true), "reject-proposed");
+    assert.equal(candidateForDecision(item, "reject-proposed").id, item.spec.candidates[0]!.id);
+    assert.equal(candidateForDecision(item, "could-not-confirm").id, item.spec.candidates[0]!.id);
     const html = renderReviewWorkbenchHtml(initialReviewQueueSessionState(reviewItems));
     assert.match(html, /data-testid="conflicting-proposals"/);
     assert.equal((html.match(/data-testid="conflicting-value"/g) ?? []).length, 2);
-    assert.doesNotMatch(html, /data-testid="use-proposed"|data-testid="keep-current"|data-testid="could-not-confirm"/);
+    assert.doesNotMatch(html, /data-testid="use-proposed"/);
+    assert.match(html, /data-testid="keep-current"[^>]*>Reject all values</);
+    assert.match(html, /data-testid="could-not-confirm"/);
+    assert.match(html, /data-testid="field-chip">Conflict: 2 values</);
 
     // A result that selects the second value (as a value-level selection would)
     // projects one claim for the slot, verified with that value only.
@@ -291,6 +304,65 @@ describe("one candidate set per claim slot (#289)", () => {
     assert.deepEqual(feeClaims.map((claim) => [claim.value, claim.status]), [[52000, "verified"]]);
   });
 
+  for (const [decision, conflictStatus] of [["could-not-confirm", "disputed"], ["reject-proposed", "rejected"]] as const) {
+    it(`a conflict decided ${decision} resolves the round: the sibling verifies, no conflicting value does`, async () => {
+      const { items, conflict, sibling } = await conflictRound();
+      const session = decidedSession(items, { [conflict.metadata.name]: decision, [sibling.metadata.name]: "accept-proposed" }, conflict.metadata.name);
+      assert.equal(reviewSessionSummary(session).unresolved, 0);
+      assertConflictRoundProjection(project(items, buildReviewWorkbenchResultsFromSession(session)).bundle, conflictStatus);
+    });
+
+    it(`the server apply boundary accepts a conflict decided ${decision} with every item required`, async () => {
+      const { items, conflict, sibling } = await conflictRound();
+      const snapshot = { ...initialReviewQueueSessionState(items), actorId: "reviewer-1", reviewedAt: "2026-09-28T00:00:00.000Z" };
+      const events = buildReviewSessionEvents(decidedSession(items, { [conflict.metadata.name]: decision, [sibling.metadata.name]: "accept-proposed" }, conflict.metadata.name), "round-1");
+      const record = createServerReviewSessionRecord({ sessionName: "round-1", snapshot, eventCount: events.length, updatedAt: "2026-09-28T00:00:00.000Z" });
+      const applied = deriveServerReviewSessionApplyResult({ record, events, requiredResolvedItems: "all" });
+      assert.equal(applied.ok, true, JSON.stringify(applied.issues));
+      if (!applied.ok) return;
+      assertConflictRoundProjection(project(items, applied.results).bundle, conflictStatus);
+    });
+  }
+
+  it("the MCP card shows every conflicting value; accept is refused and reject is recorded", async () => {
+    const { items, conflict } = await conflictRound();
+    const tmpDir = await mkdtemp(join(tmpdir(), "survey-conflict-mcp-"));
+    const sessionPath = join(tmpDir, "session.json");
+    const snapshot = { ...initialReviewQueueSessionState(items), actorId: "reviewer-1", reviewedAt: "2026-09-28T00:00:00.000Z" };
+    await writeFile(sessionPath, JSON.stringify({
+      session: { apiVersion: "survey.kontourai.io/v1alpha1", kind: "ReviewSession", metadata: { name: "mcp-review-session" },
+        spec: { reviewItemNames: items.map((item) => item.metadata.name), actor: { id: "reviewer-1" }, startedAt: "2026-09-28T00:00:00.000Z" },
+        status: { activeItemName: conflict.metadata.name, eventCount: 0, decisionCount: 0 } },
+      snapshot, events: [],
+    }));
+    const server = spawn("node", ["bin/survey-review-mcp.mjs", "--session", sessionPath], { stdio: ["pipe", "pipe", "inherit"] });
+    const call = rpc(server);
+    try {
+      await call("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "0" } });
+      server.stdin!.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
+      const detail = await call("tools/call", { name: "survey_review_item", arguments: { itemName: conflict.metadata.name } });
+      const content = detail.result.content as Array<{ type: string; text?: string; resource?: { text?: string } }>;
+      const text = content.find((entry) => entry.type === "text")?.text ?? "";
+      assert.match(text, /Conflict: 2 proposed values/);
+      assert.match(text, /Proposed value: 48000[\s\S]*Proposed value: 52000/);
+      const html = content.find((entry) => entry.type === "resource")?.resource?.text ?? "";
+      assert.match(html, /Conflict: 2 values/);
+      assert.match(html, /48000[\s\S]*52000/);
+      assert.doesNotMatch(html, /id="btn-accept"/);
+      assert.match(html, /Reject all values/);
+
+      const accept = await call("tools/call", { name: "survey_review_decide", arguments: { itemName: conflict.metadata.name, decision: "accept" } });
+      assert.equal(accept.result.isError, true);
+      assert.match((accept.result.content as Array<{ text: string }>)[0]!.text, /cannot choose between them/);
+      const reject = await call("tools/call", { name: "survey_review_decide", arguments: { itemName: conflict.metadata.name, decision: "reject", note: "Schedule and amendment disagree." } });
+      assert.equal(reject.result.isError, false, JSON.stringify(reject.result.content));
+    } finally {
+      server.stdin!.end();
+      await once(server, "exit");
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   it("keeps the extraction inspector bound to every proposal of a grouped item", async () => {
     const importResult = importExtractionEnvelope(await traverseFixture("success-conflicting-fee"), options());
     const model = buildExtractionInspectorModel({ importResult, artifact: { status: "unavailable", code: "not-found" } });
@@ -299,3 +371,48 @@ describe("one candidate set per claim slot (#289)", () => {
     assert.deepEqual(buildReviewItemsFromExtractionEnvelopeImport(importResult.record), importResult.reviewItems);
   });
 });
+
+/**
+ * One envelope with a conflicting `fee` item (48000 vs 52000) and an ordinary
+ * sibling item (`annualFee`, the second 48000 span re-labelled).
+ */
+async function conflictRound() {
+  const envelope = await traverseFixture("success-conflicting-fee");
+  envelope.result.proposals[1]!.fieldPath = "annualFee";
+  const items = importExtractionEnvelope(envelope, options()).reviewItems;
+  const conflict = items.find((item) => item.spec.candidateSetStatus === "conflict")!;
+  const sibling = items.find((item) => item.spec.target === "annualFee")!;
+  assert.equal(items.length, 2);
+  return { items, conflict, sibling };
+}
+
+function decidedSession(items: readonly ReviewItem[], decisions: Record<string, ReviewWorkbenchDecision>, noteFor: string) {
+  return {
+    ...initialReviewQueueSessionState(items), actorId: "reviewer-1", reviewedAt: "2026-09-28T00:00:00.000Z",
+    decisionsByItemName: decisions, notesByItemName: { [noteFor]: "The schedule and the amendment disagree." },
+  };
+}
+
+function assertConflictRoundProjection(bundle: ReturnType<typeof project>["bundle"], conflictStatus: string): void {
+  const claims = bundle.claims.map((claim) => [claim.fieldOrBehavior, claim.value, claim.status]);
+  assert.deepEqual(claims.filter(([field]) => field === "annualFee"), [["annualFee", 48000, "verified"]]);
+  const feeClaims = claims.filter(([field]) => field === "fee");
+  assert.equal(feeClaims.length, 1);
+  assert.equal(feeClaims[0]![2], conflictStatus);
+}
+
+function rpc(server: ReturnType<typeof spawn>) {
+  const pending = new Map<number, (message: { result: Record<string, unknown> }) => void>();
+  createInterface({ input: server.stdout! }).on("line", (line) => {
+    if (!line.trim()) return;
+    const message = JSON.parse(line) as { id?: number; result: Record<string, unknown> };
+    if (typeof message.id === "number") pending.get(message.id)?.(message);
+  });
+  let id = 0;
+  return (method: string, params: unknown) => new Promise<{ result: Record<string, unknown> }>((resolve, reject) => {
+    id += 1;
+    const timer = setTimeout(() => reject(new Error(`timed out waiting for ${method}`)), 15_000);
+    pending.set(id, (message) => { clearTimeout(timer); resolve(message); });
+    server.stdin!.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
+  });
+}

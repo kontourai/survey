@@ -60,21 +60,41 @@ Inside a slot there is one candidate per distinct canonical value, all with the
   candidate's producer metadata as `sameValueProposals` with their proposal
   index, evidence id, locator, and excerpt.
 - two or more distinct values: `candidateSetStatus: "conflict"`. The item projects
-  one claim, so two values for one claim can no longer be accepted as two
-  verified claims.
+  one claim, so within one envelope two values for one claim can no longer be
+  accepted as two verified claims.
+
+Grouping is per envelope import. Two imports that propose different values for
+the same subject and field (two runs, or one envelope imported under two import
+names) are still separate items and can still both be verified: item identity
+includes the import name and run id, and carrying one claim slot across runs is
+the stable slot identity tracked in kontourai/fieldwork#52 and
+kontourai/survey#295.
 
 A multi-valued field stays one item per value when the producer says so: array
 items carry distinct `pathIndices`, or `claimTarget` returns distinct claim ids
-or subjects. Proposals that share a slot must return identical claim targets;
+or subjects. `pathIndices` are the indices the model assigned in the chunk it
+read, not a document-wide item identity. In a multi-chunk run, two chunks can
+give the same index to different array items (grouped into one slot: a false
+conflict, which fails closed to review) or different indices to the same item
+(separate slots, so the same value can appear as two items). Proposals that share a slot must return identical claim targets;
 otherwise the import is refused, because one claim cannot carry two impact
 levels. The item's producer metadata lists every `proposalIndices` it stands for.
 
-The review workbench records a decision against a candidate role, so it cannot
-choose between several `proposed` values. On a `conflict` item it lists the
-values and offers no decision control, and `candidateForDecision` refuses a
-decision whose role names more than one candidate instead of settling the
-conflict by picking the first. Surface's reviewed-extraction profile likewise
-refuses items with more than one candidate.
+The review workbench, the server session, and the MCP review tool record a
+decision against a candidate role, so none of them can choose one of several
+`proposed` values yet. On a `conflict` item:
+
+- accept is refused: `candidateForDecision` throws instead of settling the
+  conflict by picking the first value, and the workbench and MCP card offer no
+  accept control;
+- rejecting all values (`reject-proposed`) and `could-not-confirm` are
+  allowed, because they trust no value. They are recorded against the first
+  candidate as the set's anchor. Reject projects the claim `rejected`;
+  could-not-confirm keeps the pre-review posture of a conflict, `disputed`.
+  Neither projects `verified`, and the round can complete.
+
+Both cards list every value and label the item as a conflict. Surface's
+reviewed-extraction profile refuses items with more than one candidate.
 
 ### Identities
 

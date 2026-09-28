@@ -99,7 +99,7 @@ function itemDetailText(item: ReviewItem, snapshot: ReviewQueueSessionState, eve
   const note = current.notesByItemName[item.metadata.name];
 
   const currentCandidate = item.spec.candidates.find((c) => c.role === "current");
-  const proposedCandidate = item.spec.candidates.find((c) => c.role === "proposed");
+  const proposedCandidates = item.spec.candidates.filter((c) => c.role === "proposed");
 
   const valueStr = (v: unknown): string =>
     typeof v === "string" ? v : JSON.stringify(v);
@@ -120,10 +120,15 @@ function itemDetailText(item: ReviewItem, snapshot: ReviewQueueSessionState, eve
     `  source: ${currentCandidate?.source?.sourceRef ?? "none"}`,
     ...(currentCandidate?.locator?.excerpt ? [`  excerpt: ${currentCandidate.locator.excerpt}`] : []),
     ``,
-    `Proposed value: ${valueStr(proposedCandidate?.value ?? "(none)")}`,
-    `  confidence: ${confStr(proposedCandidate?.extraction?.confidence ?? proposedCandidate?.confidence)}`,
-    `  source: ${proposedCandidate?.source?.sourceRef ?? "none"}`,
-    ...(proposedCandidate?.locator?.excerpt ? [`  excerpt: ${proposedCandidate.locator.excerpt}`] : []),
+    ...(proposedCandidates.length > 1
+      ? [`Conflict: ${proposedCandidates.length} proposed values. Accept is refused; reject them all or use could-not-confirm with a reason.`]
+      : []),
+    ...(proposedCandidates.length === 0 ? [`Proposed value: (none)`] : proposedCandidates.flatMap((candidate) => [
+      `Proposed value: ${valueStr(candidate.value)}`,
+      `  confidence: ${confStr(candidate.extraction?.confidence ?? candidate.confidence)}`,
+      `  source: ${candidate.source?.sourceRef ?? "none"}`,
+      ...(candidate.locator?.excerpt ? [`  excerpt: ${candidate.locator.excerpt}`] : []),
+    ])),
   ];
 
   if (item.spec.rationale) {
@@ -161,7 +166,10 @@ function buildReviewCardHtml(
   const resolved = total - summary.unresolved;
 
   const currentCandidate = item.spec.candidates.find((c) => c.role === "current");
-  const proposedCandidate = item.spec.candidates.find((c) => c.role === "proposed");
+  const proposedCandidates = item.spec.candidates.filter((c) => c.role === "proposed");
+  // Several proposed values are a conflict: every value is shown, and accept
+  // (which names a role, not a value) is not offered.
+  const conflict = proposedCandidates.length > 1;
   const decision = current.decisionsByItemName[item.metadata.name];
   const status = deriveQueueRowStatus(item, current);
 
@@ -172,13 +180,23 @@ function buildReviewCardHtml(
     c !== undefined ? `${Math.round(c * 100)}%` : "—";
 
   const currentValue = valueStr(currentCandidate?.value ?? "—");
-  const proposedValue = valueStr(proposedCandidate?.value ?? "—");
   const currentConf = confStr(currentCandidate?.extraction?.confidence ?? currentCandidate?.confidence);
-  const proposedConf = confStr(proposedCandidate?.extraction?.confidence ?? proposedCandidate?.confidence);
   const currentSource = currentCandidate?.source?.sourceRef ?? "—";
-  const proposedSource = proposedCandidate?.source?.sourceRef ?? "—";
   const currentExcerpt = currentCandidate?.locator?.excerpt ?? "";
-  const proposedExcerpt = proposedCandidate?.locator?.excerpt ?? "";
+  const proposedCard = (candidate: ReviewItem["spec"]["candidates"][number] | undefined, label: string): string => {
+    const value = valueStr(candidate?.value ?? "—");
+    const excerpt = candidate?.locator?.excerpt ?? "";
+    return `<div class="card is-proposed">
+    <div class="card-label">${escapeHtml(label)}</div>
+    <div class="value">${value.includes("\n") ? `<pre>${escapeHtml(value)}</pre>` : escapeHtml(value)}</div>
+    <div class="conf">confidence ${confStr(candidate?.extraction?.confidence ?? candidate?.confidence)}</div>
+    <div class="source-ref">${escapeHtml(candidate?.source?.sourceRef ?? "—")}</div>
+    ${excerpt ? `<div class="excerpt">${escapeHtml(excerpt)}</div>` : ""}
+  </div>`;
+  };
+  const proposedCards = conflict
+    ? proposedCandidates.map((candidate, index) => proposedCard(candidate, `Proposed ${index + 1} of ${proposedCandidates.length}`)).join("\n  ")
+    : proposedCard(proposedCandidates[0], "Proposed");
 
   const itemNameJson = escapeJsonInHtml(item.metadata.name);
 
@@ -270,6 +288,7 @@ h1{font-size:15px;font-weight:700;margin:0 0 4px}
 <div class="meta">
   <span>${escapeHtml(item.metadata.name)}</span>
   ${decisionBadge}
+  ${conflict ? `<span class="badge badge-hold" id="conflict-badge">Conflict: ${proposedCandidates.length} values</span>` : ""}
   <span class="progress">${resolved}/${total} resolved</span>
 </div>
 
@@ -281,14 +300,9 @@ h1{font-size:15px;font-weight:700;margin:0 0 4px}
     <div class="source-ref">${escapeHtml(currentSource)}</div>
     ${currentExcerpt ? `<div class="excerpt">${escapeHtml(currentExcerpt)}</div>` : ""}
   </div>
-  <div class="card is-proposed">
-    <div class="card-label">Proposed</div>
-    <div class="value">${proposedValue.includes("\n") ? `<pre>${escapeHtml(proposedValue)}</pre>` : escapeHtml(proposedValue)}</div>
-    <div class="conf">confidence ${proposedConf}</div>
-    <div class="source-ref">${escapeHtml(proposedSource)}</div>
-    ${proposedExcerpt ? `<div class="excerpt">${escapeHtml(proposedExcerpt)}</div>` : ""}
-  </div>
+  ${proposedCards}
 </div>
+${conflict ? `<p class="feedback" id="conflict-note">${proposedCandidates.length} different values were proposed. This card cannot choose one of them yet: reject them all, or use Could not confirm with a reason.</p>` : ""}
 
 <div class="divider"></div>
 
@@ -296,9 +310,9 @@ h1{font-size:15px;font-weight:700;margin:0 0 4px}
 <textarea class="note-input" id="note" placeholder="Add a rationale for this decision...">${escapeHtml(current.notesByItemName[item.metadata.name] ?? "")}</textarea>
 
 <div class="btn-row">
-  <button class="btn btn-accept${decision === "accept-proposed" ? " active" : ""}" id="btn-accept">Accept proposed</button>
+  ${conflict ? "" : `<button class="btn btn-accept${decision === "accept-proposed" ? " active" : ""}" id="btn-accept">Accept proposed</button>`}
   <button class="btn btn-hold${decision === "keep-current" ? " active" : ""}" id="btn-hold">Hold / Keep current</button>
-  <button class="btn btn-reject${decision === "reject-proposed" ? " active" : ""}" id="btn-reject">Reject proposed</button>
+  <button class="btn btn-reject${decision === "reject-proposed" ? " active" : ""}" id="btn-reject">${conflict ? "Reject all values" : "Reject proposed"}</button>
   <button class="btn btn-unconfirmed${decision === "could-not-confirm" ? " active" : ""}" id="btn-unconfirmed">Could not confirm</button>
 </div>
 <div class="feedback" id="feedback"></div>
@@ -329,7 +343,8 @@ h1{font-size:15px;font-weight:700;margin:0 0 4px}
     return true;
   }
 
-  document.getElementById('btn-accept').addEventListener('click', function () { postDecision('accept'); document.getElementById('feedback').textContent = 'Submitting accept…'; });
+  var acceptButton = document.getElementById('btn-accept');
+  if (acceptButton) acceptButton.addEventListener('click', function () { postDecision('accept'); document.getElementById('feedback').textContent = 'Submitting accept…'; });
   document.getElementById('btn-hold').addEventListener('click', function () { postDecision('hold'); document.getElementById('feedback').textContent = 'Submitting hold…'; });
   document.getElementById('btn-reject').addEventListener('click', function () { postDecision('reject'); document.getElementById('feedback').textContent = 'Submitting reject…'; });
   document.getElementById('btn-unconfirmed').addEventListener('click', function () { if (postDecision('could-not-confirm')) document.getElementById('feedback').textContent = 'Submitting could not confirm…'; });

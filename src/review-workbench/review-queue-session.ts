@@ -223,13 +223,14 @@ export function reviewSessionSummary(session: ReviewQueueSessionState): ReviewSe
  * would invent a prior value, with provenance, that the source never had.
  */
 export function keepActionDecision(item: ReviewItem, flaggedWrong: boolean): ReviewWorkbenchDecision | undefined {
-  // A decision is recordable only when its role names exactly one candidate
-  // (see candidateForDecision).
+  // Keeping the current value is recordable only when exactly one candidate is
+  // current (see candidateForDecision); rejecting the proposed values is
+  // recordable however many there are.
   const count = (role: ReviewCandidate["role"]): number =>
     item.spec.candidates.filter((candidate) => candidate.role === role).length;
 
   if (flaggedWrong || count("current") === 0) {
-    return count("proposed") === 1 ? "reject-proposed" : undefined;
+    return count("proposed") > 0 ? "reject-proposed" : undefined;
   }
 
   return count("current") === 1 ? "keep-current" : undefined;
@@ -246,6 +247,9 @@ export function keepActionDecision(item: ReviewItem, flaggedWrong: boolean): Rev
  * candidate's value against it; this is the shared selector all of those go
  * through, which is why the check belongs here rather than at each of them.
  */
+/** Decisions that make no candidate the trusted value (they project `rejected` or `proposed`). */
+const VALUE_NEUTRAL_DECISIONS: ReadonlySet<ReviewWorkbenchDecision> = new Set(["reject-proposed", "could-not-confirm"]);
+
 export function candidateForDecision(item: ReviewItem, decision: ReviewWorkbenchDecision): ReviewCandidate {
   const definition = workbenchDecisionDefinitions[decision];
   const matches = item.spec.candidates.filter((entry) => entry.role === definition.candidateRole);
@@ -255,9 +259,13 @@ export function candidateForDecision(item: ReviewItem, decision: ReviewWorkbench
     throw new Error(`ReviewItem ${item.metadata.name} has no ${definition.candidateRole} candidate.`);
   }
   // A decision names a role, not a value. With several candidates in that role
-  // (conflicting values for one claim) picking the first would settle the
-  // conflict for the reviewer without showing it, so the decision is refused.
-  if (matches.length > 1) {
+  // (conflicting values for one claim), a decision that would make one of them
+  // the trusted value is refused: picking the first would settle the conflict
+  // for the reviewer without showing it. Rejecting every proposed value, or
+  // ending the round as could-not-confirm, trusts none of them, so those are
+  // recorded against the first candidate as the set's anchor and project
+  // `rejected` / `proposed`, never `verified`.
+  if (matches.length > 1 && !VALUE_NEUTRAL_DECISIONS.has(decision)) {
     throw new Error(`ReviewItem ${item.metadata.name} has ${matches.length} ${definition.candidateRole} candidates; the ${decision} decision cannot choose between them.`);
   }
   assertSoleCandidateId(item, candidate.id);

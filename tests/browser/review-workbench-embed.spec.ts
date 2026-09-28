@@ -569,7 +569,7 @@ test.describe("embedded workbench: envelope-imported decisions", () => {
     expect(consoleErrors).toEqual([]);
   });
 
-  test("a field with conflicting proposed values lists them and offers no decision", async ({ page }) => {
+  test("a field with conflicting proposed values lists them and offers only decisions that trust none", async ({ page }) => {
     const seeds: EnvelopeProposalSeed[] = [
       ...envelopeQueueSeeds,
       { fieldPath: "commercial.annualFeeUsd", candidateValue: 52000, excerpt: "52000", valueType: "number" },
@@ -579,15 +579,22 @@ test.describe("embedded workbench: envelope-imported decisions", () => {
     const conflict = fieldByTarget(page, "commercial.annualFeeUsd");
     await expect(conflict.getByTestId("conflicting-proposals")).toBeVisible();
     await expect(conflict.getByTestId("conflicting-value")).toHaveCount(2);
+    await expect(conflict.getByTestId("field-chip")).toHaveText("Conflict: 2 values");
     await expect(conflict.getByTestId("use-proposed")).toHaveCount(0);
-    await expect(conflict.getByTestId("keep-current")).toHaveCount(0);
-    await expect(conflict.getByTestId("could-not-confirm")).toHaveCount(0);
+    await expect(conflict.getByTestId("could-not-confirm")).toBeVisible();
+    await expect(conflict.getByTestId("keep-current")).toHaveText("Reject all values");
+    await conflict.screenshot({ path: test.info().outputPath("conflict-undecided.png") });
+
+    await conflict.getByTestId("keep-current").click();
+    await expect(conflict).toHaveAttribute("data-decision", "reject-proposed");
+    await expect(conflict.getByTestId("decided-chip")).toHaveText("All values rejected");
+    await conflict.screenshot({ path: test.info().outputPath("conflict-rejected.png") });
 
     // The rest of the queue still decides.
     const other = fieldByTarget(page, "renewal.date");
     await other.getByTestId("use-proposed").click();
     await expect(other.getByTestId("decided-chip")).toHaveText("Accepted");
-    await expect(page.getByTestId("fields-changed-count")).toHaveText("4");
+    await expect(page.getByTestId("decided-count")).toHaveText("2");
 
     expect(pageErrors).toEqual([]);
     expect(consoleErrors).toEqual([]);

@@ -962,13 +962,13 @@ function fieldCardState(item: ReviewItem, decision: ReviewWorkbenchDecision | un
  * {@link keepActionDecision}). Saying "Kept — flagged wrong" there would claim a
  * distinction the record does not hold, so the chip states only what happened.
  */
-function chipLabel(state: FieldCardState, hasCurrentValue: boolean): string {
+function chipLabel(state: FieldCardState, hasCurrentValue: boolean, conflictingValues?: number): string {
   switch (state) {
     case "accepted": return "Accepted";
-    case "kept": return hasCurrentValue ? "Kept current" : "Left unset";
-    case "rejected": return hasCurrentValue ? "Kept — flagged wrong" : "Left unset";
+    case "kept": return hasCurrentValue ? "Kept current" : conflictingValues ? "All values rejected" : "Left unset";
+    case "rejected": return hasCurrentValue ? "Kept — flagged wrong" : conflictingValues ? "All values rejected" : "Left unset";
     case "could-not-confirm": return "Could not confirm";
-    default: return "Needs review";
+    default: return conflictingValues ? `Conflict: ${conflictingValues} values` : "Needs review";
   }
 }
 
@@ -1109,13 +1109,15 @@ function renderFieldCard(
   const decided = decision !== undefined;
   const current = item.spec.candidates.find((candidate) => candidate.role === "current");
   const proposedCandidates = item.spec.candidates.filter((candidate) => candidate.role === "proposed");
-  // Several proposed values for one claim are a conflict no decision control
-  // can settle (each control names a role, not a value), so none is offered.
+  // Several proposed values for one claim are a conflict. A control names a
+  // role, not a value, so none may make one of them the trusted value; the
+  // reviewer can still reject them all or end the round as could-not-confirm.
+  const conflict = proposedCandidates.length > 1;
   const proposed = proposedCandidates.length === 1 ? proposedCandidates[0] : undefined;
   const presentation = buildReviewItemPresentation(item, presentationAdapter);
   const hasCurrentValue = current !== undefined && !isEmptyValue(current.value);
   const kind = hasCurrentValue ? "Update" : "New";
-  const keepLabel = hasCurrentValue ? "Keep current" : "Leave unset";
+  const keepLabel = hasCurrentValue ? "Keep current" : conflict ? "Reject all values" : "Leave unset";
   // Only render controls whose decision this item can actually record. Every
   // decision resolves to a candidate role, so a control routed at a role the
   // item does not carry cannot emit anything — it used to throw mid-click and
@@ -1147,7 +1149,7 @@ function renderFieldCard(
         <div class="frow1">
           <span class="fname">${escapeHtml(presentation.targetLabel)}</span>
           <span class="fkind">${kind}</span>
-          <span class="chip ${state} push" data-testid="field-chip">${chipLabel(state, hasCurrentValue)}</span>
+          <span class="chip ${state} push" data-testid="field-chip">${chipLabel(state, hasCurrentValue, conflict ? proposedCandidates.length : undefined)}</span>
         </div>
         ${proposed
           ? renderDiffRow(item, current, proposed, presentation.targetLabel, decided, effectiveProposedText, currentPresentationText)
@@ -1163,6 +1165,7 @@ function renderFieldCard(
             Suggestion was wrong
           </label>
           <button class="btn unconfirmed" type="button" data-testid="could-not-confirm" data-item-name="${escapeHtml(item.metadata.name)}">Could not confirm</button>` : ""}
+          ${conflict ? `<button class="btn unconfirmed" type="button" data-testid="could-not-confirm" data-item-name="${escapeHtml(item.metadata.name)}">Could not confirm</button>` : ""}
         </div>
         <!--
           A control's precondition message belongs where the control is. The
@@ -1173,7 +1176,7 @@ function renderFieldCard(
         -->
         <span class="derr" data-testid="decision-error" role="alert" hidden></span>
         <div class="decided">
-          <span class="chip ${state}" data-testid="decided-chip">${chipLabel(state, hasCurrentValue)}</span>
+          <span class="chip ${state}" data-testid="decided-chip">${chipLabel(state, hasCurrentValue, conflict ? proposedCandidates.length : undefined)}</span>
           <button class="undo" type="button" data-testid="undo-decision" data-item-name="${escapeHtml(item.metadata.name)}">Change</button>
         </div>
         ${renderAuditDetails(item, current, proposed, session, presentationAdapter)}
@@ -1185,7 +1188,7 @@ function renderFieldCard(
 /**
  * The card body for an item whose candidate set holds several proposed values.
  * Lists every value with its excerpt; the workbench records a decision against
- * a role, so it cannot pick one of them, and says so.
+ * a role, so it cannot pick one of them, and says what the reviewer can do.
  */
 function renderConflictingProposals(
   item: ReviewItem,
@@ -1200,7 +1203,7 @@ function renderConflictingProposals(
   }).join("");
   return `
     <div class="field-value" data-testid="conflicting-proposals">
-      <p>${candidates.length} different values were proposed for this field. This queue cannot choose between them.</p>
+      <p>${candidates.length} different values were proposed for this field. This queue cannot choose one of them yet: reject them all, or mark the field Could not confirm with a reason.</p>
       <ul>${values}</ul>
     </div>
   `;
