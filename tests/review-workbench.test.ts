@@ -595,7 +595,7 @@ describe("review workbench prototype", () => {
     assert.deepEqual(decisions.map((decision) => decision.spec.status), ["verified", "verified", "rejected"]);
     assert.deepEqual(results.map((result) => result.decision), ["accept-proposed", "keep-current", "reject-proposed"]);
     assert.deepEqual(results.map((result) => result.status), ["verified", "verified", "rejected"]);
-    assert.ok(results.every((result) => result.selectedCandidateId === result.selectedCandidate.id));
+    assert.ok(results.every((result) => result.selectedCandidateId === result.selectedCandidate?.id));
 
     const itemForDecision = (decision: ReviewDecision): ReviewItem => {
       const item = replayed.items.find((entry) => entry.metadata.name === decision.spec.reviewItemName);

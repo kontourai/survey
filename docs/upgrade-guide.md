@@ -512,6 +512,79 @@ The projected claim value is unchanged for mappings built by
 `surveySchemaMapping`. If you hand-build a `ReviewedMapping`, give its
 `selectedCandidate.value` the same four keys.
 
+## Envelope imports: one item per claim, partial coverage, optional confidence
+
+`importExtractionEnvelope` changed in three ways
+([extraction-envelope-import.md](extraction-envelope-import.md)):
+
+- **One `ReviewItem` per claim.** Proposals whose claim targets name the same
+  claim at the same `pathIndices` are one candidate set, with one candidate per
+  distinct value; two or more values make it `conflict`. Item names are now
+  derived from that claim slot rather than the proposal index, so every
+  imported item name changes and envelopes that repeat a claim yield fewer
+  items. Stored review rounds keyed by the old names do not carry over. Read
+  `metadata.producer["survey.kontourai.io/extraction-envelope"].proposalIndices`
+  to map proposals to items instead of assuming item `i` is proposal `i`.
+  Proposals that share a claim must now return identical claim targets. To keep
+  a multi-valued field as separate items, give each value its own claim id or
+  subject in `claimTarget`, or use an array field so each value has its own
+  `pathIndices`.
+- **Role-based decisions refuse ambiguity.** `candidateForDecision` (and so the
+  workbench, the session event builders, and the MCP decide tool) throws for
+  `accept-proposed` or `keep-current` when the decision's role names more than
+  one candidate, instead of using the first. `reject-proposed` and
+  `could-not-confirm` stay available on a `conflict` item and select no
+  candidate (`decisionSelectsNoCandidate`, `decisionCandidateId`): the decision
+  and its events carry no `candidateId`, and `keepActionDecision` returns
+  `reject-proposed` for such an item. `CandidateSetStatus` gains `rejected`
+  (every candidate rejected, none selected). `buildSurveyTrustBundle` projects
+  a claim whose candidate set has several candidates, no `selectedCandidateId`
+  and no claim `candidateId` as a set-level claim (its own value, null from the
+  canonical path; every value in `metadata.survey.candidates`; one evidence
+  record per candidate; never `verified`) instead of silently using the first
+  candidate. If such a set also has a review that names one candidate, the
+  bundle now throws (before, the review was dropped and the claim projected the
+  first candidate's value): give the set a `selectedCandidateId` or the claim a
+  `candidateId`.
+- **`ReviewWorkbenchResult.selectedCandidate*` can be absent.** For a decision
+  that selects no candidate (reject-all or could-not-confirm on a `conflict`
+  item), `selectedCandidate`, `selectedCandidateId`, `selectedCandidateRole`,
+  `selectedValue`, `selectedDisplayValue`, `effectiveValue` and
+  `effectiveDisplayValue` are absent, `unselectedCandidates` holds every
+  candidate, and `ReviewResultPresentation.selectedValueText` is absent. Code
+  that reads the selected candidate to ground or attribute a result, for
+  example `result.selectedCandidate.id` or `result.selectedCandidateId!`, must
+  treat "no candidate" as its own case (nothing to apply or attribute) instead
+  of throwing or attributing the first candidate. Fieldwork's grounding and
+  attribution code is this pattern: `result.selectedCandidate.projection` is a
+  compile error under `strict` and a `TypeError` at runtime on such a result,
+  and `candidates.find((c) => c.id === result.selectedCandidateId)` finds
+  nothing and throws its unresolvable-decision error. `buildCanonicalReviewedTrustInput` now projects a
+  could-not-confirm on a `conflict` or `escalated` item as `disputed`, the
+  status Surface projection already required for it.
+- **Partial runs and confidence.** The importer accepts the partial reasons
+  `provider-failure`, `content-truncated`, and `output-truncated`, an optional
+  `result.coverage` list, and proposals without `confidence`. Candidates carry
+  `partial` and `coverage` next to `outcome` in their producer metadata. A
+  candidate from a proposal without confidence has no `confidence` on the
+  candidate or its extraction; code that read `candidate.confidence` as a
+  number must handle `undefined`. Imported candidates now carry
+  `extraction.extractedAt`, so they project through
+  `buildCanonicalReviewedTrustInput`. `toSurfaceReviewedExtractionImport`
+  refuses a record with a proposal that has no confidence, because Surface's
+  reviewed-extraction profile still requires one.
+
+### Failed and proposal-less envelope imports are unresolved
+
+An envelope whose outcome is `failure` now imports with `status.state:
+"unresolved"` and an `extraction-failed` diagnostic (`category`, `code`,
+`message`) instead of `grounded` with no diagnostics. A `partial` envelope with
+no proposals gets an `extraction-incomplete` diagnostic naming its reason. Both
+used to look exactly like a complete run that found nothing. Code that treated
+`state === "grounded"` with zero items as "nothing to review" should read the
+diagnostics, and stored import records of such envelopes no longer validate
+until re-imported, because their stored status no longer matches.
+
 ## See also
 
 - [consumer-integration-guide.md](consumer-integration-guide.md) — first-time

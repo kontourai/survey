@@ -1,5 +1,6 @@
-import { buildReviewItemsFromExtractionEnvelopeImport, validateExtractionEnvelopeImport, type ExtractionEnvelopeImport, type ExtractionEnvelopeImportResult, type PortableExtractionProposal } from "../extraction-envelope.js";
+import { buildReviewItemsFromExtractionEnvelopeImport, validateExtractionEnvelopeImport, type ExtractionEnvelopeImport, type ExtractionEnvelopeImportDiagnostic, type ExtractionEnvelopeImportResult, type PortableExtractionProposal } from "../extraction-envelope.js";
 import { canonicalJson } from "./canonical.js";
+import type { ReviewItem } from "../review-resource.js";
 import { sha256Hex } from "../sha256.js";
 import {
   resolvePortablePdfRegion,
@@ -92,6 +93,12 @@ export interface ExtractionInspectorSource {
   artifactText?: string;
   ocrDerived?: true;
   alignment: ExtractionAlignmentState;
+  /**
+   * Present when the extraction failed, or stopped short without proposing
+   * anything: the import's `extraction-failed` / `extraction-incomplete`
+   * diagnostic. An empty source with this set is not a run that found nothing.
+   */
+  extractionDiagnostic?: Extract<ExtractionEnvelopeImportDiagnostic, { kind: "extraction-failed" | "extraction-incomplete" }>;
   message: string;
 }
 
@@ -170,18 +177,22 @@ export function buildExtractionInspectorModel(input: ExtractionInspectorInput): 
       sourceKey,
       record.metadata.name,
       prepared,
-      record.status.state,
+      record.status.diagnostics,
       entry.artifact,
       envelope.result.ocrDerived,
     );
     sources.push(source);
     const candidateStart = candidates.length;
+    const itemByProposalIndex = new Map<number, string>();
+    for (const item of entry.importResult.reviewItems) {
+      for (const proposalIndex of envelopeItemProposalIndices(item)) itemByProposalIndex.set(proposalIndex, item.metadata.name);
+    }
     envelope.result.proposals.forEach((proposal, proposalIndex) => {
-      const item = entry.importResult.reviewItems[proposalIndex];
-      if (!item) return; // unresolved imports legitimately produce no ReviewItems
+      const itemName = itemByProposalIndex.get(proposalIndex);
+      if (!itemName) return; // unresolved imports legitimately produce no ReviewItems
       candidates.push(candidateModel(
         source,
-        item.metadata.name,
+        itemName,
         proposal,
         proposalIndex,
         envelope.result.provider,
@@ -295,34 +306,61 @@ function assertImportedResult(result: ExtractionEnvelopeImportResult, record: Ex
   if (record.apiVersion !== "survey.kontourai.io/v1alpha1" || record.kind !== "ExtractionEnvelopeImport") throw new Error("Invalid extraction import resource identity.");
   if (!record.metadata?.name || !record.metadata.producerNamespace || !record.spec?.envelope?.result || !Array.isArray(record.spec.envelope.result.proposals)) throw new Error("Malformed extraction import result.");
   const grounded = record.status?.state === "grounded";
-  if ((!grounded && reviewItems.length !== 0) || (grounded && reviewItems.length !== record.spec.envelope.result.proposals.length)) throw new Error("Extraction import ReviewItems do not match its grounding state.");
+  const proposals = record.spec.envelope.result.proposals;
+  const covered = reviewItems.flatMap(envelopeItemProposalIndices).sort((left, right) => left - right);
+  if ((!grounded && reviewItems.length !== 0) || (grounded && canonicalJson(covered) !== canonicalJson(proposals.map((_proposal, index) => index)))) throw new Error("Extraction import ReviewItems do not match its grounding state.");
   const canonicalItems = buildReviewItemsFromExtractionEnvelopeImport(record);
   if (canonicalJson(reviewItems) !== canonicalJson(canonicalItems)) throw new Error("Extraction import ReviewItems do not match their canonical identities and bindings.");
-  reviewItems.forEach((item, index) => {
-    const proposal = record.spec.envelope.result.proposals[index]!;
+  reviewItems.forEach((item, itemIndex) => {
     const metadata = item.metadata?.producer?.["survey.kontourai.io/extraction-envelope"] as { importName?: unknown } | undefined;
-    const candidate = item.spec?.candidates?.[0];
-    const binding = candidate?.producer?.["survey.kontourai.io/extraction-envelope"] as { importName?: unknown; proposalIndex?: unknown; runId?: unknown; provider?: unknown } | undefined;
-    if (item.kind !== "ReviewItem" || !item.metadata.name || item.spec.candidates.length !== 1
-      || metadata?.importName !== record.metadata.name || binding?.importName !== record.metadata.name
-      || binding.proposalIndex !== index || binding.runId !== record.spec.envelope.result.runId || binding.provider !== record.spec.envelope.result.provider
-      || item.spec.target !== proposal.fieldPath || candidate?.locator?.locator !== proposal.provenance.locator || candidate.locator.excerpt !== proposal.provenance.excerpt) {
-      throw new Error(`Extraction import ReviewItem ${index} is inconsistent with its validated proposal.`);
+    if (item.kind !== "ReviewItem" || !item.metadata.name || item.spec.candidates.length === 0 || metadata?.importName !== record.metadata.name) {
+      throw new Error(`Extraction import ReviewItem ${itemIndex} is inconsistent with its validated proposals.`);
+    }
+    for (const candidate of item.spec.candidates) {
+      const binding = candidate.producer?.["survey.kontourai.io/extraction-envelope"] as { importName?: unknown; proposalIndex?: unknown; runId?: unknown; provider?: unknown } | undefined;
+      const proposal = typeof binding?.proposalIndex === "number" ? proposals[binding.proposalIndex] : undefined;
+      if (!proposal || binding?.importName !== record.metadata.name || binding.runId !== record.spec.envelope.result.runId || binding.provider !== record.spec.envelope.result.provider
+        || candidate.extraction.target !== proposal.fieldPath || candidate.locator?.locator !== proposal.provenance.locator || candidate.locator.excerpt !== proposal.provenance.excerpt) {
+        throw new Error(`Extraction import ReviewItem ${itemIndex} is inconsistent with its validated proposals.`);
+      }
     }
   });
+}
+
+/** The proposal indices one imported ReviewItem stands for, as its producer metadata records them. */
+function envelopeItemProposalIndices(item: ReviewItem): number[] {
+  const metadata = item.metadata?.producer?.["survey.kontourai.io/extraction-envelope"] as { proposalIndices?: unknown } | undefined;
+  const indices = metadata?.proposalIndices;
+  if (!Array.isArray(indices) || indices.length === 0 || !indices.every((index) => Number.isSafeInteger(index) && index >= 0)) {
+    throw new Error(`Extraction import ReviewItem ${item.metadata?.name ?? "(unnamed)"} does not record its proposals.`);
+  }
+  return indices as number[];
+}
+
+/**
+ * The posture a source is shown with: the extraction's own failure or early
+ * stop when there is one, otherwise the artifact alignment. A failed
+ * extraction over an aligned artifact must not show the aligned posture.
+ */
+export function inspectorSourcePosture(source: Pick<ExtractionInspectorSource, "alignment" | "extractionDiagnostic">): ExtractionAlignmentState | "extraction-failed" | "extraction-incomplete" {
+  if (source.extractionDiagnostic) return source.extractionDiagnostic.kind;
+  return source.alignment;
 }
 
 function sourceModel(
   key: string,
   importName: string,
   prepared: ExtractionEnvelopeImportResult["record"]["spec"]["envelope"]["result"]["preparedArtifact"],
-  state: string,
+  diagnostics: readonly ExtractionEnvelopeImportDiagnostic[],
   artifact: ResolvedExtractionArtifact,
   ocrDerived: true | undefined,
 ): ExtractionInspectorSource {
   let alignment: ExtractionAlignmentState;
   let message: string;
-  if (state !== "grounded" || artifact.status === "unavailable") {
+  const artifactUnresolved = diagnostics.some((diagnostic) => diagnostic.kind === "artifact-unavailable" || diagnostic.kind === "digest-mismatch");
+  const extractionDiagnostic = diagnostics.find((diagnostic): diagnostic is NonNullable<ExtractionInspectorSource["extractionDiagnostic"]> =>
+    diagnostic.kind === "extraction-failed" || diagnostic.kind === "extraction-incomplete");
+  if (artifactUnresolved || artifact.status === "unavailable") {
     alignment = "artifact-unavailable"; message = `Prepared artifact unavailable (${artifact.status === "unavailable" ? artifact.code : "invalid-artifact"}). Candidates are not grounded.`;
   } else if (artifact.status === "digest-mismatch" || !prepared || artifact.actualDigest !== prepared.digest
     || sha256Hex(artifact.text) !== artifact.actualDigest) {
@@ -330,9 +368,14 @@ function sourceModel(
   } else if (artifact.text.length !== prepared.contentLength) {
     alignment = "artifact-unavailable"; message = "Prepared artifact content has the wrong length. Candidates are not grounded.";
   } else {
-    alignment = "aligned"; message = `Prepared artifact identity verified. Exact source spans are available.${ocrDerived ? " Prepared text is OCR-derived." : ""}`;
+    alignment = "aligned"; message = extractionDiagnostic
+      ? "Prepared artifact identity verified."
+      : `Prepared artifact identity verified. Exact source spans are available.${ocrDerived ? " Prepared text is OCR-derived." : ""}`;
   }
-  return { key, importName, ...(prepared?.ref ? { artifactRef: prepared.ref } : {}), ...(prepared?.digest ? { expectedDigest: prepared.digest } : {}), ...("actualDigest" in artifact ? { actualDigest: artifact.actualDigest } : {}), ...(alignment === "aligned" && artifact.status === "available" ? { artifactText: artifact.text } : {}), ...(ocrDerived ? { ocrDerived: true as const } : {}), alignment, message };
+  // The extraction's own failure leads: an aligned artifact with no candidates
+  // must not read as a complete run that found nothing.
+  if (extractionDiagnostic) message = `${extractionDiagnostic.message} ${message}`;
+  return { key, importName, ...(extractionDiagnostic ? { extractionDiagnostic } : {}), ...(prepared?.ref ? { artifactRef: prepared.ref } : {}), ...(prepared?.digest ? { expectedDigest: prepared.digest } : {}), ...("actualDigest" in artifact ? { actualDigest: artifact.actualDigest } : {}), ...(alignment === "aligned" && artifact.status === "available" ? { artifactText: artifact.text } : {}), ...(ocrDerived ? { ocrDerived: true as const } : {}), alignment, message };
 }
 
 function candidateModel(
@@ -433,7 +476,7 @@ export function mountExtractionInspector(
     next.hidden = pageCount === 1;
     previous.disabled = page === 0;
     next.disabled = page >= pageCount - 1;
-    postures.innerHTML = model.sources.map(s => `<div class="inspector-posture ${s.alignment}" role="status"><strong>${escapeHtml(s.importName)}: ${escapeHtml(s.alignment)}</strong><span>${escapeHtml(s.message)}</span></div>`).join("");
+    postures.innerHTML = model.sources.map(s => { const posture = inspectorSourcePosture(s); return `<div class="inspector-posture ${s.alignment}${posture !== s.alignment ? ` ${posture}` : ""}" role="status" data-posture="${escapeHtml(posture)}"><strong>${escapeHtml(s.importName)}: ${escapeHtml(posture)}</strong><span>${escapeHtml(s.message)}</span></div>`; }).join("");
     sourcesRoot.innerHTML = model.sources.map(s => { const anchored = model.candidates.filter(c => c.sourceKey === s.key); const marked = visible.filter(c => c.sourceKey === s.key); return `<div class="inspector-source" aria-label="Prepared source for ${escapeHtml(s.importName)}"><h3>${escapeHtml(s.importName)}</h3><pre tabindex="0">${s.artifactText === undefined ? `${anchored.map(c => anchorHtml(c, highlightIdFor(c))).join("")}<span class="source-unavailable">${escapeHtml(s.message)}</span>` : renderSource(s.artifactText, anchored, marked, highlightIdFor)}</pre></div>`; }).join("");
   };
   root.querySelectorAll<HTMLSelectElement>("select").forEach(select => select.addEventListener("change", event => { event.stopPropagation(); const key = select.dataset.filter as keyof ExtractionInspectorFilters; if (select.value) (filters as Record<string,string>)[key] = select.value; else delete (filters as Record<string,string>)[key]; page = 0; render(); }));

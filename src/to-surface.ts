@@ -123,6 +123,10 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
 
   for (const projection of input.claims) {
     const candidateSet = requireMapValue(candidateSets, projection.candidateSetId, "candidate set");
+    if (projection.candidateId === undefined && candidateSet.selectedCandidateId === undefined && candidateSet.candidates.length > 1) {
+      projectUnselectedSetClaim({ input, projection, candidateSet, rawSources, extractions, reviewsByCandidateSet, projectionContextId, claims, evidence, events });
+      continue;
+    }
     const candidate = selectCandidate(candidateSet, projection.candidateId);
     const extraction = requireMapValue(extractions, candidate.extractionId, "extraction");
     const rawSource = requireMapValue(rawSources, extraction.sourceId, "raw source");
@@ -306,6 +310,130 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
     policies: [],
     events,
   };
+}
+
+/**
+ * A claim over a candidate set that selects none of its candidates (a review
+ * rejected every conflicting value, or could not confirm any). No single value
+ * is presented: the claim value is the projection's own (null from the
+ * canonical path), every candidate is listed in `metadata.survey.candidates`
+ * and backed by its own evidence record, and the status can never be trusted.
+ * A review that names one candidate cannot apply to such a claim and is
+ * refused rather than dropped. With `reviewProofs`, no integrity anchor is
+ * attached: the anchor commits one reviewed candidate, and this claim has none
+ * (it is never `verified` or `assumed`).
+ */
+function projectUnselectedSetClaim(context: {
+  input: SurveyInput;
+  projection: ClaimTarget;
+  candidateSet: CandidateSet;
+  rawSources: Map<string, RawSource>;
+  extractions: Map<string, Extraction>;
+  reviewsByCandidateSet: Map<string, ReviewOutcome[]>;
+  projectionContextId: string | undefined;
+  claims: Claim[];
+  evidence: Evidence[];
+  events: VerificationEvent[];
+}): void {
+  const { input, projection, candidateSet, projectionContextId } = context;
+  const setReviews = context.reviewsByCandidateSet.get(candidateSet.id) ?? [];
+  const candidateReviews = setReviews.filter((review) => review.candidateId);
+  if (candidateReviews.length) {
+    throw new Error(`Claim ${projection.id} names no candidate of set ${candidateSet.id}, but review ${candidateReviews.map((review) => review.id).join(", ")} is about candidate ${candidateReviews.map((review) => review.candidateId).join(", ")}: a candidate-level review needs a selectedCandidateId on the set or a candidateId on the claim.`);
+  }
+  const reviews = setReviews;
+  const review = latestReview(reviews, projection.id);
+  const setStatus = statusFor({ candidateSet, candidate: { id: "", extractionId: "", value: null } });
+  const status = projection.status
+    ?? (review?.resolution === "could_not_confirm"
+      ? (setStatus === "disputed" ? setStatus : review.status)
+      : review?.status ?? setStatus);
+  if (status === "verified" || status === "assumed") {
+    throw new ReviewAgreementError("status-mismatch", `Claim ${projection.id} selects no candidate of set ${candidateSet.id}, so it cannot be ${status}`);
+  }
+  assertReviewOutcomeDiscipline({ subject: `Claim ${projection.id}`, status, review, candidateSetStatus: candidateSet.status });
+
+  const sources = candidateSet.candidates.map((candidate) => {
+    const extraction = requireMapValue(context.extractions, candidate.extractionId, "extraction");
+    const rawSource = requireMapValue(context.rawSources, extraction.sourceId, "raw source");
+    return { candidate, extraction, rawSource };
+  });
+  const evidenceIds = sources.map(({ candidate, extraction, rawSource }) => {
+    const id = projectionRecordId(projection.id, projectionContextId, "claim-evidence", `evidence.source.${candidate.id}`);
+    const policyStandard = policyStandardFields(rawSource);
+    context.evidence.push({
+      id,
+      claimId: projection.id,
+      evidenceType: projection.evidenceType ?? (rawSource.resolution ? evidenceTypeForResolution(rawSource, rawSource.resolution) : evidenceTypeFor(rawSource)),
+      method: projection.evidenceMethod ?? "extraction",
+      sourceRef: rawSource.sourceRef,
+      sourceLocator: extraction.locator,
+      excerptOrSummary: evidenceExcerptOrSummary({ rawSource, extraction, projection, policyStandard }),
+      observedAt: rawSource.observedAt,
+      collectedBy: projection.collectedBy,
+      integrityRef: rawSource.checksum,
+      metadata: {
+        ...rawSource.metadata,
+        ...extraction.metadata,
+        ...candidate.metadata,
+        ...(policyStandard ? { policyStandard } : {}),
+        rawSourceKind: rawSource.kind,
+        locatorScheme: rawSource.locatorScheme,
+        candidateId: candidate.id,
+        ...(candidate.confidence ?? extraction.confidence) !== undefined ? { confidence: candidate.confidence ?? extraction.confidence } : {},
+      },
+    });
+    return id;
+  });
+
+  const producerSurvey = isRecord(projection.metadata?.survey) ? projection.metadata.survey : {};
+  context.claims.push({
+    id: projection.id,
+    subjectType: projection.subjectType,
+    subjectId: projection.subjectId,
+    facet: projection.facet,
+    claimType: projection.claimType,
+    fieldOrBehavior: projection.fieldOrBehavior,
+    value: "value" in projection ? projection.value : null,
+    status,
+    createdAt: projection.createdAt ?? sources.map(({ extraction }) => extraction.extractedAt).sort()[0]!,
+    updatedAt: projection.updatedAt ?? review?.reviewedAt ?? input.generatedAt,
+    impactLevel: projection.impactLevel,
+    derivedFrom: projection.derivedFrom,
+    derivationEdges: projection.derivationEdges,
+    confidenceBasis: {
+      sourceQuality: "moderate",
+      reviewerAuthority: "none",
+      evidenceStrength: "weak",
+      impactLevel: projection.impactLevel,
+      ...projection.confidenceBasis,
+    },
+    metadata: {
+      ...projection.metadata,
+      survey: {
+        ...producerSurvey,
+        candidateSetId: candidateSet.id,
+        candidateSetStatus: candidateSet.status,
+        // No candidate is selected; every value the set held, in set order.
+        candidates: candidateSet.candidates.map((candidate) => ({
+          candidateId: candidate.id,
+          value: candidate.value,
+          ...(candidate.rejectionReason !== undefined ? { rejectionReason: candidate.rejectionReason } : {}),
+        })),
+        reviewOutcomeId: review?.id,
+      },
+    },
+  });
+  context.events.push({
+    id: projectionRecordId(projection.id, projectionContextId, "claim-event", `event.${status}`),
+    claimId: projection.id,
+    status,
+    actor: projection.actor ?? (review?.resolution === "could_not_confirm" ? undefined : review?.actor) ?? projection.collectedBy,
+    method: projection.eventMethod ?? eventMethodFor(status, candidateSet),
+    evidenceIds,
+    createdAt: review?.reviewedAt ?? input.generatedAt,
+    notes: review?.rationale ?? candidateSet.rationale,
+  });
 }
 
 function validateProjectionContextId(contextId: string | undefined): string | undefined {
@@ -672,6 +800,7 @@ function statusFor(input: {
   }
   if (input.candidateSet.status === "conflict") return "disputed";
   if (input.candidateSet.status === "escalated") return "disputed";
+  if (input.candidateSet.status === "rejected") return "rejected";
   return "proposed";
 }
 

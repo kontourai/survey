@@ -177,8 +177,8 @@ describe("buildCanonicalReviewedTrustInput", () => {
       results: [{
         ...result,
         selectedCandidate: {
-          ...result.selectedCandidate,
-          extraction: { ...result.selectedCandidate.extraction, target: "differentTarget" },
+          ...result.selectedCandidate!,
+          extraction: { ...result.selectedCandidate!.extraction, target: "differentTarget" },
         },
       }],
     }), /selected candidate does not match/i);

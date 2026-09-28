@@ -2,6 +2,8 @@ import { canonicalJson } from "./canonical.js";
 import { assertReviewResolutionConsistency } from "../producer-discipline.js";
 import {
   candidateForDecision,
+  decisionCandidateId,
+  decisionSelectsNoCandidate,
   keepActionDecision,
   buildReviewSessionEvent,
   buildReviewSessionEvents,
@@ -102,6 +104,8 @@ export {
   buildReviewSessionEvent,
   buildReviewSessionResource,
   candidateForDecision,
+  decisionCandidateId,
+  decisionSelectsNoCandidate,
   keepActionDecision,
   currentReviewItem,
   currentReviewWorkbenchState,
@@ -179,11 +183,15 @@ export function buildReviewDecision(state: ReviewWorkbenchState): ReviewDecision
     throw new Error("Could not confirm requires a non-empty reason.");
   }
   const candidate = candidateForDecision(state.item, state.decision);
+  // A decision that selects no candidate (a value-neutral decision on a
+  // conflict) records no candidate id and no candidate's projection hints.
+  const selectsNone = decisionSelectsNoCandidate(state.item, state.decision);
   const projection = {
-    ...candidate.projection,
-    reviewOutcomeId: candidate.projection?.reviewOutcomeId
+    ...(selectsNone ? state.item.spec.projection : candidate.projection),
+    reviewOutcomeId: (selectsNone ? state.item.spec.projection : candidate.projection)?.reviewOutcomeId
       ?? `${state.item.metadata.name}:${state.decision}:review-outcome`,
   };
+  const candidateProjection = selectsNone ? undefined : candidate.projection;
   const authorizing = buildDecisionCardAuthorizing(state);
 
   const reviewDecision: ReviewDecision = {
@@ -196,7 +204,7 @@ export function buildReviewDecision(state: ReviewWorkbenchState): ReviewDecision
     },
     spec: {
       reviewItemName: state.item.metadata.name,
-      candidateId: candidate.id,
+      ...(selectsNone ? {} : { candidateId: candidate.id }),
       status: definition.status,
       ...(state.decision === "could-not-confirm"
         ? {
@@ -217,7 +225,7 @@ export function buildReviewDecision(state: ReviewWorkbenchState): ReviewDecision
         : {}),
     },
     status: {
-      ...(candidate.projection?.claimId ? { appliedToClaimIds: [candidate.projection.claimId] } : {}),
+      ...(candidateProjection?.claimId ? { appliedToClaimIds: [candidateProjection.claimId] } : {}),
     },
   };
   assertReviewResolutionConsistency(`ReviewDecision ${reviewDecision.metadata.name}`, {
@@ -293,7 +301,16 @@ function buildDecisionCardAuthorizing(
  */
 function decisionCardRenderedPrompt(state: ReviewWorkbenchState, targetLabel: string): string {
   const currentCandidate = state.item.spec.candidates.find((c) => c.role === "current");
-  const proposedCandidate = state.item.spec.candidates.find((c) => c.role === "proposed");
+  const proposedCandidates = state.item.spec.candidates.filter((c) => c.role === "proposed");
+  // A conflict card lists every proposed value and offers reject-all or could
+  // not confirm; the prompt states the same, naming no single value.
+  if (proposedCandidates.length > 1) {
+    const decisionLabel = state.decision === "reject-proposed"
+      ? "Reject all values"
+      : state.decision ? workbenchDecisionDefinitions[state.decision].label : "";
+    return `For ${targetLabel}, ${proposedCandidates.length} different values were proposed: ${proposedCandidates.map((c) => formatValue(c.value)).join(", ")}. Selected decision: ${decisionLabel}.`;
+  }
+  const proposedCandidate = proposedCandidates[0];
   const currentValue = formatValue(currentCandidate?.value ?? "");
   const proposedValue = formatValue(proposedCandidate?.value ?? "");
   const decisionLabel = state.decision ? workbenchDecisionDefinitions[state.decision].label : "";
@@ -428,24 +445,31 @@ export interface BrowserReviewWorkbenchConfig {
   readonly startState?: ReviewQueueSessionState | ReviewWorkbenchState;
 }
 
+/**
+ * The in-process outcome of one workbench decision, derived from the session.
+ * For a decision that selects no candidate ({@link decisionSelectsNoCandidate}:
+ * reject-all or could-not-confirm on a conflict), every `selected*` and
+ * `effective*` field is absent, `unselectedCandidates` holds every candidate,
+ * and `reviewDecision.spec.candidateId` is absent.
+ */
 export interface ReviewWorkbenchResult {
   readonly reviewItemName: string;
   readonly decision: ReviewWorkbenchDecision;
-  readonly selectedCandidate: ReviewCandidate;
-  readonly selectedCandidateId: string;
+  readonly selectedCandidate?: ReviewCandidate;
+  readonly selectedCandidateId?: string;
   readonly selectedCandidateRole?: ReviewCandidate["role"];
   /** The selected candidate's original value, unaffected by any reviewer edit. Used
    *  for candidate-identity matching (see `matchingSelectedCandidate`); consumers who
    *  want the reviewer's edited value should read `effectiveValue` instead. */
-  readonly selectedValue: unknown;
-  readonly selectedDisplayValue: string;
+  readonly selectedValue?: unknown;
+  readonly selectedDisplayValue?: string;
   /** Reviewer-edited override captured for an accept-proposed decision, if the
    *  reviewer changed the proposed value before applying it. Additive/optional. */
   readonly editedValue?: unknown;
   /** The value that should actually be applied: `editedValue` when present (and the
    *  decision selects the proposed candidate), otherwise `selectedValue`. */
-  readonly effectiveValue: unknown;
-  readonly effectiveDisplayValue: string;
+  readonly effectiveValue?: unknown;
+  readonly effectiveDisplayValue?: string;
   readonly unselectedCandidates: readonly ReviewCandidate[];
   readonly reviewDecision: ReviewDecision;
   readonly status: ReviewDecision["spec"]["status"];
@@ -609,7 +633,9 @@ function mapReviewApplyResultToActions<TAction>(input: {
   readonly options: MapReviewWorkbenchResultsToApplyActionsOptions<TAction>;
   readonly issues: ReviewApplyActionIssue[];
 }): ReviewApplyActionMapping<TAction>[] {
-  if (input.result.decision === "could-not-confirm") {
+  // Could-not-confirm applies nothing, and neither does a decision that selects
+  // no candidate (rejecting every value of a conflict): there is no value to apply.
+  if (input.result.decision === "could-not-confirm" || input.result.selectedCandidateId === undefined) {
     return [];
   }
   const context = buildReviewApplyActionContext(input.result, input.itemByName, input.issues);
@@ -672,6 +698,7 @@ function matchingSelectedCandidate(
   item: ReviewItem,
   result: ReviewWorkbenchResult,
 ): ReviewCandidate | undefined {
+  if (result.selectedCandidateId === undefined) return undefined;
   const candidate = findSoleCandidateById(item, result.selectedCandidateId);
   return candidate
     && candidate.role === result.selectedCandidateRole
@@ -700,6 +727,16 @@ export function buildReviewWorkbenchResultsFromSession(session: ReviewQueueSessi
       return [];
     }
 
+    if (decisionSelectsNoCandidate(item, decision)) {
+      return [{
+        reviewItemName: item.metadata.name,
+        decision,
+        unselectedCandidates: [...item.spec.candidates],
+        reviewDecision,
+        status: reviewDecision.spec.status,
+        rationale: reviewDecision.spec.rationale,
+      }];
+    }
     const selectedCandidate = candidateForDecision(item, decision);
     const editedValue = decision === "accept-proposed"
       ? session.editedValuesByItemName?.[item.metadata.name]
@@ -962,13 +999,13 @@ function fieldCardState(item: ReviewItem, decision: ReviewWorkbenchDecision | un
  * {@link keepActionDecision}). Saying "Kept — flagged wrong" there would claim a
  * distinction the record does not hold, so the chip states only what happened.
  */
-function chipLabel(state: FieldCardState, hasCurrentValue: boolean): string {
+function chipLabel(state: FieldCardState, hasCurrentValue: boolean, conflictingValues?: number): string {
   switch (state) {
     case "accepted": return "Accepted";
-    case "kept": return hasCurrentValue ? "Kept current" : "Left unset";
-    case "rejected": return hasCurrentValue ? "Kept — flagged wrong" : "Left unset";
+    case "kept": return hasCurrentValue ? "Kept current" : conflictingValues ? "All values rejected" : "Left unset";
+    case "rejected": return hasCurrentValue ? "Kept — flagged wrong" : conflictingValues ? "All values rejected" : "Left unset";
     case "could-not-confirm": return "Could not confirm";
-    default: return "Needs review";
+    default: return conflictingValues ? `Conflict: ${conflictingValues} values` : "Needs review";
   }
 }
 
@@ -1108,11 +1145,16 @@ function renderFieldCard(
   const state = fieldCardState(item, decision);
   const decided = decision !== undefined;
   const current = item.spec.candidates.find((candidate) => candidate.role === "current");
-  const proposed = item.spec.candidates.find((candidate) => candidate.role === "proposed");
+  const proposedCandidates = item.spec.candidates.filter((candidate) => candidate.role === "proposed");
+  // Several proposed values for one claim are a conflict. A control names a
+  // role, not a value, so none may make one of them the trusted value; the
+  // reviewer can still reject them all or end the round as could-not-confirm.
+  const conflict = proposedCandidates.length > 1;
+  const proposed = proposedCandidates.length === 1 ? proposedCandidates[0] : undefined;
   const presentation = buildReviewItemPresentation(item, presentationAdapter);
   const hasCurrentValue = current !== undefined && !isEmptyValue(current.value);
   const kind = hasCurrentValue ? "Update" : "New";
-  const keepLabel = hasCurrentValue ? "Keep current" : "Leave unset";
+  const keepLabel = hasCurrentValue ? "Keep current" : conflict ? "Reject all values" : "Leave unset";
   // Only render controls whose decision this item can actually record. Every
   // decision resolves to a candidate role, so a control routed at a role the
   // item does not carry cannot emit anything — it used to throw mid-click and
@@ -1144,11 +1186,13 @@ function renderFieldCard(
         <div class="frow1">
           <span class="fname">${escapeHtml(presentation.targetLabel)}</span>
           <span class="fkind">${kind}</span>
-          <span class="chip ${state} push" data-testid="field-chip">${chipLabel(state, hasCurrentValue)}</span>
+          <span class="chip ${state} push" data-testid="field-chip">${chipLabel(state, hasCurrentValue, conflict ? proposedCandidates.length : undefined)}</span>
         </div>
         ${proposed
           ? renderDiffRow(item, current, proposed, presentation.targetLabel, decided, effectiveProposedText, currentPresentationText)
-          : "<p class=\"field-value\">No proposed value is available for this field.</p>"}
+          : proposedCandidates.length > 1
+            ? renderConflictingProposals(item, proposedCandidates, presentationAdapter, presentation.targetLabel)
+            : "<p class=\"field-value\">No proposed value is available for this field.</p>"}
         ${proposed ? renderProvenanceRow(item, proposed, presentationAdapter) : ""}
         <div class="decide">
           ${keepDecision === undefined ? "" : `<button class="btn keep" type="button" data-testid="keep-current" data-item-name="${escapeHtml(item.metadata.name)}">${keepLabel}</button>`}
@@ -1158,6 +1202,7 @@ function renderFieldCard(
             Suggestion was wrong
           </label>
           <button class="btn unconfirmed" type="button" data-testid="could-not-confirm" data-item-name="${escapeHtml(item.metadata.name)}">Could not confirm</button>` : ""}
+          ${conflict ? `<button class="btn unconfirmed" type="button" data-testid="could-not-confirm" data-item-name="${escapeHtml(item.metadata.name)}">Could not confirm</button>` : ""}
         </div>
         <!--
           A control's precondition message belongs where the control is. The
@@ -1168,12 +1213,36 @@ function renderFieldCard(
         -->
         <span class="derr" data-testid="decision-error" role="alert" hidden></span>
         <div class="decided">
-          <span class="chip ${state}" data-testid="decided-chip">${chipLabel(state, hasCurrentValue)}</span>
+          <span class="chip ${state}" data-testid="decided-chip">${chipLabel(state, hasCurrentValue, conflict ? proposedCandidates.length : undefined)}</span>
           <button class="undo" type="button" data-testid="undo-decision" data-item-name="${escapeHtml(item.metadata.name)}">Change</button>
         </div>
         ${renderAuditDetails(item, current, proposed, session, presentationAdapter)}
       </div>
     </section>
+  `;
+}
+
+/**
+ * The card body for an item whose candidate set holds several proposed values.
+ * Lists every value with its excerpt; the workbench records a decision against
+ * a role, so it cannot pick one of them, and says what the reviewer can do.
+ */
+function renderConflictingProposals(
+  item: ReviewItem,
+  candidates: readonly ReviewCandidate[],
+  presentationAdapter: ReviewPresentationAdapter | undefined,
+  targetLabel: string,
+): string {
+  const values = candidates.map((candidate) => {
+    const text = buildReviewCandidatePresentation(item, candidate, presentationAdapter, targetLabel).valueText;
+    const excerpt = candidate.locator?.excerpt;
+    return `<li data-testid="conflicting-value"><span class="vtext">${escapeHtml(text)}</span>${excerpt ? ` <q>${escapeHtml(excerpt)}</q>` : ""}</li>`;
+  }).join("");
+  return `
+    <div class="field-value" data-testid="conflicting-proposals">
+      <p>${candidates.length} different values were proposed for this field. This queue cannot choose one of them yet: reject them all, or mark the field Could not confirm with a reason.</p>
+      <ul>${values}</ul>
+    </div>
   `;
 }
 
@@ -1775,7 +1844,7 @@ function createReviewWorkbenchController(
     const session = sessionForEvent;
     const item = itemName ? session.items.find((entry) => entry.metadata.name === itemName) : undefined;
     const decision = itemName ? session.decisionsByItemName[itemName] : undefined;
-    const candidate = item && decision ? candidateForDecision(item, decision) : undefined;
+    const candidateId = item && decision ? decisionCandidateId(item, decision) : undefined;
     const definition = decision ? workbenchDecisionDefinitions[decision] : undefined;
     const note = itemName ? session.notesByItemName[itemName] : undefined;
     // Carry the reviewer's inline edit in the event (accept-proposed only), so
@@ -1799,7 +1868,7 @@ function createReviewWorkbenchController(
       occurredAt: session.reviewedAt,
       reviewItemName: itemName,
       reviewDecisionName: item && decision ? `${item.metadata.name}-${decision}` : undefined,
-      candidateId: candidate?.id,
+      candidateId,
       status: definition?.status,
       ...(decision === "could-not-confirm"
         ? {

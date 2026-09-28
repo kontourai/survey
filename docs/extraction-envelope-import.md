@@ -43,13 +43,93 @@ records directly; this adapter is additive.
 An absent or `available` prepared-artifact state is grounded. `unavailable`,
 `storage-error`, `identity-mismatch`, and `invalid-artifact` states become typed
 `artifact-unavailable` diagnostics. `digest-mismatch` becomes a typed diagnostic
-with expected and actual digests. Unresolved imports produce no `ReviewItem`.
+with expected and actual digests. A `failure` outcome becomes an
+`extraction-failed` diagnostic carrying its category and code (for example
+`provider/no-usable-answer`), and a `partial` outcome with no proposals becomes an
+`extraction-incomplete` diagnostic naming the partial reason, so neither reads as
+a complete run that found nothing; the source inspector leads with the same
+message and exposes it as `extractionDiagnostic`. A partial run with proposals
+stays grounded and carries its reason on every candidate. Unresolved imports
+produce no `ReviewItem`.
 
-Candidate, extraction, evidence, and resolution identity includes producer/import
+### One candidate set per claim
+
+Proposals are grouped into one `ReviewItem` per **claim slot**: the claim the
+proposal maps to through `claimTarget` (`subjectType`, `subjectId`, `facet`,
+`claimType`, `fieldOrBehavior`, and `claimId` when one is set) plus the
+proposal's `pathIndices`. The slot is the claim, not the upstream `fieldPath`
+(two field paths mapped to one claim are one slot) and never the value.
+Inside a slot there is one candidate per distinct canonical value, all with the
+`proposed` role:
+
+- one distinct value: one candidate, `candidateSetStatus: "needs-review"`.
+  Further proposals of that value (the same fee quoted twice) are listed on the
+  candidate's producer metadata as `sameValueProposals` with their proposal
+  index, evidence id, locator, and excerpt.
+- two or more distinct values: `candidateSetStatus: "conflict"`. The item projects
+  one claim, so within one envelope two values for one claim can no longer be
+  accepted as two verified claims.
+
+Grouping is per envelope import. Two imports that propose different values for
+the same subject and field (two runs, or one envelope imported under two import
+names) are still separate items and can still both be verified: item identity
+includes the import name and run id, and carrying one claim slot across runs is
+the stable slot identity tracked in kontourai/fieldwork#52 and
+kontourai/survey#295.
+
+A multi-valued field stays one item per value when the producer says so: array
+items carry distinct `pathIndices`, or `claimTarget` returns distinct claim ids
+or subjects. `pathIndices` are the indices the model assigned in the chunk it
+read, not a document-wide item identity. In a multi-chunk run, two chunks can
+give the same index to different array items (grouped into one slot: a false
+conflict, which fails closed to review) or different indices to the same item
+(separate slots, so the same value can appear as two items). Proposals that share a slot must return identical claim targets;
+otherwise the import is refused, because one claim cannot carry two impact
+levels. The item's producer metadata lists every `proposalIndices` it stands for.
+
+The review workbench, the server session, and the MCP review tool record a
+decision against a candidate role, so none of them can choose one of several
+`proposed` values yet. On a `conflict` item:
+
+- accept is refused: `candidateForDecision` throws instead of settling the
+  conflict by picking the first value, and the workbench and MCP card offer no
+  accept control;
+- rejecting all values (`reject-proposed`) and `could-not-confirm` are
+  allowed, because they trust no value, and the round can complete. They
+  select no candidate, and no record singles one out:
+  - the `ReviewDecision` and its session events carry no `candidateId`;
+  - the `CandidateSet` has no `selectedCandidateId`; after reject-all its status
+    is `rejected` and every proposed candidate carries a `rejectionReason` (the
+    reviewer's note, or a fixed sentence), so each gets its own
+    `learning.rejected-candidate`; after could-not-confirm it stays `conflict`;
+  - the `ReviewOutcome` and the claim carry no `candidateId`;
+  - the Surface claim has `value: null` (Surface requires the key; no one value
+    is the claim's), lists every value in `metadata.survey.candidates`, has one
+    evidence record per candidate, and is `rejected` (reject-all) or
+    `disputed` (could-not-confirm, the pre-review posture of a conflict). It
+    can never be `verified`.
+
+  The `ReviewWorkbenchResult` for such a decision has no `selectedCandidate*`,
+  `selectedValue`, or `effective*` fields and lists every candidate in
+  `unselectedCandidates`; `buildReviewResultPresentation` shows no selected
+  value and names each candidate as rejected or unconfirmed; the apply-action
+  mapping produces no action. With `reviewProofs: true`, the set-level claim
+  gets no integrity anchor, because an anchor commits one reviewed candidate and
+  this claim has none; it is never `verified` or `assumed`.
+
+Both cards list every value and label the item as a conflict. Surface's
+reviewed-extraction profile refuses items with more than one candidate.
+
+### Identities
+
+The `ReviewItem` name commits the producer/import namespace, source and
+snapshot, prepared artifact, PDF layout, run, and the claim slot. Candidate,
+extraction, evidence, and resolution identity includes producer/import
 namespace, source and snapshot, prepared artifact, PDF layout, run, proposal index, and the
 complete proposal semantics: field, value, confidence, extractor, type/inference,
-path indices, excerpt, locator, and exact-occurrence record. Same values at
-different spans therefore remain distinct. Evidence identity binds the complete
+path indices, excerpt, locator, and exact-occurrence record; a candidate that
+stands for several same-value proposals also commits each of them. Same values at
+different spans therefore remain distinct evidence. Evidence identity binds the complete
 source provenance, including excerpt and occurrence selection, while excluding
 field and value semantics; different fields grounded by one span visibly share
 evidence. Each resolution call adds a fresh UUID-backed evidence/event identity.
@@ -86,7 +166,38 @@ importer accepts:
   into the same producer metadata as an annotation; it does not change the
   candidate-set status or routing.
 
-Any other key is still rejected.
+- `result.coverage`: per-chunk read coverage, `{ chunk, start, end, status,
+  reason? }`. `chunk` is a positive 1-based number; `start`/`end` are
+  prepared-text UTF-16 offsets with `0 <= start < end <= contentLength`;
+  `status` is `complete`, `unread`, or `output-truncated`; `reason`
+  (`provider-failure`, `content-truncated`, `missing-tool-call`,
+  `not-dispatched`) is present exactly on `unread` entries and covers exactly
+  the unread span. Entries are ordered by `start` and may overlap, because
+  chunks overlap. Coverage requires `result.preparedArtifact`.
+- Partial reasons `provider-failure`, `content-truncated`, and
+  `output-truncated` (a dispatched chunk was not fully read or answered), next
+  to the early stops `cancelled`, `max-provider-calls`, `max-total-tokens`, and
+  `max-chunks`. An envelope with one of the three loss reasons must carry a
+  coverage entry that is not `complete` for a dispatched chunk (a
+  `not-dispatched` range alone is an early stop, not that loss), and a `success` outcome must not carry
+  one, so the outcome and the coverage cannot disagree.
+- `result.proposals[].confidence` may be absent: it is the proposer's
+  uncalibrated self-report. When present it must be a finite number in `0..1`
+  (`null` is rejected). An absent confidence stays absent on the candidate and
+  its extraction; Survey never substitutes a number.
+
+Any other key, and any other partial reason, is still rejected.
+
+### Partial runs downstream
+
+Survey carries what the envelope says about unread text; it does not turn it
+into a completeness verdict. Every candidate's
+`survey.kontourai.io/extraction-envelope` producer metadata holds the run's
+`outcome`, and on a partial run also `partial` and `coverage`, and the import
+record keeps the whole envelope. Survey derives no state for a field without a
+proposal: no proposal means no `ReviewItem` and no claim, so nothing Survey emits
+reports a value as absent or a run as complete. A consumer that needs to know
+whether a field could have been in unread text reads `coverage`.
 
 The portable format excludes prepared text, raw provider responses, native
 failures, and configuration by design. Candidate values and excerpts remain

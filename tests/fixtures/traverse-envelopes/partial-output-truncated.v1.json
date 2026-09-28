@@ -1,0 +1,74 @@
+{
+  "format": "traverse-extraction-result",
+  "result": {
+    "coverage": [
+      {
+        "chunk": 1,
+        "end": 7,
+        "start": 0,
+        "status": "output-truncated"
+      }
+    ],
+    "extractedAt": "2026-09-28T14:22:56.321Z",
+    "model": "fixture-relay-model",
+    "outcome": {
+      "reason": "output-truncated",
+      "status": "partial"
+    },
+    "partial": {
+      "completedChunks": 1,
+      "reason": "output-truncated",
+      "remainingChunks": 0
+    },
+    "preparedArtifact": {
+      "contentLength": 7,
+      "digest": "f17553f7c748dc56b4287a3b74f825cc7fe019f7a8e1aa2c936c27471d9fdbf2",
+      "format": "traverse-prepared-artifact",
+      "preparationMode": "text",
+      "preparationVersion": "3",
+      "ref": "traverse-prepared-artifact:v1:sha256:01303a2c8d347a1735d5da50bdc6950dae1815b49e063283a1304fe5bfde1a38",
+      "version": 1
+    },
+    "proposals": [
+      {
+        "candidateValue": 5,
+        "extractor": "relay-extraction-provider:fake",
+        "fieldPath": "fee",
+        "provenance": {
+          "excerpt": "5",
+          "locator": "chars:5-6",
+          "occurrence": {
+            "ambiguous": false,
+            "count": 1,
+            "hintUsed": false,
+            "resolverVersion": "exact-occurrence-v1",
+            "selected": {
+              "end": 6,
+              "index": 0,
+              "start": 5
+            },
+            "selection": "source-order"
+          }
+        },
+        "valueType": "number"
+      }
+    ],
+    "provider": "relay-extraction-provider:fake",
+    "providerCalls": 1,
+    "raw": {
+      "tokensUsed": 3
+    },
+    "runId": "traverse-extraction-run:9f21c3f1-a4e2-4721-ad9e-492f585c9c8b",
+    "totalTokensUsed": 3,
+    "warningClassifications": [
+      {
+        "category": "provider",
+        "code": "output-truncated"
+      }
+    ]
+  },
+  "source": {
+    "ref": "fixture://vendor-contract"
+  },
+  "version": 1
+}

@@ -56,7 +56,7 @@ describe("generic facility credential consumer example", () => {
     assert.equal(resultPresentation.targetLabel, "Operating license credential");
     assert.equal(resultPresentation.decisionLabel, "Accept Proposed");
     assert.equal(resultPresentation.applyMeaning, "Saved decision applies proposed value");
-    assert.match(resultPresentation.selectedValueText, /FAC-2026-1042/);
+    assert.match(resultPresentation.selectedValueText ?? "", /FAC-2026-1042/);
     assert.equal(example.surfaceProjectionPreview.canonicalClaim.status, "verified");
     assert.equal(example.surfaceProjectionPreview.canonicalClaim.candidateId, result.selectedCandidateId);
     assert.equal(example.surfaceProjectionPreview.candidateHistory.length, 1);

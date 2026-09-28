@@ -1,0 +1,109 @@
+{
+  "format": "traverse-extraction-result",
+  "result": {
+    "coverage": [
+      {
+        "chunk": 1,
+        "end": 30,
+        "start": 0,
+        "status": "complete"
+      },
+      {
+        "chunk": 1,
+        "end": 40,
+        "reason": "content-truncated",
+        "start": 30,
+        "status": "unread"
+      },
+      {
+        "chunk": 2,
+        "end": 70,
+        "start": 40,
+        "status": "complete"
+      },
+      {
+        "chunk": 2,
+        "end": 80,
+        "reason": "content-truncated",
+        "start": 70,
+        "status": "unread"
+      },
+      {
+        "chunk": 3,
+        "end": 88,
+        "start": 80,
+        "status": "complete"
+      }
+    ],
+    "extractedAt": "2026-09-28T14:22:56.319Z",
+    "model": "fixture-model",
+    "outcome": {
+      "reason": "content-truncated",
+      "status": "partial"
+    },
+    "partial": {
+      "completedChunks": 3,
+      "reason": "content-truncated",
+      "remainingChunks": 0
+    },
+    "preparedArtifact": {
+      "contentLength": 88,
+      "digest": "2f3b6641786b261641a107d1357e8d844d457329bf6a3db843676b5c26feceac",
+      "format": "traverse-prepared-artifact",
+      "preparationMode": "text",
+      "preparationVersion": "3",
+      "ref": "traverse-prepared-artifact:v1:sha256:3dada6fd19895a057d4ca7ca228cfe0ffae113a9247e1302c3e4fb87508fb38e",
+      "version": 1
+    },
+    "proposals": [
+      {
+        "candidateValue": 48000,
+        "confidence": 0.8,
+        "extractor": "fixture-fee-scanner",
+        "fieldPath": "fee",
+        "provenance": {
+          "excerpt": "48000",
+          "locator": "chars:19-24",
+          "occurrence": {
+            "ambiguous": false,
+            "count": 1,
+            "hintUsed": false,
+            "resolverVersion": "exact-occurrence-v1",
+            "selected": {
+              "end": 24,
+              "index": 0,
+              "start": 19
+            },
+            "selection": "source-order"
+          }
+        },
+        "valueType": "number"
+      }
+    ],
+    "provider": "fixture-fee-scanner",
+    "providerCalls": 3,
+    "raw": {
+      "tokensUsed": 5
+    },
+    "runId": "traverse-extraction-run:3a30da15-8725-4699-81b0-f8fccef19713",
+    "totalTokensUsed": 15,
+    "warningClassifications": [
+      {
+        "category": "limit",
+        "code": "content-truncated-at-dispatch"
+      },
+      {
+        "category": "limit",
+        "code": "content-truncated-at-dispatch"
+      },
+      {
+        "category": "content",
+        "code": "content-chunking"
+      }
+    ]
+  },
+  "source": {
+    "ref": "fixture://vendor-contract"
+  },
+  "version": 1
+}

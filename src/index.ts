@@ -39,6 +39,7 @@ export {
 export {
   buildExtractionInspectorModel,
   exportExtractionInspector,
+  inspectorSourcePosture,
   filterExtractionInspectorCandidates,
 } from "./review-workbench/extraction-inspector.js";
 export {
@@ -91,7 +92,9 @@ export type {
   ExtractionEnvelopeImportOptions,
   ExtractionEnvelopeImportResult,
   ExtractionEnvelopeResolutionIdentity,
+  PortableExtractionCoverageEntry,
   PortableExtractionEvidenceMatch,
+  PortableExtractionPartialReason,
   PortableExtractionOccurrence,
   PortableExtractionProducedBy,
   PortableExtractionProposal,

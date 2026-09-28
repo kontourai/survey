@@ -1,0 +1,61 @@
+{
+  "format": "traverse-extraction-result",
+  "result": {
+    "extractedAt": "2026-09-28T14:22:56.338Z",
+    "model": "fixture-model",
+    "outcome": {
+      "status": "success"
+    },
+    "preparedArtifact": {
+      "contentLength": 68,
+      "digest": "f62c10eae1b9a853d1db5f1cb3aeeb5d89164acb157f71d204358b0eb18af3ca",
+      "format": "traverse-prepared-artifact",
+      "preparationMode": "markdown",
+      "preparationVersion": "3+linkedom@0.18.13+turndown@7.2.4",
+      "ref": "traverse-prepared-artifact:v1:sha256:e15ea8ab3555d477f90264a5f23e41a5a8718cab55452e1774d6dcab5958313f",
+      "version": 1
+    },
+    "proposals": [
+      {
+        "candidateValue": 48000,
+        "confidence": 0.7,
+        "extractor": "fixture-fee-scanner",
+        "fieldPath": "fee",
+        "provenance": {
+          "excerpt": "48000",
+          "locator": "chars:21-26",
+          "occurrence": {
+            "ambiguous": false,
+            "count": 1,
+            "hintUsed": false,
+            "resolverVersion": "exact-occurrence-v1",
+            "selected": {
+              "end": 26,
+              "index": 0,
+              "start": 21
+            },
+            "selection": "source-order"
+          }
+        },
+        "valueType": "number"
+      }
+    ],
+    "provider": "fixture-fee-scanner",
+    "providerCalls": 1,
+    "raw": {
+      "tokensUsed": 5
+    },
+    "runId": "traverse-extraction-run:eb441f44-f951-46ed-b9ef-d1238f272311",
+    "totalTokensUsed": 5,
+    "warningClassifications": [
+      {
+        "category": "preparation",
+        "code": "navigation-pruned"
+      }
+    ]
+  },
+  "source": {
+    "ref": "fixture://vendor-page"
+  },
+  "version": 1
+}
