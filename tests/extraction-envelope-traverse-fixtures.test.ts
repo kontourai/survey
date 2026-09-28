@@ -99,14 +99,50 @@ describe("typed partial reasons and per-chunk coverage (#286)", () => {
     assert.deepEqual(producer(imported.reviewItems[0]!.spec.candidates[0]).coverage, envelope.result.coverage);
   });
 
-  it("imports a failure with no usable answer: no candidates, the failure and its warnings kept", async () => {
+  it("imports a failure with no usable answer as unresolved, with an extraction-failed diagnostic and no candidates", async () => {
     const envelope = await traverseFixture("failure-no-usable-answer");
     assert.deepEqual(envelope.result.outcome, { status: "failure", category: "provider", code: "no-usable-answer" });
     assert.ok(envelope.result.warningClassifications?.some((warning) => warning.code === "unusable-answer"));
     const imported = importExtractionEnvelope(envelope, options());
     assert.deepEqual(imported.reviewItems, []);
+    assert.deepEqual(imported.record.status, { state: "unresolved", diagnostics: [{ kind: "extraction-failed", category: "provider", code: "no-usable-answer",
+      message: "Extraction failed (provider/no-usable-answer); no text was read and answered, so the import has no candidates." }] });
+    assert.deepEqual(reimportExtractionEnvelope(exportExtractionEnvelopeImport(imported.record)), imported.record);
     assert.deepEqual(imported.record.spec.envelope.result.outcome, envelope.result.outcome);
     assert.deepEqual(imported.record.spec.envelope.result.warningClassifications, envelope.result.warningClassifications);
+  });
+
+  it("a failed or proposal-less partial run never looks like an empty complete run, in the import or the inspector", async () => {
+    const artifactFor = (envelope: PortableExtractionResultEnvelope, text: string) =>
+      ({ status: "available" as const, text, actualDigest: envelope.result.preparedArtifact!.digest });
+    const empty = await traverseFixture("success-empty");
+    const failed = await traverseFixture("failure-no-usable-answer");
+    const stopped = await traverseFixture("partial-max-chunks-empty");
+    assert.deepEqual([empty, failed, stopped].map((envelope) => envelope.result.proposals.length), [0, 0, 0]);
+
+    const emptyImport = importExtractionEnvelope(empty, options());
+    const failedImport = importExtractionEnvelope(failed, options());
+    const stoppedImport = importExtractionEnvelope(stopped, options());
+    assert.deepEqual(emptyImport.record.status, { state: "grounded", diagnostics: [] });
+    assert.equal(failedImport.record.status.state, "unresolved");
+    assert.deepEqual(stoppedImport.record.status, { state: "unresolved", diagnostics: [{ kind: "extraction-incomplete", reason: "max-chunks",
+      message: "Extraction stopped short (max-chunks) without proposing any value; unread text may hold values." }] });
+
+    const emptySource = buildExtractionInspectorModel({ importResult: emptyImport, artifact: artifactFor(empty, "Fee: 5.") }).sources[0]!;
+    const failedSource = buildExtractionInspectorModel({ importResult: failedImport, artifact: artifactFor(failed, "Fee: 5.") }).sources[0]!;
+    assert.equal(emptySource.alignment, "aligned");
+    assert.equal(emptySource.extractionDiagnostic, undefined);
+    assert.match(emptySource.message, /^Prepared artifact identity verified/);
+    assert.equal(failedSource.alignment, "aligned", "the artifact itself still resolves");
+    assert.deepEqual(failedSource.extractionDiagnostic, failedImport.record.status.diagnostics[0]);
+    assert.match(failedSource.message, /^Extraction failed \(provider\/no-usable-answer\)/);
+    assert.notEqual(failedSource.message, emptySource.message);
+  });
+
+  it("keeps a partial run that proposed values grounded, with its reason on the candidates", async () => {
+    const imported = importExtractionEnvelope(await traverseFixture("partial-max-chunks"), options());
+    assert.deepEqual(imported.record.status, { state: "grounded", diagnostics: [] });
+    assert.deepEqual(producer(imported.reviewItems[0]!.spec.candidates[0]).outcome, { status: "partial", reason: "max-chunks" });
   });
 
   it("accepts a failure that carries unread coverage, while a success still may not", async () => {

@@ -1,4 +1,4 @@
-import { buildReviewItemsFromExtractionEnvelopeImport, validateExtractionEnvelopeImport, type ExtractionEnvelopeImport, type ExtractionEnvelopeImportResult, type PortableExtractionProposal } from "../extraction-envelope.js";
+import { buildReviewItemsFromExtractionEnvelopeImport, validateExtractionEnvelopeImport, type ExtractionEnvelopeImport, type ExtractionEnvelopeImportDiagnostic, type ExtractionEnvelopeImportResult, type PortableExtractionProposal } from "../extraction-envelope.js";
 import { canonicalJson } from "./canonical.js";
 import type { ReviewItem } from "../review-resource.js";
 import { sha256Hex } from "../sha256.js";
@@ -93,6 +93,12 @@ export interface ExtractionInspectorSource {
   artifactText?: string;
   ocrDerived?: true;
   alignment: ExtractionAlignmentState;
+  /**
+   * Present when the extraction failed, or stopped short without proposing
+   * anything: the import's `extraction-failed` / `extraction-incomplete`
+   * diagnostic. An empty source with this set is not a run that found nothing.
+   */
+  extractionDiagnostic?: Extract<ExtractionEnvelopeImportDiagnostic, { kind: "extraction-failed" | "extraction-incomplete" }>;
   message: string;
 }
 
@@ -171,7 +177,7 @@ export function buildExtractionInspectorModel(input: ExtractionInspectorInput): 
       sourceKey,
       record.metadata.name,
       prepared,
-      record.status.state,
+      record.status.diagnostics,
       entry.artifact,
       envelope.result.ocrDerived,
     );
@@ -335,13 +341,16 @@ function sourceModel(
   key: string,
   importName: string,
   prepared: ExtractionEnvelopeImportResult["record"]["spec"]["envelope"]["result"]["preparedArtifact"],
-  state: string,
+  diagnostics: readonly ExtractionEnvelopeImportDiagnostic[],
   artifact: ResolvedExtractionArtifact,
   ocrDerived: true | undefined,
 ): ExtractionInspectorSource {
   let alignment: ExtractionAlignmentState;
   let message: string;
-  if (state !== "grounded" || artifact.status === "unavailable") {
+  const artifactUnresolved = diagnostics.some((diagnostic) => diagnostic.kind === "artifact-unavailable" || diagnostic.kind === "digest-mismatch");
+  const extractionDiagnostic = diagnostics.find((diagnostic): diagnostic is NonNullable<ExtractionInspectorSource["extractionDiagnostic"]> =>
+    diagnostic.kind === "extraction-failed" || diagnostic.kind === "extraction-incomplete");
+  if (artifactUnresolved || artifact.status === "unavailable") {
     alignment = "artifact-unavailable"; message = `Prepared artifact unavailable (${artifact.status === "unavailable" ? artifact.code : "invalid-artifact"}). Candidates are not grounded.`;
   } else if (artifact.status === "digest-mismatch" || !prepared || artifact.actualDigest !== prepared.digest
     || sha256Hex(artifact.text) !== artifact.actualDigest) {
@@ -351,7 +360,10 @@ function sourceModel(
   } else {
     alignment = "aligned"; message = `Prepared artifact identity verified. Exact source spans are available.${ocrDerived ? " Prepared text is OCR-derived." : ""}`;
   }
-  return { key, importName, ...(prepared?.ref ? { artifactRef: prepared.ref } : {}), ...(prepared?.digest ? { expectedDigest: prepared.digest } : {}), ...("actualDigest" in artifact ? { actualDigest: artifact.actualDigest } : {}), ...(alignment === "aligned" && artifact.status === "available" ? { artifactText: artifact.text } : {}), ...(ocrDerived ? { ocrDerived: true as const } : {}), alignment, message };
+  // The extraction's own failure leads: an aligned artifact with no candidates
+  // must not read as a complete run that found nothing.
+  if (extractionDiagnostic) message = `${extractionDiagnostic.message} ${message}`;
+  return { key, importName, ...(extractionDiagnostic ? { extractionDiagnostic } : {}), ...(prepared?.ref ? { artifactRef: prepared.ref } : {}), ...(prepared?.digest ? { expectedDigest: prepared.digest } : {}), ...("actualDigest" in artifact ? { actualDigest: artifact.actualDigest } : {}), ...(alignment === "aligned" && artifact.status === "available" ? { artifactText: artifact.text } : {}), ...(ocrDerived ? { ocrDerived: true as const } : {}), alignment, message };
 }
 
 function candidateModel(
@@ -452,7 +464,7 @@ export function mountExtractionInspector(
     next.hidden = pageCount === 1;
     previous.disabled = page === 0;
     next.disabled = page >= pageCount - 1;
-    postures.innerHTML = model.sources.map(s => `<div class="inspector-posture ${s.alignment}" role="status"><strong>${escapeHtml(s.importName)}: ${escapeHtml(s.alignment)}</strong><span>${escapeHtml(s.message)}</span></div>`).join("");
+    postures.innerHTML = model.sources.map(s => { const posture = s.extractionDiagnostic ? (s.extractionDiagnostic.kind === "extraction-failed" ? "extraction-failed" : "extraction-incomplete") : s.alignment; return `<div class="inspector-posture ${s.alignment}${s.extractionDiagnostic ? " extraction-issue" : ""}" role="status" data-posture="${escapeHtml(posture)}"><strong>${escapeHtml(s.importName)}: ${escapeHtml(posture)}</strong><span>${escapeHtml(s.message)}</span></div>`; }).join("");
     sourcesRoot.innerHTML = model.sources.map(s => { const anchored = model.candidates.filter(c => c.sourceKey === s.key); const marked = visible.filter(c => c.sourceKey === s.key); return `<div class="inspector-source" aria-label="Prepared source for ${escapeHtml(s.importName)}"><h3>${escapeHtml(s.importName)}</h3><pre tabindex="0">${s.artifactText === undefined ? `${anchored.map(c => anchorHtml(c, highlightIdFor(c))).join("")}<span class="source-unavailable">${escapeHtml(s.message)}</span>` : renderSource(s.artifactText, anchored, marked, highlightIdFor)}</pre></div>`; }).join("");
   };
   root.querySelectorAll<HTMLSelectElement>("select").forEach(select => select.addEventListener("change", event => { event.stopPropagation(); const key = select.dataset.filter as keyof ExtractionInspectorFilters; if (select.value) (filters as Record<string,string>)[key] = select.value; else delete (filters as Record<string,string>)[key]; page = 0; render(); }));

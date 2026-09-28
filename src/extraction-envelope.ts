@@ -139,9 +139,18 @@ export interface ExtractionEnvelopeImportOptions {
   claimTarget: (proposal: PortableExtractionProposal, index: number) => ClaimTargetHint;
 }
 
+/**
+ * Why an import is `unresolved`: its prepared artifact did not resolve, or the
+ * extraction itself produced nothing reviewable. `extraction-failed` is a
+ * failure outcome; `extraction-incomplete` is a partial outcome that proposed
+ * nothing, so no candidate can carry the reason. Either way the import is not
+ * a complete run that found no values.
+ */
 export type ExtractionEnvelopeImportDiagnostic =
   | { kind: "artifact-unavailable"; status: "unavailable" | "storage-error" | "identity-mismatch" | "invalid-artifact"; artifactRef?: string; message: string }
-  | { kind: "digest-mismatch"; artifactRef: string; expectedDigest: string; actualDigest: string; message: string };
+  | { kind: "digest-mismatch"; artifactRef: string; expectedDigest: string; actualDigest: string; message: string }
+  | { kind: "extraction-failed"; category: string; code: string; message: string }
+  | { kind: "extraction-incomplete"; reason: PortableExtractionPartialReason; message: string };
 
 export interface ExtractionEnvelopeImport {
   apiVersion: typeof extractionEnvelopeImportApiVersion;
@@ -356,6 +365,9 @@ function evidenceInputs(record: ExtractionEnvelopeImport, proposal: PortableExtr
 }
 
 function diagnosticsFor(envelope: PortableExtractionResultEnvelope): ExtractionEnvelopeImportDiagnostic[] {
+  return [...artifactDiagnostics(envelope), ...outcomeDiagnostics(envelope)];
+}
+function artifactDiagnostics(envelope: PortableExtractionResultEnvelope): ExtractionEnvelopeImportDiagnostic[] {
   const state = envelope.result.preparedArtifactState;
   if (!state || state.status === "available") return [];
   if (state.status === "digest-mismatch") return [{ kind: "digest-mismatch", artifactRef: state.canonicalRef,
@@ -364,6 +376,19 @@ function diagnosticsFor(envelope: PortableExtractionResultEnvelope): ExtractionE
   return [{ kind: "artifact-unavailable", status: state.status,
     ...(state.status === "invalid-artifact" ? { artifactRef: state.canonicalRef } : { artifactRef: state.requestedRef }),
     message: `Prepared artifact resolution is ${state.status}.` }];
+}
+/**
+ * A failed run, or a partial run with no proposal, must not look like a
+ * complete run that found nothing. A partial run with proposals stays
+ * grounded: its reason and coverage travel on every candidate.
+ */
+function outcomeDiagnostics(envelope: PortableExtractionResultEnvelope): ExtractionEnvelopeImportDiagnostic[] {
+  const outcome = envelope.result.outcome;
+  if (outcome.status === "failure") return [{ kind: "extraction-failed", category: outcome.category, code: outcome.code,
+    message: `Extraction failed (${outcome.category}/${outcome.code}); no text was read and answered, so the import has no candidates.` }];
+  if (outcome.status === "partial" && envelope.result.proposals.length === 0) return [{ kind: "extraction-incomplete", reason: outcome.reason,
+    message: `Extraction stopped short (${outcome.reason}) without proposing any value; unread text may hold values.` }];
+  return [];
 }
 
 function validateImport(value: unknown): asserts value is ExtractionEnvelopeImport {

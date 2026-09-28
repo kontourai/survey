@@ -43,7 +43,14 @@ records directly; this adapter is additive.
 An absent or `available` prepared-artifact state is grounded. `unavailable`,
 `storage-error`, `identity-mismatch`, and `invalid-artifact` states become typed
 `artifact-unavailable` diagnostics. `digest-mismatch` becomes a typed diagnostic
-with expected and actual digests. Unresolved imports produce no `ReviewItem`.
+with expected and actual digests. A `failure` outcome becomes an
+`extraction-failed` diagnostic carrying its category and code (for example
+`provider/no-usable-answer`), and a `partial` outcome with no proposals becomes an
+`extraction-incomplete` diagnostic naming the partial reason, so neither reads as
+a complete run that found nothing; the source inspector leads with the same
+message and exposes it as `extractionDiagnostic`. A partial run with proposals
+stays grounded and carries its reason on every candidate. Unresolved imports
+produce no `ReviewItem`.
 
 ### One candidate set per claim
 

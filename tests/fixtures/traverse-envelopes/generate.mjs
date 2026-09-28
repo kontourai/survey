@@ -3,6 +3,7 @@
 // produces rather than a hand-written approximation.
 //
 // The envelopes were produced from kontourai/traverse at commit b9cb7e3
+// (merged to traverse main as 3bea6e8, with an identical tree)
 // (branch fix/envelope-partial-confidence, the producer side of typed partial
 // reasons, per-chunk coverage and optional confidence), built with
 // `pnpm install --frozen-lockfile && pnpm run build`. Every run goes through
@@ -12,7 +13,8 @@
 // reject can never be written.
 //
 // Usage (from this repository's root):
-//   node tests/fixtures/traverse-envelopes/generate.mjs <path-to-traverse-checkout>
+//   node tests/fixtures/traverse-envelopes/generate.mjs <path-to-traverse-checkout> [case ...]
+// Naming cases regenerates only those.
 //
 // Run ids and extraction times are minted by Traverse per run, so regenerating
 // changes those values; everything else is deterministic.
@@ -138,6 +140,17 @@ const cases = {
       } },
     });
   },
+  // A complete run that proposed nothing: the one legitimately empty import.
+  "success-empty": () => extract({
+    sourceRef: "fixture://vendor-contract", contentType: "text", targetSchema: feeSchema, content: "Fee: 5.",
+    provider: { name: "fixture-empty", async extract() { return { proposals: [], raw: { response: "", model: "fixture-model" } }; } },
+  }),
+  // An early stop after the first chunk, which proposed nothing: partial with
+  // no proposals.
+  "partial-max-chunks-empty": () => extract({
+    sourceRef: "fixture://vendor-contract", contentType: "text", targetSchema: feeSchema, content: threeChunkText, chunkSize: 40, chunkOverlap: 10, maxChunks: 1,
+    provider: { name: "fixture-empty", async extract() { return { proposals: [], raw: { response: "", model: "fixture-model" } }; } },
+  }),
   // A complete run whose provider reports no confidence.
   "success-no-confidence": () => extract({
     sourceRef: "fixture://vendor-contract", contentType: "text", targetSchema: feeSchema, content: "Vendor: Acme. Fee: 48000 per year.",
@@ -167,7 +180,8 @@ const cases = {
   }),
 };
 
-for (const [name, run] of Object.entries(cases)) {
+const only = process.argv.slice(3);
+for (const [name, run] of Object.entries(cases).filter(([name]) => only.length === 0 || only.includes(name))) {
   const result = await run();
   const serialized = serializePortableExtractionResult(result);
   deserializePortableExtractionResult(serialized);

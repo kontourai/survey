@@ -574,6 +574,17 @@ The projected claim value is unchanged for mappings built by
   refuses a record with a proposal that has no confidence, because Surface's
   reviewed-extraction profile still requires one.
 
+### Failed and proposal-less envelope imports are unresolved
+
+An envelope whose outcome is `failure` now imports with `status.state:
+"unresolved"` and an `extraction-failed` diagnostic (`category`, `code`,
+`message`) instead of `grounded` with no diagnostics. A `partial` envelope with
+no proposals gets an `extraction-incomplete` diagnostic naming its reason. Both
+used to look exactly like a complete run that found nothing. Code that treated
+`state === "grounded"` with zero items as "nothing to review" should read the
+diagnostics, and stored import records of such envelopes no longer validate
+until re-imported, because their stored status no longer matches.
+
 ## See also
 
 - [consumer-integration-guide.md](consumer-integration-guide.md) — first-time
