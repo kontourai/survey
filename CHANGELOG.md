@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.1.0](https://github.com/kontourai/survey/compare/v6.0.0...v6.1.0) (2026-09-28)
+
+
+### Features
+
+* SupportVerifier port and immutable CandidateVerification record ([#313](https://github.com/kontourai/survey/issues/313)) ([45a7662](https://github.com/kontourai/survey/commit/45a76626e5ff7c2c4d6f51eeae6e244f3d019553))
+
 ## [6.0.0](https://github.com/kontourai/survey/compare/v5.0.0...v6.0.0) (2026-09-28)
 
 
