@@ -2,7 +2,7 @@
 // Traverse build, so the fixtures have exactly the shape Traverse's serializer
 // produces rather than a hand-written approximation.
 //
-// The envelopes were produced from kontourai/traverse at commit 107fe1a
+// The envelopes were produced from kontourai/traverse at commit bb99abd
 // (branch fix/envelope-partial-confidence, the producer side of typed partial
 // reasons, per-chunk coverage and optional confidence), built with
 // `pnpm install --frozen-lockfile && pnpm run build`. Every run goes through
@@ -109,6 +109,12 @@ const cases = {
       provider: { name: scanner.name, async extract(input) { return input.chunkIndex === 1 ? { proposals: "garbage", raw: { response: "", model: "fixture-model" } } : scanner.extract(input); } },
     });
   },
+  // A bundled adapter (relay) whose tool call carries no usable proposals
+  // array: partial/provider-failure with the chunk unread, unusable-answer.
+  "partial-unusable-tool-input": () => extract({
+    sourceRef: "fixture://vendor-contract", contentType: "text", targetSchema: feeSchema, content: "Fee: 5.",
+    provider: relayProvider({ stopReason: "tool_use", toolCalls: [{ id: "1", name: "submit_extraction_proposals", input: { proposals: "not-a-list" } }] }),
+  }),
   // A complete run whose provider reports no confidence.
   "success-no-confidence": () => extract({
     sourceRef: "fixture://vendor-contract", contentType: "text", targetSchema: feeSchema, content: "Vendor: Acme. Fee: 48000 per year.",

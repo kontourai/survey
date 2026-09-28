@@ -5,12 +5,12 @@
       {
         "chunk": 1,
         "end": 7,
-        "reason": "missing-tool-call",
+        "reason": "provider-failure",
         "start": 0,
         "status": "unread"
       }
     ],
-    "extractedAt": "2026-09-28T13:45:52.585Z",
+    "extractedAt": "2026-09-28T13:45:52.589Z",
     "model": "fixture-relay-model",
     "outcome": {
       "reason": "provider-failure",
@@ -36,12 +36,16 @@
     "raw": {
       "tokensUsed": 3
     },
-    "runId": "traverse-extraction-run:bd951083-908b-4dd8-b41d-50390420b1a0",
+    "runId": "traverse-extraction-run:eef2c47b-77a7-49ff-9dfe-5204ce22dfb9",
     "totalTokensUsed": 3,
     "warningClassifications": [
       {
         "category": "provider",
-        "code": "missing-tool-call"
+        "code": "provider-warning"
+      },
+      {
+        "category": "provider",
+        "code": "unusable-answer"
       }
     ]
   },

@@ -22,7 +22,7 @@
         "status": "complete"
       }
     ],
-    "extractedAt": "2026-09-28T12:57:43.268Z",
+    "extractedAt": "2026-09-28T13:45:52.588Z",
     "model": "fixture-model",
     "outcome": {
       "reason": "provider-failure",
@@ -72,12 +72,16 @@
     "raw": {
       "tokensUsed": 5
     },
-    "runId": "traverse-extraction-run:31a28dbe-e45c-414d-9818-b4a72da68224",
+    "runId": "traverse-extraction-run:81e96e9a-36d0-4b86-bb3d-614e4db1793e",
     "totalTokensUsed": 10,
     "warningClassifications": [
       {
         "category": "provider",
         "code": "provider-warning"
+      },
+      {
+        "category": "provider",
+        "code": "unusable-answer"
       },
       {
         "category": "content",
