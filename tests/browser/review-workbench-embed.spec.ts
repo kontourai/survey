@@ -630,6 +630,45 @@ test.describe("embedded workbench: envelope-imported decisions", () => {
     expect(pageErrors).toEqual([]);
   });
 
+  for (const artifact of [
+    { status: "unavailable", code: "not-found" },
+    { status: "digest-mismatch", actualDigest: "0".repeat(64) },
+  ] as const) {
+    test(`an incomplete extraction over a ${artifact.status} artifact keeps the negative posture colour`, async ({ page }) => {
+      const envelope = JSON.parse(readFileSync("tests/fixtures/traverse-envelopes/partial-max-chunks-empty.v1.json", "utf8")) as PortableExtractionResultEnvelope;
+      const importResult = importExtractionEnvelope(envelope, {
+        sourceKind: "uploaded-document",
+        claimTarget: (proposal) => ({ subjectType: "vendor", subjectId: "vendor-1", facet: "vendor.contract", claimType: "vendor.field", fieldOrBehavior: proposal.fieldPath, impactLevel: "medium" }),
+      });
+      const { pageErrors } = await loadEmbed(page, { inspectorEntry: { importResult, artifact } });
+      const posture = page.locator(".inspector-posture").first();
+      const failureClass = artifact.status === "unavailable" ? "artifact-unavailable" : "digest-mismatch";
+      // Both classes are present, so the two rules tie on specificity.
+      await expect(posture).toHaveClass(new RegExp(`\\b${failureClass}\\b`));
+      await expect(posture).toHaveClass(/\bextraction-incomplete\b/);
+      const paint = await posture.evaluate((node, classes) => {
+        const probe = (className: string) => {
+          const element = document.createElement("div");
+          element.className = className;
+          node.parentElement!.appendChild(element);
+          const style = getComputedStyle(element);
+          const result = { background: style.backgroundColor, color: style.color };
+          element.remove();
+          return result;
+        };
+        const style = getComputedStyle(node);
+        return {
+          actual: { background: style.backgroundColor, color: style.color },
+          negative: probe(`inspector-posture ${classes.failureClass}`),
+          caution: probe("inspector-posture extraction-incomplete"),
+        };
+      }, { failureClass });
+      expect(paint.negative.background).not.toBe(paint.caution.background);
+      expect(paint.actual).toEqual(paint.negative);
+      expect(pageErrors).toEqual([]);
+    });
+  }
+
   test("the decided count is not painted over by a host's generic .progress styles", async ({ page }) => {
     const { pageErrors } = await loadEmbed(page);
 
