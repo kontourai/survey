@@ -5,6 +5,7 @@ import {
   buildCandidateVerification,
   DEFAULT_SUPPORT_VERIFIER_TIMEOUT_MS,
   foldCandidateVerifications,
+  MAX_SUPPORT_VERIFIER_TIMEOUT_MS,
   runSupportVerifier,
   validateCandidateVerification,
   valueDigest,
@@ -249,6 +250,15 @@ describe("runSupportVerifier through the port", () => {
       assert.equal(record.abstainReason, "timeout");
     } finally {
       mock.timers.reset();
+    }
+  });
+
+  it("accepts timeoutMs up to the timer ceiling and refuses anything above it", async () => {
+    assert.equal(MAX_SUPPORT_VERIFIER_TIMEOUT_MS, 2_147_483_647);
+    const record = await runSupportVerifier(fakeVerifier(() => ({ result: "supported" })), input, { now: clock, timeoutMs: 2_147_483_647 });
+    assert.equal(record.result, "supported");
+    for (const timeoutMs of [2_147_483_648, 1e10, Infinity, 0, -1, Number.NaN]) {
+      await assert.rejects(runSupportVerifier(fakeVerifier(() => ({ result: "supported" })), input, { now: clock, timeoutMs }), /timeoutMs must be a positive finite number no greater than 2147483647/, String(timeoutMs));
     }
   });
 

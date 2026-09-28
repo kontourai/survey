@@ -609,7 +609,9 @@ records `empty`, one that returns anything other than a well-formed verdict
 records `malformed`, and one that does not answer within `timeoutMs` records
 `timeout` (its `signal` is aborted). `timeoutMs` defaults to
 `DEFAULT_SUPPORT_VERIFIER_TIMEOUT_MS` (30 seconds), so a verifier is never
-waited on without a bound. None of these is ever recorded as a pass or
+waited on without a bound. A `timeoutMs` above
+`MAX_SUPPORT_VERIFIER_TIMEOUT_MS` (2_147_483_647, the largest timer delay) is
+refused, because a timer would clamp it to 1 ms. None of these is ever recorded as a pass or
 a fail. A verifier may abstain on its own with any reason, for example
 `unsupported`.
 

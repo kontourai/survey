@@ -52,7 +52,9 @@ never feeds `confidence` or `conclusionConfidence`.
   no aggregate verdict.
 - **Timeout.** `runSupportVerifier` always bounds the wait:
   `DEFAULT_SUPPORT_VERIFIER_TIMEOUT_MS` (30 seconds) unless the caller passes
-  `timeoutMs`. A verifier that hangs records `abstain/timeout`.
+  `timeoutMs`. A verifier that hangs records `abstain/timeout`. `timeoutMs`
+  may not exceed `MAX_SUPPORT_VERIFIER_TIMEOUT_MS` (2_147_483_647 ms), since a
+  timer clamps a larger delay to 1 ms.
 - **What validation proves.** Reload validation catches edited and
   inconsistent records: the id is a content digest, not a signature, so it does
   not establish who wrote a record. A record rebuilt with a recomputed id

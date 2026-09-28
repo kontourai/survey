@@ -152,11 +152,19 @@ export function buildCandidateVerification(input: BuildCandidateVerificationInpu
 /** How long {@link runSupportVerifier} waits when no `timeoutMs` is given. */
 export const DEFAULT_SUPPORT_VERIFIER_TIMEOUT_MS = 30_000;
 
+/**
+ * The largest `timeoutMs` {@link runSupportVerifier} accepts: the largest
+ * delay a timer honours (2^31 - 1 ms). A larger delay would be clamped to
+ * 1 ms, turning a long bound into an immediate timeout, so it is refused.
+ */
+export const MAX_SUPPORT_VERIFIER_TIMEOUT_MS = 2_147_483_647;
+
 export interface RunSupportVerifierOptions {
   /**
    * Abstain with `timeout` when the verifier has not answered by then.
    * Defaults to {@link DEFAULT_SUPPORT_VERIFIER_TIMEOUT_MS}; a verifier is
-   * never waited on without a bound.
+   * never waited on without a bound. At most
+   * {@link MAX_SUPPORT_VERIFIER_TIMEOUT_MS}.
    */
   timeoutMs?: number;
   /** Clock for `createdAt`; defaults to the current time. */
@@ -180,8 +188,8 @@ export async function runSupportVerifier(
   const identity = normalizeVerifier(verifier);
   const normalized = normalizeInput(input);
   const timeoutMs = options.timeoutMs ?? DEFAULT_SUPPORT_VERIFIER_TIMEOUT_MS;
-  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-    throw new Error("timeoutMs must be a positive finite number");
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > MAX_SUPPORT_VERIFIER_TIMEOUT_MS) {
+    throw new Error(`timeoutMs must be a positive finite number no greater than ${MAX_SUPPORT_VERIFIER_TIMEOUT_MS}`);
   }
   const now = options.now ?? (() => new Date().toISOString());
   const verdict = await callVerifier(verifier, normalized, timeoutMs);

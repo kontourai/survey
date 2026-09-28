@@ -238,6 +238,7 @@ export {
   buildCandidateVerification,
   candidateVerificationKind,
   DEFAULT_SUPPORT_VERIFIER_TIMEOUT_MS,
+  MAX_SUPPORT_VERIFIER_TIMEOUT_MS,
   foldCandidateVerifications,
   runSupportVerifier,
   supportVerificationInputDigest,
