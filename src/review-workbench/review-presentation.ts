@@ -1,3 +1,4 @@
+import { foldCandidateVerifications, type SupportAbstainReason, type SupportVerificationMethod, type SupportVerificationResult } from "../candidate-verification.js";
 import { findSoleCandidateById, type ReviewCandidate, type ReviewItem } from "../review-resource.js";
 import type { InterpretationAnswerImpact, InterpretationReadingKind } from "../types.js";
 import { type ReviewWorkbenchResult } from "./review-workbench.js";
@@ -229,6 +230,92 @@ export function excludedProposalsSentence(excluded: readonly ExcludedProposalPre
   if (excluded.length === 0) return undefined;
   const named = excluded.map((entry) => `${entry.valueText} (proposal ${entry.proposalIndex}, ${entry.locator})`).join(", ");
   return `${excluded.length === 1 ? "Another proposed value was" : `${excluded.length} other proposed values were`} excluded at import because the source text at the cited span is not the excerpt: ${named}. Unverifiable is not disproven.`;
+}
+
+export interface CandidateVerificationRecordPresentation {
+  readonly recordId: string;
+  readonly verifierId: string;
+  readonly verifierVersion: string;
+  readonly method: SupportVerificationMethod;
+  readonly result: SupportVerificationResult;
+  readonly abstainReason?: SupportAbstainReason;
+  readonly createdAt: string;
+}
+
+/**
+ * What the verifier records on one candidate say about the value under
+ * review. Only candidates that carry `verifications` get a note, so a
+ * candidate no verifier looked at shows nothing rather than a verdict.
+ */
+export interface CandidateVerificationNote {
+  /** Position in `item.spec.candidates`; ids are not assumed unique. */
+  readonly candidateIndex: number;
+  readonly candidateId: string;
+  readonly subjectLabel: string;
+  /** `not-evaluated` when no valid record is bound to the value under review. */
+  readonly status: "not-evaluated" | "evaluated";
+  readonly records: readonly CandidateVerificationRecordPresentation[];
+  /** Valid records bound to another value, candidate or input. */
+  readonly inapplicableCount: number;
+  /** Records that failed validation (forged, edited or malformed); never shown as verdicts. */
+  readonly rejectedCount: number;
+  readonly sentence: string;
+}
+
+const VERIFICATION_RESULT_TEXT: Record<Exclude<SupportVerificationResult, "abstain">, string> = {
+  supported: "supported",
+  contradicted: "contradicted",
+  "not-addressed": "not addressed by the evidence",
+};
+
+/**
+ * Verifier notes for every candidate that carries records, read against the
+ * value each surface is deciding on: the candidate's own value, or the
+ * reviewer's edit when an accept carries one (records on the proposed value do
+ * not apply to an edited value). Records are validated here, so a forged
+ * record is counted and ignored on every surface alike.
+ */
+export function candidateVerificationNotes(item: ReviewItem, editedValue?: unknown): CandidateVerificationNote[] {
+  const proposed = item.spec.candidates.filter((candidate) => candidate.role === "proposed");
+  return item.spec.candidates.flatMap((candidate, candidateIndex) => {
+    if (candidate.verifications === undefined) return [];
+    const edited = editedValue !== undefined && proposed.length === 1 && candidate === proposed[0];
+    const subjectLabel = edited
+      ? "the edited value"
+      : candidate.role === "current"
+        ? "the current value"
+        : candidate.role === "proposed"
+          ? proposed.length > 1 ? `proposed value ${proposed.indexOf(candidate) + 1} of ${proposed.length}` : "the proposed value"
+          : `candidate ${candidate.id}`;
+    const records: readonly unknown[] = Array.isArray(candidate.verifications) ? candidate.verifications : [candidate.verifications];
+    const fold = foldCandidateVerifications({ candidateId: candidate.id, value: edited ? editedValue : candidate.value }, records);
+    const presented = fold.applicable.map((record) => ({
+      recordId: record.id,
+      verifierId: record.verifier.id,
+      verifierVersion: record.verifier.version,
+      method: record.method,
+      result: record.result,
+      ...(record.abstainReason ? { abstainReason: record.abstainReason } : {}),
+      createdAt: record.createdAt,
+    }));
+    const said = presented.map((record) => `${record.verifierId} ${record.verifierVersion} (${record.method}) ${record.result === "abstain" ? `abstained: ${record.abstainReason}` : `said ${VERIFICATION_RESULT_TEXT[record.result]}`}`);
+    const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+    const sentence = [
+      said.length ? `Verifier records for ${subjectLabel} (what a verifier said, not a review decision): ${said.join("; ")}.` : `No verifier record applies to ${subjectLabel}.`,
+      ...(fold.inapplicable.length ? [`${plural(fold.inapplicable.length, "record was", "records were")} made for a different value or evidence and ${fold.inapplicable.length === 1 ? "does" : "do"} not apply.`] : []),
+      ...(fold.rejected.length ? [`${plural(fold.rejected.length, "record", "records")} failed validation and ${fold.rejected.length === 1 ? "was" : "were"} ignored.`] : []),
+    ].join(" ");
+    return [{
+      candidateIndex,
+      candidateId: candidate.id,
+      subjectLabel,
+      status: fold.status,
+      records: presented,
+      inapplicableCount: fold.inapplicable.length,
+      rejectedCount: fold.rejected.length,
+      sentence,
+    }];
+  });
 }
 
 export function buildReviewItemPresentation(

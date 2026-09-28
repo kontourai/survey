@@ -1,0 +1,101 @@
+{
+  "source": "@kontourai/surface valueDigest, src/canonical-digest.ts at 173c5a9 (4.1.0)",
+  "cases": [
+    {
+      "name": "string",
+      "value": "Alpha",
+      "valueDigest": "sha256:ec2017d5496abcafbc99601b6c234858fa3fa479fccf64a3823040ddf74e2cfe"
+    },
+    {
+      "name": "empty string",
+      "value": "",
+      "valueDigest": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126"
+    },
+    {
+      "name": "unicode string",
+      "value": "café — Ångström",
+      "valueDigest": "sha256:cabdbbe0a13e67dd80d64d06bec65298f30305897da9ca1339853fee690a7a2e"
+    },
+    {
+      "name": "integer",
+      "value": 42,
+      "valueDigest": "sha256:73475cb40a568e8da8a045ced110137e159f890ac4da883b6b17dc651b3a8049"
+    },
+    {
+      "name": "negative decimal",
+      "value": -3.25,
+      "valueDigest": "sha256:79615ef5649ea6557eef066359bbae7867f83935ff3a6bdc9bc2850883d2da24"
+    },
+    {
+      "name": "zero",
+      "value": 0,
+      "valueDigest": "sha256:5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+    },
+    {
+      "name": "boolean",
+      "value": true,
+      "valueDigest": "sha256:b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+    },
+    {
+      "name": "null",
+      "value": null,
+      "valueDigest": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    {
+      "name": "array",
+      "value": [
+        1,
+        "two",
+        null
+      ],
+      "valueDigest": "sha256:597be421a7a1692cdedfeae56567a7f6f64f20022eacae23a3918aeaa29e5904"
+    },
+    {
+      "name": "nested object",
+      "value": {
+        "b": {
+          "d": [
+            1,
+            {
+              "f": 2,
+              "e": 1
+            }
+          ],
+          "c": "x"
+        },
+        "a": 1
+      },
+      "valueDigest": "sha256:e131b9dea1e39ec466c14522773eded3f15a6b648d93970dffb3e0ff74a5c9bd"
+    },
+    {
+      "name": "key order variant",
+      "value": {
+        "a": 1,
+        "b": {
+          "c": "x",
+          "d": [
+            1,
+            {
+              "e": 1,
+              "f": 2
+            }
+          ]
+        }
+      },
+      "valueDigest": "sha256:e131b9dea1e39ec466c14522773eded3f15a6b648d93970dffb3e0ff74a5c9bd"
+    },
+    {
+      "name": "mixed-case keys",
+      "value": {
+        "a": 1,
+        "B": 2,
+        "_": 3,
+        "Z": {
+          "y": true,
+          "X": false
+        }
+      },
+      "valueDigest": "sha256:3e3b6951ab2bf32ae201296fb68f7079024a4fa3a7b6f98ff354efa89c629f9b"
+    }
+  ]
+}

@@ -53,7 +53,7 @@ import {
   type ReviewValueDescriptor,
 } from "../review-resource.js";
 import { validateAuthorizing, buildAuthorizedActionAuthorizing } from "../review-authorizing.js";
-import { excludedProposalsSentence, humanizeIdentifier } from "./review-presentation.js";
+import { candidateVerificationNotes, excludedProposalsSentence, humanizeIdentifier, type CandidateVerificationNote } from "./review-presentation.js";
 import { editedValueFromEditorText, isIsoCalendarDate, parsePlainDecimal } from "./edited-value.js";
 import {
   createAuditFactTrace,
@@ -304,8 +304,9 @@ function decisionCardRenderedPrompt(state: ReviewWorkbenchState, targetLabel: st
   // The card shows proposals excluded at import; the recorded prompt must say
   // the reviewer was told about them.
   const excluded = excludedProposalsSentence(buildReviewItemPresentation(state.item).excludedProposals);
-  const base = decisionCardBasePrompt(state, targetLabel);
-  return excluded ? `${base} ${excluded}` : base;
+  // Likewise the verifier records the card showed, read against the same value.
+  const verification = candidateVerificationNotes(state.item, state.decision === "accept-proposed" ? state.editedValue : undefined).map((note) => note.sentence);
+  return [decisionCardBasePrompt(state, targetLabel), ...(excluded ? [excluded] : []), ...verification].join(" ");
 }
 
 function decisionCardBasePrompt(state: ReviewWorkbenchState, targetLabel: string): string {
@@ -1204,6 +1205,7 @@ function renderFieldCard(
             : "<p class=\"field-value\">No proposed value is available for this field.</p>"}
         ${proposed ? renderProvenanceRow(item, proposed, presentationAdapter) : ""}
         ${renderExtractionImportNotes(presentation)}
+        ${renderVerificationNotes(candidateVerificationNotes(item, decision === "accept-proposed" ? editedValue : undefined))}
         <div class="decide">
           ${keepDecision === undefined ? "" : `<button class="btn keep" type="button" data-testid="keep-current" data-item-name="${escapeHtml(item.metadata.name)}">${keepLabel}</button>`}
           ${proposed ? `<button class="btn use" type="button" data-testid="use-proposed" data-item-name="${escapeHtml(item.metadata.name)}">Use proposed</button>
@@ -1489,6 +1491,20 @@ function renderExtractionImportNotes(presentation: ReviewItemPresentation): stri
         : "Excerpts not checked against the prepared source text at import."}</p>`;
   return `
     <div class="prov import-notes">${excludedHtml}${verificationHtml}
+    </div>
+  `;
+}
+
+/**
+ * What verifier records say about the value on this card. A record is what a
+ * verifier said, not a review decision; records bound to another value and
+ * records that failed validation are counted, never shown as verdicts.
+ */
+function renderVerificationNotes(notes: readonly CandidateVerificationNote[]): string {
+  if (notes.length === 0) return "";
+  return `
+    <div class="prov import-notes">${notes.map((note) => `
+      <p class="support-verification" data-testid="support-verification" data-candidate-id="${escapeHtml(note.candidateId)}" data-status="${note.status}">${escapeHtml(note.sentence)}</p>`).join("")}
     </div>
   `;
 }

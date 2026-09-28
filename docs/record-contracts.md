@@ -584,6 +584,76 @@ approval/rejection mismatch must not silently coexist.
 `rejectExtractionImprovementProposal` remains terminal and inert.
 
 
+## Candidate verifications
+
+A `CandidateVerification` records what an independent support verifier said
+about whether a candidate's value is supported by its evidence. It is a record
+of a verifier's output, not a trust decision: no Survey routing, auto-accept,
+calibration, or Surface projection reads it. Survey defines the
+`SupportVerifier` port and the record only. Verifier implementations, including
+any model-backed ones, live with producers or in separate adapter packages.
+
+```ts
+interface SupportVerifier {
+  readonly id: string; readonly version: string;
+  readonly method: "deterministic" | "model" | "human";
+  verify(input: { candidateId; value; valueType?; evidence: { id; excerpt; locator; context? }[] },
+         options?: { signal?: AbortSignal }): Promise<SupportVerdict>;
+}
+```
+
+`runSupportVerifier(verifier, input, { timeoutMs?, now? })` calls a verifier and
+builds the record. A verifier that throws or rejects records
+`result: "abstain"` with `abstainReason: "error"`. One that returns nothing
+records `empty`, one that returns anything other than a well-formed verdict
+records `malformed`, and one that does not answer within `timeoutMs` records
+`timeout` (its `signal` is aborted). None of these is ever recorded as a pass or
+a fail. A verifier may abstain on its own with any reason, for example
+`unsupported`.
+
+The record carries `candidateId`, the sorted `evidenceIds`, `valueDigest`,
+`inputDigest`, `verifier: { id, version }`, `method`, `result`
+(`supported | contradicted | not-addressed | abstain`), `abstainReason` exactly
+when `result` is `abstain`, an optional `score`, and a canonical `createdAt`.
+Its `id` is a domain-separated SHA-256 digest of every other field, so any
+change to any field changes the id. `buildCandidateVerification` returns a
+frozen record.
+
+- `valueDigest` is `"sha256:" +` the hex SHA-256 of the value's canonical JSON
+  (object keys sorted by UTF-16 code unit), the same definition as Surface's
+  `valueDigest`. `tests/fixtures/surface-value-digest.v1.json` pins the two
+  together.
+- `inputDigest` covers everything the verifier was given: candidate id, value,
+  value type, and each evidence item's id, excerpt, locator, and context.
+- `score` is uncalibrated. It has no meaning unless a calibration record says
+  otherwise. It is optional, never defaulted, never allowed on an abstention,
+  and never feeds `confidence` or `conclusionConfidence`.
+
+`validateCandidateVerification` checks a record read back from storage. It
+rejects unknown fields, an abstention without a reason, a pass or fail with one,
+unsorted evidence ids, a non-canonical timestamp, and any id that is not the
+digest of the record's own fields (a forged or edited record).
+
+`foldCandidateVerifications(subject, records)` reads records for one candidate
+against its current value. Records that fail validation are listed in
+`rejected`. Valid records for another candidate, or whose `valueDigest` is not
+the digest of the subject's value, are listed in `inapplicable` (with
+`inputDigest` also checked when the subject supplies its evidence). The rest are
+`applicable`, deduplicated and ordered by id. `status` is `not-evaluated` when no
+record applies. An edited value therefore reads as `not-evaluated` until a
+verifier checks the new value. The fold never chooses a winner and never derives
+a verdict. An applicable abstention is shown as an abstention, which keeps a
+verifier failure distinct from both a pass and the absence of any record.
+
+A `ReviewCandidate` may carry records on `verifications`. The MCP item (text,
+data and card), the workbench card, and the recorded decision prompt read them
+through `candidateVerificationNotes`, which validates every record, reads it
+against the value being decided (the reviewer's edit, when an accept carries
+one), and gives every surface the same sentence. A candidate without
+`verifications` shows nothing. How Surface consumes these records is a separate
+change.
+
+
 ## Repeated observations
 
 Use `repeatedObservation` when a producer wants to describe a repeated field or
