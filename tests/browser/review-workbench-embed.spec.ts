@@ -634,7 +634,7 @@ test.describe("embedded workbench: envelope-imported decisions", () => {
     { status: "unavailable", code: "not-found" },
     { status: "digest-mismatch", actualDigest: "0".repeat(64) },
   ] as const) {
-    test(`an incomplete extraction over a ${artifact.status} artifact keeps the negative posture colour`, async ({ page }) => {
+    test(`an incomplete extraction over a prepared artifact in ${artifact.status} keeps the negative posture colour`, async ({ page }) => {
       const envelope = JSON.parse(readFileSync("tests/fixtures/traverse-envelopes/partial-max-chunks-empty.v1.json", "utf8")) as PortableExtractionResultEnvelope;
       const importResult = importExtractionEnvelope(envelope, {
         sourceKind: "uploaded-document",
