@@ -235,13 +235,43 @@ export type {
   SourceOfAuthorityObservationInput,
 } from "./source-of-authority-observation.js";
 export {
+  buildCandidateVerification,
+  candidateVerificationKind,
+  DEFAULT_SUPPORT_VERIFIER_TIMEOUT_MS,
+  MAX_SUPPORT_VERIFIER_TIMEOUT_MS,
+  foldCandidateVerifications,
+  runSupportVerifier,
+  supportVerificationInputDigest,
+  validateCandidateVerification,
+  valueDigest,
+} from "./candidate-verification.js";
+export type {
+  BuildCandidateVerificationInput,
+  CandidateVerification,
+  CandidateVerificationInapplicableReason,
+  CandidateVerificationStatus,
+  CandidateVerificationSubject,
+  FoldCandidateVerificationsResult,
+  RunSupportVerifierOptions,
+  SupportAbstainReason,
+  SupportEvidence,
+  SupportVerdict,
+  SupportVerificationInput,
+  SupportVerificationMethod,
+  SupportVerificationResult,
+  SupportVerifier,
+} from "./candidate-verification.js";
+export {
   buildInterpretationReadingPresentation,
   buildReviewCandidatePresentation,
   buildReviewItemPresentation,
   buildReviewResultPresentation,
+  candidateVerificationNotes,
   humanizeIdentifier,
 } from "./review-workbench/review-presentation.js";
 export type {
+  CandidateVerificationNote,
+  CandidateVerificationRecordPresentation,
   InterpretationReadingPresentation,
   InterpretationReadingSource,
   ReviewCandidatePresentation,

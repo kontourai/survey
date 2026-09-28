@@ -627,7 +627,8 @@ h1, h2, h3, p {
   font-size: 12px;
 }
 
-.excerpt-verification {
+.excerpt-verification,
+.support-verification {
   margin: 0;
   font-size: 12px;
   color: var(--k-muted);

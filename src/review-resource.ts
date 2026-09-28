@@ -1,3 +1,4 @@
+import type { CandidateVerification } from "./candidate-verification.js";
 import type {
   CandidateSetStatus,
   ClaimTarget,
@@ -124,6 +125,14 @@ export interface ReviewCandidate {
   claimTarget: ClaimTargetHint;
   projection?: SurveyRecordProjectionHint;
   producer?: Record<string, unknown>;
+  /**
+   * Records of what independent support verifiers said about this candidate's
+   * value (see `CandidateVerification`). A record of a verifier's output, not a
+   * trust decision: nothing routes, accepts, or calibrates on it. Every decision
+   * surface validates each record on read, ignores any that fail, and shows only
+   * those bound to the value under review.
+   */
+  verifications?: CandidateVerification[];
 }
 
 /**

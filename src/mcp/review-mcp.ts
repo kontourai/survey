@@ -23,7 +23,7 @@ import {
   deriveServerReviewSessionApplyResult,
 } from "../review-workbench/server-review-session.js";
 import type { ReviewItem, ReviewSession, ReviewSessionEvent } from "../review-resource.js";
-import { buildReviewItemPresentation, excludedProposalsSentence } from "../review-workbench/review-presentation.js";
+import { buildReviewItemPresentation, candidateVerificationNotes, excludedProposalsSentence } from "../review-workbench/review-presentation.js";
 import {
   appendReviewSessionEvents,
   readReviewSessionFile,
@@ -132,6 +132,7 @@ function itemDetailText(item: ReviewItem, snapshot: ReviewQueueSessionState, eve
       ...(candidate.locator?.excerpt ? [`  excerpt: ${candidate.locator.excerpt}`] : []),
     ])),
     ...extractionImportLines(item),
+    ...candidateVerificationNotes(item, editedValueFor(item, current)).flatMap((entry) => [``, `Verification: ${entry.sentence}`]),
   ];
 
   if (item.spec.rationale) {
@@ -139,6 +140,11 @@ function itemDetailText(item: ReviewItem, snapshot: ReviewQueueSessionState, eve
   }
 
   return lines.join("\n");
+}
+
+/** The reviewer's edit when the item's decision accepts one; verifier records are read against it. */
+function editedValueFor(item: ReviewItem, state: ReviewQueueSessionState): unknown {
+  return state.decisionsByItemName[item.metadata.name] === "accept-proposed" ? state.editedValuesByItemName?.[item.metadata.name] : undefined;
 }
 
 /** What an envelope import says about the item's evidence, including rival values it excluded. */
@@ -213,6 +219,7 @@ function buildReviewCardHtml(
 
   const itemNameJson = escapeJsonInHtml(item.metadata.name);
   const excludedNote = excludedProposalsSentence(buildReviewItemPresentation(item).excludedProposals);
+  const verificationNotes = candidateVerificationNotes(item, editedValueFor(item, current));
 
   const decisionBadge = decision
     ? `<span class="badge badge-${decision === "accept-proposed" ? "accept" : decision === "reject-proposed" ? "reject" : "hold"}">${escapeHtml(workbenchDecisionDefinitions[decision].label)}</span>`
@@ -317,6 +324,7 @@ h1{font-size:15px;font-weight:700;margin:0 0 4px}
   ${proposedCards}
 </div>
 ${excludedNote ? `<p class="feedback" id="excluded-note">${escapeHtml(excludedNote)}</p>` : ""}
+${verificationNotes.map((entry) => `<p class="feedback verification-note" data-candidate-id="${escapeHtml(entry.candidateId)}">${escapeHtml(entry.sentence)}</p>`).join("\n")}
 ${conflict ? `<p class="feedback" id="conflict-note">${proposedCandidates.length} different values were proposed. This card cannot choose one of them yet: reject them all, or use Could not confirm with a reason.</p>` : ""}
 
 <div class="divider"></div>
@@ -440,14 +448,21 @@ async function toolItem(itemName: string, options: ReviewMcpOptions): Promise<Co
         ...(presentation.excludedProposals.length ? { excludedProposals: presentation.excludedProposals.map(({ proposalIndex, value, locator, excerpt }) => ({ proposalIndex, value, locator, excerpt })) } : {}),
       };
     })(),
-    candidates: item.spec.candidates.map((c) => ({
-      id: c.id,
-      role: c.role,
-      value: c.value,
-      confidence: c.extraction?.confidence ?? c.confidence,
-      sourceRef: c.source?.sourceRef,
-      excerpt: c.locator?.excerpt,
-    })),
+    candidates: (() => {
+      const notes = candidateVerificationNotes(item, editedValueFor(item, current));
+      return item.spec.candidates.map((c, index) => {
+        const note = notes.find((entry) => entry.candidateIndex === index);
+        return {
+          id: c.id,
+          role: c.role,
+          value: c.value,
+          confidence: c.extraction?.confidence ?? c.confidence,
+          sourceRef: c.source?.sourceRef,
+          excerpt: c.locator?.excerpt,
+          ...(note ? { verification: { subject: note.subjectLabel, status: note.status, records: note.records, inapplicableCount: note.inapplicableCount, rejectedCount: note.rejectedCount } } : {}),
+        };
+      });
+    })(),
   };
 
   const content: ContentItem[] = [

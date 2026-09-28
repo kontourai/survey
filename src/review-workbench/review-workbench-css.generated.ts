@@ -835,7 +835,8 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   font-size: 12px;
 }
 
-.survey-workbench-embed .excerpt-verification{
+.survey-workbench-embed .excerpt-verification,
+.survey-workbench-embed .support-verification{
   margin: 0;
   font-size: 12px;
   color: var(--k-muted);
