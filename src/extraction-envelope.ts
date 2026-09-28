@@ -19,6 +19,26 @@ export interface PortableExtractionOccurrence {
   ambiguous: boolean;
 }
 
+/** Which model produced one proposal, as the extractor recorded it for that proposal's own request. */
+export interface PortableExtractionProducedBy {
+  model: string;
+  modelSource: "provider-reported" | "configured";
+  /** Content-free digest of the provider request (`sha256:<hex>`). */
+  requestDigest: string;
+}
+
+/**
+ * Deterministic, versioned facts about how a proposal's value relates to the
+ * declared schema and to its own excerpt. Annotations only: Survey carries
+ * them to review and does not route or block on them.
+ */
+export interface PortableExtractionEvidenceMatch {
+  checkerVersion: string;
+  schema: "ok" | "type-mismatch" | "enum-mismatch" | "format-invalid";
+  valueInExcerpt: "match" | "mismatch" | "not-evaluated" | "not-applicable";
+  tokenBoundary?: boolean;
+}
+
 export interface PortableExtractionProposal {
   fieldPath: string;
   candidateValue: unknown;
@@ -29,6 +49,8 @@ export interface PortableExtractionProposal {
   inferenceType?: "explicit" | "inferred";
   valueType?: ReviewValueType;
   enumValues?: string[];
+  producedBy?: PortableExtractionProducedBy;
+  evidenceMatch?: PortableExtractionEvidenceMatch;
 }
 
 export type PortablePreparedArtifactState =
@@ -56,7 +78,8 @@ export interface PortableExtractionResultEnvelope {
     providerCalls: number;
     totalTokensUsed: number;
     partial?: { reason: "cancelled" | "max-provider-calls" | "max-total-tokens" | "max-chunks"; completedChunks: number; remainingChunks: number; tokenOvershoot?: number };
-    providerFailures?: Array<{ provider: string; kind: "authentication" | "rate-limit" | "timeout" | "invalid-request" | "unavailable" | "unknown"; retryable: boolean }>;
+    /** `code` is the upstream error code, informational only; `kind` stays authoritative. */
+    providerFailures?: Array<{ provider: string; kind: "authentication" | "rate-limit" | "timeout" | "invalid-request" | "unavailable" | "unknown"; retryable: boolean; code?: string }>;
     taskDigest?: string;
     exampleDigests?: string[];
     pdfPageOffsets?: number[];
@@ -187,6 +210,8 @@ function buildReviewItem(record: ExtractionEnvelopeImport, proposal: PortableExt
       ...(envelope.result.taskDigest ? { taskDigest: envelope.result.taskDigest } : {}),
       ...(envelope.result.exampleDigests ? { exampleDigests: envelope.result.exampleDigests } : {}),
       valueType: { type: valueType, origin: proposal.inferenceType ?? "inferred" },
+      ...(proposal.producedBy ? { producedBy: proposal.producedBy } : {}),
+      ...(proposal.evidenceMatch ? { evidenceMatch: proposal.evidenceMatch } : {}),
       occurrence: proposal.provenance.occurrence,
       attempt: { id: envelope.result.runId, providerCalls: envelope.result.providerCalls },
       ...(envelope.result.warningClassifications ? { warnings: envelope.result.warningClassifications } : {}),
@@ -281,7 +306,7 @@ function validateEnvelope(input: unknown): PortableExtractionResultEnvelope {
 }
 
 function validateProposal(input: unknown, index: number, contentLength?: number): PortableExtractionProposal {
-  const p = obj(input, `proposal[${index}]`); exact(p, ["fieldPath", "candidateValue", "confidence", "provenance", "extractor"], `proposal[${index}]`, ["pathIndices", "inferenceType", "valueType", "enumValues"]);
+  const p = obj(input, `proposal[${index}]`); exact(p, ["fieldPath", "candidateValue", "confidence", "provenance", "extractor"], `proposal[${index}]`, ["pathIndices", "inferenceType", "valueType", "enumValues", "producedBy", "evidenceMatch"]);
   wireNonEmpty(p.fieldPath, "proposal.fieldPath"); stableIdentity(p.extractor, "proposal.extractor"); finite(p.confidence, "proposal.confidence", 0, 1);
   const provenance = obj(p.provenance, "proposal.provenance"); exact(provenance, ["excerpt", "locator", "occurrence"], "proposal.provenance"); wireNonEmpty(provenance.excerpt, "proposal.provenance.excerpt");
   if (typeof provenance.locator !== "string") throw new Error("proposal locator must be chars:start-end.");
@@ -292,6 +317,8 @@ function validateProposal(input: unknown, index: number, contentLength?: number)
   if (p.inferenceType !== undefined && p.inferenceType !== "explicit" && p.inferenceType !== "inferred") throw new Error("proposal inferenceType is invalid.");
   if (p.valueType !== undefined && !VALUE_TYPES.has(p.valueType as ReviewValueType)) throw new Error("proposal valueType is invalid.");
   if (p.enumValues !== undefined) array(p.enumValues, "enumValues").forEach((v) => wellFormedString(v, "enumValue"));
+  if (p.producedBy !== undefined) validateProducedBy(p.producedBy);
+  if (p.evidenceMatch !== undefined) validateEvidenceMatch(p.evidenceMatch);
   return cloneJson(p) as unknown as PortableExtractionProposal;
 }
 
@@ -300,7 +327,9 @@ function validateArtifact(input: unknown): PortableExtractionResultEnvelope["res
 function validateArtifactState(input: unknown, artifact?: PortableExtractionResultEnvelope["result"]["preparedArtifact"]): PortablePreparedArtifactState { if (!artifact) throw new Error("prepared artifact state requires prepared artifact."); const s = obj(input, "preparedArtifactState"); const status = s.status; if (status === "digest-mismatch") { exact(s, ["status", "requestedRef", "canonicalRef", "actualDigest", "actualContentLength"], "preparedArtifactState"); digest(s.actualDigest, "actualDigest", false); integer(s.actualContentLength, "actualContentLength"); } else if (status === "invalid-artifact") { exact(s, ["status", "reason", "canonicalRef"], "preparedArtifactState"); if (!ARTIFACT_INVALID_REASONS.has(s.reason as string)) throw new Error("prepared artifact invalid reason is invalid."); } else if (["available", "unavailable", "storage-error", "identity-mismatch"].includes(status as string)) exact(s, ["status", "requestedRef", "canonicalRef"], "preparedArtifactState"); else throw new Error("prepared artifact state is invalid."); preparedReference(s.canonicalRef, "canonicalRef"); if (s.canonicalRef !== artifact.ref) throw new Error("prepared artifact canonical ref mismatch."); if (s.requestedRef !== undefined) { safeReference(s.requestedRef, "requestedRef"); if (status !== "identity-mismatch") preparedReference(s.requestedRef, "requestedRef"); if (status === "identity-mismatch" ? s.requestedRef === s.canonicalRef : s.requestedRef !== s.canonicalRef) throw new Error(`prepared artifact ${status} requestedRef relationship is invalid.`); } return cloneJson(s) as PortablePreparedArtifactState; }
 function validateOutcome(input: unknown, partial: unknown): void { const o = obj(input, "outcome"); if (o.status === "success") exact(o, ["status"], "outcome"); else if (o.status === "partial") { exact(o, ["status", "reason"], "outcome"); if (!PARTIAL.has(o.reason as string)) throw new Error("partial reason is invalid."); const p = obj(partial, "partial"); exact(p, ["reason", "completedChunks", "remainingChunks"], "partial", ["tokenOvershoot"]); if (p.reason !== o.reason) throw new Error("partial reason mismatch."); integer(p.completedChunks, "completedChunks"); integer(p.remainingChunks, "remainingChunks"); if (p.tokenOvershoot !== undefined) { integer(p.tokenOvershoot, "tokenOvershoot"); if (p.tokenOvershoot === 0) throw new Error("tokenOvershoot must be positive."); } } else if (o.status === "failure") { exact(o, ["status", "category", "code"], "outcome"); if (!FAILURE_CATEGORIES.has(o.category as string)) throw new Error("failure category is invalid."); stableIdentity(o.code, "failure code"); } else throw new Error("outcome status is invalid."); if (o.status !== "partial" && partial !== undefined) throw new Error("partial requires partial outcome."); }
 function validateWarning(v: unknown): void { const w = obj(v, "warning"); exact(w, ["category", "code"], "warning"); if (!WARNING_CATEGORIES.has(w.category as string)) throw new Error("warning category invalid."); stableIdentity(w.code, "warning.code"); }
-function validateFailure(v: unknown): void { const f = obj(v, "providerFailure"); exact(f, ["provider", "kind", "retryable"], "providerFailure"); stableIdentity(f.provider, "failure.provider"); if (!FAILURE_KINDS.has(f.kind as string) || typeof f.retryable !== "boolean") throw new Error("provider failure invalid."); }
+function validateFailure(v: unknown): void { const f = obj(v, "providerFailure"); exact(f, ["provider", "kind", "retryable"], "providerFailure", ["code"]); stableIdentity(f.provider, "failure.provider"); if (!FAILURE_KINDS.has(f.kind as string) || typeof f.retryable !== "boolean") throw new Error("provider failure invalid."); if (f.code !== undefined) { stableIdentity(f.code, "failure.code"); if (f.code.length > 128) throw new Error("failure.code must be at most 128 characters."); } }
+function validateProducedBy(v: unknown): void { const b = obj(v, "proposal.producedBy"); exact(b, ["model", "modelSource", "requestDigest"], "proposal.producedBy"); stableIdentity(b.model, "proposal.producedBy.model"); if (!MODEL_SOURCES.has(b.modelSource as string)) throw new Error("proposal.producedBy.modelSource is invalid."); digest(b.requestDigest, "proposal.producedBy.requestDigest"); }
+function validateEvidenceMatch(v: unknown): void { const m = obj(v, "proposal.evidenceMatch"); exact(m, ["checkerVersion", "schema", "valueInExcerpt"], "proposal.evidenceMatch", ["tokenBoundary"]); stableIdentity(m.checkerVersion, "proposal.evidenceMatch.checkerVersion"); if (!SCHEMA_MATCHES.has(m.schema as string)) throw new Error("proposal.evidenceMatch.schema is invalid."); if (!VALUE_IN_EXCERPT_MATCHES.has(m.valueInExcerpt as string)) throw new Error("proposal.evidenceMatch.valueInExcerpt is invalid."); if (m.tokenBoundary !== undefined && typeof m.tokenBoundary !== "boolean") throw new Error("proposal.evidenceMatch.tokenBoundary must be a boolean."); }
 function validateClaimTarget(v: unknown): void { const t = obj(v, "claimTarget"); exact(t, ["subjectType", "subjectId", "facet", "claimType", "fieldOrBehavior", "impactLevel"], "claimTarget", ["claimId", "evidenceType", "evidenceMethod", "collectedBy", "derivedFrom"]); for (const key of ["subjectType", "subjectId", "facet", "claimType", "fieldOrBehavior"]) nonEmpty(t[key], `claimTarget.${key}`); if (!["low", "medium", "high", "critical"].includes(t.impactLevel as string)) throw new Error("claimTarget.impactLevel invalid."); for (const key of ["claimId", "evidenceType", "evidenceMethod", "collectedBy"] as const) optionalString(t[key], `claimTarget.${key}`); if (t.derivedFrom !== undefined) array(t.derivedFrom, "claimTarget.derivedFrom").forEach((entry) => nonEmpty(entry, "claimTarget.derivedFrom entry")); }
 
 function inferValueType(v: unknown): ReviewValueType { if (Array.isArray(v)) return "array"; if (v === null || typeof v === "object") return "object"; if (["string", "number", "boolean"].includes(typeof v)) return typeof v as ReviewValueType; return "string"; }
@@ -330,6 +359,9 @@ const PARTIAL = new Set(["cancelled", "max-provider-calls", "max-total-tokens", 
 const FAILURE_CATEGORIES = new Set(["invalid-config", "invalid-task", "preparation", "provider", "unexpected"]);
 const WARNING_CATEGORIES = new Set(["provider", "normalization", "preparation", "limit", "storage", "content", "other"]);
 const FAILURE_KINDS = new Set(["authentication", "rate-limit", "timeout", "invalid-request", "unavailable", "unknown"]);
+const MODEL_SOURCES = new Set(["provider-reported", "configured"]);
+const SCHEMA_MATCHES = new Set(["ok", "type-mismatch", "enum-mismatch", "format-invalid"]);
+const VALUE_IN_EXCERPT_MATCHES = new Set(["match", "mismatch", "not-evaluated", "not-applicable"]);
 const PREPARATION_MODES = new Set(["text", "markdown", "transcript", "pdf-text", "image-ocr"]);
 const ARTIFACT_INVALID_REASONS = new Set(["not-an-object", "invalid-format", "invalid-version", "invalid-digest", "invalid-ref", "invalid-preparation-mode", "invalid-preparation-version", "invalid-content-length", "invalid-source-snapshot-ref", "ill-formed-unicode", "invalid-resolved-text"]);
 const STABLE_IDENTITY = /^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{0,255}$/;

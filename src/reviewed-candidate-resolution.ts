@@ -1,5 +1,6 @@
 import { candidateReviewRecord, type SurveyClaimRecord, type SurveyObservationInput } from "./builder.js";
 import type { CandidateSet, ClaimTarget, ReviewOutcome } from "./types.js";
+import { ReviewAgreementError } from "./to-surface.js";
 
 export interface ReviewedCandidateResolutionInput {
   id: string;
@@ -29,13 +30,11 @@ export function reviewedCandidateResolution(input: ReviewedCandidateResolutionIn
       ...input.reviewOutcome,
       candidateId: input.reviewOutcome.candidateId ?? input.selectedCandidateId,
     },
-    observations: input.observations.map((observation) => ({
-      ...observation,
-      claim: {
-        ...observation.claim,
-        status: observation.claim.status ?? claimStatusForObservation(input, observation),
-      },
-    })),
+    observations: input.observations.map((observation) => {
+      const status = observation.claim.status ?? claimStatusForObservation(input, observation);
+      if (observationCandidateId(observation) === input.selectedCandidateId) assertSelectedStatusAgrees(input, status);
+      return { ...observation, claim: { ...observation.claim, status } };
+    }),
   });
 }
 
@@ -47,6 +46,16 @@ function claimStatusForObservation(
     return input.selectedClaimStatus ?? input.reviewOutcome.status;
   }
   return input.unselectedClaimStatus ?? "superseded";
+}
+
+/** A trusted selected claim must carry the status its review decided. */
+function assertSelectedStatusAgrees(input: ReviewedCandidateResolutionInput, status: ClaimTarget["status"]): void {
+  if ((status === "verified" || status === "assumed") && status !== input.reviewOutcome.status) {
+    throw new ReviewAgreementError(
+      "status-mismatch",
+      `Candidate set ${input.id} selected claim status ${status} disagrees with review outcome status ${input.reviewOutcome.status}`,
+    );
+  }
 }
 
 function observationCandidateId(observation: SurveyObservationInput): string {

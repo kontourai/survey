@@ -4,6 +4,7 @@ import { buildReviewProofAnchor } from "./review-proof.js";
 import { assertReviewOutcomeDiscipline } from "./producer-discipline.js";
 import { deriveCalibration, type CalibrationMetrics } from "./calibration.js";
 import { AUTO_ACCEPT_ACTOR } from "./producer-profile.js";
+import { canonicalJson } from "./review-workbench/canonical.js";
 import type {
   Candidate,
   CandidateSet,
@@ -80,6 +81,24 @@ export interface BuildSurveyTrustBundleOptions {
   calibration?: boolean | SurveyCalibrationOptions;
 }
 
+/**
+ * Thrown when a claim's trusted status or value does not agree with the review
+ * outcome it cites, or when the governing review cannot be chosen.
+ * - `status-mismatch`: a `verified`/`assumed` claim cites a review whose status differs.
+ * - `value-mismatch`: a `verified`/`assumed` claim carries a value other than the reviewed value.
+ * - `ambiguous-review-order`: several reviews apply to one candidate and the latest
+ *   cannot be determined from `reviewedAt` (missing, unparseable, or tied).
+ */
+export class ReviewAgreementError extends Error {
+  readonly name = "ReviewAgreementError";
+  readonly code: "status-mismatch" | "value-mismatch" | "ambiguous-review-order";
+
+  constructor(code: ReviewAgreementError["code"], message: string) {
+    super(message);
+    this.code = code;
+  }
+}
+
 export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyTrustBundleOptions = {}): TrustBundle {
   const projectionContextId = validateProjectionContextId(options.projectionContextId);
   const rawSources = indexById(input.rawSources, "raw source");
@@ -107,15 +126,15 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
     const candidate = selectCandidate(candidateSet, projection.candidateId);
     const extraction = requireMapValue(extractions, candidate.extractionId, "extraction");
     const rawSource = requireMapValue(rawSources, extraction.sourceId, "raw source");
-    const review = selectReview(reviewsByCandidateSet.get(candidateSet.id) ?? [], candidate.id);
+    const review = selectReview(reviewsByCandidateSet.get(candidateSet.id) ?? [], candidate.id, projection.id);
     const projectionReview = review?.resolution === "could_not_confirm" ? undefined : review;
     const unreviewedStatus = statusFor({ candidateSet, candidate });
     const status = projection.status
       ?? (review?.resolution === "could_not_confirm"
         ? (unreviewedStatus === "disputed" ? unreviewedStatus : review.status)
         : statusFor({ candidateSet, candidate, review }));
-    assertProducerDiscipline({ status, review, candidateSet, extraction, rawSource, projection });
     const claimValue = projection.value ?? candidate.value;
+    assertProducerDiscipline({ status, review, candidateSet, candidate, extraction, rawSource, projection, claimValue });
     const createdAt = projection.createdAt ?? extraction.extractedAt;
     const updatedAt = projection.updatedAt ?? projectionReview?.reviewedAt ?? input.generatedAt;
     const evidenceId = projectionRecordId(projection.id, projectionContextId, "claim-evidence", "evidence.source");
@@ -158,6 +177,7 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
           candidate,
           review: projectionReview,
           comfortZoneReview: review,
+          valueEdit: (status === "verified" || status === "assumed") && review ? acceptedEdit(review) : undefined,
         }),
       },
     };
@@ -606,6 +626,7 @@ function buildSurveyMetadata(input: {
   candidate: Candidate;
   review?: ReviewOutcome;
   comfortZoneReview?: ReviewOutcome;
+  valueEdit?: { value: unknown };
 }): Record<string, unknown> {
   const producerSurveyMetadata = isRecord(input.projection.metadata?.survey) ? input.projection.metadata.survey : {};
   const producerCandidateMetadata = isRecord(producerSurveyMetadata.candidate) ? producerSurveyMetadata.candidate : {};
@@ -623,6 +644,11 @@ function buildSurveyMetadata(input: {
             rejectionReason: input.candidate.rejectionReason,
           },
         }
+      : {}),
+    // A trusted claim whose value is a reviewer's edit says so, and keeps the
+    // value the reviewer was shown.
+    ...(input.valueEdit
+      ? { valueEdit: { edited: true, originalValue: input.candidate.value, reviewOutcomeId: input.comfortZoneReview?.id } }
       : {}),
     ...(input.comfortZoneReview?.withinComfortZone === false
       ? {
@@ -653,9 +679,11 @@ function assertProducerDiscipline(input: {
   status: TrustStatus;
   review?: ReviewOutcome;
   candidateSet: CandidateSet;
+  candidate: Candidate;
   extraction: Extraction;
   rawSource: RawSource;
   projection: ClaimTarget;
+  claimValue: unknown;
 }): void {
   assertReviewOutcomeDiscipline({
     subject: `Claim ${input.projection.id}`,
@@ -663,6 +691,23 @@ function assertProducerDiscipline(input: {
     review: input.review,
     candidateSetStatus: input.candidateSet.status,
   });
+  if ((input.status === "verified" || input.status === "assumed") && input.review) {
+    // A trusted claim may only restate its review: same status, and the value
+    // the reviewer saw (the candidate value, or the edit the review records).
+    if (input.review.status !== input.status) {
+      throw new ReviewAgreementError(
+        "status-mismatch",
+        `Claim ${input.projection.id} status ${input.status} disagrees with review outcome ${input.review.id} status ${input.review.status}`,
+      );
+    }
+    const reviewedValue = reviewedValueFor(input.review, input.candidate);
+    if (canonicalJson(input.claimValue) !== canonicalJson(reviewedValue)) {
+      throw new ReviewAgreementError(
+        "value-mismatch",
+        `Claim ${input.projection.id} is ${input.status} but its value differs from the value reviewed in ${input.review.id}`,
+      );
+    }
+  }
   if (input.rawSource.kind !== "manual-entry" && !input.extraction.locator) {
     throw new Error(`Claim ${input.projection.id} needs a source locator for ${input.rawSource.kind}`);
   }
@@ -677,8 +722,69 @@ function selectCandidate(candidateSet: CandidateSet, candidateId?: string): Cand
   return candidate;
 }
 
-function selectReview(reviews: ReviewOutcome[], candidateId: string): ReviewOutcome | undefined {
-  return reviews.find((review) => review.candidateId === candidateId) ?? reviews.find((review) => !review.candidateId);
+/** An accepted edit the review records. `buildCanonicalReviewedTrustInput`
+ *  writes `metadata.editedValue` next to `metadata.workbenchDecision`; only an
+ *  edit on an `accept-proposed` decision replaces the reviewed value. Any other
+ *  `editedValue` (a bare one, or one on a reject or keep decision) is not an
+ *  accepted edit and is ignored. */
+function acceptedEdit(review: ReviewOutcome): { value: unknown } | undefined {
+  const metadata = review.metadata;
+  return metadata?.workbenchDecision === "accept-proposed" && Object.hasOwn(metadata, "editedValue")
+    ? { value: metadata.editedValue }
+    : undefined;
+}
+
+/** The value a review outcome attests: its accepted edit, else the candidate value that was reviewed. */
+function reviewedValueFor(review: ReviewOutcome, candidate: Candidate): unknown {
+  const edit = acceptedEdit(review);
+  return edit ? edit.value : candidate.value;
+}
+
+/** The latest applicable review governs. Exact candidate bindings take
+ *  precedence over unbound (set-wide) reviews; within a tier, several reviews
+ *  are ordered by `reviewedAt`, and an order that cannot be established is
+ *  refused rather than guessed. */
+function selectReview(reviews: ReviewOutcome[], candidateId: string, claimId: string): ReviewOutcome | undefined {
+  const exact = reviews.filter((review) => review.candidateId === candidateId);
+  return latestReview(exact.length ? exact : reviews.filter((review) => !review.candidateId), claimId);
+}
+
+function latestReview(reviews: ReviewOutcome[], claimId: string): ReviewOutcome | undefined {
+  if (reviews.length <= 1) return reviews[0];
+  const timed = reviews.map((review) => ({ review, at: review.reviewedAt ? Date.parse(review.reviewedAt) : Number.NaN }));
+  const untimed = timed.find((entry) => Number.isNaN(entry.at));
+  if (untimed) {
+    throw new ReviewAgreementError(
+      "ambiguous-review-order",
+      `Claim ${claimId} has ${reviews.length} applicable review outcomes but ${untimed.review.id} has no parseable reviewedAt`,
+    );
+  }
+  const latestAt = Math.max(...timed.map((entry) => entry.at));
+  const latest = timed.filter((entry) => entry.at === latestAt).map((entry) => entry.review);
+  // Reviews at the same instant (however the timestamp is spelled) that record
+  // the same decision are one review recorded twice; conflicting ones are refused.
+  if (new Set(latest.map(reviewDecisionKey)).size > 1) {
+    throw new ReviewAgreementError(
+      "ambiguous-review-order",
+      `Claim ${claimId} has conflicting review outcomes ${latest.map((review) => review.id).join(", ")} at the latest reviewedAt`,
+    );
+  }
+  return [...latest].sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))[0]!;
+}
+
+function reviewDecisionKey(review: ReviewOutcome): string {
+  const edit = acceptedEdit(review);
+  return canonicalJson({
+    candidateId: review.candidateId ?? null,
+    status: review.status,
+    resolution: review.resolution ?? null,
+    edit: edit ? { value: edit.value } : null,
+    // These reach the claim (comfort zone, testimony provenance), so reviews
+    // that differ in them are different decisions, not one recorded twice.
+    withinComfortZone: review.withinComfortZone ?? null,
+    comfortZoneNote: review.comfortZoneNote ?? null,
+    authorizing: review.authorizing ?? null,
+  });
 }
 
 function normalizeCalibrationOptions(

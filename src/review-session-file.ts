@@ -9,6 +9,7 @@
  * one of them takes still races with the other (kontourai/survey#281).
  */
 
+import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { open, readdir, readFile, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
@@ -75,6 +76,39 @@ function isPidAlive(pid: number): boolean {
 }
 
 /**
+ * An identity for the process currently running as `pid`: its start time, as
+ * the OS reports it. A pid can be reused after its holder dies, so a live pid
+ * only proves the holder is alive when the start time also matches the one
+ * the holder recorded (kontourai/survey#298). Linux reads `/proc/<pid>/stat`
+ * field 22 (start time in clock ticks since boot); elsewhere `ps -o lstart=`
+ * (one-second resolution), rendered in UTC with the C locale so every reader
+ * spells the same instant the same way whatever its own TZ or locale. Resolves `undefined` when the platform offers
+ * neither or the process is gone, which leaves the pid-only rule in force.
+ */
+async function processStartIdentity(pid: number): Promise<string | undefined> {
+  if (process.platform === "linux") {
+    try {
+      const procStat = await readFile(`/proc/${pid}/stat`, "utf8");
+      // Fields after the parenthesized command name, which may contain spaces.
+      const fields = procStat.slice(procStat.lastIndexOf(")") + 2).split(" ");
+      const startTicks = fields[19];
+      return startTicks ? `linux-starttime:${startTicks}` : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  if (process.platform === "win32") return undefined;
+  return new Promise((resolveIdentity) => {
+    execFile("ps", ["-o", "lstart=", "-p", String(pid)], { env: { ...process.env, LC_ALL: "C", TZ: "UTC" }, timeout: 2_000 }, (error, stdout) => {
+      const started = error ? "" : stdout.trim().replace(/\s+/g, " ");
+      resolveIdentity(started ? `ps-lstart:${started}` : undefined);
+    });
+  });
+}
+
+let ownStartIdentity: Promise<string | undefined> | undefined;
+
+/**
  * A lock is stale only when we can show its holder is gone, never merely
  * because it is old. Liveness is authoritative whenever the lock carries a
  * usable pid: a holder that is alive but slow (age past `staleMs`) is NOT
@@ -90,7 +124,9 @@ function isPidAlive(pid: number): boolean {
  * accepted cost of "never remove a live lock" actually holding.
  *
  * The age rule is kept only as the fallback for a lock we cannot judge by
- * liveness: no pid field (unknown-PID) or, since the lock carries no host
+ * liveness: no pid field (unknown-PID); a live pid whose current start time
+ * differs from the one the holder recorded, i.e. the holder died and its pid
+ * was reused by an unrelated process (kontourai/survey#298); or, since the lock carries no host
  * identity, a pid from another host/container sharing this volume (`isPidAlive`
  * is meaningless there, in either direction — the residual this repo has
  * always accepted for that case).
@@ -101,8 +137,14 @@ async function lockIsStale(lockPath: string, staleMs: number): Promise<boolean> 
     const age = Date.now() - info.mtimeMs;
     const raw = await readFile(lockPath, "utf8");
     if (raw.trim() === "") return age > EMPTY_LOCK_STALE_MS;
-    const holder = JSON.parse(raw) as { pid?: unknown };
-    if (typeof holder.pid === "number") return !isPidAlive(holder.pid);
+    const holder = JSON.parse(raw) as { pid?: unknown; startIdentity?: unknown };
+    if (typeof holder.pid === "number") {
+      if (!isPidAlive(holder.pid)) return true;
+      if (typeof holder.startIdentity !== "string") return false;
+      const current = await processStartIdentity(holder.pid);
+      // Unknown now (or never recorded): trust liveness, as before.
+      if (current === undefined || current === holder.startIdentity) return false;
+    }
     return age > staleMs;
   } catch {
     // Vanished (released) or half-written by a live acquirer: not stale.
@@ -165,12 +207,14 @@ export async function acquireReviewSessionFileLock(
   const staleMs = options.staleMs ?? DEFAULT_STALE_MS;
   const deadline = Date.now() + timeoutMs;
   const token = randomUUID();
+  ownStartIdentity ??= processStartIdentity(process.pid);
+  const startIdentity = await ownStartIdentity;
 
   for (;;) {
     try {
       const handle = await open(lockPath, "wx");
       try {
-        await handle.writeFile(JSON.stringify({ pid: process.pid, token, acquiredAt: new Date().toISOString() }));
+        await handle.writeFile(JSON.stringify({ pid: process.pid, ...(startIdentity ? { startIdentity } : {}), token, acquiredAt: new Date().toISOString() }));
       } finally {
         await handle.close();
       }
