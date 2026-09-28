@@ -52,8 +52,9 @@ jobs:
         working-directory: survey
 
   # One leg per supported @kontourai/surface major: the lowest version the
-  # dependency range admits and the newest 3.x and 4.x pnpm will resolve (it
-  # honours minimumReleaseAge). Keep the 2.x pin equal to the range's lower bound in
+  # dependency range admits and the newest published 3.x and 4.x (@kontourai/*
+  # is exempt from minimumReleaseAge in pnpm-workspace.yaml, so a same-day
+  # release is resolved). Keep the 2.x pin equal to the range's lower bound in
   # package.json. The lockfile's own Surface version is covered by `verify`.
   surface-compat:
     name: Surface ${{ matrix.surface }}
