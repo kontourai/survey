@@ -12,6 +12,7 @@ import { describe, it } from "node:test";
 import {
   buildCanonicalReviewedTrustInput,
   buildReviewItemsFromExtractionEnvelopeImport,
+  buildSurveyLearningProjections,
   buildSurveyTrustBundle,
   exportExtractionEnvelopeImport,
   importExtractionEnvelope,
@@ -318,7 +319,10 @@ describe("one candidate set per claim slot (#289)", () => {
       const { items, conflict, sibling } = await conflictRound();
       const session = decidedSession(items, { [conflict.metadata.name]: decision, [sibling.metadata.name]: "accept-proposed" }, conflict.metadata.name);
       assert.equal(reviewSessionSummary(session).unresolved, 0);
-      assertConflictRoundProjection(project(items, buildReviewWorkbenchResultsFromSession(session)).bundle, conflictStatus);
+      const results = buildReviewWorkbenchResultsFromSession(session);
+      const projected = project(items, results);
+      assertConflictRoundProjection(projected.bundle, conflictStatus);
+      assertNoValueSingledOut({ conflict, decision, projected, decisions: results.map((result) => result.reviewDecision), events: buildReviewSessionEvents(session, "round-1") });
     });
 
     it(`the server apply boundary accepts a conflict decided ${decision} with every item required`, async () => {
@@ -329,9 +333,19 @@ describe("one candidate set per claim slot (#289)", () => {
       const applied = deriveServerReviewSessionApplyResult({ record, events, requiredResolvedItems: "all" });
       assert.equal(applied.ok, true, JSON.stringify(applied.issues));
       if (!applied.ok) return;
-      assertConflictRoundProjection(project(items, applied.results).bundle, conflictStatus);
+      const projected = project(items, applied.results);
+      assertConflictRoundProjection(projected.bundle, conflictStatus);
+      assertNoValueSingledOut({ conflict, decision, projected, decisions: applied.decisions, events });
     });
   }
+
+  it("could-not-confirm on an escalated item that is not a conflict projects disputed", async () => {
+    const [imported] = importExtractionEnvelope(await traverseFixture("success-no-confidence"), options()).reviewItems;
+    const escalated: ReviewItem = { ...imported!, spec: { ...imported!.spec, candidateSetStatus: "escalated" } };
+    const session = decidedSession([escalated], { [escalated.metadata.name]: "could-not-confirm" }, escalated.metadata.name);
+    const { bundle } = project([escalated], buildReviewWorkbenchResultsFromSession(session));
+    assert.deepEqual(bundle.claims.map((claim) => [claim.value, claim.status]), [[48000, "disputed"]]);
+  });
 
   it("the MCP card shows every conflicting value; accept is refused and reject is recorded", async () => {
     const { items, conflict } = await conflictRound();
@@ -358,6 +372,7 @@ describe("one candidate set per claim slot (#289)", () => {
       assert.match(html, /Conflict: 2 values/);
       assert.match(html, /48000[\s\S]*52000/);
       assert.doesNotMatch(html, /id="btn-accept"/);
+      assert.doesNotMatch(html, /id="btn-hold"/, "no current value to keep");
       assert.match(html, /Reject all values/);
 
       const accept = await call("tools/call", { name: "survey_review_decide", arguments: { itemName: conflict.metadata.name, decision: "accept" } });
@@ -365,6 +380,7 @@ describe("one candidate set per claim slot (#289)", () => {
       assert.match((accept.result.content as Array<{ text: string }>)[0]!.text, /cannot choose between them/);
       const reject = await call("tools/call", { name: "survey_review_decide", arguments: { itemName: conflict.metadata.name, decision: "reject", note: "Schedule and amendment disagree." } });
       assert.equal(reject.result.isError, false, JSON.stringify(reject.result.content));
+      assert.match((reject.result.content as Array<{ text: string }>)[0]!.text, /^Decision recorded: Reject all values\nEffect: Every proposed value is rejected/);
     } finally {
       server.stdin!.end();
       await once(server, "exit");
@@ -408,6 +424,56 @@ function assertConflictRoundProjection(bundle: ReturnType<typeof project>["bundl
   const feeClaims = claims.filter(([field]) => field === "fee");
   assert.equal(feeClaims.length, 1);
   assert.equal(feeClaims[0]![2], conflictStatus);
+}
+
+/**
+ * After reject-all or could-not-confirm on a conflict, no emitted record may
+ * single out one of its values: no candidate id on the decision, its session
+ * events, the review outcome or the claim; no selection on the set; a null
+ * claim value that lists every value; one evidence record per candidate; and,
+ * for reject-all, one rejected-candidate learning per candidate.
+ */
+function assertNoValueSingledOut(input: {
+  conflict: ReviewItem;
+  decision: "could-not-confirm" | "reject-proposed";
+  projected: ReturnType<typeof project>;
+  decisions: readonly { spec: { reviewItemName: string; candidateId?: string } }[];
+  events: readonly { spec: { reviewItemName?: string; eventType: string; candidateId?: string } }[];
+}): void {
+  const { conflict, decision, projected: { surveyInput, bundle } } = input;
+  const ids = conflict.spec.candidates.map((candidate) => candidate.id);
+  const values = conflict.spec.candidates.map((candidate) => candidate.value);
+  assert.deepEqual(values, [48000, 52000]);
+
+  const reviewDecision = input.decisions.find((entry) => entry.spec.reviewItemName === conflict.metadata.name)!;
+  assert.equal(Object.hasOwn(reviewDecision.spec, "candidateId"), false, "decision");
+  const decisionEvents = input.events.filter((event) => event.spec.reviewItemName === conflict.metadata.name && event.spec.eventType.startsWith("decision-"));
+  assert.ok(decisionEvents.length > 0);
+  for (const event of decisionEvents) assert.equal(Object.hasOwn(event.spec, "candidateId"), false, "session event");
+
+  const set = surveyInput.candidateSets.find((candidateSet) => candidateSet.candidates.some((candidate) => ids.includes(candidate.id)))!;
+  assert.equal(Object.hasOwn(set, "selectedCandidateId"), false, "candidate set");
+  assert.equal(set.status, decision === "reject-proposed" ? "rejected" : "conflict");
+  const outcome = surveyInput.reviewOutcomes.find((review) => review.candidateSetId === set.id)!;
+  assert.equal(Object.hasOwn(outcome, "candidateId"), false, "review outcome");
+  const target = surveyInput.claims.find((claim) => claim.candidateSetId === set.id)!;
+  assert.equal(Object.hasOwn(target, "candidateId"), false, "claim target");
+  assert.equal(target.value, null);
+  assert.deepEqual(set.candidates.map((candidate) => Object.hasOwn(candidate, "rejectionReason")), decision === "reject-proposed" ? [true, true] : [false, false]);
+
+  const claim = bundle.claims.find((entry) => entry.id === target.id)!;
+  assert.equal(claim.value, null);
+  const listed = (claim.metadata?.survey as { candidates: Array<{ candidateId: string; value: unknown }> }).candidates;
+  assert.deepEqual(listed.map((entry) => [entry.candidateId, entry.value]), ids.map((id, index) => [id, values[index]]));
+  assert.deepEqual(bundle.evidence.filter((entry) => entry.claimId === claim.id).map((entry) => entry.metadata?.candidateId), ids);
+  const event = bundle.events.find((entry) => entry.claimId === claim.id)!;
+  assert.equal(event.evidenceIds.length, ids.length);
+
+  const learning = buildSurveyLearningProjections(surveyInput).filter((entry) => entry.target === set.target);
+  const rejected = learning.filter((entry) => entry.kind === "learning.rejected-candidate");
+  assert.deepEqual(rejected.map((entry) => entry.id.endsWith(".learning.rejected-candidate") && ids.find((id) => entry.id.includes(id))).sort(),
+    decision === "reject-proposed" ? [...ids].sort() : []);
+  assert.equal(learning.filter((entry) => entry.kind === "learning.could-not-confirm").length, decision === "could-not-confirm" ? 1 : 0);
 }
 
 function rpc(server: ReturnType<typeof spawn>) {

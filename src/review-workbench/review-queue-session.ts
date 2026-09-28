@@ -237,19 +237,30 @@ export function keepActionDecision(item: ReviewItem, flaggedWrong: boolean): Rev
 }
 
 /**
- * The candidate a workbench decision applies to.
- *
- * Selection is by role, but the id this returns is what every caller makes
- * durable — a ReviewDecision's `candidateId`, a session event's, a result's, a
- * replay expectation. So the id has to name exactly one candidate before it
- * leaves here. Guarding the render path alone let the workbench emit an
- * undecidable decision through the export path and then present a different
- * candidate's value against it; this is the shared selector all of those go
- * through, which is why the check belongs here rather than at each of them.
+ * Decisions that make no candidate the trusted value: rejecting the proposed
+ * values and ending the round as could-not-confirm. On an item whose role holds
+ * several candidates (conflicting values for one claim) they select none of them.
  */
-/** Decisions that make no candidate the trusted value (they project `rejected` or `proposed`). */
 const VALUE_NEUTRAL_DECISIONS: ReadonlySet<ReviewWorkbenchDecision> = new Set(["reject-proposed", "could-not-confirm"]);
 
+/**
+ * The candidate a workbench decision applies to.
+ *
+ * Selection is by role, so the role has to name exactly one candidate before a
+ * decision may trust it. Guarding the render path alone let the workbench emit
+ * an undecidable decision through the export path and then present a different
+ * candidate's value against it; this is the shared selector all of those go
+ * through, which is why the check belongs here rather than at each of them.
+ *
+ * A decision that would make one of several candidates in its role the trusted
+ * value is refused: picking the first would settle the conflict for the
+ * reviewer without showing it. A value-neutral decision (reject, could not
+ * confirm) on such an item selects none of them. It still returns the first
+ * candidate so in-process callers that need one candidate (rendering, the
+ * in-memory `ReviewWorkbenchResult`) have one, but that anchor is not recorded:
+ * {@link decisionCandidateId} is `undefined` for it, so the decision, its
+ * session events and the canonical projection name no candidate.
+ */
 export function candidateForDecision(item: ReviewItem, decision: ReviewWorkbenchDecision): ReviewCandidate {
   const definition = workbenchDecisionDefinitions[decision];
   const matches = item.spec.candidates.filter((entry) => entry.role === definition.candidateRole);
@@ -258,19 +269,27 @@ export function candidateForDecision(item: ReviewItem, decision: ReviewWorkbench
   if (!candidate) {
     throw new Error(`ReviewItem ${item.metadata.name} has no ${definition.candidateRole} candidate.`);
   }
-  // A decision names a role, not a value. With several candidates in that role
-  // (conflicting values for one claim), a decision that would make one of them
-  // the trusted value is refused: picking the first would settle the conflict
-  // for the reviewer without showing it. Rejecting every proposed value, or
-  // ending the round as could-not-confirm, trusts none of them, so those are
-  // recorded against the first candidate as the set's anchor and project
-  // `rejected` / `proposed`, never `verified`.
   if (matches.length > 1 && !VALUE_NEUTRAL_DECISIONS.has(decision)) {
     throw new Error(`ReviewItem ${item.metadata.name} has ${matches.length} ${definition.candidateRole} candidates; the ${decision} decision cannot choose between them.`);
   }
   assertSoleCandidateId(item, candidate.id);
 
   return candidate;
+}
+
+/** Whether a decision on this item selects no candidate at all (see {@link candidateForDecision}). */
+export function decisionSelectsNoCandidate(item: ReviewItem, decision: ReviewWorkbenchDecision): boolean {
+  const role = workbenchDecisionDefinitions[decision].candidateRole;
+  return VALUE_NEUTRAL_DECISIONS.has(decision) && item.spec.candidates.filter((entry) => entry.role === role).length > 1;
+}
+
+/**
+ * The candidate id a decision records: the selected candidate's, or
+ * `undefined` when the decision selects no candidate.
+ */
+export function decisionCandidateId(item: ReviewItem, decision: ReviewWorkbenchDecision): string | undefined {
+  const candidate = candidateForDecision(item, decision);
+  return decisionSelectsNoCandidate(item, decision) ? undefined : candidate.id;
 }
 
 /**
@@ -378,7 +397,7 @@ export function buildReviewSessionEvents(
       throw new Error(`ReviewItem ${item.metadata.name} could not confirm requires a non-empty reason.`);
     }
 
-    const candidate = candidateForDecision(item, decision);
+    const candidateId = decisionCandidateId(item, decision);
     const definition = workbenchDecisionDefinitions[decision];
     const reviewDecisionName = `${item.metadata.name}-${decision}`;
     // Carry the reviewer's inline edit in the event itself (accept-proposed
@@ -409,7 +428,7 @@ export function buildReviewSessionEvents(
       occurredAt: session.reviewedAt,
       reviewItemName: item.metadata.name,
       reviewDecisionName,
-      candidateId: candidate.id,
+      ...(candidateId !== undefined ? { candidateId } : {}),
       status: definition.status,
       ...(decision === "could-not-confirm"
         ? {
@@ -427,7 +446,7 @@ export function buildReviewSessionEvents(
       occurredAt: session.reviewedAt,
       reviewItemName: item.metadata.name,
       reviewDecisionName,
-      candidateId: candidate.id,
+      ...(candidateId !== undefined ? { candidateId } : {}),
       status: definition.status,
       rationale: note,
       ...(decision === "could-not-confirm"

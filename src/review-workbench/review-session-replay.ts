@@ -1,6 +1,7 @@
 import type { ReviewSessionEvent } from "../review-resource.js";
 import {
   candidateForDecision,
+  decisionSelectsNoCandidate,
   isClearedWorkbenchDecisionEvent,
   workbenchDecisionDefinitions,
   type ReviewQueueSessionState,
@@ -95,19 +96,21 @@ export function validateReviewSessionEventsForSnapshot(
       } else if (itemName && itemsByName.has(itemName)) {
         const item = itemsByName.get(itemName);
         const expectedCandidate = item ? candidateForDecision(item, decision) : undefined;
+        // A decision that selects no candidate must reference none.
+        const expectedCandidateId = item && !decisionSelectsNoCandidate(item, decision) ? expectedCandidate?.id : undefined;
         const expectedStatus = workbenchDecisionDefinitions[decision].status;
 
         const referencedCandidateExists = event.spec.candidateId
           ? item?.spec.candidates.some((candidate) => candidate.id === event.spec.candidateId)
           : false;
 
-        if (expectedCandidate && (!event.spec.candidateId || referencedCandidateExists) && event.spec.candidateId !== expectedCandidate.id) {
+        if (expectedCandidate && (!event.spec.candidateId || referencedCandidateExists) && event.spec.candidateId !== expectedCandidateId) {
           issues.push({
             ...eventRef,
             code: "decision-candidate-mismatch",
             reviewItemName: itemName,
             candidateId: event.spec.candidateId,
-            message: `ReviewSessionEvent ${event.metadata.name} decision ${decision} expects candidate ${expectedCandidate.id}, but references ${event.spec.candidateId ?? "no candidate"}.`,
+            message: `ReviewSessionEvent ${event.metadata.name} decision ${decision} expects ${expectedCandidateId ? `candidate ${expectedCandidateId}` : "no candidate"}, but references ${event.spec.candidateId ?? "no candidate"}.`,
           });
         }
 

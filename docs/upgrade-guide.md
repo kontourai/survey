@@ -533,9 +533,16 @@ The projected claim value is unchanged for mappings built by
   workbench, the session event builders, and the MCP decide tool) throws for
   `accept-proposed` or `keep-current` when the decision's role names more than
   one candidate, instead of using the first. `reject-proposed` and
-  `could-not-confirm` stay available on a `conflict` item and are recorded
-  against its first candidate; `keepActionDecision` returns `reject-proposed`
-  for such an item. `buildCanonicalReviewedTrustInput` now projects a
+  `could-not-confirm` stay available on a `conflict` item and select no
+  candidate (`decisionSelectsNoCandidate`, `decisionCandidateId`): the decision
+  and its events carry no `candidateId`, and `keepActionDecision` returns
+  `reject-proposed` for such an item. `CandidateSetStatus` gains `rejected`
+  (every candidate rejected, none selected). `buildSurveyTrustBundle` projects
+  a claim whose candidate set has several candidates, no `selectedCandidateId`
+  and no claim `candidateId` as a set-level claim (its own value, null from the
+  canonical path; every value in `metadata.survey.candidates`; one evidence
+  record per candidate; never `verified`) instead of silently using the first
+  candidate. `buildCanonicalReviewedTrustInput` now projects a
   could-not-confirm on a `conflict` or `escalated` item as `disputed`, the
   status Surface projection already required for it.
 - **Partial runs and confidence.** The importer accepts the partial reasons

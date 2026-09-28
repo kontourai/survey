@@ -88,10 +88,23 @@ decision against a candidate role, so none of them can choose one of several
   conflict by picking the first value, and the workbench and MCP card offer no
   accept control;
 - rejecting all values (`reject-proposed`) and `could-not-confirm` are
-  allowed, because they trust no value. They are recorded against the first
-  candidate as the set's anchor. Reject projects the claim `rejected`;
-  could-not-confirm keeps the pre-review posture of a conflict, `disputed`.
-  Neither projects `verified`, and the round can complete.
+  allowed, because they trust no value, and the round can complete. They
+  select no candidate, and no record singles one out:
+  - the `ReviewDecision` and its session events carry no `candidateId`;
+  - the `CandidateSet` has no `selectedCandidateId`; after reject-all its status
+    is `rejected` and every proposed candidate carries a `rejectionReason` (the
+    reviewer's note, or a fixed sentence), so each gets its own
+    `learning.rejected-candidate`; after could-not-confirm it stays `conflict`;
+  - the `ReviewOutcome` and the claim carry no `candidateId`;
+  - the Surface claim has `value: null` (Surface requires the key; no one value
+    is the claim's), lists every value in `metadata.survey.candidates`, has one
+    evidence record per candidate, and is `rejected` (reject-all) or
+    `disputed` (could-not-confirm, the pre-review posture of a conflict). It
+    can never be `verified`.
+
+  The in-memory `ReviewWorkbenchResult` still fills `selectedCandidate*` with
+  the role's first candidate because its type requires one; nothing above reads
+  it.
 
 Both cards list every value and label the item as a conflict. Surface's
 reviewed-extraction profile refuses items with more than one candidate.

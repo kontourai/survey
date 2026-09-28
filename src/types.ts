@@ -32,7 +32,11 @@ export interface Extraction {
   metadata?: Record<string, unknown>;
 }
 
-export type CandidateSetStatus = "resolved" | "needs-review" | "conflict" | "escalated";
+/**
+ * `rejected`: a review rejected every candidate in the set and selected none
+ * (for example rejecting all conflicting values for one claim).
+ */
+export type CandidateSetStatus = "resolved" | "needs-review" | "conflict" | "escalated" | "rejected";
 export type EscalationDimension = "framing" | "completeness" | "conclusion" | "citation";
 
 export interface Candidate {

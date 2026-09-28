@@ -11,7 +11,7 @@ import { SURVEY_INPUT_CONTRACT_VERSION } from "./types.js";
 import type { ReviewCandidate, ReviewItem } from "./review-resource.js";
 import { canonicalJson } from "./review-workbench/canonical.js";
 import type { ReviewWorkbenchResult } from "./review-workbench/review-workbench.js";
-import { workbenchDecisionDefinitions } from "./review-workbench/review-queue-session.js";
+import { decisionSelectsNoCandidate, workbenchDecisionDefinitions } from "./review-workbench/review-queue-session.js";
 
 export interface BuildCanonicalReviewedTrustInputOptions {
   /** Producer identity for the resulting SurveyInput batch. */
@@ -69,17 +69,26 @@ export function buildCanonicalReviewedTrustInput(
       throw new Error(`ReviewItem ${item.metadata.name} has no canonical server-applied result.`);
     }
     assertCanonicalResult(item, result);
+    // Reject-all or could-not-confirm on a conflict selects no candidate: the
+    // set, the review outcome and the claim then name none of its values.
+    const selectsNone = decisionSelectsNoCandidate(item, result.decision);
+    const rejectsAll = selectsNone && result.decision === "reject-proposed";
+    const rejectedRole = workbenchDecisionDefinitions[result.decision].candidateRole;
+    const rejectAllReason = result.rationale?.trim() || "Every proposed value for this claim was rejected.";
 
     const candidates = item.spec.candidates.map((candidate) => {
-      const records = projectCandidate(item, candidate);
+      const records = projectCandidate(item, rejectsAll && candidate.role === rejectedRole
+        ? { ...candidate, rejectionReason: candidate.rejectionReason ?? rejectAllReason }
+        : candidate);
       addConsistent(rawSources, records.rawSource, "raw source");
       addConsistent(extractions, records.extraction, "extraction");
       return records.candidate;
     });
 
-    const selected = item.spec.candidates.find((candidate) => candidate.id === result.selectedCandidateId)!;
-    const selectedRecordId = selected.projection?.candidateId ?? selected.id;
-    const candidateSetId = selected.projection?.candidateSetId
+    const selected = selectsNone ? undefined : item.spec.candidates.find((candidate) => candidate.id === result.selectedCandidateId)!;
+    const selectedRecordId = selected ? selected.projection?.candidateId ?? selected.id : undefined;
+    // Every candidate carries the same candidate-set id (checked below).
+    const candidateSetId = (selected ?? item.spec.candidates[0])?.projection?.candidateSetId
       ?? item.spec.projection?.candidateSetId
       ?? `${item.metadata.name}.candidates`;
     if (candidates.some((candidate) => candidate.metadata?.candidateSetId !== candidateSetId)) {
@@ -95,10 +104,10 @@ export function buildCanonicalReviewedTrustInput(
           ? { metadata: Object.fromEntries(Object.entries(metadata).filter(([key]) => key !== "candidateSetId")) }
           : {}),
       })),
-      selectedCandidateId: selectedRecordId,
+      ...(selectedRecordId !== undefined ? { selectedCandidateId: selectedRecordId } : {}),
       status: result.decision === "could-not-confirm"
         ? (item.spec.candidateSetStatus ?? "needs-review")
-        : "resolved",
+        : rejectsAll ? "rejected" : "resolved",
       ...(result.rationale ?? item.spec.rationale
         ? { rationale: result.rationale ?? item.spec.rationale }
         : {}),
@@ -107,12 +116,12 @@ export function buildCanonicalReviewedTrustInput(
 
     const decision = result.reviewDecision.spec;
     const reviewOutcomeId = decision.projection?.reviewOutcomeId
-      ?? selected.projection?.reviewOutcomeId
+      ?? (selected ?? item.spec).projection?.reviewOutcomeId
       ?? `${item.metadata.name}.${result.decision}.review-outcome`;
     const reviewOutcome: ReviewOutcome = {
       id: reviewOutcomeId,
       candidateSetId,
-      candidateId: selectedRecordId,
+      ...(selectedRecordId !== undefined ? { candidateId: selectedRecordId } : {}),
       status: result.status,
       ...(decision.resolution ? { resolution: decision.resolution } : {}),
       ...(decision.resolutionReason ? { resolutionReason: decision.resolutionReason } : {}),
@@ -131,27 +140,30 @@ export function buildCanonicalReviewedTrustInput(
     };
     addConsistent(reviewOutcomes, reviewOutcome, "review outcome");
 
-    const hint = selected.claimTarget;
+    // Every candidate names the same claim target (checked by assertCanonicalResult).
+    const hint = (selected ?? item.spec.candidates[0]!).claimTarget;
     assertSingleProjectionId("claim", item.metadata.name, [
       decision.projection?.claimId,
       item.spec.projection?.claimId,
       ...item.spec.candidates.flatMap((candidate) => [candidate.projection?.claimId, candidate.claimTarget.claimId]),
     ]);
     const claimId = decision.projection?.claimId
-      ?? selected.projection?.claimId
+      ?? selected?.projection?.claimId
       ?? item.spec.projection?.claimId
       ?? hint.claimId
       ?? `${item.metadata.name}.claim`;
     const claim: ClaimTarget = {
       id: claimId,
       candidateSetId,
-      candidateId: selectedRecordId,
+      ...(selectedRecordId !== undefined ? { candidateId: selectedRecordId } : {}),
       subjectType: hint.subjectType,
       subjectId: hint.subjectId,
       facet: hint.facet,
       claimType: hint.claimType,
       fieldOrBehavior: hint.fieldOrBehavior,
-      value: result.effectiveValue,
+      // Surface requires a claim value; a claim that selects none of its
+      // candidates carries null, and buildSurveyTrustBundle lists every value.
+      value: selectsNone ? null : result.effectiveValue,
       // Could-not-confirm keeps the pre-review posture, and a conflicting or
       // escalated candidate set is disputed before any review (see
       // docs/decisions/could-not-confirm.md), never merely proposed.
@@ -163,7 +175,7 @@ export function buildCanonicalReviewedTrustInput(
       ...(hint.evidenceType ? { evidenceType: hint.evidenceType } : {}),
       ...(hint.evidenceMethod ? { evidenceMethod: hint.evidenceMethod } : {}),
       ...(hint.derivedFrom ? { derivedFrom: [...hint.derivedFrom] } : {}),
-      collectedBy: hint.collectedBy ?? selected.extraction.extractor ?? options.source,
+      collectedBy: hint.collectedBy ?? sharedExtractor(selected ? [selected] : item.spec.candidates) ?? options.source,
       ...(decision.actor?.id ? { actor: decision.actor.id } : {}),
     };
     addConsistent(claims, claim, "claim target");
@@ -202,7 +214,7 @@ function assertCanonicalResult(item: ReviewItem, result: ReviewWorkbenchResult):
   const decision = result.reviewDecision.spec;
   const definition = workbenchDecisionDefinitions[result.decision];
   if (decision.reviewItemName !== item.metadata.name
-    || decision.candidateId !== result.selectedCandidateId
+    || decision.candidateId !== (decisionSelectsNoCandidate(item, result.decision) ? undefined : result.selectedCandidateId)
     || decision.status !== result.status
     || decision.status !== definition.status
     || decision.rationale !== result.rationale
@@ -319,4 +331,10 @@ function assertSingleProjectionId(label: string, itemName: string, values: reado
   if (ids.size > 1) {
     throw new Error(`ReviewItem ${itemName} carries conflicting ${label} projection ids.`);
   }
+}
+
+/** The extractor every candidate shares, or undefined when they differ. */
+function sharedExtractor(candidates: readonly ReviewCandidate[]): string | undefined {
+  const extractors = new Set(candidates.map((candidate) => candidate.extraction.extractor));
+  return extractors.size === 1 ? [...extractors][0] : undefined;
 }

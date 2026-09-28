@@ -8,6 +8,7 @@ import { z } from "zod";
 import {
   buildReviewSessionEvents,
   currentReviewItem,
+  decisionSelectsNoCandidate,
   deriveQueueRowStatus,
   initialReviewQueueSessionState,
   nextUnresolvedItemName,
@@ -311,7 +312,7 @@ ${conflict ? `<p class="feedback" id="conflict-note">${proposedCandidates.length
 
 <div class="btn-row">
   ${conflict ? "" : `<button class="btn btn-accept${decision === "accept-proposed" ? " active" : ""}" id="btn-accept">Accept proposed</button>`}
-  <button class="btn btn-hold${decision === "keep-current" ? " active" : ""}" id="btn-hold">Hold / Keep current</button>
+  ${currentCandidate ? `<button class="btn btn-hold${decision === "keep-current" ? " active" : ""}" id="btn-hold">Hold / Keep current</button>` : ""}
   <button class="btn btn-reject${decision === "reject-proposed" ? " active" : ""}" id="btn-reject">${conflict ? "Reject all values" : "Reject proposed"}</button>
   <button class="btn btn-unconfirmed${decision === "could-not-confirm" ? " active" : ""}" id="btn-unconfirmed">Could not confirm</button>
 </div>
@@ -345,7 +346,8 @@ ${conflict ? `<p class="feedback" id="conflict-note">${proposedCandidates.length
 
   var acceptButton = document.getElementById('btn-accept');
   if (acceptButton) acceptButton.addEventListener('click', function () { postDecision('accept'); document.getElementById('feedback').textContent = 'Submitting accept…'; });
-  document.getElementById('btn-hold').addEventListener('click', function () { postDecision('hold'); document.getElementById('feedback').textContent = 'Submitting hold…'; });
+  var holdButton = document.getElementById('btn-hold');
+  if (holdButton) holdButton.addEventListener('click', function () { postDecision('hold'); document.getElementById('feedback').textContent = 'Submitting hold…'; });
   document.getElementById('btn-reject').addEventListener('click', function () { postDecision('reject'); document.getElementById('feedback').textContent = 'Submitting reject…'; });
   document.getElementById('btn-unconfirmed').addEventListener('click', function () { if (postDecision('could-not-confirm')) document.getElementById('feedback').textContent = 'Submitting could not confirm…'; });
 
@@ -544,10 +546,11 @@ async function toolDecide(
   const itemText = updatedItem ? itemDetailText(updatedItem, snapshot, newEvents) : `Item: ${itemName}`;
   const remainingText = queueSummaryText(snapshot, newEvents);
   const definition = workbenchDecisionDefinitions[wbDecision];
+  const conflictRejected = wbDecision === "reject-proposed" && updatedItem !== undefined && decisionSelectsNoCandidate(updatedItem, wbDecision);
 
   const text = [
-    `Decision recorded: ${definition.label}`,
-    `Effect: ${definition.effect}`,
+    `Decision recorded: ${conflictRejected ? "Reject all values" : definition.label}`,
+    `Effect: ${conflictRejected ? "Every proposed value is rejected; none becomes the claim's value." : definition.effect}`,
     "",
     itemText,
     "",

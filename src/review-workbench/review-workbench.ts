@@ -2,6 +2,8 @@ import { canonicalJson } from "./canonical.js";
 import { assertReviewResolutionConsistency } from "../producer-discipline.js";
 import {
   candidateForDecision,
+  decisionCandidateId,
+  decisionSelectsNoCandidate,
   keepActionDecision,
   buildReviewSessionEvent,
   buildReviewSessionEvents,
@@ -102,6 +104,8 @@ export {
   buildReviewSessionEvent,
   buildReviewSessionResource,
   candidateForDecision,
+  decisionCandidateId,
+  decisionSelectsNoCandidate,
   keepActionDecision,
   currentReviewItem,
   currentReviewWorkbenchState,
@@ -179,11 +183,15 @@ export function buildReviewDecision(state: ReviewWorkbenchState): ReviewDecision
     throw new Error("Could not confirm requires a non-empty reason.");
   }
   const candidate = candidateForDecision(state.item, state.decision);
+  // A decision that selects no candidate (a value-neutral decision on a
+  // conflict) records no candidate id and no candidate's projection hints.
+  const selectsNone = decisionSelectsNoCandidate(state.item, state.decision);
   const projection = {
-    ...candidate.projection,
-    reviewOutcomeId: candidate.projection?.reviewOutcomeId
+    ...(selectsNone ? state.item.spec.projection : candidate.projection),
+    reviewOutcomeId: (selectsNone ? state.item.spec.projection : candidate.projection)?.reviewOutcomeId
       ?? `${state.item.metadata.name}:${state.decision}:review-outcome`,
   };
+  const candidateProjection = selectsNone ? undefined : candidate.projection;
   const authorizing = buildDecisionCardAuthorizing(state);
 
   const reviewDecision: ReviewDecision = {
@@ -196,7 +204,7 @@ export function buildReviewDecision(state: ReviewWorkbenchState): ReviewDecision
     },
     spec: {
       reviewItemName: state.item.metadata.name,
-      candidateId: candidate.id,
+      ...(selectsNone ? {} : { candidateId: candidate.id }),
       status: definition.status,
       ...(state.decision === "could-not-confirm"
         ? {
@@ -217,7 +225,7 @@ export function buildReviewDecision(state: ReviewWorkbenchState): ReviewDecision
         : {}),
     },
     status: {
-      ...(candidate.projection?.claimId ? { appliedToClaimIds: [candidate.projection.claimId] } : {}),
+      ...(candidateProjection?.claimId ? { appliedToClaimIds: [candidateProjection.claimId] } : {}),
     },
   };
   assertReviewResolutionConsistency(`ReviewDecision ${reviewDecision.metadata.name}`, {
@@ -428,6 +436,14 @@ export interface BrowserReviewWorkbenchConfig {
   readonly startState?: ReviewQueueSessionState | ReviewWorkbenchState;
 }
 
+/**
+ * The in-process outcome of one workbench decision, derived from the session.
+ * For a decision that selects no candidate ({@link decisionSelectsNoCandidate}:
+ * reject-all or could-not-confirm on a conflict), `selectedCandidate*` and
+ * `selectedValue` hold the role's first candidate only because the type needs
+ * one; `reviewDecision.spec.candidateId` is absent and
+ * `buildCanonicalReviewedTrustInput` selects nothing.
+ */
 export interface ReviewWorkbenchResult {
   readonly reviewItemName: string;
   readonly decision: ReviewWorkbenchDecision;
@@ -1807,7 +1823,7 @@ function createReviewWorkbenchController(
     const session = sessionForEvent;
     const item = itemName ? session.items.find((entry) => entry.metadata.name === itemName) : undefined;
     const decision = itemName ? session.decisionsByItemName[itemName] : undefined;
-    const candidate = item && decision ? candidateForDecision(item, decision) : undefined;
+    const candidateId = item && decision ? decisionCandidateId(item, decision) : undefined;
     const definition = decision ? workbenchDecisionDefinitions[decision] : undefined;
     const note = itemName ? session.notesByItemName[itemName] : undefined;
     // Carry the reviewer's inline edit in the event (accept-proposed only), so
@@ -1831,7 +1847,7 @@ function createReviewWorkbenchController(
       occurredAt: session.reviewedAt,
       reviewItemName: itemName,
       reviewDecisionName: item && decision ? `${item.metadata.name}-${decision}` : undefined,
-      candidateId: candidate?.id,
+      candidateId,
       status: definition?.status,
       ...(decision === "could-not-confirm"
         ? {
