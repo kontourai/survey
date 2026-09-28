@@ -294,14 +294,17 @@ describe("proposals without a proposer confidence (#287)", () => {
     assert.equal(claims[0]!.value, 48000);
     assert.equal(Object.hasOwn(claims[0]!.confidenceBasis ?? {}, "extractionConfidence"), false);
     assert.equal(Object.hasOwn(surveyInput.extractions[0]!, "confidence"), false);
+    // Absent in memory too, not only after JSON drops an undefined key.
+    assert.equal(Object.hasOwn(bundle.claims[0]!.confidenceBasis ?? {}, "extractionConfidence"), false);
+    assert.equal(Object.hasOwn(bundle.evidence[0]!.metadata ?? {}, "confidence"), false);
     const calibration = deriveCalibration(surveyInput);
     assert.equal(calibration.skippedCount, 1);
     assert.equal(calibration.sampleCount, 0);
   });
 
-  it("refuses by name to hand a record without confidence to Surface's reviewed-extraction profile", async () => {
-    const { record } = importExtractionEnvelope(await traverseFixture("success-no-confidence"), options());
-    assert.throws(() => toSurfaceReviewedExtractionImport(record), /requires a proposer confidence on every proposal; proposal 0 of vendor-import reports none/);
+  // A record without confidence is exported or refused depending on the
+  // resolved Surface; tests/surface-reviewed-extraction.test.ts covers both.
+  it("hands a record whose proposals all report confidence to Surface unchanged", async () => {
     const reported = importExtractionEnvelope(await traverseFixture("success-conflicting-fee"), options()).record;
     assert.equal(toSurfaceReviewedExtractionImport(reported), reported);
   });

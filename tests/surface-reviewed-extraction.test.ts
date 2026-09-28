@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import { projectReviewedExtractionEvidence, restoreReviewedExtractionEvidence } from "@kontourai/surface";
+import { surfaceAcceptsAbsentConfidence } from "../src/surface-reviewed-extraction.js";
 import {
   importExtractionEnvelope,
   toSurfaceReviewedExtractionDecision,
@@ -59,11 +60,19 @@ function project(imported: ReturnType<typeof importExtractionEnvelope>, index: n
 
 /** Major version of the Surface this test run resolved (CI pins each supported major). */
 async function installedSurfaceMajor(): Promise<number> {
+  return (await installedSurfaceVersion())[0];
+}
+
+/** [major, minor] of the Surface this test run resolved, read independently of the module under test. */
+async function installedSurfaceVersion(): Promise<[number, number]> {
   let dir = new URL(".", import.meta.resolve("@kontourai/surface"));
   for (;;) {
     try {
       const pkg = JSON.parse(await readFile(new URL("package.json", dir), "utf8")) as { name?: string; version?: string };
-      if (pkg.name === "@kontourai/surface" && typeof pkg.version === "string") return Number(pkg.version.split(".")[0]);
+      if (pkg.name === "@kontourai/surface" && typeof pkg.version === "string") {
+        const [major, minor] = pkg.version.split(".").map(Number);
+        return [major!, minor!];
+      }
     } catch { /* keep walking up */ }
     const parent = new URL("..", dir);
     if (parent.href === dir.href) throw new Error("installed @kontourai/surface package.json not found");
@@ -162,6 +171,34 @@ describe("surface reviewed-extraction bridge", () => {
       assert.deepEqual(projection.gaps, []);
       assert.equal(restoreReviewedExtractionEvidence(projection.evidence).evidenceId, `bridge-evidence-model-${index}`);
     }
+  });
+
+  it("a confidence-less import exports and restores through Surface 4.1+, and is refused by name before it", async () => {
+    const envelope = JSON.parse(await readFile(fixtureUrl, "utf8")) as PortableExtractionResultEnvelope;
+    for (const proposal of envelope.result.proposals) delete proposal.confidence;
+    const imported = importExtractionEnvelope(envelope, options());
+    const item = imported.reviewItems[0]!;
+    assert.equal(Object.hasOwn(item.spec.candidates[0]!, "confidence"), false);
+
+    const [major, minor] = await installedSurfaceVersion();
+    if (major > 4 || (major === 4 && minor >= 1)) {
+      const exported = toSurfaceReviewedExtractionImport(imported.record);
+      assert.equal(Object.hasOwn(exported.spec.envelope.result.proposals[0]!, "confidence"), false, "no confidence is substituted");
+      const projection = project(imported, 0);
+      assert.deepEqual(projection.gaps, [], JSON.stringify(projection.gaps));
+      assert.equal(projection.evidence.supportStrength, "entails");
+      const restored = restoreReviewedExtractionEvidence(projection.evidence);
+      assert.equal(restored.evidenceId, "bridge-evidence-model-0");
+      assert.equal(Object.hasOwn(restored.importRecord.spec.envelope.result.proposals[0]!, "confidence"), false);
+      assert.equal(Object.hasOwn(restored.reviewItem!.spec.candidates[0]!, "confidence"), false);
+    } else {
+      assert.throws(() => toSurfaceReviewedExtractionImport(imported.record), new RegExp(`@kontourai/surface ${major}\\.${minor}\\.\\d+ requires a proposer confidence on every proposal \\(4\\.1\\.0 and later do not\\); proposal 0 of bridge-fixture-import reports none`));
+    }
+  });
+
+  it("reads 4.1.0 as the first Surface that accepts an absent confidence", () => {
+    for (const version of ["2.13.0", "3.3.0", "4.0.0", "4.0.9", "not-a-version", ""]) assert.equal(surfaceAcceptsAbsentConfidence(version), false, version);
+    for (const version of ["4.1.0", "4.2.0", "4.10.0", "5.0.0", "4.1.0-rc.1"]) assert.equal(surfaceAcceptsAbsentConfidence(version), true, version);
   });
 
   it("a rejected decision degrades to cited support with the typed gap, through the same bridge", async () => {

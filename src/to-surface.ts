@@ -82,6 +82,16 @@ export interface BuildSurveyTrustBundleOptions {
 }
 
 /**
+ * The evidence's own `confidence` replaces any a metadata spread carried. When
+ * the extraction reported none, the key is removed rather than set to
+ * undefined, so absence is absence in memory as well as on the wire.
+ */
+function withoutUndefinedConfidence(metadata: Record<string, unknown>): Record<string, unknown> {
+  if (metadata.confidence === undefined) delete metadata.confidence;
+  return metadata;
+}
+
+/**
  * Thrown when a claim's trusted status or value does not agree with the review
  * outcome it cites, or when the governing review cannot be chosen.
  * - `status-mismatch`: a `verified`/`assumed` claim cites a review whose status differs.
@@ -160,7 +170,8 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
       derivationEdges: projection.derivationEdges,
       confidenceBasis: {
         sourceQuality: "moderate",
-        extractionConfidence: candidate.confidence ?? extraction.confidence,
+        // An absent confidence stays absent; no key, no default.
+        ...((candidate.confidence ?? extraction.confidence) !== undefined ? { extractionConfidence: candidate.confidence ?? extraction.confidence } : {}),
         // An auto-accept policy checked nothing but the proposer's own
         // confidence, so its claims carry system authority and weak evidence;
         // only a human review earns operator authority.
@@ -253,7 +264,7 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
       observedAt: rawSource.observedAt,
       collectedBy: projection.collectedBy,
       integrityRef: rawSource.checksum,
-      metadata: {
+      metadata: withoutUndefinedConfidence({
         ...rawSource.metadata,
         ...extraction.metadata,
         ...candidate.metadata,
@@ -262,7 +273,7 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
         locatorScheme: rawSource.locatorScheme,
         ...(rawSource.resolution ? { provenanceResolution: rawSource.resolution } : {}),
         confidence: candidate.confidence ?? extraction.confidence,
-      },
+      }),
     });
 
     const rationale = projectionReview?.rationale ?? candidateSet.rationale;
