@@ -102,9 +102,13 @@ decision against a candidate role, so none of them can choose one of several
     `disputed` (could-not-confirm, the pre-review posture of a conflict). It
     can never be `verified`.
 
-  The in-memory `ReviewWorkbenchResult` still fills `selectedCandidate*` with
-  the role's first candidate because its type requires one; nothing above reads
-  it.
+  The `ReviewWorkbenchResult` for such a decision has no `selectedCandidate*`,
+  `selectedValue`, or `effective*` fields and lists every candidate in
+  `unselectedCandidates`; `buildReviewResultPresentation` shows no selected
+  value and names each candidate as rejected or unconfirmed; the apply-action
+  mapping produces no action. With `reviewProofs: true`, the set-level claim
+  gets no integrity anchor, because an anchor commits one reviewed candidate and
+  this claim has none; it is never `verified` or `assumed`.
 
 Both cards list every value and label the item as a conflict. Surface's
 reviewed-extraction profile refuses items with more than one candidate.
@@ -167,7 +171,8 @@ importer accepts:
   `output-truncated` (a dispatched chunk was not fully read or answered), next
   to the early stops `cancelled`, `max-provider-calls`, `max-total-tokens`, and
   `max-chunks`. An envelope with one of the three loss reasons must carry a
-  coverage entry that is not `complete`, and a `success` outcome must not carry
+  coverage entry that is not `complete` for a dispatched chunk (a
+  `not-dispatched` range alone is an early stop, not that loss), and a `success` outcome must not carry
   one, so the outcome and the coverage cannot disagree.
 - `result.proposals[].confidence` may be absent: it is the proposer's
   uncalibrated self-report. When present it must be a finite number in `0..1`

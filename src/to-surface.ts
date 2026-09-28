@@ -318,6 +318,10 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
  * is presented: the claim value is the projection's own (null from the
  * canonical path), every candidate is listed in `metadata.survey.candidates`
  * and backed by its own evidence record, and the status can never be trusted.
+ * A review that names one candidate cannot apply to such a claim and is
+ * refused rather than dropped. With `reviewProofs`, no integrity anchor is
+ * attached: the anchor commits one reviewed candidate, and this claim has none
+ * (it is never `verified` or `assumed`).
  */
 function projectUnselectedSetClaim(context: {
   input: SurveyInput;
@@ -332,7 +336,12 @@ function projectUnselectedSetClaim(context: {
   events: VerificationEvent[];
 }): void {
   const { input, projection, candidateSet, projectionContextId } = context;
-  const reviews = (context.reviewsByCandidateSet.get(candidateSet.id) ?? []).filter((review) => !review.candidateId);
+  const setReviews = context.reviewsByCandidateSet.get(candidateSet.id) ?? [];
+  const candidateReviews = setReviews.filter((review) => review.candidateId);
+  if (candidateReviews.length) {
+    throw new Error(`Claim ${projection.id} names no candidate of set ${candidateSet.id}, but review ${candidateReviews.map((review) => review.id).join(", ")} is about candidate ${candidateReviews.map((review) => review.candidateId).join(", ")}: a candidate-level review needs a selectedCandidateId on the set or a candidateId on the claim.`);
+  }
+  const reviews = setReviews;
   const review = latestReview(reviews, projection.id);
   const setStatus = statusFor({ candidateSet, candidate: { id: "", extractionId: "", value: null } });
   const status = projection.status

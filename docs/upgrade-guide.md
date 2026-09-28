@@ -542,7 +542,24 @@ The projected claim value is unchanged for mappings built by
   and no claim `candidateId` as a set-level claim (its own value, null from the
   canonical path; every value in `metadata.survey.candidates`; one evidence
   record per candidate; never `verified`) instead of silently using the first
-  candidate. `buildCanonicalReviewedTrustInput` now projects a
+  candidate. If such a set also has a review that names one candidate, the
+  bundle now throws (before, the review was dropped and the claim projected the
+  first candidate's value): give the set a `selectedCandidateId` or the claim a
+  `candidateId`.
+- **`ReviewWorkbenchResult.selectedCandidate*` can be absent.** For a decision
+  that selects no candidate (reject-all or could-not-confirm on a `conflict`
+  item), `selectedCandidate`, `selectedCandidateId`, `selectedCandidateRole`,
+  `selectedValue`, `selectedDisplayValue`, `effectiveValue` and
+  `effectiveDisplayValue` are absent, `unselectedCandidates` holds every
+  candidate, and `ReviewResultPresentation.selectedValueText` is absent. Code
+  that reads the selected candidate to ground or attribute a result, for
+  example `result.selectedCandidate.id` or `result.selectedCandidateId!`, must
+  treat "no candidate" as its own case (nothing to apply or attribute) instead
+  of throwing or attributing the first candidate. Fieldwork's grounding and
+  attribution code (`result.selectedCandidate.projection`,
+  `candidates.find((c) => c.id === result.selectedCandidateId)`) is this
+  pattern: without that case it throws `Cannot attribute the reviewed claim`
+  or an unresolvable-decision error on such a result. `buildCanonicalReviewedTrustInput` now projects a
   could-not-confirm on a `conflict` or `escalated` item as `disputed`, the
   status Surface projection already required for it.
 - **Partial runs and confidence.** The importer accepts the partial reasons

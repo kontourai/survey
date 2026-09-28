@@ -197,24 +197,36 @@ export function buildCanonicalReviewedTrustInput(
 }
 
 function assertCanonicalResult(item: ReviewItem, result: ReviewWorkbenchResult): void {
-  const selected = item.spec.candidates.find((candidate) => candidate.id === result.selectedCandidateId);
-  if (!selected) {
-    throw new Error(`Review result ${result.reviewItemName} selects an unknown candidate.`);
-  }
-  if (canonicalJson(selected) !== canonicalJson(result.selectedCandidate)) {
-    throw new Error(`Review result ${result.reviewItemName} selected candidate does not match its canonical ReviewItem.`);
-  }
-  const unselected = item.spec.candidates.filter((candidate) => candidate.id !== selected.id);
-  if (canonicalJson(unselected) !== canonicalJson(result.unselectedCandidates)) {
-    throw new Error(`Review result ${result.reviewItemName} unselected candidates do not match its canonical ReviewItem.`);
-  }
-  if (result.selectedCandidateRole !== selected.role || canonicalJson(result.selectedValue) !== canonicalJson(selected.value)) {
-    throw new Error(`Review result ${result.reviewItemName} selected identity does not match its canonical ReviewItem.`);
+  const selectsNone = decisionSelectsNoCandidate(item, result.decision);
+  let selected: ReviewCandidate | undefined;
+  if (selectsNone) {
+    if (result.selectedCandidate !== undefined || result.selectedCandidateId !== undefined || result.selectedCandidateRole !== undefined
+      || result.selectedValue !== undefined || result.effectiveValue !== undefined || result.editedValue !== undefined) {
+      throw new Error(`Review result ${result.reviewItemName} names a selected value, but its ${result.decision} decision selects no candidate.`);
+    }
+    if (canonicalJson(item.spec.candidates) !== canonicalJson(result.unselectedCandidates)) {
+      throw new Error(`Review result ${result.reviewItemName} unselected candidates do not match its canonical ReviewItem.`);
+    }
+  } else {
+    selected = item.spec.candidates.find((candidate) => candidate.id === result.selectedCandidateId);
+    if (!selected) {
+      throw new Error(`Review result ${result.reviewItemName} selects an unknown candidate.`);
+    }
+    if (canonicalJson(selected) !== canonicalJson(result.selectedCandidate)) {
+      throw new Error(`Review result ${result.reviewItemName} selected candidate does not match its canonical ReviewItem.`);
+    }
+    const unselected = item.spec.candidates.filter((candidate) => candidate.id !== selected!.id);
+    if (canonicalJson(unselected) !== canonicalJson(result.unselectedCandidates)) {
+      throw new Error(`Review result ${result.reviewItemName} unselected candidates do not match its canonical ReviewItem.`);
+    }
+    if (result.selectedCandidateRole !== selected.role || canonicalJson(result.selectedValue) !== canonicalJson(selected.value)) {
+      throw new Error(`Review result ${result.reviewItemName} selected identity does not match its canonical ReviewItem.`);
+    }
   }
   const decision = result.reviewDecision.spec;
   const definition = workbenchDecisionDefinitions[result.decision];
   if (decision.reviewItemName !== item.metadata.name
-    || decision.candidateId !== (decisionSelectsNoCandidate(item, result.decision) ? undefined : result.selectedCandidateId)
+    || decision.candidateId !== selected?.id
     || decision.status !== result.status
     || decision.status !== definition.status
     || decision.rationale !== result.rationale
@@ -224,14 +236,17 @@ function assertCanonicalResult(item: ReviewItem, result: ReviewWorkbenchResult):
   if ((result.decision === "could-not-confirm") !== (decision.resolution === "could_not_confirm")) {
     throw new Error(`Review result ${result.reviewItemName} contradicts its canonical review resolution.`);
   }
-  const expectedEffective = result.editedValue !== undefined && result.decision === "accept-proposed"
-    ? result.editedValue
-    : selected.value;
-  if (canonicalJson(expectedEffective) !== canonicalJson(result.effectiveValue)) {
-    throw new Error(`Review result ${result.reviewItemName} effective value is not canonical.`);
+  if (selected) {
+    const expectedEffective = result.editedValue !== undefined && result.decision === "accept-proposed"
+      ? result.editedValue
+      : selected.value;
+    if (canonicalJson(expectedEffective) !== canonicalJson(result.effectiveValue)) {
+      throw new Error(`Review result ${result.reviewItemName} effective value is not canonical.`);
+    }
   }
+  const reference = selected ?? item.spec.candidates[0]!;
   for (const candidate of item.spec.candidates) {
-    if (canonicalJson(claimTargetIdentity(candidate.claimTarget)) !== canonicalJson(claimTargetIdentity(selected.claimTarget))) {
+    if (canonicalJson(claimTargetIdentity(candidate.claimTarget)) !== canonicalJson(claimTargetIdentity(reference.claimTarget))) {
       throw new Error(`ReviewItem ${item.metadata.name} candidates carry conflicting claim targets.`);
     }
   }

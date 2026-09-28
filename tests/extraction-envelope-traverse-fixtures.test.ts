@@ -24,6 +24,7 @@ import {
 import { deriveCalibration } from "../src/calibration.js";
 import { toSurfaceReviewedExtractionImport } from "../src/surface-reviewed-extraction.js";
 import { buildExtractionInspectorModel } from "../src/review-workbench/extraction-inspector.js";
+import { buildReviewResultPresentation } from "../src/review-workbench/review-presentation.js";
 import { buildReviewSessionEvents, candidateForDecision, keepActionDecision, reviewSessionSummary, type ReviewWorkbenchDecision } from "../src/review-workbench/review-queue-session.js";
 import { createServerReviewSessionRecord, deriveServerReviewSessionApplyResult } from "../src/review-workbench/server-review-session.js";
 import { spawn } from "node:child_process";
@@ -35,6 +36,7 @@ import { join } from "node:path";
 import {
   buildReviewWorkbenchResultsFromSession,
   initialReviewQueueSessionState,
+  mapReviewWorkbenchResultsToApplyActions,
   renderReviewWorkbenchHtml,
   type ReviewWorkbenchResult,
 } from "../src/review-workbench/review-workbench.js";
@@ -140,6 +142,25 @@ describe("typed partial reasons and per-chunk coverage (#286)", () => {
     const missing = await traverseFixture("partial-content-truncated");
     delete missing.result.coverage;
     assert.throws(() => importExtractionEnvelope(missing, options()), /partial reason content-truncated requires/);
+  });
+
+  it("rejects a loss reason whose only lost range was never dispatched", async () => {
+    const envelope = await traverseFixture("partial-max-chunks");
+    (envelope.result.outcome as { reason: string }).reason = "provider-failure";
+    envelope.result.partial = { reason: "provider-failure", completedChunks: 1, remainingChunks: 0 };
+    assert.throws(() => importExtractionEnvelope(envelope, options()), /requires a result\.coverage entry for a dispatched chunk/);
+  });
+
+  it("imports a bundled adapter's unusable tool input and the new warning codes", async () => {
+    const envelope = await traverseFixture("partial-unusable-tool-input");
+    assert.deepEqual(envelope.result.coverage, [{ chunk: 1, start: 0, end: 7, status: "unread", reason: "provider-failure" }]);
+    assert.ok(envelope.result.warningClassifications?.some((warning) => warning.category === "provider" && warning.code === "unusable-answer"));
+    const imported = importExtractionEnvelope(envelope, options());
+    assert.deepEqual(imported.reviewItems, []);
+    assert.deepEqual(imported.record.spec.envelope.result.warningClassifications, envelope.result.warningClassifications);
+    const normalization = await traverseFixture("partial-unusable-answer");
+    normalization.result.warningClassifications = [...normalization.result.warningClassifications!, { category: "normalization", code: "proposal-normalization" }];
+    assert.deepEqual(producer(importExtractionEnvelope(normalization, options()).reviewItems[0]!.spec.candidates[0]).warnings, normalization.result.warningClassifications);
   });
 
   it("rejects a success outcome whose coverage names unread text", async () => {
@@ -320,6 +341,22 @@ describe("one candidate set per claim slot (#289)", () => {
       const session = decidedSession(items, { [conflict.metadata.name]: decision, [sibling.metadata.name]: "accept-proposed" }, conflict.metadata.name);
       assert.equal(reviewSessionSummary(session).unresolved, 0);
       const results = buildReviewWorkbenchResultsFromSession(session);
+      const conflictResult = results.find((result) => result.reviewItemName === conflict.metadata.name)!;
+      for (const key of ["selectedCandidate", "selectedCandidateId", "selectedCandidateRole", "selectedValue", "selectedDisplayValue", "effectiveValue", "effectiveDisplayValue"]) {
+        assert.equal(Object.hasOwn(conflictResult, key), false, key);
+      }
+      assert.deepEqual(conflictResult.unselectedCandidates.map((candidate) => candidate.id), conflict.spec.candidates.map((candidate) => candidate.id));
+      const presentation = buildReviewResultPresentation(conflictResult, conflict);
+      assert.equal(presentation.selectedValueText, undefined);
+      assert.equal(presentation.applyMeaning, decision === "reject-proposed"
+        ? "Saved decision rejects every proposed value; none is applied"
+        : "Saved decision records that no proposed value could be confirmed; none is applied");
+      assert.deepEqual(presentation.traceRefs.map((ref) => [ref.label, ref.value]), [
+        ["Survey ReviewItem", conflict.metadata.name],
+        ...conflict.spec.candidates.map((candidate) => [decision === "reject-proposed" ? "Rejected candidate" : "Unconfirmed candidate", candidate.id]),
+      ]);
+      const actions = mapReviewWorkbenchResultsToApplyActions({ results, items, map: (context) => context.selectedCandidate.id });
+      assert.deepEqual(actions.map((action) => action.result.reviewItemName), [sibling.metadata.name]);
       const projected = project(items, results);
       assertConflictRoundProjection(projected.bundle, conflictStatus);
       assertNoValueSingledOut({ conflict, decision, projected, decisions: results.map((result) => result.reviewDecision), events: buildReviewSessionEvents(session, "round-1") });
@@ -338,6 +375,19 @@ describe("one candidate set per claim slot (#289)", () => {
       assertNoValueSingledOut({ conflict, decision, projected, decisions: applied.decisions, events });
     });
   }
+
+  it("refuses a candidate-level review on a claim that names no candidate of a multi-candidate set", () => {
+    const at = "2026-09-28T00:00:00.000Z";
+    const input = {
+      contractVersion: "1", source: "p", generatedAt: at,
+      rawSources: [{ id: "rs", kind: "uploaded-document" as const, sourceRef: "doc", observedAt: at, locatorScheme: "page" as const, checksum: "sha256:x" }],
+      extractions: [{ id: "ex", sourceId: "rs", extractor: "e", target: "fee", locator: "p1", extractedAt: at }],
+      candidateSets: [{ id: "cs", target: "fee", status: "needs-review" as const, candidates: [{ id: "a", extractionId: "ex", value: 1 }, { id: "b", extractionId: "ex", value: 2 }] }],
+      claims: [{ id: "c", candidateSetId: "cs", subjectType: "s", subjectId: "1", facet: "f", claimType: "t", fieldOrBehavior: "fee", impactLevel: "low" as const, collectedBy: "p" }],
+      reviewOutcomes: [{ id: "ro", candidateSetId: "cs", candidateId: "a", status: "verified" as const, actor: "r", reviewedAt: at }],
+    } as unknown as Parameters<typeof buildSurveyTrustBundle>[0];
+    assert.throws(() => buildSurveyTrustBundle(input), /Claim c names no candidate of set cs, but review ro is about candidate a: a candidate-level review needs a selectedCandidateId on the set or a candidateId on the claim/);
+  });
 
   it("could-not-confirm on an escalated item that is not a conflict projects disputed", async () => {
     const [imported] = importExtractionEnvelope(await traverseFixture("success-no-confidence"), options()).reviewItems;

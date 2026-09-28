@@ -68,7 +68,8 @@ export interface ReviewResultPresentation {
   readonly target: string;
   readonly targetLabel: string;
   readonly decisionLabel: string;
-  readonly selectedValueText: string;
+  /** Absent when the decision selects no candidate (reject-all or could-not-confirm on a conflict). */
+  readonly selectedValueText?: string;
   readonly applyMeaning: string;
   readonly reviewItemLink?: ReviewPresentationLink;
   readonly traceRefs: readonly ReviewTraceRef[];
@@ -221,6 +222,29 @@ export function buildReviewResultPresentation(
     : humanizeIdentifier(target);
   const selectedCandidate = item ? selectedCandidateForResult(item, result) : undefined;
 
+  // A decision that selects no candidate presents no selected value and no
+  // selected trace; it names every candidate instead.
+  if (result.selectedCandidateId === undefined) {
+    const rejected = result.decision === "reject-proposed";
+    return {
+      result,
+      item,
+      target,
+      targetLabel,
+      decisionLabel: humanizeIdentifier(result.decision),
+      applyMeaning: rejected
+        ? "Saved decision rejects every proposed value; none is applied"
+        : "Saved decision records that no proposed value could be confirmed; none is applied",
+      reviewItemLink: item && itemContext ? adapter.linkForReviewItem?.(item, itemContext) : undefined,
+      traceRefs: [
+        { label: "Survey ReviewItem", value: result.reviewItemName, kind: "review-item" as const, context: undefined },
+        ...result.unselectedCandidates.map((candidate) => ({
+          label: rejected ? "Rejected candidate" : "Unconfirmed candidate", value: candidate.id, kind: "candidate" as const, context: candidate,
+        })),
+      ].flatMap(({ context, ...ref }) => (item ? withTraceLinks([ref], { item, candidate: context }, adapter) : [ref])),
+    };
+  }
+
   return {
     result,
     item,
@@ -323,7 +347,7 @@ function traceRefsForResult(
 ): ReviewTraceRef[] {
   return withTraceLinks([
     { label: "Survey ReviewItem", value: result.reviewItemName, kind: "review-item" },
-    { label: "Selected candidate", value: result.selectedCandidateId, kind: "candidate" },
+    { label: "Selected candidate", value: result.selectedCandidateId ?? "none", kind: "candidate" },
     {
       label: "Selected claim",
       value: selectedCandidate?.claimTarget.claimId ?? "not provided",

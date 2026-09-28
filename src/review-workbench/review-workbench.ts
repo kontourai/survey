@@ -439,29 +439,28 @@ export interface BrowserReviewWorkbenchConfig {
 /**
  * The in-process outcome of one workbench decision, derived from the session.
  * For a decision that selects no candidate ({@link decisionSelectsNoCandidate}:
- * reject-all or could-not-confirm on a conflict), `selectedCandidate*` and
- * `selectedValue` hold the role's first candidate only because the type needs
- * one; `reviewDecision.spec.candidateId` is absent and
- * `buildCanonicalReviewedTrustInput` selects nothing.
+ * reject-all or could-not-confirm on a conflict), every `selected*` and
+ * `effective*` field is absent, `unselectedCandidates` holds every candidate,
+ * and `reviewDecision.spec.candidateId` is absent.
  */
 export interface ReviewWorkbenchResult {
   readonly reviewItemName: string;
   readonly decision: ReviewWorkbenchDecision;
-  readonly selectedCandidate: ReviewCandidate;
-  readonly selectedCandidateId: string;
+  readonly selectedCandidate?: ReviewCandidate;
+  readonly selectedCandidateId?: string;
   readonly selectedCandidateRole?: ReviewCandidate["role"];
   /** The selected candidate's original value, unaffected by any reviewer edit. Used
    *  for candidate-identity matching (see `matchingSelectedCandidate`); consumers who
    *  want the reviewer's edited value should read `effectiveValue` instead. */
-  readonly selectedValue: unknown;
-  readonly selectedDisplayValue: string;
+  readonly selectedValue?: unknown;
+  readonly selectedDisplayValue?: string;
   /** Reviewer-edited override captured for an accept-proposed decision, if the
    *  reviewer changed the proposed value before applying it. Additive/optional. */
   readonly editedValue?: unknown;
   /** The value that should actually be applied: `editedValue` when present (and the
    *  decision selects the proposed candidate), otherwise `selectedValue`. */
-  readonly effectiveValue: unknown;
-  readonly effectiveDisplayValue: string;
+  readonly effectiveValue?: unknown;
+  readonly effectiveDisplayValue?: string;
   readonly unselectedCandidates: readonly ReviewCandidate[];
   readonly reviewDecision: ReviewDecision;
   readonly status: ReviewDecision["spec"]["status"];
@@ -625,7 +624,9 @@ function mapReviewApplyResultToActions<TAction>(input: {
   readonly options: MapReviewWorkbenchResultsToApplyActionsOptions<TAction>;
   readonly issues: ReviewApplyActionIssue[];
 }): ReviewApplyActionMapping<TAction>[] {
-  if (input.result.decision === "could-not-confirm") {
+  // Could-not-confirm applies nothing, and neither does a decision that selects
+  // no candidate (rejecting every value of a conflict): there is no value to apply.
+  if (input.result.decision === "could-not-confirm" || input.result.selectedCandidateId === undefined) {
     return [];
   }
   const context = buildReviewApplyActionContext(input.result, input.itemByName, input.issues);
@@ -688,6 +689,7 @@ function matchingSelectedCandidate(
   item: ReviewItem,
   result: ReviewWorkbenchResult,
 ): ReviewCandidate | undefined {
+  if (result.selectedCandidateId === undefined) return undefined;
   const candidate = findSoleCandidateById(item, result.selectedCandidateId);
   return candidate
     && candidate.role === result.selectedCandidateRole
@@ -716,6 +718,16 @@ export function buildReviewWorkbenchResultsFromSession(session: ReviewQueueSessi
       return [];
     }
 
+    if (decisionSelectsNoCandidate(item, decision)) {
+      return [{
+        reviewItemName: item.metadata.name,
+        decision,
+        unselectedCandidates: [...item.spec.candidates],
+        reviewDecision,
+        status: reviewDecision.spec.status,
+        rationale: reviewDecision.spec.rationale,
+      }];
+    }
     const selectedCandidate = candidateForDecision(item, decision);
     const editedValue = decision === "accept-proposed"
       ? session.editedValuesByItemName?.[item.metadata.name]

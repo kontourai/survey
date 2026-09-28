@@ -65,6 +65,12 @@ export function prepareFacilityCredentialServerApply(input: {
     return { ok: false, message: "Current credential no longer matches the review session snapshot." };
   }
 
+  // A decision that selects no candidate (reject-all or could-not-confirm on a
+  // conflict) has no value to apply.
+  if (result.selectedCandidateId === undefined) {
+    return { ok: false, message: "Review result selects no candidate, so there is nothing to apply." };
+  }
+
   if (input.currentRecord.appliedReviewItemNames.includes(result.reviewItemName)) {
     return { ok: false, message: "Review result was already applied." };
   }

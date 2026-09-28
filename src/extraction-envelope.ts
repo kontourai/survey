@@ -461,7 +461,10 @@ function validateCoverage(input: unknown, artifact: PortableExtractionResultEnve
 function validateCoverageAgreement(outcome: PortableExtractionResultEnvelope["result"]["outcome"], coverage: PortableExtractionCoverageEntry[] | undefined): void {
   const lost = coverage?.some((entry) => entry.status !== "complete") ?? false;
   if (outcome.status === "success" && lost) throw new Error("result.coverage names unread or unanswered text, but the outcome is success.");
-  if (outcome.status === "partial" && LOSS_PARTIAL.has(outcome.reason) && !lost) throw new Error(`partial reason ${outcome.reason} requires a result.coverage entry that was not read or answered.`);
+  // A loss reason means a dispatched chunk lost text; a never-dispatched range
+  // is an early stop, not that loss.
+  const dispatchedLoss = coverage?.some((entry) => entry.status !== "complete" && entry.reason !== "not-dispatched") ?? false;
+  if (outcome.status === "partial" && LOSS_PARTIAL.has(outcome.reason) && !dispatchedLoss) throw new Error(`partial reason ${outcome.reason} requires a result.coverage entry for a dispatched chunk that was not read or answered.`);
 }
 function validateWarning(v: unknown): void { const w = obj(v, "warning"); exact(w, ["category", "code"], "warning"); if (!WARNING_CATEGORIES.has(w.category as string)) throw new Error("warning category invalid."); stableIdentity(w.code, "warning.code"); }
 function validateFailure(v: unknown): void { const f = obj(v, "providerFailure"); exact(f, ["provider", "kind", "retryable"], "providerFailure", ["code"]); stableIdentity(f.provider, "failure.provider"); if (!FAILURE_KINDS.has(f.kind as string) || typeof f.retryable !== "boolean") throw new Error("provider failure invalid."); if (f.code !== undefined) { stableIdentity(f.code, "failure.code"); if (f.code.length > 128) throw new Error("failure.code must be at most 128 characters."); } }
