@@ -201,7 +201,8 @@ function assertCanonicalResult(item: ReviewItem, result: ReviewWorkbenchResult):
   let selected: ReviewCandidate | undefined;
   if (selectsNone) {
     if (result.selectedCandidate !== undefined || result.selectedCandidateId !== undefined || result.selectedCandidateRole !== undefined
-      || result.selectedValue !== undefined || result.effectiveValue !== undefined || result.editedValue !== undefined) {
+      || result.selectedValue !== undefined || result.selectedDisplayValue !== undefined
+      || result.effectiveValue !== undefined || result.effectiveDisplayValue !== undefined || result.editedValue !== undefined) {
       throw new Error(`Review result ${result.reviewItemName} names a selected value, but its ${result.decision} decision selects no candidate.`);
     }
     if (canonicalJson(item.spec.candidates) !== canonicalJson(result.unselectedCandidates)) {

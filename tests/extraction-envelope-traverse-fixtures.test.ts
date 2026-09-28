@@ -19,6 +19,7 @@ import {
   reimportExtractionEnvelope,
   type ExtractionEnvelopeImportOptions,
   type PortableExtractionResultEnvelope,
+  type ReviewDecision,
   type ReviewItem,
 } from "../src/index.js";
 import { deriveCalibration } from "../src/calibration.js";
@@ -346,6 +347,9 @@ describe("one candidate set per claim slot (#289)", () => {
         assert.equal(Object.hasOwn(conflictResult, key), false, key);
       }
       assert.deepEqual(conflictResult.unselectedCandidates.map((candidate) => candidate.id), conflict.spec.candidates.map((candidate) => candidate.id));
+      for (const extra of [{ selectedDisplayValue: "48000" }, { effectiveDisplayValue: "48000" }]) {
+        assert.throws(() => project(items, results.map((result) => (result === conflictResult ? { ...result, ...extra } : result))), /names a selected value/, JSON.stringify(extra));
+      }
       const presentation = buildReviewResultPresentation(conflictResult, conflict);
       assert.equal(presentation.selectedValueText, undefined);
       assert.equal(presentation.applyMeaning, decision === "reject-proposed"
@@ -487,7 +491,7 @@ function assertNoValueSingledOut(input: {
   conflict: ReviewItem;
   decision: "could-not-confirm" | "reject-proposed";
   projected: ReturnType<typeof project>;
-  decisions: readonly { spec: { reviewItemName: string; candidateId?: string } }[];
+  decisions: readonly ReviewDecision[];
   events: readonly { spec: { reviewItemName?: string; eventType: string; candidateId?: string } }[];
 }): void {
   const { conflict, decision, projected: { surveyInput, bundle } } = input;
@@ -497,6 +501,9 @@ function assertNoValueSingledOut(input: {
 
   const reviewDecision = input.decisions.find((entry) => entry.spec.reviewItemName === conflict.metadata.name)!;
   assert.equal(Object.hasOwn(reviewDecision.spec, "candidateId"), false, "decision");
+  const prompt = (reviewDecision.spec.authorizing as { renderedPrompt?: string } | undefined)?.renderedPrompt ?? "";
+  assert.match(prompt, /2 different values were proposed: 48000, 52000\./, "rendered prompt");
+  assert.match(prompt, decision === "reject-proposed" ? /Selected decision: Reject all values\.$/ : /Selected decision: Could not confirm\.$/);
   const decisionEvents = input.events.filter((event) => event.spec.reviewItemName === conflict.metadata.name && event.spec.eventType.startsWith("decision-"));
   assert.ok(decisionEvents.length > 0);
   for (const event of decisionEvents) assert.equal(Object.hasOwn(event.spec, "candidateId"), false, "session event");
@@ -506,6 +513,7 @@ function assertNoValueSingledOut(input: {
   assert.equal(set.status, decision === "reject-proposed" ? "rejected" : "conflict");
   const outcome = surveyInput.reviewOutcomes.find((review) => review.candidateSetId === set.id)!;
   assert.equal(Object.hasOwn(outcome, "candidateId"), false, "review outcome");
+  assert.equal((outcome.authorizing as { renderedPrompt?: string } | undefined)?.renderedPrompt, prompt, "review outcome prompt");
   const target = surveyInput.claims.find((claim) => claim.candidateSetId === set.id)!;
   assert.equal(Object.hasOwn(target, "candidateId"), false, "claim target");
   assert.equal(target.value, null);

@@ -556,10 +556,10 @@ The projected claim value is unchanged for mappings built by
   example `result.selectedCandidate.id` or `result.selectedCandidateId!`, must
   treat "no candidate" as its own case (nothing to apply or attribute) instead
   of throwing or attributing the first candidate. Fieldwork's grounding and
-  attribution code (`result.selectedCandidate.projection`,
-  `candidates.find((c) => c.id === result.selectedCandidateId)`) is this
-  pattern: without that case it throws `Cannot attribute the reviewed claim`
-  or an unresolvable-decision error on such a result. `buildCanonicalReviewedTrustInput` now projects a
+  attribution code is this pattern: `result.selectedCandidate.projection` is a
+  compile error under `strict` and a `TypeError` at runtime on such a result,
+  and `candidates.find((c) => c.id === result.selectedCandidateId)` finds
+  nothing and throws its unresolvable-decision error. `buildCanonicalReviewedTrustInput` now projects a
   could-not-confirm on a `conflict` or `escalated` item as `disputed`, the
   status Surface projection already required for it.
 - **Partial runs and confidence.** The importer accepts the partial reasons

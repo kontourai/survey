@@ -301,7 +301,16 @@ function buildDecisionCardAuthorizing(
  */
 function decisionCardRenderedPrompt(state: ReviewWorkbenchState, targetLabel: string): string {
   const currentCandidate = state.item.spec.candidates.find((c) => c.role === "current");
-  const proposedCandidate = state.item.spec.candidates.find((c) => c.role === "proposed");
+  const proposedCandidates = state.item.spec.candidates.filter((c) => c.role === "proposed");
+  // A conflict card lists every proposed value and offers reject-all or could
+  // not confirm; the prompt states the same, naming no single value.
+  if (proposedCandidates.length > 1) {
+    const decisionLabel = state.decision === "reject-proposed"
+      ? "Reject all values"
+      : state.decision ? workbenchDecisionDefinitions[state.decision].label : "";
+    return `For ${targetLabel}, ${proposedCandidates.length} different values were proposed: ${proposedCandidates.map((c) => formatValue(c.value)).join(", ")}. Selected decision: ${decisionLabel}.`;
+  }
+  const proposedCandidate = proposedCandidates[0];
   const currentValue = formatValue(currentCandidate?.value ?? "");
   const proposedValue = formatValue(proposedCandidate?.value ?? "");
   const decisionLabel = state.decision ? workbenchDecisionDefinitions[state.decision].label : "";
