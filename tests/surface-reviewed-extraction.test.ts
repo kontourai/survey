@@ -8,7 +8,9 @@ import {
   toSurfaceReviewedExtractionImport,
   toSurfaceReviewedExtractionItem,
   type ExtractionEnvelopeImportOptions,
+  type PortableExtractionResultEnvelope,
   type ReviewDecision,
+  type ReviewItem,
 } from "../src/index.js";
 
 const fixtureUrl = new URL("../../tests/fixtures/portable-extraction-result.v1.json", import.meta.url);
@@ -23,6 +25,44 @@ function options(): ExtractionEnvelopeImportOptions {
       claimType: "fixture.field", fieldOrBehavior: proposal.fieldPath, impactLevel: "medium",
     }),
   };
+}
+
+function acceptedDecision(item: ReviewItem): ReviewDecision {
+  return {
+    apiVersion: "survey.kontourai.io/v1alpha1",
+    kind: "ReviewDecision",
+    metadata: { name: `${item.metadata.name}-decision` },
+    spec: {
+      reviewItemName: item.metadata.name,
+      candidateId: item.spec.candidates[0]!.id,
+      status: "verified",
+      resolution: "accepted",
+      actor: { id: "bridge-test-reviewer" },
+      reviewedAt: "2026-07-29T00:00:00.000Z",
+    },
+  };
+}
+
+function project(imported: ReturnType<typeof importExtractionEnvelope>, index: number, item = imported.reviewItems[index]!) {
+  const claim = imported.record.spec.claimTargets[index]!;
+  return projectReviewedExtractionEvidence({
+    evidenceId: `bridge-evidence-model-${index}`,
+    claimId: `${claim.subjectType}:${claim.fieldOrBehavior}`,
+    proposalIndex: index,
+    importRecord: toSurfaceReviewedExtractionImport(imported.record),
+    reviewItem: toSurfaceReviewedExtractionItem(item),
+    reviewDecision: toSurfaceReviewedExtractionDecision(acceptedDecision(item)),
+    collectedBy: "survey-bridge-test",
+    structuralTrust: "validated",
+  });
+}
+
+async function servedBy(models: [string, string]): Promise<PortableExtractionResultEnvelope> {
+  const envelope = JSON.parse(await readFile(fixtureUrl, "utf8")) as PortableExtractionResultEnvelope;
+  envelope.result.proposals.forEach((proposal, index) => {
+    proposal.producedBy = { model: models[index]!, modelSource: "provider-reported", requestDigest: `sha256:${String(index).repeat(64)}` };
+  });
+  return envelope;
 }
 
 describe("surface reviewed-extraction bridge", () => {
@@ -69,6 +109,50 @@ describe("surface reviewed-extraction bridge", () => {
     // Round-trip: surface re-derives and cross-checks the digest-bound profile.
     const restored = restoreReviewedExtractionEvidence(projection.evidence);
     assert.equal(restored.evidenceId, "bridge-evidence-1");
+  });
+
+  it("a multi-model envelope projects through a Surface that binds the proposal's own model", async () => {
+    // Proposal 0 was served by a fallback model; the run-level model names
+    // only the last chunk's. Surface releases that bind the candidate's model
+    // to `producedBy.model` accept every candidate; earlier releases bind it
+    // to `result.model` and refuse the fallback candidate. Probe which one
+    // resolved by presenting the run-level model on the fallback candidate.
+    const imported = importExtractionEnvelope(await servedBy(["fallback-model", "generic-model"]), options());
+    assert.equal(imported.record.spec.envelope.result.model, "generic-model");
+    assert.deepEqual(imported.reviewItems.map((item) => item.spec.candidates[0]!.extraction.model), ["fallback-model", "generic-model"]);
+
+    const runLevel = structuredClone(imported.reviewItems[0]!);
+    runLevel.spec.candidates[0]!.extraction.model = "generic-model";
+    let surfaceBindsProposalModel: boolean;
+    try { project(imported, 0, runLevel); surfaceBindsProposalModel = false; }
+    catch (error) {
+      assert.match(String(error), /candidate extraction does not match proposal/);
+      surfaceBindsProposalModel = true;
+    }
+
+    if (surfaceBindsProposalModel) {
+      for (const index of [0, 1]) {
+        const projection = project(imported, index);
+        assert.deepEqual(projection.gaps, [], `proposal ${index}: ${JSON.stringify(projection.gaps)}`);
+        assert.equal(projection.evidence.supportStrength, "entails");
+        assert.equal(restoreReviewedExtractionEvidence(projection.evidence).evidenceId, `bridge-evidence-model-${index}`);
+      }
+    } else {
+      // Known limit of Surface releases before the proposal-model binding:
+      // they cannot represent a fallback candidate, so they refuse it.
+      assert.throws(() => project(imported, 0), /candidate extraction does not match proposal/);
+      assert.equal(project(imported, 1).evidence.supportStrength, "entails");
+    }
+  });
+
+  it("a single-model envelope with producedBy projects as before on every Surface", async () => {
+    const imported = importExtractionEnvelope(await servedBy(["generic-model", "generic-model"]), options());
+    for (const index of [0, 1]) {
+      assert.equal(imported.reviewItems[index]!.spec.candidates[0]!.extraction.model, "generic-model");
+      const projection = project(imported, index);
+      assert.deepEqual(projection.gaps, []);
+      assert.equal(restoreReviewedExtractionEvidence(projection.evidence).evidenceId, `bridge-evidence-model-${index}`);
+    }
   });
 
   it("a rejected decision degrades to cited support with the typed gap, through the same bridge", async () => {
