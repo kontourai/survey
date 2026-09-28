@@ -1,5 +1,32 @@
 # Changelog
 
+## [4.0.0](https://github.com/kontourai/survey/compare/v3.0.0...v4.0.0) (2026-09-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* buildSurveyTrustBundle, reviewedCandidateResolution and reviewedCurrentProposedResolution throw ReviewAgreementError for inputs they accepted before. See docs/upgrade-guide.md.
+* **calibration:** `calibration: true` (or an options object without `experimentalConclusionValue: true`) no longer sets `conclusionConfidence.value`. `deriveCalibration` returns `suggestedThreshold: undefined` for bins below 30 samples or whose Wilson lower bound misses the target, and skips multi-candidate sets without a "proposed" role marker.
+
+### Features
+
+* **interpretation:** gleaned and answerImpact reading kinds on the Interpretation record ([#259](https://github.com/kontourai/survey/issues/259)) ([#261](https://github.com/kontourai/survey/issues/261)) ([3c224ad](https://github.com/kontourai/survey/commit/3c224ad3b0829c1445642fb33f46c6c99b957c5f))
+* **kit:** declare builder.build workflow routing ([#249](https://github.com/kontourai/survey/issues/249)) ([dded2b2](https://github.com/kontourai/survey/commit/dded2b2e0a69c71076600570f6f3ffe692243949))
+
+
+### Fixes
+
+* **calibration:** guard calibration output until labels and sample bounds are sound ([#283](https://github.com/kontourai/survey/issues/283)) ([a018d96](https://github.com/kontourai/survey/commit/a018d96063c11c2646f85a4e1eba572d88f01834))
+* claim/review agreement, envelope keys, Surface 3.x range, lock PID reuse ([#299](https://github.com/kontourai/survey/issues/299)) ([8782a11](https://github.com/kontourai/survey/commit/8782a11359166914d99ff5e6f5c26da253ee65f9)), closes [#290](https://github.com/kontourai/survey/issues/290)
+* **console,mcp:** serialize session writes and reject stale console saves ([#285](https://github.com/kontourai/survey/issues/285)) ([9934b92](https://github.com/kontourai/survey/commit/9934b9244308ea3455bd9ddb234e6cde34959e50))
+* **producer-profile:** refuse out-of-range auto-accept inputs and project system authority ([#282](https://github.com/kontourai/survey/issues/282)) ([c01bf1e](https://github.com/kontourai/survey/commit/c01bf1e7cba8782b86042b7702ec2723d11a83e6)), closes [#280](https://github.com/kontourai/survey/issues/280)
+* record the proposal's served model on imported candidates ([#302](https://github.com/kontourai/survey/issues/302)) ([60eee0b](https://github.com/kontourai/survey/commit/60eee0b09b1c5748a6d5dcafdf85c92dba477a54))
+
+
+### Documentation
+
+* **agents:** point UI work at the Kontour DESIGN.md ([#297](https://github.com/kontourai/survey/issues/297)) ([c8bc833](https://github.com/kontourai/survey/commit/c8bc8336c18c102ef36c62a0c055528f7100060f))
+
 ## [3.0.0](https://github.com/kontourai/survey/compare/v2.5.0...v3.0.0) (2026-08-02)
 
 
