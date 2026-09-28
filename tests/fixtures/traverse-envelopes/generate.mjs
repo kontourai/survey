@@ -2,7 +2,7 @@
 // Traverse build, so the fixtures have exactly the shape Traverse's serializer
 // produces rather than a hand-written approximation.
 //
-// The envelopes were produced from kontourai/traverse at commit 7b5d1d7
+// The envelopes were produced from kontourai/traverse at commit 107fe1a
 // (branch fix/envelope-partial-confidence, the producer side of typed partial
 // reasons, per-chunk coverage and optional confidence), built with
 // `pnpm install --frozen-lockfile && pnpm run build`. Every run goes through
@@ -100,6 +100,15 @@ const cases = {
     sourceRef: "fixture://vendor-contract", contentType: "text", targetSchema: feeSchema, content: threeChunkText,
     provider: feeScanner({ confidence: 0.8 }), chunkSize: 40, chunkOverlap: 10, maxChunks: 1,
   }),
+  // Chunk 2's provider answer is not a proposals array: partial/provider-failure
+  // with that chunk unread.
+  "partial-unusable-answer": () => {
+    const scanner = feeScanner({ confidence: 0.8 });
+    return extract({
+      sourceRef: "fixture://vendor-contract", contentType: "text", targetSchema: feeSchema, content: threeChunkText, chunkSize: 40, chunkOverlap: 10,
+      provider: { name: scanner.name, async extract(input) { return input.chunkIndex === 1 ? { proposals: "garbage", raw: { response: "", model: "fixture-model" } } : scanner.extract(input); } },
+    });
+  },
   // A complete run whose provider reports no confidence.
   "success-no-confidence": () => extract({
     sourceRef: "fixture://vendor-contract", contentType: "text", targetSchema: feeSchema, content: "Vendor: Acme. Fee: 48000 per year.",
@@ -110,6 +119,13 @@ const cases = {
     sourceRef: "fixture://vendor-contract", contentType: "text", targetSchema: feeSchema,
     content: "Fee: 48000 per year. Summary Fee: 48000. Amended Fee: 52000.",
     provider: feeScanner({ confidence: 0.9 }),
+  }),
+  // Markdown prep removes the page header outside <article>, keeps the
+  // article's own header and footer, and names what it removed.
+  "success-html-page-chrome": () => extract({
+    sourceRef: "fixture://vendor-page", contentType: "html", targetSchema: feeSchema, provider: feeScanner({ confidence: 0.7 }),
+    content: `<!DOCTYPE html><html><body><header><p>Site banner text</p></header><article><header><h1>Acme renewal</h1><p>Fee: 48000</p></header>`
+      + `<p>Terms of the renewal.</p><footer><p>Posted 2026-09-01</p></footer></article></body></html>`,
   }),
   // Structural prep prunes a navigation landmark and names it in a warning.
   // The page lists one fee per plan under an array field, so every proposal

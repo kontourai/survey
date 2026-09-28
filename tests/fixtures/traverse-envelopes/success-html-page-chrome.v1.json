@@ -1,37 +1,38 @@
 {
   "format": "traverse-extraction-result",
   "result": {
-    "extractedAt": "2026-09-28T12:57:43.270Z",
+    "extractedAt": "2026-09-28T12:57:43.274Z",
     "model": "fixture-model",
     "outcome": {
       "status": "success"
     },
     "preparedArtifact": {
-      "contentLength": 34,
-      "digest": "8a6a191181da8b9b9c45635edc20a864b30a80d8fa243e1c00b1be8d5ebf6f74",
+      "contentLength": 68,
+      "digest": "f62c10eae1b9a853d1db5f1cb3aeeb5d89164acb157f71d204358b0eb18af3ca",
       "format": "traverse-prepared-artifact",
-      "preparationMode": "text",
-      "preparationVersion": "3",
-      "ref": "traverse-prepared-artifact:v1:sha256:d546332eff0e23e23824d6f6529881ec96d0279b399b324e0976bae0b091a374",
+      "preparationMode": "markdown",
+      "preparationVersion": "3+linkedom@0.18.13+turndown@7.2.4",
+      "ref": "traverse-prepared-artifact:v1:sha256:e15ea8ab3555d477f90264a5f23e41a5a8718cab55452e1774d6dcab5958313f",
       "version": 1
     },
     "proposals": [
       {
         "candidateValue": 48000,
+        "confidence": 0.7,
         "extractor": "fixture-fee-scanner",
         "fieldPath": "fee",
         "provenance": {
           "excerpt": "48000",
-          "locator": "chars:19-24",
+          "locator": "chars:21-26",
           "occurrence": {
             "ambiguous": false,
             "count": 1,
             "hintUsed": false,
             "resolverVersion": "exact-occurrence-v1",
             "selected": {
-              "end": 24,
+              "end": 26,
               "index": 0,
-              "start": 19
+              "start": 21
             },
             "selection": "source-order"
           }
@@ -44,11 +45,17 @@
     "raw": {
       "tokensUsed": 5
     },
-    "runId": "traverse-extraction-run:04d29739-3447-43bd-b9a9-40fc4fe3a2a2",
-    "totalTokensUsed": 5
+    "runId": "traverse-extraction-run:c0666887-5a89-4343-ad28-08ecce9f1fc6",
+    "totalTokensUsed": 5,
+    "warningClassifications": [
+      {
+        "category": "preparation",
+        "code": "navigation-pruned"
+      }
+    ]
   },
   "source": {
-    "ref": "fixture://vendor-contract"
+    "ref": "fixture://vendor-page"
   },
   "version": 1
 }

@@ -69,6 +69,7 @@ describe("typed partial reasons and per-chunk coverage (#286)", () => {
     ["partial-provider-failure", "provider-failure"],
     ["partial-content-truncated", "content-truncated"],
     ["partial-output-truncated", "output-truncated"],
+    ["partial-unusable-answer", "provider-failure"],
   ] as const) {
     it(`imports a Traverse ${reason} envelope and carries the reason and coverage to the candidate`, async () => {
       const envelope = await traverseFixture(name);
@@ -151,6 +152,14 @@ describe("typed partial reasons and per-chunk coverage (#286)", () => {
     (envelope.result.outcome as { reason: string }).reason = "other";
     (envelope.result.partial as { reason: string }).reason = "other";
     assert.throws(() => importExtractionEnvelope(envelope, options()), /partial reason is invalid/);
+  });
+
+  it("imports an HTML page whose chrome was removed, keeping the article's own header value", async () => {
+    const envelope = await traverseFixture("success-html-page-chrome");
+    assert.deepEqual(envelope.result.warningClassifications, [{ category: "preparation", code: "navigation-pruned" }]);
+    const imported = importExtractionEnvelope(envelope, options());
+    assert.deepEqual(imported.reviewItems.map((item) => item.spec.candidates.map((candidate) => candidate.value)), [[48000]]);
+    assert.deepEqual(producer(imported.reviewItems[0]!.spec.candidates[0]).warnings, [{ category: "preparation", code: "navigation-pruned" }]);
   });
 
   it("imports the navigation-pruned preparation warning and carries it", async () => {

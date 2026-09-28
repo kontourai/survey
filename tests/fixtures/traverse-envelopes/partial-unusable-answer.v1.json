@@ -22,7 +22,7 @@
         "status": "complete"
       }
     ],
-    "extractedAt": "2026-09-28T12:57:43.246Z",
+    "extractedAt": "2026-09-28T12:57:43.268Z",
     "model": "fixture-model",
     "outcome": {
       "reason": "provider-failure",
@@ -69,22 +69,15 @@
     ],
     "provider": "fixture-fee-scanner",
     "providerCalls": 3,
-    "providerFailures": [
-      {
-        "kind": "unavailable",
-        "provider": "fixture-fee-scanner",
-        "retryable": true
-      }
-    ],
     "raw": {
       "tokensUsed": 5
     },
-    "runId": "traverse-extraction-run:e4d27f85-1bf7-4380-9cc0-759a59b66050",
+    "runId": "traverse-extraction-run:31a28dbe-e45c-414d-9818-b4a72da68224",
     "totalTokensUsed": 10,
     "warningClassifications": [
       {
         "category": "provider",
-        "code": "chunk-provider-failure"
+        "code": "provider-warning"
       },
       {
         "category": "content",

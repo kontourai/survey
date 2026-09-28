@@ -583,12 +583,10 @@ test.describe("embedded workbench: envelope-imported decisions", () => {
     await expect(conflict.getByTestId("use-proposed")).toHaveCount(0);
     await expect(conflict.getByTestId("could-not-confirm")).toBeVisible();
     await expect(conflict.getByTestId("keep-current")).toHaveText("Reject all values");
-    await conflict.screenshot({ path: test.info().outputPath("conflict-undecided.png") });
 
     await conflict.getByTestId("keep-current").click();
     await expect(conflict).toHaveAttribute("data-decision", "reject-proposed");
     await expect(conflict.getByTestId("decided-chip")).toHaveText("All values rejected");
-    await conflict.screenshot({ path: test.info().outputPath("conflict-rejected.png") });
 
     // The rest of the queue still decides.
     const other = fieldByTarget(page, "renewal.date");

@@ -10,7 +10,7 @@
         "status": "unread"
       }
     ],
-    "extractedAt": "2026-09-28T06:24:58.456Z",
+    "extractedAt": "2026-09-28T12:57:43.265Z",
     "model": "fixture-relay-model",
     "outcome": {
       "reason": "provider-failure",
@@ -36,7 +36,7 @@
     "raw": {
       "tokensUsed": 3
     },
-    "runId": "traverse-extraction-run:7c2d2ef9-a969-4541-8c62-61df7b85e471",
+    "runId": "traverse-extraction-run:5f421bbc-4fc7-4e9d-b4e2-d010e64b8dea",
     "totalTokensUsed": 3,
     "warningClassifications": [
       {

@@ -1,7 +1,7 @@
 {
   "format": "traverse-extraction-result",
   "result": {
-    "extractedAt": "2026-09-28T06:24:58.467Z",
+    "extractedAt": "2026-09-28T12:57:43.271Z",
     "model": "fixture-model",
     "outcome": {
       "status": "success"
@@ -91,7 +91,7 @@
     "raw": {
       "tokensUsed": 5
     },
-    "runId": "traverse-extraction-run:8612fa31-7c74-4a0f-88f0-406e488c4994",
+    "runId": "traverse-extraction-run:9ed79b9a-bfda-4b1e-a484-4749304dfa55",
     "totalTokensUsed": 5
   },
   "source": {
