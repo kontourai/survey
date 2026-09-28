@@ -57,6 +57,20 @@ function project(imported: ReturnType<typeof importExtractionEnvelope>, index: n
   });
 }
 
+/** Major version of the Surface this test run resolved (CI pins each supported major). */
+async function installedSurfaceMajor(): Promise<number> {
+  let dir = new URL(".", import.meta.resolve("@kontourai/surface"));
+  for (;;) {
+    try {
+      const pkg = JSON.parse(await readFile(new URL("package.json", dir), "utf8")) as { name?: string; version?: string };
+      if (pkg.name === "@kontourai/surface" && typeof pkg.version === "string") return Number(pkg.version.split(".")[0]);
+    } catch { /* keep walking up */ }
+    const parent = new URL("..", dir);
+    if (parent.href === dir.href) throw new Error("installed @kontourai/surface package.json not found");
+    dir = parent;
+  }
+}
+
 async function servedBy(models: [string, string]): Promise<PortableExtractionResultEnvelope> {
   const envelope = JSON.parse(await readFile(fixtureUrl, "utf8")) as PortableExtractionResultEnvelope;
   envelope.result.proposals.forEach((proposal, index) => {
@@ -111,37 +125,32 @@ describe("surface reviewed-extraction bridge", () => {
     assert.equal(restored.evidenceId, "bridge-evidence-1");
   });
 
-  it("a multi-model envelope projects through a Surface that binds the proposal's own model", async () => {
+  it("a multi-model envelope projects through Surface 4.x, which binds the proposal's own model", async () => {
     // Proposal 0 was served by a fallback model; the run-level model names
-    // only the last chunk's. Surface releases that bind the candidate's model
-    // to `producedBy.model` accept every candidate; earlier releases bind it
-    // to `result.model` and refuse the fallback candidate. Probe which one
-    // resolved by presenting the run-level model on the fallback candidate.
+    // only the last chunk's. Surface 4.x binds the candidate's model to
+    // `producedBy.model` and accepts every candidate. Surface 3.3 and older
+    // bind it to `result.model` and refuse the fallback candidate; no released
+    // producer emits such envelopes before Traverse 1.0.0.
     const imported = importExtractionEnvelope(await servedBy(["fallback-model", "generic-model"]), options());
     assert.equal(imported.record.spec.envelope.result.model, "generic-model");
     assert.deepEqual(imported.reviewItems.map((item) => item.spec.candidates[0]!.extraction.model), ["fallback-model", "generic-model"]);
 
+    // The same fallback candidate, presented with the run-level model.
     const runLevel = structuredClone(imported.reviewItems[0]!);
     runLevel.spec.candidates[0]!.extraction.model = "generic-model";
-    let surfaceBindsProposalModel: boolean;
-    try { project(imported, 0, runLevel); surfaceBindsProposalModel = false; }
-    catch (error) {
-      assert.match(String(error), /candidate extraction does not match proposal/);
-      surfaceBindsProposalModel = true;
-    }
 
-    if (surfaceBindsProposalModel) {
+    if (await installedSurfaceMajor() >= 4) {
       for (const index of [0, 1]) {
         const projection = project(imported, index);
         assert.deepEqual(projection.gaps, [], `proposal ${index}: ${JSON.stringify(projection.gaps)}`);
         assert.equal(projection.evidence.supportStrength, "entails");
         assert.equal(restoreReviewedExtractionEvidence(projection.evidence).evidenceId, `bridge-evidence-model-${index}`);
       }
+      assert.throws(() => project(imported, 0, runLevel), /candidate extraction does not match proposal/);
     } else {
-      // Known limit of Surface releases before the proposal-model binding:
-      // they cannot represent a fallback candidate, so they refuse it.
       assert.throws(() => project(imported, 0), /candidate extraction does not match proposal/);
       assert.equal(project(imported, 1).evidence.supportStrength, "entails");
+      assert.equal(project(imported, 0, runLevel).evidence.supportStrength, "entails");
     }
   });
 
