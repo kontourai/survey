@@ -181,6 +181,11 @@ const cases = {
 };
 
 const only = process.argv.slice(3);
+const unknown = only.filter((name) => !Object.hasOwn(cases, name));
+if (unknown.length) {
+  console.error(`unknown case${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")}. Known: ${Object.keys(cases).join(", ")}`);
+  process.exit(2);
+}
 for (const [name, run] of Object.entries(cases).filter(([name]) => only.length === 0 || only.includes(name))) {
   const result = await run();
   const serialized = serializePortableExtractionResult(result);

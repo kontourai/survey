@@ -24,7 +24,8 @@ import {
 } from "../src/index.js";
 import { deriveCalibration } from "../src/calibration.js";
 import { toSurfaceReviewedExtractionImport } from "../src/surface-reviewed-extraction.js";
-import { buildExtractionInspectorModel } from "../src/review-workbench/extraction-inspector.js";
+import { buildExtractionInspectorModel, inspectorSourcePosture } from "../src/review-workbench/extraction-inspector.js";
+import { validateReviewQueueAgainstExtractionImport } from "../src/review-workbench/queue-binding.js";
 import { buildReviewResultPresentation } from "../src/review-workbench/review-presentation.js";
 import { buildReviewSessionEvents, candidateForDecision, keepActionDecision, reviewSessionSummary, type ReviewWorkbenchDecision } from "../src/review-workbench/review-queue-session.js";
 import { createServerReviewSessionRecord, deriveServerReviewSessionApplyResult } from "../src/review-workbench/server-review-session.js";
@@ -106,7 +107,7 @@ describe("typed partial reasons and per-chunk coverage (#286)", () => {
     const imported = importExtractionEnvelope(envelope, options());
     assert.deepEqual(imported.reviewItems, []);
     assert.deepEqual(imported.record.status, { state: "unresolved", diagnostics: [{ kind: "extraction-failed", category: "provider", code: "no-usable-answer",
-      message: "Extraction failed (provider/no-usable-answer); no text was read and answered, so the import has no candidates." }] });
+      message: "Extraction failed (provider/no-usable-answer); no usable answer was recorded for this source, so the import has no candidates." }] });
     assert.deepEqual(reimportExtractionEnvelope(exportExtractionEnvelopeImport(imported.record)), imported.record);
     assert.deepEqual(imported.record.spec.envelope.result.outcome, envelope.result.outcome);
     assert.deepEqual(imported.record.spec.envelope.result.warningClassifications, envelope.result.warningClassifications);
@@ -136,7 +137,14 @@ describe("typed partial reasons and per-chunk coverage (#286)", () => {
     assert.equal(failedSource.alignment, "aligned", "the artifact itself still resolves");
     assert.deepEqual(failedSource.extractionDiagnostic, failedImport.record.status.diagnostics[0]);
     assert.match(failedSource.message, /^Extraction failed \(provider\/no-usable-answer\)/);
+    assert.doesNotMatch(failedSource.message, /Exact source spans are available/);
     assert.notEqual(failedSource.message, emptySource.message);
+    assert.equal(inspectorSourcePosture(emptySource), "aligned");
+    assert.equal(inspectorSourcePosture(failedSource), "extraction-failed");
+    const stoppedSource = buildExtractionInspectorModel({ importResult: stoppedImport, artifact: { status: "unavailable", code: "not-found" } }).sources[0]!;
+    assert.equal(inspectorSourcePosture(stoppedSource), "extraction-incomplete");
+    const binding = validateReviewQueueAgainstExtractionImport(emptyImport.reviewItems, failedImport);
+    assert.match(binding[0]!.message, /not grounded \(Extraction failed \(provider\/no-usable-answer\)/);
   });
 
   it("keeps a partial run that proposed values grounded, with its reason on the candidates", async () => {

@@ -325,7 +325,7 @@ export function validateReviewQueueAgainstExtractionImport(
   if (record.status.state !== "grounded") {
     return [{
       code: "import-not-grounded",
-      message: `Extraction import ${record.metadata.name} is ${record.status.state}, not grounded; it cannot attest a review queue.`,
+      message: `Extraction import ${record.metadata.name} is ${record.status.state}, not grounded (${record.status.diagnostics.map((diagnostic) => diagnostic.message).join(" ")}); it cannot attest a review queue.`,
     }];
   }
   if (items.length === 0) {

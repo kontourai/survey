@@ -337,6 +337,16 @@ function envelopeItemProposalIndices(item: ReviewItem): number[] {
   return indices as number[];
 }
 
+/**
+ * The posture a source is shown with: the extraction's own failure or early
+ * stop when there is one, otherwise the artifact alignment. A failed
+ * extraction over an aligned artifact must not show the aligned posture.
+ */
+export function inspectorSourcePosture(source: Pick<ExtractionInspectorSource, "alignment" | "extractionDiagnostic">): ExtractionAlignmentState | "extraction-failed" | "extraction-incomplete" {
+  if (source.extractionDiagnostic) return source.extractionDiagnostic.kind;
+  return source.alignment;
+}
+
 function sourceModel(
   key: string,
   importName: string,
@@ -358,7 +368,9 @@ function sourceModel(
   } else if (artifact.text.length !== prepared.contentLength) {
     alignment = "artifact-unavailable"; message = "Prepared artifact content has the wrong length. Candidates are not grounded.";
   } else {
-    alignment = "aligned"; message = `Prepared artifact identity verified. Exact source spans are available.${ocrDerived ? " Prepared text is OCR-derived." : ""}`;
+    alignment = "aligned"; message = extractionDiagnostic
+      ? "Prepared artifact identity verified."
+      : `Prepared artifact identity verified. Exact source spans are available.${ocrDerived ? " Prepared text is OCR-derived." : ""}`;
   }
   // The extraction's own failure leads: an aligned artifact with no candidates
   // must not read as a complete run that found nothing.
@@ -464,7 +476,7 @@ export function mountExtractionInspector(
     next.hidden = pageCount === 1;
     previous.disabled = page === 0;
     next.disabled = page >= pageCount - 1;
-    postures.innerHTML = model.sources.map(s => { const posture = s.extractionDiagnostic ? (s.extractionDiagnostic.kind === "extraction-failed" ? "extraction-failed" : "extraction-incomplete") : s.alignment; return `<div class="inspector-posture ${s.alignment}${s.extractionDiagnostic ? " extraction-issue" : ""}" role="status" data-posture="${escapeHtml(posture)}"><strong>${escapeHtml(s.importName)}: ${escapeHtml(posture)}</strong><span>${escapeHtml(s.message)}</span></div>`; }).join("");
+    postures.innerHTML = model.sources.map(s => { const posture = inspectorSourcePosture(s); return `<div class="inspector-posture ${s.alignment}${posture !== s.alignment ? ` ${posture}` : ""}" role="status" data-posture="${escapeHtml(posture)}"><strong>${escapeHtml(s.importName)}: ${escapeHtml(posture)}</strong><span>${escapeHtml(s.message)}</span></div>`; }).join("");
     sourcesRoot.innerHTML = model.sources.map(s => { const anchored = model.candidates.filter(c => c.sourceKey === s.key); const marked = visible.filter(c => c.sourceKey === s.key); return `<div class="inspector-source" aria-label="Prepared source for ${escapeHtml(s.importName)}"><h3>${escapeHtml(s.importName)}</h3><pre tabindex="0">${s.artifactText === undefined ? `${anchored.map(c => anchorHtml(c, highlightIdFor(c))).join("")}<span class="source-unavailable">${escapeHtml(s.message)}</span>` : renderSource(s.artifactText, anchored, marked, highlightIdFor)}</pre></div>`; }).join("");
   };
   root.querySelectorAll<HTMLSelectElement>("select").forEach(select => select.addEventListener("change", event => { event.stopPropagation(); const key = select.dataset.filter as keyof ExtractionInspectorFilters; if (select.value) (filters as Record<string,string>)[key] = select.value; else delete (filters as Record<string,string>)[key]; page = 0; render(); }));

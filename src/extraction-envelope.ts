@@ -385,7 +385,7 @@ function artifactDiagnostics(envelope: PortableExtractionResultEnvelope): Extrac
 function outcomeDiagnostics(envelope: PortableExtractionResultEnvelope): ExtractionEnvelopeImportDiagnostic[] {
   const outcome = envelope.result.outcome;
   if (outcome.status === "failure") return [{ kind: "extraction-failed", category: outcome.category, code: outcome.code,
-    message: `Extraction failed (${outcome.category}/${outcome.code}); no text was read and answered, so the import has no candidates.` }];
+    message: `Extraction failed (${outcome.category}/${outcome.code}); no usable answer was recorded for this source, so the import has no candidates.` }];
   if (outcome.status === "partial" && envelope.result.proposals.length === 0) return [{ kind: "extraction-incomplete", reason: outcome.reason,
     message: `Extraction stopped short (${outcome.reason}) without proposing any value; unread text may hold values.` }];
   return [];

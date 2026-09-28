@@ -8,7 +8,10 @@
  * typed non-editable items that could never be decided (#201), and a "Leave unset"
  * control that threw and left the whole queue unrenderable (#203).
  */
+import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
+
+import { importExtractionEnvelope, type PortableExtractionResultEnvelope } from "../../src/extraction-envelope.js";
 
 import {
   envelopeInspectorEntry,
@@ -30,6 +33,8 @@ interface EmbedOptions {
   readonly candidates?: number;
   /** Explicit proposal seeds; overrides `candidates`. */
   readonly seeds?: readonly EnvelopeProposalSeed[];
+  /** Replaces the inspector entry (import result plus resolved artifact). */
+  readonly inspectorEntry?: unknown;
   readonly pageSize?: number;
   /** Overrides the resolved artifact, to mount a non-grounded posture. */
   readonly artifact?: unknown;
@@ -57,7 +62,7 @@ async function loadEmbed(page: Page, options: EmbedOptions = {}): Promise<Loaded
   const inspectorEntry = seeds ? envelopeInspectorEntry(seeds) : envelopeInspectorEntry();
   const fixture = {
     session: JSON.parse(JSON.stringify(seeds ? envelopeReviewQueueSession(seeds) : envelopeReviewQueueSession())),
-    inspectorEntry: JSON.parse(JSON.stringify(options.artifact ? { ...inspectorEntry, artifact: options.artifact } : inspectorEntry)),
+    inspectorEntry: JSON.parse(JSON.stringify(options.inspectorEntry ?? (options.artifact ? { ...inspectorEntry, artifact: options.artifact } : inspectorEntry))),
     ...(options.pageSize ? { inspectorPageSize: options.pageSize } : {}),
     ...(options.stripPublishedHighlightIds ? { stripPublishedHighlightIds: true } : {}),
     ...(options.collidingHighlightIds ? { collidingHighlightIds: true } : {}),
@@ -596,6 +601,33 @@ test.describe("embedded workbench: envelope-imported decisions", () => {
 
     expect(pageErrors).toEqual([]);
     expect(consoleErrors).toEqual([]);
+  });
+
+  test("a failed extraction renders a failure posture, not the aligned one", async ({ page }) => {
+    const envelope = JSON.parse(readFileSync("tests/fixtures/traverse-envelopes/failure-no-usable-answer.v1.json", "utf8")) as PortableExtractionResultEnvelope;
+    const importResult = importExtractionEnvelope(envelope, {
+      sourceKind: "uploaded-document",
+      claimTarget: (proposal) => ({ subjectType: "vendor", subjectId: "vendor-1", facet: "vendor.contract", claimType: "vendor.field", fieldOrBehavior: proposal.fieldPath, impactLevel: "medium" }),
+    });
+    const { pageErrors } = await loadEmbed(page, {
+      inspectorEntry: { importResult, artifact: { status: "available", text: "Fee: 5.", actualDigest: envelope.result.preparedArtifact!.digest } },
+    });
+    const posture = page.locator(".inspector-posture").first();
+    await expect(posture).toHaveAttribute("data-posture", "extraction-failed");
+    await expect(posture).toHaveClass(/\bextraction-failed\b/);
+    await expect(posture).toContainText("Extraction failed (provider/no-usable-answer)");
+    await expect(posture).not.toContainText("Exact source spans are available");
+    // Painted as a failure (the negative wash), not the aligned (positive) one.
+    const colors = await posture.evaluate((node) => {
+      const probe = document.createElement("div");
+      probe.className = "inspector-posture aligned";
+      node.parentElement!.appendChild(probe);
+      const aligned = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return { failed: getComputedStyle(node).backgroundColor, aligned };
+    });
+    expect(colors.failed).not.toBe(colors.aligned);
+    expect(pageErrors).toEqual([]);
   });
 
   test("the decided count is not painted over by a host's generic .progress styles", async ({ page }) => {
