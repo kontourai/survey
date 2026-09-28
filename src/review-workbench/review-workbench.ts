@@ -1194,6 +1194,7 @@ function renderFieldCard(
             ? renderConflictingProposals(item, proposedCandidates, presentationAdapter, presentation.targetLabel)
             : "<p class=\"field-value\">No proposed value is available for this field.</p>"}
         ${proposed ? renderProvenanceRow(item, proposed, presentationAdapter) : ""}
+        ${renderExtractionImportNotes(item)}
         <div class="decide">
           ${keepDecision === undefined ? "" : `<button class="btn keep" type="button" data-testid="keep-current" data-item-name="${escapeHtml(item.metadata.name)}">${keepLabel}</button>`}
           ${proposed ? `<button class="btn use" type="button" data-testid="use-proposed" data-item-name="${escapeHtml(item.metadata.name)}">Use proposed</button>
@@ -1450,6 +1451,38 @@ function renderProvenanceRow(
         <q>${escapeHtml(excerpt)}</q>
         <span class="from">from ${sourceLinkHtml}</span>
       </div>
+    </div>
+  `;
+}
+
+/**
+ * What an envelope import says about this field's evidence: whether its
+ * excerpts were checked against the prepared source text, and any rival
+ * proposals the import left out because their excerpt was not at their span.
+ * Such a proposal is unverifiable, not disproven, so the reviewer sees it
+ * before accepting the value that remained. Empty for items from other
+ * producers.
+ */
+function renderExtractionImportNotes(item: ReviewItem): string {
+  const metadata = item.metadata.producer?.["survey.kontourai.io/extraction-envelope"] as
+    | { excerptVerification?: unknown; excludedProposals?: Array<{ proposalIndex: number; value: unknown; locator: string; excerpt: string }> }
+    | undefined;
+  if (!metadata) return "";
+  const verified = metadata.excerptVerification === "verified";
+  const excluded = Array.isArray(metadata.excludedProposals) ? metadata.excludedProposals : [];
+  const excludedHtml = excluded.length === 0 ? "" : `
+      <div class="noprov" data-testid="excluded-proposals" role="note">
+        ${WARNING_SVG}
+        <span class="tag">${excluded.length} excluded</span>
+        <span>${excluded.length === 1 ? "Another proposal for this field was" : `${excluded.length} other proposals for this field were`} left out because the source text at the cited span is not the excerpt:
+          ${excluded.map((entry) => `<span data-testid="excluded-proposal" data-proposal-index="${escapeHtml(String(entry.proposalIndex))}"><q>${escapeHtml(formatValue(entry.value))}</q> (proposal ${escapeHtml(String(entry.proposalIndex))}, ${escapeHtml(entry.locator)})</span>`).join(", ")}.
+          Unverifiable is not disproven: check the source before deciding.</span>
+      </div>`;
+  return `
+    <div class="prov import-notes">${excludedHtml}
+      <p class="excerpt-verification" data-testid="excerpt-verification" data-verified="${verified ? "true" : "false"}">${verified
+        ? "Excerpts checked against the prepared source text at import."
+        : "Excerpts not checked against the prepared source text at import."}</p>
     </div>
   `;
 }

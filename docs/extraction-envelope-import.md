@@ -75,11 +75,25 @@ index and locator. The rest import unchanged and the import stays `grounded`,
 unless every proposal failed, which makes it `unresolved`. The text itself is
 not stored in the record.
 
+An excluded proposal is unverifiable, not disproven. When it shared a claim
+slot with proposals that did verify, the slot's item lists it in its producer
+metadata as `excludedProposals`, and the workbench shows it on the card with
+its value and span. The candidate set is judged on the candidates that
+remain: a rival value whose excerpt failed does not keep the set in
+`conflict`, because a conflict item offers only decisions that trust no
+value, and an unverifiable citation would then be enough to block the value
+that the source does support. The reviewer still sees the rival and can
+decline with Could not confirm. The source inspector names every excluded
+proposal, including ones whose slot has no other proposal and so no item, and
+shows the `proposals-excluded` posture instead of the aligned one.
+
 `status.provenance` is `"verified"` only when this check ran against text that
 matched the digest. Without the option, or when the text did not verify, it is
 `"unverified"`. Consumers that must not review unverified excerpts should
 require `"verified"`. Records written before this field existed have no
-`provenance`. The field records what the import saw. It is not proof: a
+`provenance`. Items from a verified import carry `excerptVerification:
+"verified"` in their producer metadata, and the inspector and workbench show
+whether a source's excerpts were checked. The field records what the import saw. It is not proof: a
 record taken from untrusted storage cannot prove it without the text.
 
 ### One candidate set per claim

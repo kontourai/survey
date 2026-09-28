@@ -93,6 +93,17 @@ export interface ExtractionInspectorSource {
    * diagnostic. An empty source with this set is not a run that found nothing.
    */
   extractionDiagnostic?: Extract<ExtractionEnvelopeImportDiagnostic, { kind: "extraction-failed" | "extraction-incomplete" }>;
+  /**
+   * Whether the import checked excerpts against the prepared artifact
+   * (`status.provenance`; a record without it is `unverified`). Always set by
+   * {@link buildExtractionInspectorModel}; optional for hand-authored models.
+   */
+  importProvenance?: "verified" | "unverified";
+  /**
+   * Proposals the import left out because the prepared text at their span is
+   * not their excerpt. They have no candidate row; this is where they are shown.
+   */
+  excludedProposals?: Array<{ proposalIndex: number; field: string; locator: string }>;
   message: string;
 }
 
@@ -174,6 +185,8 @@ export function buildExtractionInspectorModel(input: ExtractionInspectorInput): 
       record.status.diagnostics,
       entry.artifact,
       envelope.result.ocrDerived,
+      envelope.result.proposals,
+      record.status.provenance ?? "unverified",
     );
     sources.push(source);
     const candidateStart = candidates.length;
@@ -326,8 +339,10 @@ function envelopeItemProposalIndices(item: ReviewItem): number[] {
  * stop when there is one, otherwise the artifact alignment. A failed
  * extraction over an aligned artifact must not show the aligned posture.
  */
-export function inspectorSourcePosture(source: Pick<ExtractionInspectorSource, "alignment" | "extractionDiagnostic">): ExtractionAlignmentState | "extraction-failed" | "extraction-incomplete" {
+export function inspectorSourcePosture(source: Pick<ExtractionInspectorSource, "alignment" | "extractionDiagnostic" | "excludedProposals">): ExtractionAlignmentState | "extraction-failed" | "extraction-incomplete" | "proposals-excluded" {
   if (source.extractionDiagnostic) return source.extractionDiagnostic.kind;
+  // An aligned artifact must not read as complete when the import dropped proposals.
+  if (source.alignment === "aligned" && source.excludedProposals?.length) return "proposals-excluded";
   return source.alignment;
 }
 
@@ -338,10 +353,15 @@ function sourceModel(
   diagnostics: readonly ExtractionEnvelopeImportDiagnostic[],
   artifact: ResolvedExtractionArtifact,
   ocrDerived: true | undefined,
+  proposals: readonly PortableExtractionProposal[],
+  importProvenance: "verified" | "unverified",
 ): ExtractionInspectorSource {
   let alignment: ExtractionAlignmentState;
   let message: string;
   const artifactUnresolved = diagnostics.some((diagnostic) => diagnostic.kind === "artifact-unavailable" || diagnostic.kind === "digest-mismatch");
+  const excludedProposals = diagnostics.flatMap((diagnostic) => diagnostic.kind === "excerpt-mismatch"
+    ? [{ proposalIndex: diagnostic.proposalIndex, field: proposals[diagnostic.proposalIndex]?.fieldPath ?? "", locator: diagnostic.locator }]
+    : []);
   const extractionDiagnostic = diagnostics.find((diagnostic): diagnostic is NonNullable<ExtractionInspectorSource["extractionDiagnostic"]> =>
     diagnostic.kind === "extraction-failed" || diagnostic.kind === "extraction-incomplete");
   const check = checkPreparedArtifact(prepared, artifact);
@@ -352,14 +372,19 @@ function sourceModel(
   } else if (check.status === "wrong-length") {
     alignment = "artifact-unavailable"; message = "Prepared artifact content has the wrong length. Candidates are not grounded.";
   } else {
-    alignment = "aligned"; message = extractionDiagnostic
+    alignment = "aligned"; message = extractionDiagnostic || excludedProposals.length
       ? "Prepared artifact identity verified."
       : `Prepared artifact identity verified. Exact source spans are available.${ocrDerived ? " Prepared text is OCR-derived." : ""}`;
   }
+  if (excludedProposals.length) {
+    const named = excludedProposals.map((p) => `#${p.proposalIndex} ${p.field} (${p.locator})`).join(", ");
+    message = `${excludedProposals.length} proposal${excludedProposals.length === 1 ? " was" : "s were"} excluded at import because the prepared text at the span is not the excerpt: ${named}. ${message}`;
+  }
+  message = `${message} ${importProvenance === "verified" ? "Excerpts were checked against the prepared artifact at import." : "Excerpts were not checked against the prepared artifact at import."}`;
   // The extraction's own failure leads: an aligned artifact with no candidates
   // must not read as a complete run that found nothing.
   if (extractionDiagnostic) message = `${extractionDiagnostic.message} ${message}`;
-  return { key, importName, ...(extractionDiagnostic ? { extractionDiagnostic } : {}), ...(prepared?.ref ? { artifactRef: prepared.ref } : {}), ...(prepared?.digest ? { expectedDigest: prepared.digest } : {}), ...("actualDigest" in artifact ? { actualDigest: artifact.actualDigest } : {}), ...(alignment === "aligned" && artifact.status === "available" ? { artifactText: artifact.text } : {}), ...(ocrDerived ? { ocrDerived: true as const } : {}), alignment, message };
+  return { key, importName, importProvenance, ...(excludedProposals.length ? { excludedProposals } : {}), ...(extractionDiagnostic ? { extractionDiagnostic } : {}), ...(prepared?.ref ? { artifactRef: prepared.ref } : {}), ...(prepared?.digest ? { expectedDigest: prepared.digest } : {}), ...("actualDigest" in artifact ? { actualDigest: artifact.actualDigest } : {}), ...(alignment === "aligned" && artifact.status === "available" ? { artifactText: artifact.text } : {}), ...(ocrDerived ? { ocrDerived: true as const } : {}), alignment, message };
 }
 
 function candidateModel(
@@ -380,7 +405,7 @@ function candidateModel(
   const start = Number(match[1]), end = Number(match[2]);
   if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start) throw new Error(`Extraction proposal ${index} has an invalid text span.`);
   const alignment = source.alignment === "aligned" && !proposalSpanMatches(source.artifactText!, proposal) ? "excerpt-mismatch" : source.alignment;
-  if (alignment === "excerpt-mismatch") { source.alignment = alignment; source.message = "One or more source spans do not match their recorded excerpts. Affected candidates are not grounded."; }
+  if (alignment === "excerpt-mismatch") { source.alignment = alignment; source.message = `One or more source spans do not match their recorded excerpts. Affected candidates are not grounded.${source.importProvenance === "unverified" ? " Excerpts were not checked against the prepared artifact at import." : ""}`; }
   let pdfRegion = pdfLayout ? resolvePortablePdfRegion(pdfLayout, proposal.provenance.locator) : undefined;
   const page = resolvePdfPage(pdfPageOffsets, start);
   if (page !== undefined) {

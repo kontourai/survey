@@ -243,7 +243,8 @@ export function buildReviewItemsFromExtractionEnvelopeImport(record: ExtractionE
 }
 
 interface IndexedProposal { proposal: PortableExtractionProposal; index: number }
-interface ClaimSlotGroup { slot: ClaimSlot; members: IndexedProposal[] }
+/** `excluded` are the slot's proposals the import left out because their span did not match their excerpt. */
+interface ClaimSlotGroup { slot: ClaimSlot; members: IndexedProposal[]; excluded: IndexedProposal[] }
 interface ClaimSlot {
   subjectType: string; subjectId: string; facet: string; claimType: string; fieldOrBehavior: string;
   claimId: string | null; pathIndices: number[] | null;
@@ -252,22 +253,33 @@ interface ClaimSlot {
 function claimSlotGroups(record: ExtractionEnvelopeImport): ClaimSlotGroup[] {
   const groups = new Map<string, ClaimSlotGroup>();
   const excluded = excerptMismatchProposalIndices(record);
-  record.spec.envelope.result.proposals.forEach((proposal, index) => {
-    if (excluded.has(index)) return;
+  const slotOf = (proposal: PortableExtractionProposal, index: number): ClaimSlot => {
     const target = record.spec.claimTargets[index]!;
-    const slot: ClaimSlot = {
+    return {
       subjectType: target.subjectType, subjectId: target.subjectId, facet: target.facet, claimType: target.claimType,
       fieldOrBehavior: target.fieldOrBehavior, claimId: target.claimId ?? null, pathIndices: proposal.pathIndices ?? null,
     };
+  };
+  record.spec.envelope.result.proposals.forEach((proposal, index) => {
+    if (excluded.has(index)) return;
+    const target = record.spec.claimTargets[index]!;
+    const slot = slotOf(proposal, index);
     const key = canonicalJson(slot);
     const group = groups.get(key);
-    if (!group) { groups.set(key, { slot, members: [{ proposal, index }] }); return; }
+    if (!group) { groups.set(key, { slot, members: [{ proposal, index }], excluded: [] }); return; }
     const first = group.members[0]!.index;
     // One claim cannot carry two impact levels or evidence descriptions.
     if (canonicalJson(record.spec.claimTargets[first]) !== canonicalJson(target)) {
       throw new Error(`Proposals ${first} and ${index} map to the same claim with different claim targets.`);
     }
     group.members.push({ proposal, index });
+  });
+  // An excluded proposal is unverifiable, not disproven: the slot it would have
+  // joined keeps a record of it, so a rival value cannot vanish without trace.
+  // A slot whose every proposal was excluded has no item; the import
+  // diagnostics are then the only record, as for any excluded proposal.
+  record.spec.envelope.result.proposals.forEach((proposal, index) => {
+    if (excluded.has(index)) groups.get(canonicalJson(slotOf(proposal, index)))?.excluded.push({ proposal, index });
   });
   return [...groups.values()];
 }
@@ -314,6 +326,13 @@ function buildReviewItem(record: ExtractionEnvelopeImport, group: ClaimSlotGroup
       proposalIndices: group.members.map((member) => member.index),
       source: envelope.source,
       ...(envelope.result.preparedArtifact ? { preparedArtifact: envelope.result.preparedArtifact } : {}),
+      // Present only on verified imports, so an unverified import's items stay
+      // byte-identical to the ones earlier releases produced.
+      ...(record.status.provenance === "verified" ? { excerptVerification: "verified" } : {}),
+      ...(group.excluded.length ? { excludedProposals: group.excluded.map(({ proposal, index }) => ({
+        proposalIndex: index, value: proposal.candidateValue, locator: proposal.provenance.locator,
+        excerpt: proposal.provenance.excerpt, reason: "excerpt-mismatch",
+      })) } : {}),
     } } },
     spec: {
       target: lead.fieldPath, candidates,

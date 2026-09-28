@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import {
   buildExtractionInspectorModel,
   buildReviewItemsFromExtractionEnvelopeImport,
+  inspectorSourcePosture,
   exportExtractionEnvelopeImport,
   importExtractionEnvelope,
   reimportExtractionEnvelope,
@@ -74,7 +76,16 @@ describe("import-time excerpt verification against the prepared artifact (#293)"
     const clean = envelope([matching, renewal]);
     const withoutArtifact = importExtractionEnvelope(clean, options());
     const withArtifact = importExtractionEnvelope(clean, options(available()));
-    assert.deepEqual(withArtifact.reviewItems, withoutArtifact.reviewItems);
+    // Same items and candidates; only the item says it was verified.
+    const unmark = (items: typeof withArtifact.reviewItems) => items.map((item) => {
+      const copy = JSON.parse(JSON.stringify(item));
+      const meta = copy.metadata.producer["survey.kontourai.io/extraction-envelope"];
+      assert.equal(meta.excerptVerification, "verified");
+      delete meta.excerptVerification;
+      return copy;
+    });
+    assert.deepEqual(unmark(withArtifact.reviewItems), withoutArtifact.reviewItems);
+    assert.ok(withoutArtifact.reviewItems.every((item) => !("excerptVerification" in (item.metadata.producer!["survey.kontourai.io/extraction-envelope"] as object))));
     assert.deepEqual(withArtifact.record.status, { state: "grounded", diagnostics: [], provenance: "verified" });
 
     const mixed = importExtractionEnvelope(envelope([matching, fabricated, renewal]), options(available()));
@@ -91,6 +102,39 @@ describe("import-time excerpt verification against the prepared artifact (#293)"
     assert.deepEqual(validateReviewQueueAgainstExtractionImport(mixed.reviewItems, mixed), []);
     const inspector = buildExtractionInspectorModel({ importResult: mixed, artifact: available() });
     assert.deepEqual(inspector.candidates.map((c) => [c.proposalIndex, c.alignment]), [[0, "aligned"], [2, "aligned"]]);
+    // The excluded proposal is named on the source, which is not painted as complete.
+    const [source] = inspector.sources;
+    assert.deepEqual(source!.excludedProposals, [{ proposalIndex: 1, field: "commercial.discount", locator: "chars:12-17" }]);
+    assert.equal(inspectorSourcePosture(source!), "proposals-excluded");
+    assert.match(source!.message, /^1 proposal was excluded at import .*#1 commercial\.discount \(chars:12-17\)/);
+    assert.doesNotMatch(source!.message, /Exact source spans are available/);
+    assert.equal(source!.importProvenance, "verified");
+    const clean2 = buildExtractionInspectorModel({ importResult: withoutArtifact, artifact: available() }).sources[0]!;
+    assert.equal(inspectorSourcePosture(clean2), "aligned");
+    assert.equal(clean2.importProvenance, "unverified");
+    assert.match(clean2.message, /Exact source spans are available\. Excerpts were not checked against the prepared artifact at import\.$/);
+  });
+
+  it("a rival value excluded from a claim slot stays visible on the item", async () => {
+    // A real Traverse envelope: "Fee: 48000 per year. Summary Fee: 48000. Amended Fee: 52000."
+    const envelope = JSON.parse(await readFile(new URL("../../tests/fixtures/traverse-envelopes/success-conflicting-fee.v1.json", import.meta.url), "utf8")) as PortableExtractionResultEnvelope;
+    const text = "Fee: 48000 per year. Summary Fee: 48000. Amended Fee: 52000.";
+    const clean = importExtractionEnvelope(envelope, options(available(text)));
+    assert.deepEqual(clean.record.status, { state: "grounded", diagnostics: [], provenance: "verified" });
+    assert.equal(clean.reviewItems.length, 1);
+    assert.equal(clean.reviewItems[0]!.spec.candidateSetStatus, "conflict", "a verified conflict stays a conflict");
+
+    // The rival's excerpt no longer matches its span.
+    const rival = envelope.result.proposals[2]!;
+    rival.candidateValue = 52001; rival.provenance.excerpt = "52001";
+    const verified = importExtractionEnvelope(envelope, options(available(text)));
+    const [item] = verified.reviewItems;
+    assert.equal(verified.reviewItems.length, 1);
+    assert.equal(item!.spec.candidates.length, 1);
+    assert.deepEqual((item!.metadata.producer!["survey.kontourai.io/extraction-envelope"] as Record<string, unknown>).excludedProposals,
+      [{ proposalIndex: 2, value: 52001, locator: "chars:54-59", excerpt: "52001", reason: "excerpt-mismatch" }]);
+    assert.deepEqual(reimportExtractionEnvelope(exportExtractionEnvelopeImport(verified.record)), verified.record);
+    assert.deepEqual(buildReviewItemsFromExtractionEnvelopeImport(verified.record), verified.reviewItems);
   });
 
   it("a digest mismatch makes the import unresolved", () => {

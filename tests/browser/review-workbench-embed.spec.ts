@@ -13,7 +13,11 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { importExtractionEnvelope, type PortableExtractionResultEnvelope } from "../../src/extraction-envelope.js";
 
+import { initialReviewQueueSessionState } from "../../src/review-workbench/review-queue-session.js";
+import { sha256Hex } from "../../src/sha256.js";
 import {
+  buildEnvelopeImportFixture,
+  envelopeArtifactText,
   envelopeInspectorEntry,
   envelopeQueueSeeds,
   envelopeReviewQueueSession,
@@ -33,6 +37,8 @@ interface EmbedOptions {
   readonly candidates?: number;
   /** Explicit proposal seeds; overrides `candidates`. */
   readonly seeds?: readonly EnvelopeProposalSeed[];
+  /** Replaces the queue session (for items from a different import). */
+  readonly session?: unknown;
   /** Replaces the inspector entry (import result plus resolved artifact). */
   readonly inspectorEntry?: unknown;
   readonly pageSize?: number;
@@ -61,7 +67,7 @@ async function loadEmbed(page: Page, options: EmbedOptions = {}): Promise<Loaded
   const seeds = options.seeds ?? (options.candidates ? paginatingEnvelopeSeeds(options.candidates) : undefined);
   const inspectorEntry = seeds ? envelopeInspectorEntry(seeds) : envelopeInspectorEntry();
   const fixture = {
-    session: JSON.parse(JSON.stringify(seeds ? envelopeReviewQueueSession(seeds) : envelopeReviewQueueSession())),
+    session: JSON.parse(JSON.stringify(options.session ?? (seeds ? envelopeReviewQueueSession(seeds) : envelopeReviewQueueSession()))),
     inspectorEntry: JSON.parse(JSON.stringify(options.inspectorEntry ?? (options.artifact ? { ...inspectorEntry, artifact: options.artifact } : inspectorEntry))),
     ...(options.pageSize ? { inspectorPageSize: options.pageSize } : {}),
     ...(options.stripPublishedHighlightIds ? { stripPublishedHighlightIds: true } : {}),
@@ -668,6 +674,63 @@ test.describe("embedded workbench: envelope-imported decisions", () => {
       expect(pageErrors).toEqual([]);
     });
   }
+
+  test("an import that excluded proposals says so in the inspector and on the card, and is not painted as complete", async ({ page }, testInfo) => {
+    // A rival fee whose span does not hold its excerpt, and an enum proposal
+    // likewise: both are excluded when the import verifies against the text.
+    const seeds: EnvelopeProposalSeed[] = [
+      ...envelopeQueueSeeds,
+      { fieldPath: "commercial.annualFeeUsd", candidateValue: 52000, excerpt: "52000", valueType: "number" },
+    ];
+    const envelope = JSON.parse(JSON.stringify(buildEnvelopeImportFixture(seeds).record.spec.envelope)) as PortableExtractionResultEnvelope;
+    const rival = envelope.result.proposals[4]!;
+    rival.candidateValue = 99999; rival.provenance.excerpt = "99999";
+    const posture = envelope.result.proposals[3]!;
+    posture.candidateValue = "manual"; posture.provenance.excerpt = "manualxxxx";
+    const text = envelopeArtifactText(seeds);
+    const artifact = { status: "available" as const, text, actualDigest: sha256Hex(text) };
+    const importResult = importExtractionEnvelope(envelope, {
+      sourceKind: "uploaded-document", artifact,
+      claimTarget: (proposal) => ({ subjectType: "vendor.entity", subjectId: "vendor-1", facet: "vendor.contract", claimType: "vendor.field-candidate", fieldOrBehavior: proposal.fieldPath, impactLevel: "medium" }),
+    });
+    expect(importResult.record.status.state).toBe("grounded");
+    const { pageErrors } = await loadEmbed(page, { session: initialReviewQueueSessionState(importResult.reviewItems), inspectorEntry: { importResult, artifact } });
+
+    const sourcePosture = page.locator(".inspector-posture").first();
+    await expect(sourcePosture).toHaveAttribute("data-posture", "proposals-excluded");
+    await expect(sourcePosture).toContainText("2 proposals were excluded at import");
+    await expect(sourcePosture).toContainText("#3 renewal.posture");
+    await expect(sourcePosture).toContainText("#4 commercial.annualFeeUsd");
+    await expect(sourcePosture).toContainText("Excerpts were checked against the prepared artifact at import.");
+    await expect(sourcePosture).not.toContainText("Exact source spans are available");
+    const paint = await sourcePosture.evaluate((node) => {
+      const probe = document.createElement("div");
+      probe.className = "inspector-posture aligned";
+      node.parentElement!.appendChild(probe);
+      const aligned = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return { actual: getComputedStyle(node).backgroundColor, aligned };
+    });
+    expect(paint.actual).not.toBe(paint.aligned);
+
+    // The fee card keeps its verified value and shows the rival that was left out.
+    const fee = fieldByTarget(page, "commercial.annualFeeUsd");
+    await expect(fee.getByTestId("excluded-proposals")).toContainText("99999");
+    await expect(fee.getByTestId("excluded-proposal")).toHaveAttribute("data-proposal-index", "4");
+    await expect(fee.getByTestId("excerpt-verification")).toHaveAttribute("data-verified", "true");
+    await expect(fieldByTarget(page, "vendor.name").getByTestId("excluded-proposals")).toHaveCount(0);
+
+    await sourcePosture.screenshot({ path: testInfo.outputPath("excluded-posture.png") });
+    await fee.screenshot({ path: testInfo.outputPath("excluded-fee-card.png") });
+    expect(pageErrors).toEqual([]);
+  });
+
+  test("an unverified envelope import says its excerpts were not checked", async ({ page }) => {
+    const { pageErrors } = await loadEmbed(page);
+    await expect(fieldByTarget(page, "vendor.name").getByTestId("excerpt-verification")).toHaveAttribute("data-verified", "false");
+    await expect(page.locator(".inspector-posture").first()).toContainText("Excerpts were not checked against the prepared artifact at import.");
+    expect(pageErrors).toEqual([]);
+  });
 
   test("the decided count is not painted over by a host's generic .progress styles", async ({ page }) => {
     const { pageErrors } = await loadEmbed(page);

@@ -585,11 +585,13 @@ used to look exactly like a complete run that found nothing. Code that treated
 diagnostics, and stored import records of such envelopes no longer validate
 until re-imported, because their stored status no longer matches.
 
-## Excerpt verification at envelope import (#293)
+## Excerpt verification at envelope import (#293) — breaking
 
 `importExtractionEnvelope` takes an optional `artifact`, the same
-`ResolvedExtractionArtifact` the source inspector takes. Nothing changes until
-you pass it, apart from one new status field:
+`ResolvedExtractionArtifact` the source inspector takes. The breaking parts
+are that **every new import record carries `status.provenance`** and that
+**`ExtractionEnvelopeImportDiagnostic` has a new member, `excerpt-mismatch`**.
+Everything else changes only when you pass `artifact`:
 
 - **`status.provenance` on every new import record.** It is `"unverified"`
   when no artifact was passed, or when the one passed did not verify, and
@@ -616,6 +618,23 @@ you pass it, apart from one new status field:
   case for it. `ResolvedExtractionArtifact` and `ArtifactUnavailableCode` are
   now declared in the envelope module. They are still exported from the
   package root and the inspector module.
+
+- **Items say what was verified.** Items from a verified import carry
+  `excerptVerification: "verified"` in their
+  `metadata.producer["survey.kontourai.io/extraction-envelope"]`. An
+  unverified import's items are byte-identical to earlier releases. An item
+  whose claim slot lost a proposal to an excerpt mismatch lists it there as
+  `excludedProposals` (`proposalIndex`, `value`, `locator`, `excerpt`,
+  `reason: "excerpt-mismatch"`). The candidate set is judged on the remaining
+  candidates, so a conflict whose rival was excluded becomes `needs-review`,
+  and the workbench card shows the excluded rival and whether the excerpts
+  were checked.
+- **Inspector.** Sources gain `importProvenance` and `excludedProposals`.
+  `inspectorSourcePosture` can return `proposals-excluded`, styled like the
+  other non-grounded postures, for an aligned source whose import excluded
+  proposals. The message then names them and omits "Exact source spans are
+  available". Every source message now ends with whether excerpts were
+  checked at import, so code that matches the whole message must allow it.
 
 `provenance` records what the import saw. It is not an attestation: a
 stored record cannot prove its verification without the text, so

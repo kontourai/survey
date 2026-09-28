@@ -248,7 +248,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 .survey-workbench-embed .inspector-posture{ display: flex; flex-direction: column; padding: .75rem; border-radius: var(--k-radius-sm); background: var(--k-positive-wash); }
 /* Caution first: an artifact failure on the same source must win the tie and stay negative. */
 .survey-workbench-embed .inspector-posture.extraction-incomplete{ background: var(--k-caution-wash); color: var(--k-caution); border: 2px solid currentColor; }
-.survey-workbench-embed .inspector-posture.digest-mismatch, .survey-workbench-embed .inspector-posture.artifact-unavailable, .survey-workbench-embed .inspector-posture.excerpt-mismatch{ background: var(--k-negative-wash); color: var(--k-negative); border: 2px solid currentColor; }
+.survey-workbench-embed .inspector-posture.digest-mismatch, .survey-workbench-embed .inspector-posture.artifact-unavailable, .survey-workbench-embed .inspector-posture.excerpt-mismatch, .survey-workbench-embed .inspector-posture.proposals-excluded{ background: var(--k-negative-wash); color: var(--k-negative); border: 2px solid currentColor; }
 .survey-workbench-embed .inspector-posture.extraction-failed{ background: var(--k-negative-wash); color: var(--k-negative); border: 2px solid currentColor; }
 .survey-workbench-embed .inspector-filters{ display: flex; flex-wrap: wrap; gap: .6rem; margin: 1rem 0; }
 .survey-workbench-embed .inspector-filters label{ display: grid; gap: .25rem; font-size: .75rem; color: var(--k-text-muted); }
@@ -833,6 +833,12 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   padding: 2px 8px;
   border-radius: 999px;
   font-size: 12px;
+}
+
+.survey-workbench-embed .excerpt-verification{
+  margin: 0;
+  font-size: 12px;
+  color: var(--k-muted);
 }
 
 /* decisions */
