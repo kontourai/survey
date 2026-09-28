@@ -24,6 +24,7 @@ import type { ReviewDecision, ReviewSessionEvent } from "../review-resource.js";
 import { assertReviewQueueBinding, type ReviewQueueBinding } from "./queue-binding.js";
 import { replayReviewSessionEvents, type ReviewQueueSessionState } from "./review-queue-session.js";
 import { canonicalJson } from "./canonical.js";
+import type { ReviewPresentationAdapter } from "./review-presentation.js";
 
 export interface ServerReviewSessionRecord {
   readonly sessionName: string;
@@ -101,6 +102,8 @@ export interface DeriveServerReviewSessionApplyResultOptions {
   readonly currentSnapshot?: ReviewQueueSessionState;
   readonly currentEventCount?: number;
   readonly requiredResolvedItems?: ReviewSessionApplyResolutionRequirement;
+  /** The adapter the reviewer's card used; the recorded decision prompts render the target label and values with it. */
+  readonly presentationAdapter?: ReviewPresentationAdapter;
   /**
    * The queue binding taken when this session opened (see
    * ./queue-binding.ts). When present, the apply derivation refuses unless the
@@ -232,6 +235,7 @@ export function deriveServerReviewSessionApplyResult(
     snapshot: options.record.snapshot,
     events: options.events,
     requiredResolvedItems: options.requiredResolvedItems,
+    presentationAdapter: options.presentationAdapter,
   });
 }
 

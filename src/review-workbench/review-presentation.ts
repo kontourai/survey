@@ -68,6 +68,14 @@ export interface ReviewItemPresentation {
    */
   readonly excludedProposals: readonly ExcludedProposalPresentation[];
   /**
+   * Stored `excludedProposals` entries that {@link excludedProposals} cannot
+   * show: malformed entries, or every entry of an item whose envelope binding
+   * is not intact. Hiding a rival is the unsafe direction, so every surface
+   * that shows excluded proposals shows this notice too. Absent when every
+   * stored entry is shown.
+   */
+  readonly excludedProposalsUnreadable?: ExcludedProposalsUnreadable;
+  /**
    * For an envelope-imported item, whether its import checked excerpts
    * against the prepared artifact. Absent for other items, and for an item
    * whose envelope binding is missing, which cannot claim either.
@@ -81,6 +89,17 @@ export interface ExcludedProposalPresentation {
   readonly valueText: string;
   readonly locator: string;
   readonly excerpt: string;
+}
+
+export interface ExcludedProposalsUnreadable {
+  /**
+   * `malformed-entries`: some stored entries are not well-formed.
+   * `binding-broken`: the item's extraction binding is not intact, so none of
+   * its stored entries can be vouched for.
+   */
+  readonly reason: "malformed-entries" | "binding-broken";
+  /** How many stored entries are not shown; absent when the stored field is not a list. */
+  readonly count?: number;
 }
 
 export interface ReviewResultPresentation {
@@ -209,17 +228,34 @@ function extractionEnvelopeBinding(item: ReviewItem): Record<string, unknown> | 
   return bound ? binding : undefined;
 }
 
-/** The well-formed `excludedProposals` entries of a bound envelope item; malformed entries are ignored, never rendered. */
-function excludedProposalsOf(item: ReviewItem, binding: Record<string, unknown> | undefined, adapter: ReviewPresentationAdapter): ExcludedProposalPresentation[] {
-  if (!binding || !Array.isArray(binding.excludedProposals)) return [];
-  return binding.excludedProposals.flatMap((entry: unknown) => {
+/**
+ * The well-formed `excludedProposals` entries of a bound envelope item, and
+ * what the item stores but cannot show: malformed entries, or every entry
+ * when the binding is not intact. Nothing stored is dropped silently.
+ */
+function excludedProposalsOf(item: ReviewItem, binding: Record<string, unknown> | undefined, adapter: ReviewPresentationAdapter): Pick<ReviewItemPresentation, "excludedProposals" | "excludedProposalsUnreadable"> {
+  const metadata = item.metadata?.producer?.[EXTRACTION_ENVELOPE_PRODUCER];
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    // Candidates that still carry the envelope binding came from an import,
+    // whose item metadata is gone or replaced: what it stored is unknown.
+    const candidatesBound = item.spec.candidates.some((candidate) => candidate.producer?.[EXTRACTION_ENVELOPE_PRODUCER] !== undefined);
+    return candidatesBound ? { excludedProposals: [], excludedProposalsUnreadable: { reason: "binding-broken" } } : { excludedProposals: [] };
+  }
+  const stored = (metadata as Record<string, unknown>).excludedProposals;
+  if (stored === undefined) return { excludedProposals: [] };
+  const count = Array.isArray(stored) ? stored.length : undefined;
+  if (!binding) return count === 0 ? { excludedProposals: [] } : { excludedProposals: [], excludedProposalsUnreadable: { reason: "binding-broken", ...(count !== undefined ? { count } : {}) } };
+  if (!Array.isArray(stored)) return { excludedProposals: [], excludedProposalsUnreadable: { reason: "malformed-entries" } };
+  const proposed = item.spec.candidates.find((candidate) => candidate.role === "proposed");
+  const excludedProposals = stored.flatMap((entry: unknown) => {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
     const e = entry as Record<string, unknown>;
     if (!Number.isSafeInteger(e.proposalIndex) || typeof e.locator !== "string" || typeof e.excerpt !== "string" || !("value" in e)) return [];
-    const proposed = item.spec.candidates.find((candidate) => candidate.role === "proposed");
     const valueText = (proposed ? adapter.summarizeValue?.(e.value, { item, candidate: proposed, value: e.value }) : undefined) ?? formatValue(e.value);
     return [{ proposalIndex: e.proposalIndex as number, value: e.value, valueText, locator: e.locator, excerpt: e.excerpt }];
   });
+  const unreadable = stored.length - excludedProposals.length;
+  return { excludedProposals, ...(unreadable > 0 ? { excludedProposalsUnreadable: { reason: "malformed-entries" as const, count: unreadable } } : {}) };
 }
 
 /**
@@ -230,6 +266,20 @@ export function excludedProposalsSentence(excluded: readonly ExcludedProposalPre
   if (excluded.length === 0) return undefined;
   const named = excluded.map((entry) => `${entry.valueText} (proposal ${entry.proposalIndex}, ${entry.locator})`).join(", ");
   return `${excluded.length === 1 ? "Another proposed value was" : `${excluded.length} other proposed values were`} excluded at import because the source text at the cited span is not the excerpt: ${named}. Unverifiable is not disproven.`;
+}
+
+/**
+ * One sentence saying that stored excluded proposals cannot be shown, for
+ * every surface that shows excluded proposals. Undefined when none are hidden.
+ */
+export function excludedProposalsUnreadableSentence(unreadable: ExcludedProposalsUnreadable | undefined): string | undefined {
+  if (!unreadable) return undefined;
+  const { count } = unreadable;
+  const entries = count === undefined ? "Stored excluded proposals are" : `${count} stored excluded ${count === 1 ? "entry is" : "entries are"}`;
+  const why = unreadable.reason === "binding-broken"
+    ? "not shown because this item's extraction binding is broken"
+    : "unreadable and not shown";
+  return `${entries} ${why}. Another value may have been proposed for this field.`;
 }
 
 export interface CandidateVerificationRecordPresentation {
@@ -338,10 +388,10 @@ export function buildReviewItemPresentation(
   };
 }
 
-function extractionPresentation(item: ReviewItem, adapter: ReviewPresentationAdapter): Pick<ReviewItemPresentation, "excludedProposals" | "excerptVerification"> {
+function extractionPresentation(item: ReviewItem, adapter: ReviewPresentationAdapter): Pick<ReviewItemPresentation, "excludedProposals" | "excludedProposalsUnreadable" | "excerptVerification"> {
   const binding = extractionEnvelopeBinding(item);
   return {
-    excludedProposals: excludedProposalsOf(item, binding, adapter),
+    ...excludedProposalsOf(item, binding, adapter),
     ...(binding ? { excerptVerification: binding.excerptVerification === "verified" ? "verified" as const : "unverified" as const } : {}),
   };
 }

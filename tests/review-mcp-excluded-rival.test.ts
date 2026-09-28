@@ -15,8 +15,30 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { importExtractionEnvelope, type PortableExtractionResultEnvelope } from "../src/extraction-envelope.js";
 import { initialReviewQueueSessionState } from "../src/review-workbench/review-queue-session.js";
-import { buildReviewDecisionsFromSession, replayReviewSessionEventsForSnapshot } from "../src/review-workbench/review-workbench.js";
-import { buildReviewItemPresentation } from "../src/review-workbench/review-presentation.js";
+import {
+  buildReviewDecision,
+  buildReviewDecisionsFromSession,
+  deriveReviewSessionApplyResultForSnapshot,
+  initialReviewWorkbenchState,
+  renderReviewWorkbenchHtml,
+  replayReviewSessionEventsForSnapshot,
+} from "../src/review-workbench/review-workbench.js";
+import { buildReviewItemPresentation, type ReviewPresentationAdapter } from "../src/review-workbench/review-presentation.js";
+import { buildReviewSessionEvents } from "../src/review-workbench/review-queue-session.js";
+import { createServerReviewSessionRecord, deriveServerReviewSessionApplyResult } from "../src/review-workbench/server-review-session.js";
+import type { ReviewDecision, ReviewItem } from "../src/review-resource.js";
+
+const ENVELOPE_PRODUCER = "survey.kontourai.io/extraction-envelope";
+
+function renderedPrompt(decision: ReviewDecision | undefined): string {
+  return (decision?.spec.authorizing as { renderedPrompt?: string } | undefined)?.renderedPrompt ?? "";
+}
+
+function edited(item: ReviewItem, change: (meta: Record<string, any>, copy: Record<string, any>) => void): ReviewItem {
+  const copy = JSON.parse(JSON.stringify(item));
+  change(copy.metadata.producer[ENVELOPE_PRODUCER], copy);
+  return copy;
+}
 
 const TEXT = "Fee: 48000 per year. Summary Fee: 48000. Amended Fee: 52000.";
 
@@ -107,6 +129,7 @@ describe("an excluded rival value on the MCP decision path", () => {
     };
     const junk = buildReviewItemPresentation(edit((meta) => { meta.excludedProposals = [null, 7, { proposalIndex: "x" }]; }));
     assert.deepEqual(junk.excludedProposals, []);
+    assert.deepEqual(junk.excludedProposalsUnreadable, { reason: "malformed-entries", count: 3 });
     assert.equal(junk.excerptVerification, "verified");
     // No binding: a bare metadata object cannot vouch for anything.
     const forged = buildReviewItemPresentation(edit((meta, copy) => {
@@ -114,10 +137,106 @@ describe("an excluded rival value on the MCP decision path", () => {
     }));
     assert.equal(forged.excerptVerification, undefined);
     assert.deepEqual(forged.excludedProposals, []);
+    assert.deepEqual(forged.excludedProposalsUnreadable, { reason: "binding-broken", count: 1 });
     // Candidates bound to another import do not count as a binding either.
     const crossBound = buildReviewItemPresentation(edit((_meta, copy) => {
       copy.spec.candidates[0].producer["survey.kontourai.io/extraction-envelope"].importName = "other-import";
     }));
     assert.equal(crossBound.excerptVerification, undefined);
+  });
+
+  test("stored excluded entries that cannot be shown are flagged on the card, the audit rows, the MCP surfaces and the prompt", async () => {
+    const [item] = await verifiedItemsWithExcludedRival();
+    // One valid entry and two malformed ones: the valid one is shown, and the card says two were not.
+    const mixed = edited(item!, (meta) => { meta.excludedProposals = [meta.excludedProposals[0], null, { proposalIndex: "x" }]; });
+    const mixedPresentation = buildReviewItemPresentation(mixed);
+    assert.equal(mixedPresentation.excludedProposals.length, 1);
+    assert.deepEqual(mixedPresentation.excludedProposalsUnreadable, { reason: "malformed-entries", count: 2 });
+    const mixedCard = renderReviewWorkbenchHtml(initialReviewWorkbenchState(mixed));
+    assert.match(mixedCard, /data-testid="excluded-proposal"/);
+    assert.match(mixedCard, /data-testid="excluded-proposals-unreadable" data-reason="malformed-entries"[\s\S]*2 stored excluded entries are unreadable and not shown\./);
+    assert.match(mixedCard, /data-audit-row="excluded-proposals-unreadable"/);
+    assert.match(renderedPrompt(buildReviewDecision({ ...initialReviewWorkbenchState(mixed), decision: "accept-proposed" })), /2 stored excluded entries are unreadable and not shown\./);
+
+    // A candidate that lost its import name breaks the binding: 0 of 1 stored rivals can be shown, and that is said.
+    const unbound = edited(item!, (_meta, copy) => { delete copy.spec.candidates[0].producer[ENVELOPE_PRODUCER].importName; });
+    assert.deepEqual(buildReviewItemPresentation(unbound).excludedProposals, []);
+    assert.deepEqual(buildReviewItemPresentation(unbound).excludedProposalsUnreadable, { reason: "binding-broken", count: 1 });
+    const unboundCard = renderReviewWorkbenchHtml(initialReviewWorkbenchState(unbound));
+    assert.match(unboundCard, /data-testid="excluded-proposals-unreadable" data-reason="binding-broken"[\s\S]*1 stored excluded entry is not shown because this item&#39;s extraction binding is broken\./);
+    assert.match(renderedPrompt(buildReviewDecision({ ...initialReviewWorkbenchState(unbound), decision: "accept-proposed" })), /1 stored excluded entry is not shown because this item's extraction binding is broken\./);
+
+    // Item metadata replaced by a non-object, or removed, while the candidates still carry the envelope binding: binding broken, count unknown.
+    for (const replacement of ["tampered", ["tampered"], undefined]) {
+      const replaced = edited(item!, (_meta, copy) => { copy.metadata.producer[ENVELOPE_PRODUCER] = replacement; });
+      assert.deepEqual(buildReviewItemPresentation(replaced).excludedProposalsUnreadable, { reason: "binding-broken" }, JSON.stringify(replacement));
+      assert.match(renderedPrompt(buildReviewDecision({ ...initialReviewWorkbenchState(replaced), decision: "accept-proposed" })), /Stored excluded proposals are not shown because this item's extraction binding is broken\./);
+    }
+    // An item from another producer (no envelope binding anywhere) says nothing.
+    const foreign = edited(item!, (_meta, copy) => { delete copy.metadata.producer[ENVELOPE_PRODUCER]; for (const c of copy.spec.candidates) delete c.producer[ENVELOPE_PRODUCER]; });
+    assert.equal(buildReviewItemPresentation(foreign).excludedProposalsUnreadable, undefined);
+    // A stored field that is not a list is unreadable, count unknown.
+    assert.deepEqual(buildReviewItemPresentation(edited(item!, (meta) => { meta.excludedProposals = "tampered"; })).excludedProposalsUnreadable, { reason: "malformed-entries" });
+    // An intact item hides nothing and says nothing extra.
+    assert.equal(buildReviewItemPresentation(item!).excludedProposalsUnreadable, undefined);
+
+    // The MCP item text, data and card say the same.
+    const itemName = mixed.metadata.name;
+    const example = JSON.parse(await readFile("example-data/mcp-review-session.json", "utf8")) as Record<string, any>;
+    example.session.spec.reviewItemNames = [itemName];
+    const tmpDir = await mkdtemp(join(tmpdir(), "survey-mcp-unreadable-"));
+    const sessionPath = join(tmpDir, "session.json");
+    await writeFile(sessionPath, JSON.stringify({ session: example.session, snapshot: initialReviewQueueSessionState([mixed]), events: [] }, null, 2));
+    const server = spawn("node", ["bin/survey-review-mcp.mjs", "--session", sessionPath], { stdio: ["pipe", "pipe", "inherit"] });
+    const call = rpc(server);
+    try {
+      await call("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "0" } });
+      server.stdin!.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
+      const response = await call("tools/call", { name: "survey_review_item", arguments: { itemName } });
+      assert.equal(response.result.isError, false);
+      const text: string = response.result.content[0].text;
+      assert.match(text, /Excluded: 2 stored excluded entries are unreadable and not shown\./);
+      assert.match(text, /"excludedProposalsUnreadable": \{\s*"reason": "malformed-entries",\s*"count": 2/);
+      const card = response.result.content.find((entry: { type: string }) => entry.type === "resource")?.resource?.text ?? "";
+      assert.match(card, /id="excluded-unreadable-note"[^>]*>2 stored excluded entries are unreadable/);
+    } finally {
+      server.stdin!.end();
+      await once(server, "exit");
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test("the recorded prompt renders values with the card's presentation adapter", async () => {
+    const [item] = await verifiedItemsWithExcludedRival();
+    const adapter: ReviewPresentationAdapter = {
+      labelForTarget: () => "Annual fee",
+      summarizeValue: (value) => `USD ${String(value)}`,
+    };
+    const card = renderReviewWorkbenchHtml(initialReviewWorkbenchState(item!), undefined, { presentationAdapter: adapter });
+    assert.match(card, /USD 48000/);
+    assert.match(card, /<q>USD 52001<\/q>/);
+
+    const prompt = renderedPrompt(buildReviewDecision({ ...initialReviewWorkbenchState(item!), decision: "accept-proposed" }, { presentationAdapter: adapter }));
+    assert.match(prompt, /^For Annual fee, decide whether USD 48000 should replace /);
+    assert.match(prompt, /USD 52001 \(proposal 2, chars:54-59\)/);
+
+    // The server apply boundary records the same prompt when given the same adapter.
+    const snapshot = initialReviewQueueSessionState([item!]);
+    const decided = { ...snapshot, decisionsByItemName: { [item!.metadata.name]: "accept-proposed" as const } };
+    const applied = deriveReviewSessionApplyResultForSnapshot({ snapshot, events: buildReviewSessionEvents(decided), presentationAdapter: adapter });
+    assert.equal(renderedPrompt(applied.decisions[0]), renderedPrompt(buildReviewDecision({ ...initialReviewWorkbenchState(item!), decision: "accept-proposed", reviewedAt: applied.decisions[0]!.spec.reviewedAt!, actorId: applied.decisions[0]!.spec.actor!.id }, { presentationAdapter: adapter })));
+    assert.match(renderedPrompt(applied.decisions[0]), /USD 52001/);
+  });
+
+  test("the server apply boundary records the card-adapted prompt when given the card's adapter", async () => {
+    const [item] = await verifiedItemsWithExcludedRival();
+    const adapter: ReviewPresentationAdapter = { labelForTarget: () => "Annual fee", summarizeValue: (value) => `USD ${String(value)}` };
+    const snapshot = initialReviewQueueSessionState([item!]);
+    const events = buildReviewSessionEvents({ ...snapshot, decisionsByItemName: { [item!.metadata.name]: "accept-proposed" } });
+    const record = createServerReviewSessionRecord({ sessionName: events[0]!.spec.sessionName, snapshot });
+    const adapted = renderedPrompt(deriveServerReviewSessionApplyResult({ record, events, presentationAdapter: adapter }).decisions[0]);
+    assert.match(adapted, /^For Annual fee, decide whether USD 48000 should replace /);
+    assert.match(adapted, /USD 52001 \(proposal 2, chars:54-59\)/);
+    assert.equal(adapted, renderedPrompt(deriveReviewSessionApplyResultForSnapshot({ snapshot, events, presentationAdapter: adapter }).decisions[0]));
   });
 });

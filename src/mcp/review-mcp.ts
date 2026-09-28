@@ -23,7 +23,7 @@ import {
   deriveServerReviewSessionApplyResult,
 } from "../review-workbench/server-review-session.js";
 import type { ReviewItem, ReviewSession, ReviewSessionEvent } from "../review-resource.js";
-import { buildReviewItemPresentation, candidateVerificationNotes, excludedProposalsSentence } from "../review-workbench/review-presentation.js";
+import { buildReviewItemPresentation, candidateVerificationNotes, excludedProposalsSentence, excludedProposalsUnreadableSentence } from "../review-workbench/review-presentation.js";
 import {
   appendReviewSessionEvents,
   readReviewSessionFile,
@@ -151,8 +151,10 @@ function editedValueFor(item: ReviewItem, state: ReviewQueueSessionState): unkno
 function extractionImportLines(item: ReviewItem): string[] {
   const presentation = buildReviewItemPresentation(item);
   const excluded = excludedProposalsSentence(presentation.excludedProposals);
+  const unreadable = excludedProposalsUnreadableSentence(presentation.excludedProposalsUnreadable);
   return [
     ...(excluded ? [``, `Excluded: ${excluded} Check the source before accepting.`] : []),
+    ...(unreadable ? [``, `Excluded: ${unreadable} Check the source before accepting.`] : []),
     ...(presentation.excerptVerification ? [``, `Excerpts ${presentation.excerptVerification === "verified" ? "were" : "were not"} checked against the prepared source text at import.`] : []),
   ];
 }
@@ -218,7 +220,9 @@ function buildReviewCardHtml(
     : proposedCard(proposedCandidates[0], "Proposed");
 
   const itemNameJson = escapeJsonInHtml(item.metadata.name);
-  const excludedNote = excludedProposalsSentence(buildReviewItemPresentation(item).excludedProposals);
+  const itemPresentation = buildReviewItemPresentation(item);
+  const excludedNote = excludedProposalsSentence(itemPresentation.excludedProposals);
+  const unreadableNote = excludedProposalsUnreadableSentence(itemPresentation.excludedProposalsUnreadable);
   const verificationNotes = candidateVerificationNotes(item, editedValueFor(item, current));
 
   const decisionBadge = decision
@@ -324,6 +328,7 @@ h1{font-size:15px;font-weight:700;margin:0 0 4px}
   ${proposedCards}
 </div>
 ${excludedNote ? `<p class="feedback" id="excluded-note">${escapeHtml(excludedNote)}</p>` : ""}
+${unreadableNote ? `<p class="feedback" id="excluded-unreadable-note">${escapeHtml(unreadableNote)}</p>` : ""}
 ${verificationNotes.map((entry) => `<p class="feedback verification-note" data-candidate-id="${escapeHtml(entry.candidateId)}">${escapeHtml(entry.sentence)}</p>`).join("\n")}
 ${conflict ? `<p class="feedback" id="conflict-note">${proposedCandidates.length} different values were proposed. This card cannot choose one of them yet: reject them all, or use Could not confirm with a reason.</p>` : ""}
 
@@ -446,6 +451,7 @@ async function toolItem(itemName: string, options: ReviewMcpOptions): Promise<Co
       return {
         ...(presentation.excerptVerification ? { excerptVerification: presentation.excerptVerification } : {}),
         ...(presentation.excludedProposals.length ? { excludedProposals: presentation.excludedProposals.map(({ proposalIndex, value, locator, excerpt }) => ({ proposalIndex, value, locator, excerpt })) } : {}),
+        ...(presentation.excludedProposalsUnreadable ? { excludedProposalsUnreadable: presentation.excludedProposalsUnreadable } : {}),
       };
     })(),
     candidates: (() => {

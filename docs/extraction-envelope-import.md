@@ -79,7 +79,14 @@ An excluded proposal is unverifiable, not disproven. When it shared a claim
 slot with proposals that did verify, the slot's item lists it in its producer
 metadata as `excludedProposals`. Every decision surface shows it with its
 value and span: the workbench card and audit rows, the MCP item and card, and
-the recorded decision prompt. The candidate set is judged on the candidates that
+the recorded decision prompt. The prompt is rebuilt from the item when the
+decision is built, so it records what the card states for that item, not
+proof that a reviewer read it. Stored entries that cannot be shown, because
+they are malformed or the item's extraction binding is broken, are never
+dropped silently: the same surfaces say how many are not shown and why.
+An entry deleted outright leaves nothing to flag;
+`validateReviewQueueAgainstExtractionImport` catches that, because it requires
+each stored item to match its import byte for byte. The candidate set is judged on the candidates that
 remain: a rival value whose excerpt failed does not keep the set in
 `conflict`, because a conflict item offers only decisions that trust no
 value, and an unverifiable citation would then be enough to block the value
@@ -230,6 +237,9 @@ importer accepts:
   uncalibrated self-report. When present it must be a finite number in `0..1`
   (`null` is rejected). An absent confidence stays absent on the candidate and
   its extraction; Survey never substitutes a number.
+  `toSurfaceReviewedExtractionImport` exports such a record only when the
+  installed `@kontourai/surface` is 4.1.0 or later, and refuses it by name
+  on older versions, which reject it.
 
 Any other key, and any other partial reason, is still rejected.
 

@@ -629,8 +629,8 @@ Everything else changes only when you pass `artifact`:
   candidates, so a conflict whose rival was excluded becomes `needs-review`.
   Every decision surface shows the excluded rival: the workbench card and its
   audit rows (new key `excluded-proposal`), the MCP item text, data and card,
-  and the recorded decision prompt (`authorizing.renderedPrompt`), so the
-  audit trail shows the reviewer was told. `ReviewItemPresentation` gains
+  and the recorded decision prompt (`authorizing.renderedPrompt`).
+  `ReviewItemPresentation` gains
   `excludedProposals` and `excerptVerification`, read only from an item whose
   envelope binding is intact. Neither is projected into Surface trust
   inputs yet: that needs a Surface field.
@@ -646,6 +646,49 @@ stored record cannot prove its verification without the text, so
 stored-record integrity is still the caller's job, as for
 `validateReviewQueueAgainstExtractionImport`. A reloaded record is checked
 only for carrying verification results that an import could have written.
+
+## Confidence-less exports to Surface; unreadable excluded entries are flagged (#315, #310)
+
+- **`toSurfaceReviewedExtractionImport` exports proposals without
+  confidence** when the `@kontourai/surface` installed next to Survey is
+  4.1.0 or later. The proposal stays without one: no number is substituted.
+  With an older Surface, which rejects such a proposal, it still refuses the
+  record by name, and the message now names the installed Surface version.
+  To export these records, upgrade Surface to 4.1.0 or later. The version
+  checked is that of the Surface copy Survey resolves. If your code projects
+  with a different copy (say its own Surface 4.0.0 next to Survey's 4.2.0),
+  Surface itself refuses with `proposal.confidence is invalid`; dedupe Surface
+  so one copy is installed. When the version cannot be determined, as in a
+  bundle without `import.meta.resolve`, the export refuses with "Cannot
+  determine the installed @kontourai/surface version".
+- **`buildSurveyTrustBundle` omits absent confidences.** A candidate without
+  confidence produces a claim with no `confidenceBasis.extractionConfidence`
+  key and evidence with no `metadata.confidence` key. They used to be present
+  with the value `undefined`, which JSON already dropped.
+- **Unreadable excluded entries are flagged, not hidden.** When an item stores
+  `excludedProposals` that cannot be shown (malformed entries, or any entries
+  when the item's extraction binding is broken, including item metadata that
+  was removed or replaced while its candidates still carry the binding),
+  `ReviewItemPresentation.excludedProposalsUnreadable` says why and how many
+  (`{ reason: "malformed-entries" | "binding-broken", count? }`). The
+  workbench card, its audit rows (new key `excluded-proposals-unreadable`),
+  the MCP item text, data and card, and the recorded decision prompt all state
+  it. Only a tampered or hand-edited queue reaches this. Flagging covers
+  entries that are malformed or unbound; an entry deleted outright, or an
+  emptied list, leaves nothing to flag. `validateReviewQueueAgainstExtractionImport`
+  catches it, because it requires each stored item to match its import byte
+  for byte.
+- **The recorded prompt renders values like the card.** The decision prompt
+  is rebuilt from the item when the decision is built; it records what the card
+  states for that item, not a capture of what a reviewer saw. It now uses the
+  presentation adapter's `labelForTarget` and `summarizeValue`, as the card
+  does. Pass the card's adapter as `presentationAdapter` to `buildReviewDecision`,
+  `buildReviewDecisionsFromSession`, `buildReviewWorkbenchResultsFromSession`,
+  `buildReviewWorkbenchSessionExport`, `buildReviewWorkbenchSessionExportForSnapshot`,
+  `deriveReviewSessionApplyResultForSnapshot`, and
+  `deriveServerReviewSessionApplyResult`; the mounted workbench passes its
+  own. A server that applies sessions must pass the same adapter its
+  workbench uses, or its recorded prompts render values unadapted. Without an adapter the prompt text is unchanged.
 
 ## See also
 
