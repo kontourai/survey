@@ -52,6 +52,8 @@ interface EmbedOptions {
   readonly duplicateCandidateIds?: boolean;
   /** Duplicate ids with the fragment under test published by the SECOND candidate. */
   readonly duplicateCandidateIdsOnPageTwo?: boolean;
+  /** Marks the first inspector source as an extraction that stopped short. */
+  readonly markSourceIncomplete?: boolean;
   /** Two distinct candidates over the exact same span, in either order. */
   readonly sharedSpanCandidates?: "as-is" | "reversed";
 }
@@ -75,6 +77,7 @@ async function loadEmbed(page: Page, options: EmbedOptions = {}): Promise<Loaded
     ...(options.duplicateCandidateIds ? { duplicateCandidateIds: true } : {}),
     ...(options.duplicateCandidateIdsOnPageTwo ? { duplicateCandidateIdsOnPageTwo: true } : {}),
     ...(options.sharedSpanCandidates ? { sharedSpanCandidates: options.sharedSpanCandidates } : {}),
+    ...(options.markSourceIncomplete ? { markSourceIncomplete: true } : {}),
   };
   await page.addInitScript((value) => {
     (window as unknown as Record<string, unknown>).__surveyEmbedFixture = value;
@@ -675,9 +678,8 @@ test.describe("embedded workbench: envelope-imported decisions", () => {
     });
   }
 
-  test("an import that excluded proposals says so in the inspector and on the card, and is not painted as complete", async ({ page }, testInfo) => {
-    // A rival fee whose span does not hold its excerpt, and an enum proposal
-    // likewise: both are excluded when the import verifies against the text.
+  /** A rival fee and an enum proposal whose spans do not hold their excerpts, imported with verification. */
+  function importWithExcludedProposals() {
     const seeds: EnvelopeProposalSeed[] = [
       ...envelopeQueueSeeds,
       { fieldPath: "commercial.annualFeeUsd", candidateValue: 52000, excerpt: "52000", valueType: "number" },
@@ -694,6 +696,11 @@ test.describe("embedded workbench: envelope-imported decisions", () => {
       claimTarget: (proposal) => ({ subjectType: "vendor.entity", subjectId: "vendor-1", facet: "vendor.contract", claimType: "vendor.field-candidate", fieldOrBehavior: proposal.fieldPath, impactLevel: "medium" }),
     });
     expect(importResult.record.status.state).toBe("grounded");
+    return { importResult, artifact };
+  }
+
+  test("an import that excluded proposals says so in the inspector and on the card, and is not painted as complete", async ({ page }, testInfo) => {
+    const { importResult, artifact } = importWithExcludedProposals();
     const { pageErrors } = await loadEmbed(page, { session: initialReviewQueueSessionState(importResult.reviewItems), inspectorEntry: { importResult, artifact } });
 
     const sourcePosture = page.locator(".inspector-posture").first();
@@ -719,9 +726,34 @@ test.describe("embedded workbench: envelope-imported decisions", () => {
     await expect(fee.getByTestId("excluded-proposal")).toHaveAttribute("data-proposal-index", "4");
     await expect(fee.getByTestId("excerpt-verification")).toHaveAttribute("data-verified", "true");
     await expect(fieldByTarget(page, "vendor.name").getByTestId("excluded-proposals")).toHaveCount(0);
+    await fee.getByTestId("audit-details").locator("summary").first().click();
+    await expect(fee.locator('[data-audit-row="excluded-proposal"]')).toContainText("99999 at chars:45-50");
 
     await sourcePosture.screenshot({ path: testInfo.outputPath("excluded-posture.png") });
     await fee.screenshot({ path: testInfo.outputPath("excluded-fee-card.png") });
+    expect(pageErrors).toEqual([]);
+  });
+
+  test("exclusions keep the negative posture over an extraction that stopped short", async ({ page }) => {
+    const { importResult, artifact } = importWithExcludedProposals();
+    const { pageErrors } = await loadEmbed(page, { inspectorEntry: { importResult, artifact }, markSourceIncomplete: true });
+    const sourcePosture = page.locator(".inspector-posture").first();
+    await expect(sourcePosture).toHaveAttribute("data-posture", "proposals-excluded");
+    await expect(sourcePosture).toHaveClass(/\bproposals-excluded\b/);
+    await expect(sourcePosture).toHaveClass(/\bextraction-incomplete\b/);
+    const paint = await sourcePosture.evaluate((node) => {
+      const probe = (className: string) => {
+        const element = document.createElement("div");
+        element.className = className;
+        node.parentElement!.appendChild(element);
+        const color = getComputedStyle(element).backgroundColor;
+        element.remove();
+        return color;
+      };
+      return { actual: getComputedStyle(node).backgroundColor, negative: probe("inspector-posture proposals-excluded"), caution: probe("inspector-posture extraction-incomplete") };
+    });
+    expect(paint.negative).not.toBe(paint.caution);
+    expect(paint.actual).toBe(paint.negative);
     expect(pageErrors).toEqual([]);
   });
 

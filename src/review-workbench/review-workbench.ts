@@ -39,6 +39,7 @@ import {
 import {
   buildReviewCandidatePresentation,
   buildReviewItemPresentation,
+  type ReviewItemPresentation,
   type ReviewPresentationAdapter,
 } from "./review-presentation.js";
 import {
@@ -52,7 +53,7 @@ import {
   type ReviewValueDescriptor,
 } from "../review-resource.js";
 import { validateAuthorizing, buildAuthorizedActionAuthorizing } from "../review-authorizing.js";
-import { humanizeIdentifier } from "./review-presentation.js";
+import { excludedProposalsSentence, humanizeIdentifier } from "./review-presentation.js";
 import { editedValueFromEditorText, isIsoCalendarDate, parsePlainDecimal } from "./edited-value.js";
 import {
   createAuditFactTrace,
@@ -300,6 +301,14 @@ function buildDecisionCardAuthorizing(
  * followed by the selected decision label so the block is self-contained.
  */
 function decisionCardRenderedPrompt(state: ReviewWorkbenchState, targetLabel: string): string {
+  // The card shows proposals excluded at import; the recorded prompt must say
+  // the reviewer was told about them.
+  const excluded = excludedProposalsSentence(buildReviewItemPresentation(state.item).excludedProposals);
+  const base = decisionCardBasePrompt(state, targetLabel);
+  return excluded ? `${base} ${excluded}` : base;
+}
+
+function decisionCardBasePrompt(state: ReviewWorkbenchState, targetLabel: string): string {
   const currentCandidate = state.item.spec.candidates.find((c) => c.role === "current");
   const proposedCandidates = state.item.spec.candidates.filter((c) => c.role === "proposed");
   // A conflict card lists every proposed value and offers reject-all or could
@@ -1194,7 +1203,7 @@ function renderFieldCard(
             ? renderConflictingProposals(item, proposedCandidates, presentationAdapter, presentation.targetLabel)
             : "<p class=\"field-value\">No proposed value is available for this field.</p>"}
         ${proposed ? renderProvenanceRow(item, proposed, presentationAdapter) : ""}
-        ${renderExtractionImportNotes(item)}
+        ${renderExtractionImportNotes(presentation)}
         <div class="decide">
           ${keepDecision === undefined ? "" : `<button class="btn keep" type="button" data-testid="keep-current" data-item-name="${escapeHtml(item.metadata.name)}">${keepLabel}</button>`}
           ${proposed ? `<button class="btn use" type="button" data-testid="use-proposed" data-item-name="${escapeHtml(item.metadata.name)}">Use proposed</button>
@@ -1463,26 +1472,23 @@ function renderProvenanceRow(
  * before accepting the value that remained. Empty for items from other
  * producers.
  */
-function renderExtractionImportNotes(item: ReviewItem): string {
-  const metadata = item.metadata.producer?.["survey.kontourai.io/extraction-envelope"] as
-    | { excerptVerification?: unknown; excludedProposals?: Array<{ proposalIndex: number; value: unknown; locator: string; excerpt: string }> }
-    | undefined;
-  if (!metadata) return "";
-  const verified = metadata.excerptVerification === "verified";
-  const excluded = Array.isArray(metadata.excludedProposals) ? metadata.excludedProposals : [];
+function renderExtractionImportNotes(presentation: ReviewItemPresentation): string {
+  const { excerptVerification: verification, excludedProposals: excluded } = presentation;
+  if (verification === undefined && excluded.length === 0) return "";
   const excludedHtml = excluded.length === 0 ? "" : `
       <div class="noprov" data-testid="excluded-proposals" role="note">
         ${WARNING_SVG}
         <span class="tag">${excluded.length} excluded</span>
         <span>${excluded.length === 1 ? "Another proposal for this field was" : `${excluded.length} other proposals for this field were`} left out because the source text at the cited span is not the excerpt:
-          ${excluded.map((entry) => `<span data-testid="excluded-proposal" data-proposal-index="${escapeHtml(String(entry.proposalIndex))}"><q>${escapeHtml(formatValue(entry.value))}</q> (proposal ${escapeHtml(String(entry.proposalIndex))}, ${escapeHtml(entry.locator)})</span>`).join(", ")}.
+          ${excluded.map((entry) => `<span data-testid="excluded-proposal" data-proposal-index="${escapeHtml(String(entry.proposalIndex))}"><q>${escapeHtml(entry.valueText)}</q> (proposal ${escapeHtml(String(entry.proposalIndex))}, ${escapeHtml(entry.locator)})</span>`).join(", ")}.
           Unverifiable is not disproven: check the source before deciding.</span>
       </div>`;
-  return `
-    <div class="prov import-notes">${excludedHtml}
-      <p class="excerpt-verification" data-testid="excerpt-verification" data-verified="${verified ? "true" : "false"}">${verified
+  const verificationHtml = verification === undefined ? "" : `
+      <p class="excerpt-verification" data-testid="excerpt-verification" data-verified="${verification === "verified" ? "true" : "false"}">${verification === "verified"
         ? "Excerpts checked against the prepared source text at import."
-        : "Excerpts not checked against the prepared source text at import."}</p>
+        : "Excerpts not checked against the prepared source text at import."}</p>`;
+  return `
+    <div class="prov import-notes">${excludedHtml}${verificationHtml}
     </div>
   `;
 }
@@ -1554,6 +1560,7 @@ function renderAuditDetails(
           ${proposed?.extraction.model ? fieldItem("model", "Model", proposed.extraction.model) : ""}
           ${proposed ? placementItem(trace, { of: proposed.id, property: "extraction.extractor" }, "extractor", "Extractor", proposed.extraction.extractor ?? "unknown") : ""}
           ${proposed ? fieldItem("extracted-at", "Extracted at", proposed.extraction.extractedAt ?? "unknown") : ""}
+          ${buildReviewItemPresentation(item, presentationAdapter).excludedProposals.map((entry) => fieldItem("excluded-proposal", `Excluded proposal ${entry.proposalIndex}`, `${entry.valueText} at ${entry.locator}: excerpt not at the cited span`)).join("")}
         </dl>
         ${preview
           ? `<div class="preview-section-grid">${renderSurfacePreviewSections(preview, trace)}</div><p class="preview-disclaimer preview-disclaimer-footer">${escapeHtml(preview.postureDisclaimer)}</p>`

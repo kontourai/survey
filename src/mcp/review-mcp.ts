@@ -23,6 +23,7 @@ import {
   deriveServerReviewSessionApplyResult,
 } from "../review-workbench/server-review-session.js";
 import type { ReviewItem, ReviewSession, ReviewSessionEvent } from "../review-resource.js";
+import { buildReviewItemPresentation, excludedProposalsSentence } from "../review-workbench/review-presentation.js";
 import {
   appendReviewSessionEvents,
   readReviewSessionFile,
@@ -130,6 +131,7 @@ function itemDetailText(item: ReviewItem, snapshot: ReviewQueueSessionState, eve
       `  source: ${candidate.source?.sourceRef ?? "none"}`,
       ...(candidate.locator?.excerpt ? [`  excerpt: ${candidate.locator.excerpt}`] : []),
     ])),
+    ...extractionImportLines(item),
   ];
 
   if (item.spec.rationale) {
@@ -137,6 +139,16 @@ function itemDetailText(item: ReviewItem, snapshot: ReviewQueueSessionState, eve
   }
 
   return lines.join("\n");
+}
+
+/** What an envelope import says about the item's evidence, including rival values it excluded. */
+function extractionImportLines(item: ReviewItem): string[] {
+  const presentation = buildReviewItemPresentation(item);
+  const excluded = excludedProposalsSentence(presentation.excludedProposals);
+  return [
+    ...(excluded ? [``, `Excluded: ${excluded} Check the source before accepting.`] : []),
+    ...(presentation.excerptVerification ? [``, `Excerpts ${presentation.excerptVerification === "verified" ? "were" : "were not"} checked against the prepared source text at import.`] : []),
+  ];
 }
 
 // ---- UI card -------------------------------------------------------------
@@ -200,6 +212,7 @@ function buildReviewCardHtml(
     : proposedCard(proposedCandidates[0], "Proposed");
 
   const itemNameJson = escapeJsonInHtml(item.metadata.name);
+  const excludedNote = excludedProposalsSentence(buildReviewItemPresentation(item).excludedProposals);
 
   const decisionBadge = decision
     ? `<span class="badge badge-${decision === "accept-proposed" ? "accept" : decision === "reject-proposed" ? "reject" : "hold"}">${escapeHtml(workbenchDecisionDefinitions[decision].label)}</span>`
@@ -303,6 +316,7 @@ h1{font-size:15px;font-weight:700;margin:0 0 4px}
   </div>
   ${proposedCards}
 </div>
+${excludedNote ? `<p class="feedback" id="excluded-note">${escapeHtml(excludedNote)}</p>` : ""}
 ${conflict ? `<p class="feedback" id="conflict-note">${proposedCandidates.length} different values were proposed. This card cannot choose one of them yet: reject them all, or use Could not confirm with a reason.</p>` : ""}
 
 <div class="divider"></div>
@@ -419,6 +433,13 @@ async function toolItem(itemName: string, options: ReviewMcpOptions): Promise<Co
     decision: current.decisionsByItemName[item.metadata.name],
     note: current.notesByItemName[item.metadata.name],
     candidateSetStatus: item.spec.candidateSetStatus,
+    ...(() => {
+      const presentation = buildReviewItemPresentation(item);
+      return {
+        ...(presentation.excerptVerification ? { excerptVerification: presentation.excerptVerification } : {}),
+        ...(presentation.excludedProposals.length ? { excludedProposals: presentation.excludedProposals.map(({ proposalIndex, value, locator, excerpt }) => ({ proposalIndex, value, locator, excerpt })) } : {}),
+      };
+    })(),
     candidates: item.spec.candidates.map((c) => ({
       id: c.id,
       role: c.role,

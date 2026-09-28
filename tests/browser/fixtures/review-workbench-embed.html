@@ -43,6 +43,11 @@
           ],
         };
       }
+      if (fixture.markSourceIncomplete) {
+        // An extraction that stopped short on the same source as exclusions.
+        const [first, ...rest] = inspectorModel.sources;
+        inspectorModel = { sources: [{ ...first, extractionDiagnostic: { kind: "extraction-incomplete", reason: "max-chunks", message: "Extraction stopped short (max-chunks)." } }, ...rest], candidates: inspectorModel.candidates };
+      }
       if (fixture.sharedSpanCandidates) {
         // Two DISTINCT candidates over the exact same span — ordinary in
         // extraction, and merged into a single <mark> by the renderer.

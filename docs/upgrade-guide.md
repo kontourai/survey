@@ -626,9 +626,14 @@ Everything else changes only when you pass `artifact`:
   whose claim slot lost a proposal to an excerpt mismatch lists it there as
   `excludedProposals` (`proposalIndex`, `value`, `locator`, `excerpt`,
   `reason: "excerpt-mismatch"`). The candidate set is judged on the remaining
-  candidates, so a conflict whose rival was excluded becomes `needs-review`,
-  and the workbench card shows the excluded rival and whether the excerpts
-  were checked.
+  candidates, so a conflict whose rival was excluded becomes `needs-review`.
+  Every decision surface shows the excluded rival: the workbench card and its
+  audit rows (new key `excluded-proposal`), the MCP item text, data and card,
+  and the recorded decision prompt (`authorizing.renderedPrompt`), so the
+  audit trail shows the reviewer was told. `ReviewItemPresentation` gains
+  `excludedProposals` and `excerptVerification`, read only from an item whose
+  envelope binding is intact. Neither is projected into Surface trust
+  inputs yet: that needs a Surface field.
 - **Inspector.** Sources gain `importProvenance` and `excludedProposals`.
   `inspectorSourcePosture` can return `proposals-excluded`, styled like the
   other non-grounded postures, for an aligned source whose import excluded

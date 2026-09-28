@@ -340,9 +340,10 @@ function envelopeItemProposalIndices(item: ReviewItem): number[] {
  * extraction over an aligned artifact must not show the aligned posture.
  */
 export function inspectorSourcePosture(source: Pick<ExtractionInspectorSource, "alignment" | "extractionDiagnostic" | "excludedProposals">): ExtractionAlignmentState | "extraction-failed" | "extraction-incomplete" | "proposals-excluded" {
+  // Dropped proposals are a loss of evidence: they lead over an aligned
+  // artifact and over an extraction that merely stopped short.
+  if (source.alignment === "aligned" && source.excludedProposals?.length && source.extractionDiagnostic?.kind !== "extraction-failed") return "proposals-excluded";
   if (source.extractionDiagnostic) return source.extractionDiagnostic.kind;
-  // An aligned artifact must not read as complete when the import dropped proposals.
-  if (source.alignment === "aligned" && source.excludedProposals?.length) return "proposals-excluded";
   return source.alignment;
 }
 
@@ -485,7 +486,7 @@ export function mountExtractionInspector(
     next.hidden = pageCount === 1;
     previous.disabled = page === 0;
     next.disabled = page >= pageCount - 1;
-    postures.innerHTML = model.sources.map(s => { const posture = inspectorSourcePosture(s); return `<div class="inspector-posture ${s.alignment}${posture !== s.alignment ? ` ${posture}` : ""}" role="status" data-posture="${escapeHtml(posture)}"><strong>${escapeHtml(s.importName)}: ${escapeHtml(posture)}</strong><span>${escapeHtml(s.message)}</span></div>`; }).join("");
+    postures.innerHTML = model.sources.map(s => { const posture = inspectorSourcePosture(s); const classes = [...new Set([s.alignment, s.extractionDiagnostic?.kind, s.excludedProposals?.length ? "proposals-excluded" : undefined, posture].filter(Boolean))].join(" "); return `<div class="inspector-posture ${classes}" role="status" data-posture="${escapeHtml(posture)}"><strong>${escapeHtml(s.importName)}: ${escapeHtml(posture)}</strong><span>${escapeHtml(s.message)}</span></div>`; }).join("");
     sourcesRoot.innerHTML = model.sources.map(s => { const anchored = model.candidates.filter(c => c.sourceKey === s.key); const marked = visible.filter(c => c.sourceKey === s.key); return `<div class="inspector-source" aria-label="Prepared source for ${escapeHtml(s.importName)}"><h3>${escapeHtml(s.importName)}</h3><pre tabindex="0">${s.artifactText === undefined ? `${anchored.map(c => anchorHtml(c, highlightIdFor(c))).join("")}<span class="source-unavailable">${escapeHtml(s.message)}</span>` : renderSource(s.artifactText, anchored, marked, highlightIdFor)}</pre></div>`; }).join("");
   };
   root.querySelectorAll<HTMLSelectElement>("select").forEach(select => select.addEventListener("change", event => { event.stopPropagation(); const key = select.dataset.filter as keyof ExtractionInspectorFilters; if (select.value) (filters as Record<string,string>)[key] = select.value; else delete (filters as Record<string,string>)[key]; page = 0; render(); }));

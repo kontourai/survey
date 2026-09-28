@@ -77,8 +77,9 @@ not stored in the record.
 
 An excluded proposal is unverifiable, not disproven. When it shared a claim
 slot with proposals that did verify, the slot's item lists it in its producer
-metadata as `excludedProposals`, and the workbench shows it on the card with
-its value and span. The candidate set is judged on the candidates that
+metadata as `excludedProposals`. Every decision surface shows it with its
+value and span: the workbench card and audit rows, the MCP item and card, and
+the recorded decision prompt. The candidate set is judged on the candidates that
 remain: a rival value whose excerpt failed does not keep the set in
 `conflict`, because a conflict item offers only decisions that trust no
 value, and an unverifiable citation would then be enough to block the value
