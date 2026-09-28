@@ -237,6 +237,7 @@ export type {
 export {
   buildCandidateVerification,
   candidateVerificationKind,
+  DEFAULT_SUPPORT_VERIFIER_TIMEOUT_MS,
   foldCandidateVerifications,
   runSupportVerifier,
   supportVerificationInputDigest,
@@ -247,6 +248,7 @@ export type {
   BuildCandidateVerificationInput,
   CandidateVerification,
   CandidateVerificationInapplicableReason,
+  CandidateVerificationStatus,
   CandidateVerificationSubject,
   FoldCandidateVerificationsResult,
   RunSupportVerifierOptions,

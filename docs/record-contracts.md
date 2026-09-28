@@ -607,7 +607,9 @@ builds the record. A verifier that throws or rejects records
 `result: "abstain"` with `abstainReason: "error"`. One that returns nothing
 records `empty`, one that returns anything other than a well-formed verdict
 records `malformed`, and one that does not answer within `timeoutMs` records
-`timeout` (its `signal` is aborted). None of these is ever recorded as a pass or
+`timeout` (its `signal` is aborted). `timeoutMs` defaults to
+`DEFAULT_SUPPORT_VERIFIER_TIMEOUT_MS` (30 seconds), so a verifier is never
+waited on without a bound. None of these is ever recorded as a pass or
 a fail. A verifier may abstain on its own with any reason, for example
 `unsupported`.
 
@@ -632,7 +634,9 @@ frozen record.
 `validateCandidateVerification` checks a record read back from storage. It
 rejects unknown fields, an abstention without a reason, a pass or fail with one,
 unsorted evidence ids, a non-canonical timestamp, and any id that is not the
-digest of the record's own fields (a forged or edited record).
+digest of the record's own fields (an edited or inconsistent record). The id is
+a content digest, not a signature. It does not prove who wrote a record, and a
+record rebuilt with changed fields and a recomputed id validates.
 
 `foldCandidateVerifications(subject, records)` reads records for one candidate
 against its current value. Records that fail validation are listed in
@@ -640,8 +644,9 @@ against its current value. Records that fail validation are listed in
 the digest of the subject's value, are listed in `inapplicable` (with
 `inputDigest` also checked when the subject supplies its evidence). The rest are
 `applicable`, deduplicated and ordered by id. `status` is `not-evaluated` when no
-record applies. An edited value therefore reads as `not-evaluated` until a
-verifier checks the new value. The fold never chooses a winner and never derives
+record applies, `abstained` when every applicable record is an abstention, and
+`evaluated` when at least one applicable record carries a verdict. An edited
+value therefore reads as `not-evaluated` until a verifier checks the new value. The fold never chooses a winner and never derives
 a verdict. An applicable abstention is shown as an abstention, which keeps a
 verifier failure distinct from both a pass and the absence of any record.
 
@@ -649,7 +654,9 @@ A `ReviewCandidate` may carry records on `verifications`. The MCP item (text,
 data and card), the workbench card, and the recorded decision prompt read them
 through `candidateVerificationNotes`, which validates every record, reads it
 against the value being decided (the reviewer's edit, when an accept carries
-one), and gives every surface the same sentence. A candidate without
+one), and gives every surface the same sentence. The sentence calls each record
+what a verifier said, not proof and not a review decision. Records that fail
+validation are counted and ignored. A candidate without
 `verifications` shows nothing. How Surface consumes these records is a separate
 change.
 

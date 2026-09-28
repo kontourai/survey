@@ -44,10 +44,21 @@ never feeds `confidence` or `conclusionConfidence`.
   a malformed verdict.
 - **Empty evidence.** An input with no evidence is a caller error and throws. It
   is not recorded as an abstention.
-- **Status vocabulary.** The fold's `status` is `not-evaluated` or `evaluated`.
-  `evaluated` means only that at least one valid record applies to the current
-  value, and it includes abstentions. There is no aggregate verdict.
+- **Status vocabulary.** The fold's `status` is `not-evaluated` (no valid record
+  applies to the current value), `abstained` (records apply, but every one is
+  an abstention), or `evaluated` (at least one applicable record carries a
+  supported, contradicted or not-addressed verdict). A separate `abstained`
+  keeps a verifier that only failed from reading as a check that ran. There is
+  no aggregate verdict.
+- **Timeout.** `runSupportVerifier` always bounds the wait:
+  `DEFAULT_SUPPORT_VERIFIER_TIMEOUT_MS` (30 seconds) unless the caller passes
+  `timeoutMs`. A verifier that hangs records `abstain/timeout`.
+- **What validation proves.** Reload validation catches edited and
+  inconsistent records: the id is a content digest, not a signature, so it does
+  not establish who wrote a record. A record rebuilt with a recomputed id
+  validates.
 - **What reviewers see.** Verifier, version, method and result (or abstention
-  reason) for each applicable record, plus counts of records that do not apply
-  and records that failed validation. The score is not shown, because it is
+  reason) for each applicable record, labelled as what a verifier said, not
+  proof and not a review decision. Counts of records that do not apply and of
+  records that failed validation follow. The score is not shown, because it is
   uncalibrated.

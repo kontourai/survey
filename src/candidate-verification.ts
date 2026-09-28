@@ -149,8 +149,15 @@ export function buildCandidateVerification(input: BuildCandidateVerificationInpu
   return deepFreeze({ id: recordId(payload), ...payload });
 }
 
+/** How long {@link runSupportVerifier} waits when no `timeoutMs` is given. */
+export const DEFAULT_SUPPORT_VERIFIER_TIMEOUT_MS = 30_000;
+
 export interface RunSupportVerifierOptions {
-  /** Abstain with `timeout` when the verifier has not answered by then. */
+  /**
+   * Abstain with `timeout` when the verifier has not answered by then.
+   * Defaults to {@link DEFAULT_SUPPORT_VERIFIER_TIMEOUT_MS}; a verifier is
+   * never waited on without a bound.
+   */
   timeoutMs?: number;
   /** Clock for `createdAt`; defaults to the current time. */
   now?: () => string;
@@ -159,8 +166,8 @@ export interface RunSupportVerifierOptions {
 /**
  * Calls a verifier and records what it said. A verifier that throws abstains
  * with `error`, one that returns nothing with `empty`, one that returns a
- * malformed verdict with `malformed`, and one that exceeds `timeoutMs` with
- * `timeout`. None of these ever records a pass or a fail.
+ * malformed verdict with `malformed`, and one that exceeds `timeoutMs`
+ * (default {@link DEFAULT_SUPPORT_VERIFIER_TIMEOUT_MS}) with `timeout`. None of these ever records a pass or a fail.
  *
  * Throws only for caller errors: a malformed input, or a verifier without a
  * usable identity (a record needs one).
@@ -172,15 +179,16 @@ export async function runSupportVerifier(
 ): Promise<CandidateVerification> {
   const identity = normalizeVerifier(verifier);
   const normalized = normalizeInput(input);
-  if (options.timeoutMs !== undefined && (!Number.isFinite(options.timeoutMs) || options.timeoutMs <= 0)) {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_SUPPORT_VERIFIER_TIMEOUT_MS;
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new Error("timeoutMs must be a positive finite number");
   }
   const now = options.now ?? (() => new Date().toISOString());
-  const verdict = await callVerifier(verifier, normalized, options.timeoutMs);
+  const verdict = await callVerifier(verifier, normalized, timeoutMs);
   return buildCandidateVerification({ input: normalized, verifier: identity, verdict, createdAt: now() });
 }
 
-async function callVerifier(verifier: SupportVerifier, input: SupportVerificationInput, timeoutMs: number | undefined): Promise<SupportVerdict> {
+async function callVerifier(verifier: SupportVerifier, input: SupportVerificationInput, timeoutMs: number): Promise<SupportVerdict> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timedOut = Symbol("timeout");
@@ -188,9 +196,7 @@ async function callVerifier(verifier: SupportVerifier, input: SupportVerificatio
   const frozenInput = deepFreeze(structuredClone(input));
   try {
     const call = Promise.resolve().then(() => verifier.verify(frozenInput, { signal: controller.signal }));
-    const raced = timeoutMs === undefined
-      ? await call
-      : await Promise.race([call, new Promise<typeof timedOut>((resolve) => { timer = setTimeout(() => resolve(timedOut), timeoutMs); })]);
+    const raced = await Promise.race([call, new Promise<typeof timedOut>((resolve) => { timer = setTimeout(() => resolve(timedOut), timeoutMs); })]);
     if (raced === timedOut) {
       controller.abort();
       call.catch(() => undefined);
@@ -214,7 +220,9 @@ const RECORD_KEYS = new Set(["id", "kind", "schemaVersion", "candidateId", "evid
 /**
  * Validates a record read back from storage and returns a frozen copy. Throws
  * on any unknown field, inconsistent verdict, or an id that is not the digest
- * of the record's own fields (a forged or edited record).
+ * of the record's own fields (an edited or inconsistent record). The id is a
+ * content digest, not a signature: it does not prove who wrote the record, and
+ * a record rebuilt with a recomputed id validates.
  */
 export function validateCandidateVerification(value: unknown): CandidateVerification {
   const record = requiredObject(value, "CandidateVerification");
@@ -264,11 +272,18 @@ export interface CandidateVerificationSubject {
   evidence?: SupportEvidence[];
 }
 
+export type CandidateVerificationStatus = "not-evaluated" | "abstained" | "evaluated";
+
 export type CandidateVerificationInapplicableReason = "other-candidate" | "value-changed" | "input-changed";
 
 export interface FoldCandidateVerificationsResult {
-  /** `not-evaluated` when no record applies to the subject's current value. Not a verdict. */
-  status: "not-evaluated" | "evaluated";
+  /**
+   * `not-evaluated` when no record applies to the subject's current value,
+   * `abstained` when every applicable record is an abstention, `evaluated`
+   * when at least one applicable record carries a verdict (supported,
+   * contradicted or not-addressed). Not itself a verdict.
+   */
+  status: CandidateVerificationStatus;
   /** Valid records bound to this candidate and value, ordered by id. Abstentions included. */
   applicable: readonly CandidateVerification[];
   /** Valid records bound to another candidate, value, or input. */
@@ -315,7 +330,9 @@ export function foldCandidateVerifications(
   const byId = <T>(entries: Map<string, T>) => [...entries.keys()].sort().map((id) => entries.get(id)!);
   const applicableRecords = byId(applicable);
   return Object.freeze({
-    status: applicableRecords.length === 0 ? "not-evaluated" as const : "evaluated" as const,
+    status: applicableRecords.length === 0
+      ? "not-evaluated" as const
+      : applicableRecords.every((record) => record.result === "abstain") ? "abstained" as const : "evaluated" as const,
     applicable: Object.freeze(applicableRecords),
     inapplicable: Object.freeze(byId(inapplicable)),
     rejected: Object.freeze(rejected),

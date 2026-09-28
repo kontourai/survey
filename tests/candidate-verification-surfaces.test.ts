@@ -1,7 +1,7 @@
 /**
  * Verifier records on a candidate must read the same on every decision
  * surface: the MCP item (text, data and card), the workbench card, and the
- * recorded decision prompt. A forged record is ignored everywhere, a record on
+ * recorded decision prompt. An edited record is ignored everywhere, a record on
  * another value never reads as a verdict, and an item without records shows
  * nothing.
  */
@@ -16,7 +16,7 @@ import { describe, it } from "node:test";
 import { buildCandidateVerification, type SupportVerificationInput } from "../src/candidate-verification.js";
 import { currentProposedReviewItem, type CurrentProposedCandidateInput } from "../src/current-proposed-review-item.js";
 import type { ReviewItem } from "../src/review-resource.js";
-import { initialReviewQueueSessionState } from "../src/review-workbench/review-queue-session.js";
+import { buildReviewSessionEvents, initialReviewQueueSessionState } from "../src/review-workbench/review-queue-session.js";
 import { candidateVerificationNotes } from "../src/review-workbench/review-presentation.js";
 import {
   buildReviewDecision,
@@ -36,7 +36,7 @@ function candidate(value: unknown): CurrentProposedCandidateInput {
   };
 }
 
-const SUPPORTED = "Verifier records for the proposed value (what a verifier said, not a review decision): slow-check 1.0.0 (model) abstained: timeout; support-check 2.1.0 (model) said supported. 1 record was made for a different value or evidence and does not apply. 1 record failed validation and was ignored.";
+const SUPPORTED = "Verifier records for the proposed value (what a verifier said: not proof, not a review decision): slow-check 1.0.0 (model) abstained: timeout; support-check 2.1.0 (model) said supported. 1 record was made for a different value or evidence and does not apply. 1 record failed validation and was ignored.";
 const EDITED = "No verifier record applies to the edited value. 3 records were made for a different value or evidence and do not apply. 1 record failed validation and was ignored.";
 
 function itemWithRecords(): ReviewItem {
@@ -47,8 +47,8 @@ function itemWithRecords(): ReviewItem {
   const supported = buildCandidateVerification({ input: input(48000), verifier: { id: "support-check", version: "2.1.0", method: "model" }, verdict: { result: "supported", score: 0.97 }, createdAt });
   const timedOut = buildCandidateVerification({ input: input(48000), verifier: { id: "slow-check", version: "1.0.0", method: "model" }, verdict: { result: "abstain", abstainReason: "timeout" }, createdAt });
   const stale = buildCandidateVerification({ input: input(47000), verifier: { id: "support-check", version: "2.1.0", method: "model" }, verdict: { result: "contradicted" }, createdAt });
-  const forged = { ...JSON.parse(JSON.stringify(stale)), valueDigest: supported.valueDigest };
-  proposed.verifications = JSON.parse(JSON.stringify([supported, timedOut, stale, forged]));
+  const edited = { ...JSON.parse(JSON.stringify(stale)), valueDigest: supported.valueDigest };
+  proposed.verifications = JSON.parse(JSON.stringify([supported, timedOut, stale, edited]));
   return item;
 }
 
@@ -154,6 +154,64 @@ describe("verifier records on the decision surfaces", () => {
       const persisted = JSON.parse(await readFile(sessionPath, "utf8"));
       const [decision] = buildReviewDecisionsFromSession(replayReviewSessionEventsForSnapshot(persisted.snapshot, persisted.events));
       assert.ok(renderedPrompt(decision).includes(note!.sentence), "the recorded prompt says what the MCP item said");
+    } finally {
+      server.stdin!.end();
+      await once(server, "exit");
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("an abstain-only candidate reads as abstained, never evaluated, on the card and in the notes", () => {
+    const item = itemWithRecords();
+    const proposed = item.spec.candidates.find((c) => c.role === "proposed")!;
+    proposed.verifications = proposed.verifications!.filter((record) => record.result === "abstain");
+    const [note] = candidateVerificationNotes(item);
+    assert.equal(note?.status, "abstained");
+    assert.match(renderReviewWorkbenchHtml(initialReviewWorkbenchState(item)), /data-testid="support-verification"[^>]*data-status="abstained"/);
+  });
+
+  it("the MCP item reads a recorded edit against the edited value, and an abstain-only candidate as abstained", async () => {
+    const edited = itemWithRecords();
+    const abstainOnly = itemWithRecords();
+    abstainOnly.metadata.name = "acme-annual-fee-abstained";
+    const abstainProposed = abstainOnly.spec.candidates.find((c) => c.role === "proposed")!;
+    abstainProposed.verifications = abstainProposed.verifications!.filter((record) => record.result === "abstain");
+    const example = JSON.parse(await readFile("example-data/mcp-review-session.json", "utf8")) as Record<string, any>;
+    example.session.spec.reviewItemNames = [edited.metadata.name, abstainOnly.metadata.name];
+    const snapshot = initialReviewQueueSessionState([edited, abstainOnly]);
+    const events = buildReviewSessionEvents({
+      ...snapshot,
+      activeItemName: edited.metadata.name,
+      decisionsByItemName: { [edited.metadata.name]: "accept-proposed" },
+      editedValuesByItemName: { [edited.metadata.name]: 52000 },
+    }, example.session.metadata.name);
+    const tmpDir = await mkdtemp(join(tmpdir(), "survey-mcp-verification-edit-"));
+    const sessionPath = join(tmpDir, "session.json");
+    await writeFile(sessionPath, JSON.stringify({ session: example.session, snapshot, events }, null, 2));
+
+    const server = spawn("node", ["bin/survey-review-mcp.mjs", "--session", sessionPath], { stdio: ["pipe", "pipe", "inherit"] });
+    const call = rpc(server);
+    try {
+      await call("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "0" } });
+      server.stdin!.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
+
+      const response = await call("tools/call", { name: "survey_review_item", arguments: { itemName: edited.metadata.name } });
+      assert.equal(response.result.isError, false);
+      const text: string = response.result.content[0].text;
+      assert.match(text, /Decision: accept-proposed/);
+      assert.ok(text.includes(`Verification: ${EDITED}`), "the recorded edit is what the verification is read against");
+      assert.ok(!text.includes("said supported"));
+      const data = JSON.parse(text.slice(text.indexOf("\n{") + 1));
+      const proposed = data.candidates.find((c: { role: string }) => c.role === "proposed");
+      assert.equal(proposed.verification.status, "not-evaluated");
+      assert.equal(proposed.verification.subject, "the edited value");
+      const card = response.result.content.find((entry: { type: string }) => entry.type === "resource")?.resource?.text ?? "";
+      assert.ok(card.includes(EDITED), "the MCP card reads the edit too");
+
+      const abstained = await call("tools/call", { name: "survey_review_item", arguments: { itemName: abstainOnly.metadata.name } });
+      const abstainedText: string = abstained.result.content[0].text;
+      const abstainedData = JSON.parse(abstainedText.slice(abstainedText.indexOf("\n{") + 1));
+      assert.equal(abstainedData.candidates.find((c: { role: string }) => c.role === "proposed").verification.status, "abstained");
     } finally {
       server.stdin!.end();
       await once(server, "exit");

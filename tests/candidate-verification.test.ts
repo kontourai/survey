@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
 import {
   buildCandidateVerification,
+  DEFAULT_SUPPORT_VERIFIER_TIMEOUT_MS,
   foldCandidateVerifications,
   runSupportVerifier,
   validateCandidateVerification,
@@ -103,12 +104,13 @@ describe("validateCandidateVerification (reload)", () => {
     assert.throws(() => validateCandidateVerification(abstained), /id is not the digest/);
   });
 
-  it("rejects forged and inconsistent records", () => {
+  it("rejects edited and inconsistent records", () => {
     const cases: Array<[string, (r: Record<string, any>) => void, RegExp]> = [
       ["result flipped under the old id", (r) => { r.result = "contradicted"; }, /id is not the digest/],
       ["valueDigest swapped", (r) => { r.valueDigest = valueDigest(1); }, /id is not the digest/],
       ["verifier renamed", (r) => { r.verifier.id = "trusted"; }, /id is not the digest/],
-      ["id forged", (r) => { r.id = `sha256:${"0".repeat(64)}`; }, /id is not the digest/],
+      ["id replaced", (r) => { r.id = `sha256:${"0".repeat(64)}`; }, /id is not the digest/],
+      ["extra verifier field", (r) => { r.verifier.trusted = true; }, /verifier has an unknown field/],
       ["unknown field", (r) => { r.trusted = true; }, /unknown field trusted/],
       ["abstain without reason", (r) => { r.result = "abstain"; delete r.score; }, /abstainReason/],
       ["pass with abstain reason", (r) => { r.abstainReason = "error"; }, /only allowed when result is abstain/],
@@ -165,10 +167,11 @@ describe("foldCandidateVerifications", () => {
     assert.deepEqual(fold.rejected.map(({ index }) => index), [1, 2]);
   });
 
-  it("reads an abstention as recorded, never as absent or supported", () => {
+  it("reads an abstention as recorded, never as absent, evaluated or supported", () => {
     const abstained = buildCandidateVerification({ ...base, verdict: { result: "abstain", abstainReason: "error" } });
     const fold = foldCandidateVerifications({ candidateId: "fee.proposed", value: 48000 }, [abstained]);
-    assert.equal(fold.status, "evaluated");
+    assert.equal(fold.status, "abstained");
+    assert.equal(foldCandidateVerifications({ candidateId: "fee.proposed", value: 48000 }, [abstained, record]).status, "evaluated", "one verdict beside an abstention is evaluated");
     assert.equal(fold.applicable[0]!.result, "abstain");
     assert.equal(foldCandidateVerifications({ candidateId: "fee.proposed", value: 48000 }, []).status, "not-evaluated");
   });
@@ -225,6 +228,28 @@ describe("runSupportVerifier through the port", () => {
     assert.equal(record.result, "abstain");
     assert.equal(record.abstainReason, "timeout");
     assert.equal(aborted, true);
+  });
+
+  it("bounds the wait by default: a hung verifier abstains with timeout after the default", async () => {
+    assert.equal(DEFAULT_SUPPORT_VERIFIER_TIMEOUT_MS, 30_000);
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      let settled = false;
+      const pending = runSupportVerifier(fakeVerifier(() => new Promise(() => undefined)), input, { now: clock }).then((record) => { settled = true; return record; });
+      const flush = async () => { for (let i = 0; i < 20; i += 1) await Promise.resolve(); };
+      await flush();
+      mock.timers.tick(DEFAULT_SUPPORT_VERIFIER_TIMEOUT_MS - 1);
+      await flush();
+      assert.equal(settled, false, "still waiting just before the default");
+      mock.timers.tick(1);
+      await flush();
+      assert.equal(settled, true, "abstains at the default timeout");
+      const record = await pending;
+      assert.equal(record.result, "abstain");
+      assert.equal(record.abstainReason, "timeout");
+    } finally {
+      mock.timers.reset();
+    }
   });
 
   it("refuses a verifier with no usable identity rather than recording an anonymous verdict", async () => {

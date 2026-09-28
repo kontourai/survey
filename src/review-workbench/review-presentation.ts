@@ -1,4 +1,4 @@
-import { foldCandidateVerifications, type SupportAbstainReason, type SupportVerificationMethod, type SupportVerificationResult } from "../candidate-verification.js";
+import { foldCandidateVerifications, type CandidateVerificationStatus, type SupportAbstainReason, type SupportVerificationMethod, type SupportVerificationResult } from "../candidate-verification.js";
 import { findSoleCandidateById, type ReviewCandidate, type ReviewItem } from "../review-resource.js";
 import type { InterpretationAnswerImpact, InterpretationReadingKind } from "../types.js";
 import { type ReviewWorkbenchResult } from "./review-workbench.js";
@@ -252,12 +252,12 @@ export interface CandidateVerificationNote {
   readonly candidateIndex: number;
   readonly candidateId: string;
   readonly subjectLabel: string;
-  /** `not-evaluated` when no valid record is bound to the value under review. */
-  readonly status: "not-evaluated" | "evaluated";
+  /** As {@link foldCandidateVerifications}: `not-evaluated`, `abstained` (only abstentions apply) or `evaluated`. */
+  readonly status: CandidateVerificationStatus;
   readonly records: readonly CandidateVerificationRecordPresentation[];
   /** Valid records bound to another value, candidate or input. */
   readonly inapplicableCount: number;
-  /** Records that failed validation (forged, edited or malformed); never shown as verdicts. */
+  /** Records that failed validation (edited, inconsistent or malformed); never shown as verdicts. */
   readonly rejectedCount: number;
   readonly sentence: string;
 }
@@ -272,7 +272,7 @@ const VERIFICATION_RESULT_TEXT: Record<Exclude<SupportVerificationResult, "absta
  * Verifier notes for every candidate that carries records, read against the
  * value each surface is deciding on: the candidate's own value, or the
  * reviewer's edit when an accept carries one (records on the proposed value do
- * not apply to an edited value). Records are validated here, so a forged
+ * not apply to an edited value). Records are validated here, so an inconsistent
  * record is counted and ignored on every surface alike.
  */
 export function candidateVerificationNotes(item: ReviewItem, editedValue?: unknown): CandidateVerificationNote[] {
@@ -301,7 +301,7 @@ export function candidateVerificationNotes(item: ReviewItem, editedValue?: unkno
     const said = presented.map((record) => `${record.verifierId} ${record.verifierVersion} (${record.method}) ${record.result === "abstain" ? `abstained: ${record.abstainReason}` : `said ${VERIFICATION_RESULT_TEXT[record.result]}`}`);
     const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
     const sentence = [
-      said.length ? `Verifier records for ${subjectLabel} (what a verifier said, not a review decision): ${said.join("; ")}.` : `No verifier record applies to ${subjectLabel}.`,
+      said.length ? `Verifier records for ${subjectLabel} (what a verifier said: not proof, not a review decision): ${said.join("; ")}.` : `No verifier record applies to ${subjectLabel}.`,
       ...(fold.inapplicable.length ? [`${plural(fold.inapplicable.length, "record was", "records were")} made for a different value or evidence and ${fold.inapplicable.length === 1 ? "does" : "do"} not apply.`] : []),
       ...(fold.rejected.length ? [`${plural(fold.rejected.length, "record", "records")} failed validation and ${fold.rejected.length === 1 ? "was" : "were"} ignored.`] : []),
     ].join(" ");
