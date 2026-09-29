@@ -22,8 +22,8 @@ importers:
         specifier: 5.10.0
         version: 5.10.0(@ai-sdk/provider@4.0.4)(typescript@7.0.2)(zod@4.4.3)
       '@kontourai/traverse':
-        specifier: ^0.25.0
-        version: 0.25.1(@anthropic-ai/sdk@0.74.0(zod@4.4.3))(@kontourai/relay@0.4.0(@ai-sdk/provider@4.0.4)(@anthropic-ai/sdk@0.74.0(zod@4.4.3)))(playwright@1.62.1)(typescript@7.0.2)
+        specifier: ^3.0.1
+        version: 3.0.1(@anthropic-ai/sdk@0.74.0(zod@4.4.3))(@kontourai/relay@0.4.0(@ai-sdk/provider@4.0.4)(@anthropic-ai/sdk@0.74.0(zod@4.4.3)))(playwright@1.62.1)(typescript@7.0.2)
       '@kontourai/ui':
         specifier: ^1.1.0
         version: 1.12.0(react@19.2.7)
@@ -293,8 +293,8 @@ packages:
       typescript:
         optional: true
 
-  '@kontourai/traverse@0.25.1':
-    resolution: {integrity: sha512-WuDQpWid/GbUxBrcvC+rx8e9/3j+B94QOBACYae58mEtTPr8sOGJRwX/GDWQriTmmRQoyhyWFM4LfcFaSF74PA==}
+  '@kontourai/traverse@3.0.1':
+    resolution: {integrity: sha512-jXgp+ZNuAPpEZ1ArBAhEtF4I2MmCKvc+4ztrcQfPsjcWMiAmk25iRWe0h88jx9pOjeeNiBJPC8LhbtCES+u/Wg==}
     engines: {node: '>=22'}
     peerDependencies:
       '@anthropic-ai/sdk': '>=0.20.0'
@@ -1003,7 +1003,7 @@ snapshots:
       - kerberos
       - supports-color
 
-  '@kontourai/traverse@0.25.1(@anthropic-ai/sdk@0.74.0(zod@4.4.3))(@kontourai/relay@0.4.0(@ai-sdk/provider@4.0.4)(@anthropic-ai/sdk@0.74.0(zod@4.4.3)))(playwright@1.62.1)(typescript@7.0.2)':
+  '@kontourai/traverse@3.0.1(@anthropic-ai/sdk@0.74.0(zod@4.4.3))(@kontourai/relay@0.4.0(@ai-sdk/provider@4.0.4)(@anthropic-ai/sdk@0.74.0(zod@4.4.3)))(playwright@1.62.1)(typescript@7.0.2)':
     dependencies:
       '@kontourai/forage': 0.5.1(playwright@1.62.1)
       linkedom: 0.18.13
