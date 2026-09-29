@@ -797,7 +797,26 @@ function buildSurveyMetadata(input: {
           },
         }
       : {}),
+    // A claim whose value was chosen from conflicting proposed values lists
+    // every value and marks the chosen one, so the claim never reads as if its
+    // value had been the only one proposed.
+    ...(proposedRoleCount(input.candidateSet) > 1
+      ? {
+          candidateSetStatus: input.candidateSet.status,
+          candidates: input.candidateSet.candidates.map((candidate) => ({
+            candidateId: candidate.id,
+            value: candidate.value,
+            ...(candidate.id === input.candidate.id ? { selected: true } : {}),
+            ...(candidate.rejectionReason !== undefined ? { rejectionReason: candidate.rejectionReason } : {}),
+          })),
+        }
+      : {}),
   };
+}
+
+/** How many of a set's candidates carry the `proposed` role (Survey writes it to `metadata.role`). */
+function proposedRoleCount(candidateSet: CandidateSet): number {
+  return candidateSet.candidates.filter((candidate) => candidate.metadata?.role === "proposed").length;
 }
 
 function statusFor(input: {

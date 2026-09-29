@@ -234,6 +234,13 @@ export interface ReviewDecisionSpec {
    * Additive/optional: absent means the candidate's original value was used unchanged.
    */
   editedValue?: unknown;
+  /**
+   * The proposed candidates a `select-proposed` decision saw and did not
+   * choose, when the reviewer chose one value of a conflict (`candidateId` is
+   * the chosen one). Additive/optional: absent on every other decision, and on
+   * decisions recorded before choosing between conflicting values existed.
+   */
+  unselectedCandidateIds?: string[];
 }
 
 export interface ReviewDecisionStatus {

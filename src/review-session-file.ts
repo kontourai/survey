@@ -22,6 +22,13 @@ export interface ReviewSessionFileContent {
   readonly session: unknown;
   readonly snapshot: ReviewQueueSessionState;
   readonly events: readonly ReviewSessionEvent[];
+  /**
+   * The extraction import record (`ExtractionEnvelopeImport`) the snapshot's
+   * items were built from, stored beside them so every reload path can check
+   * the queue against it. Optional: a session without one whose items came
+   * from an import is presented as an unverified queue.
+   */
+  readonly extractionImport?: unknown;
 }
 
 export interface ReviewSessionFileLockOptions {

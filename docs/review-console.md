@@ -25,6 +25,13 @@ An SSE stream (`GET /api/stream`) watches the session file for changes. When the
 
 ## MCP agent + console convergence
 
+When the session file carries the extraction import record its items came
+from (`extractionImport`, see [review-mcp.md](review-mcp.md#session-file-contract)),
+the console checks the queue against it: a queue that does not match is not
+served (`GET /api/session` returns 409 and the page shows why) and no events are
+appended to it (422). Without a stored import, a queue whose items came from an
+extraction import is shown with an "Unverified queue" notice.
+
 The MCP server (`survey-review-mcp`) and the console share the same session file. You can run both simultaneously: the MCP agent records decisions, the console reflects them live in the browser. Both apply the same `deriveServerReviewSessionApplyResult` validation, so the event log is always consistent.
 
 ### Concurrent writers

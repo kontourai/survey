@@ -395,20 +395,25 @@ describe("one candidate set per claim slot (#289)", () => {
     assert.match(html, /data-testid="could-not-confirm"/);
     assert.match(html, /data-testid="field-chip">Conflict: 2 values</);
 
-    // A result that selects the second value (as a value-level selection would)
-    // projects one claim for the slot, verified with that value only.
+    assert.equal((html.match(/data-testid="select-value"/g) ?? []).length, 2, "each value offers its own choice");
+
+    // A choice of the second value projects one claim for the slot, verified
+    // with that value only, and records the value it passed over.
     const [first, second] = item.spec.candidates;
     const result: ReviewWorkbenchResult = {
-      reviewItemName: item.metadata.name, decision: "accept-proposed",
+      reviewItemName: item.metadata.name, decision: "select-proposed",
       selectedCandidate: second!, selectedCandidateId: second!.id, selectedCandidateRole: "proposed",
       selectedValue: second!.value, selectedDisplayValue: "52000", effectiveValue: second!.value, effectiveDisplayValue: "52000",
       unselectedCandidates: [first!], status: "verified", rationale: "Amendment supersedes the schedule.",
-      reviewDecision: { apiVersion: "survey.kontourai.io/v1alpha1", kind: "ReviewDecision", metadata: { name: `${item.metadata.name}-accept-proposed` },
-        spec: { reviewItemName: item.metadata.name, candidateId: second!.id, status: "verified", actor: { id: "reviewer-1" }, reviewedAt: "2026-09-28T00:00:00.000Z", rationale: "Amendment supersedes the schedule." } },
+      reviewDecision: { apiVersion: "survey.kontourai.io/v1alpha1", kind: "ReviewDecision", metadata: { name: `${item.metadata.name}-select-proposed` },
+        spec: { reviewItemName: item.metadata.name, candidateId: second!.id, unselectedCandidateIds: [first!.id], status: "verified", actor: { id: "reviewer-1" }, reviewedAt: "2026-09-28T00:00:00.000Z", rationale: "Amendment supersedes the schedule." } },
     };
     const { bundle } = project(reviewItems, [result]);
     const feeClaims = bundle.claims.filter((claim) => claim.subjectId === "vendor-1" && claim.fieldOrBehavior === "fee");
     assert.deepEqual(feeClaims.map((claim) => [claim.value, claim.status]), [[52000, "verified"]]);
+    // The same pick labelled as a plain accept, or without the value it passed over, is refused.
+    assert.throws(() => project(reviewItems, [{ ...result, decision: "accept-proposed" }]), /accepts one proposed value of a conflict/);
+    assert.throws(() => project(reviewItems, [{ ...result, reviewDecision: { ...result.reviewDecision, spec: { ...result.reviewDecision.spec, unselectedCandidateIds: [] } } }]), /does not record the proposed values/);
   });
 
   for (const [decision, conflictStatus] of [["could-not-confirm", "disputed"], ["reject-proposed", "rejected"]] as const) {

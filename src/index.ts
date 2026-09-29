@@ -45,7 +45,10 @@ export {
 export {
   assertReviewQueueAgainstExtractionImport,
   assertReviewQueueBinding,
+  attestReviewQueueExtraction,
   bindReviewQueue,
+  reviewItemCarriesExtractionBinding,
+  unverifiedExtractionQueueSentence,
   hashReviewQueueSnapshot,
   UnattestedExtractionQueueError,
   UnattestedReviewQueueError,
@@ -57,6 +60,7 @@ export type {
   ReviewQueueBinding,
   ReviewQueueBindingIssue,
   ReviewQueueBindingIssueCode,
+  ReviewQueueExtractionAttestation,
   ReviewQueueExtractionIssue,
   ReviewQueueExtractionIssueCode,
   ValidateReviewQueueBindingOptions,

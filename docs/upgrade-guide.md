@@ -676,8 +676,9 @@ only for carrying verification results that an import could have written.
   it. Only a tampered or hand-edited queue reaches this. Flagging covers
   entries that are malformed or unbound; an entry deleted outright, or an
   emptied list, leaves nothing to flag. `validateReviewQueueAgainstExtractionImport`
-  catches it, because it requires each stored item to match its import byte
-  for byte.
+  catches it when it is called with the stored import, because it requires
+  each stored item to match its import byte for byte. In this release no
+  built-in reload path called it; see the next section.
 - **The recorded prompt renders values like the card.** The decision prompt
   is rebuilt from the item when the decision is built; it records what the card
   states for that item, not a capture of what a reviewer saw. It now uses the
@@ -689,6 +690,48 @@ only for carrying verification results that an import could have written.
   `deriveServerReviewSessionApplyResult`; the mounted workbench passes its
   own. A server that applies sessions must pass the same adapter its
   workbench uses, or its recorded prompts render values unadapted. Without an adapter the prompt text is unchanged.
+
+## Choosing one value of a conflict; reload paths check the stored import (#304, #317)
+
+- **`select-proposed` chooses one value of a conflict by candidate id.**
+  `ReviewWorkbenchDecision` gains `select-proposed` (label "Use this value").
+  The chosen id rides in `ReviewWorkbenchState.selectedCandidateId` /
+  `ReviewQueueSessionState.selectedCandidateIdsByItemName` and, in session
+  events, as the event's `candidateId`. `candidateForDecision`,
+  `decisionCandidateId` and `effectiveValueForDecision` take it as an optional
+  last argument. The decision is refused unless the id names one `proposed`
+  candidate of an item with at least two (`conflictSelectionIssue`; validated
+  replay reports `invalid-conflict-selection`). The `ReviewDecision` gains
+  `unselectedCandidateIds`; the canonical projection gives each value not chosen
+  a not-chosen `rejectionReason`; `buildSurveyTrustBundle` lists every value in
+  `metadata.survey.candidates` (with `selected: true`) and
+  `candidateSetStatus` on a claim whose set has more than one `proposed`
+  candidate. The workbench card, the MCP tools (`decision: "select"`,
+  `candidateId`) and the recorded prompt show every value and which one was
+  chosen. See [decisions/conflict-selection.md](https://github.com/kontourai/survey/blob/main/docs/decisions/conflict-selection.md).
+  **Action:** code that switches exhaustively on `ReviewWorkbenchDecision` or
+  builds a `Record<ReviewWorkbenchDecision, …>` must add `select-proposed`.
+  Existing decision kinds and stored sessions keep their meaning.
+- **`buildCanonicalReviewedTrustInput` refuses an `accept-proposed` result on a
+  conflict** and a `select-proposed` result that does not record the values it
+  passed over. Survey's own paths never produced the first; a hand-built result
+  that did now fails instead of projecting one value as if it had been the only
+  one.
+- **Reload paths check a stored queue against its extraction import.**
+  `attestReviewQueueExtraction(items, extractionImport)` returns `attested`,
+  `diverges`, `unverified` or `not-extraction`. The MCP server and the console
+  read the import from the session file's optional `extractionImport`; the
+  workbench mount, `renderReviewWorkbenchHtml` and `<survey-review-workbench>`
+  take `extractionImport` (the element falls back to a single-import
+  `extractionInspector`); `deriveServerReviewSessionApplyResult` and
+  `applyReviewSession` take `extractionImport`. A diverging queue is refused
+  (MCP `isError`, console 409/422, workbench refusal banner and no cards,
+  `UnattestedExtractionQueueError` / `unattested-extraction-queue`). A queue
+  whose items came from an import but has none stored shows an "Unverified
+  queue" notice on every surface, and the apply result carries an
+  `unverified-extraction-queue` warning. **Action:** store the
+  `ExtractionEnvelopeImport` record beside each queue built from an import and
+  pass it to these paths. Queues that never came from an import are unaffected.
 
 ## See also
 

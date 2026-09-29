@@ -56,6 +56,10 @@ interface EmbedOptions {
   readonly markSourceIncomplete?: boolean;
   /** Two distinct candidates over the exact same span, in either order. */
   readonly sharedSpanCandidates?: "as-is" | "reversed";
+  /** The extraction import record stored beside the queue, passed to the mount. */
+  readonly extractionImport?: unknown;
+  /** Set false for a queue the workbench refuses to show. */
+  readonly expectFields?: boolean;
 }
 
 async function loadEmbed(page: Page, options: EmbedOptions = {}): Promise<LoadedEmbed> {
@@ -78,13 +82,14 @@ async function loadEmbed(page: Page, options: EmbedOptions = {}): Promise<Loaded
     ...(options.duplicateCandidateIdsOnPageTwo ? { duplicateCandidateIdsOnPageTwo: true } : {}),
     ...(options.sharedSpanCandidates ? { sharedSpanCandidates: options.sharedSpanCandidates } : {}),
     ...(options.markSourceIncomplete ? { markSourceIncomplete: true } : {}),
+    ...(options.extractionImport ? { extractionImport: JSON.parse(JSON.stringify(options.extractionImport)) } : {}),
   };
   await page.addInitScript((value) => {
     (window as unknown as Record<string, unknown>).__surveyEmbedFixture = value;
   }, fixture);
 
   await page.goto(fixturePath);
-  await expect(page.getByTestId("review-fields")).toBeVisible();
+  await expect(options.expectFields === false ? page.getByTestId("review-workbench-shell") : page.getByTestId("review-fields")).toBeVisible();
   return { pageErrors, consoleErrors };
 }
 
@@ -597,6 +602,7 @@ test.describe("embedded workbench: envelope-imported decisions", () => {
     await expect(conflict.getByTestId("use-proposed")).toHaveCount(0);
     await expect(conflict.getByTestId("could-not-confirm")).toBeVisible();
     await expect(conflict.getByTestId("keep-current")).toHaveText("Reject all values");
+    await expect(conflict.getByTestId("select-value")).toHaveCount(2);
 
     await conflict.getByTestId("keep-current").click();
     await expect(conflict).toHaveAttribute("data-decision", "reject-proposed");
@@ -610,6 +616,69 @@ test.describe("embedded workbench: envelope-imported decisions", () => {
 
     expect(pageErrors).toEqual([]);
     expect(consoleErrors).toEqual([]);
+  });
+
+  test("choosing one conflicting value records it by id and marks every value chosen or not chosen", async ({ page }, testInfo) => {
+    const seeds: EnvelopeProposalSeed[] = [
+      ...envelopeQueueSeeds,
+      { fieldPath: "commercial.annualFeeUsd", candidateValue: 52000, excerpt: "52000", valueType: "number" },
+    ];
+    const { pageErrors, consoleErrors } = await loadEmbed(page, { seeds, extractionImport: buildEnvelopeImportFixture(seeds).record });
+    const conflict = fieldByTarget(page, "commercial.annualFeeUsd");
+    const values = conflict.getByTestId("conflicting-value");
+    await expect(values).toHaveCount(2);
+    const [firstId, secondId] = await values.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-candidate-id")));
+    const screenshots = process.env.SURVEY_SCREENSHOT_DIR;
+    if (screenshots) await conflict.screenshot({ path: `${screenshots}/conflict-selection-${testInfo.project.name}-undecided.png` });
+
+    // Choose the SECOND value: a fallback to the first candidate would show here.
+    await values.nth(1).getByTestId("select-value").click();
+    await expect(conflict).toHaveAttribute("data-decision", "select-proposed");
+    await expect(conflict.getByTestId("decided-chip")).toHaveText("Chose 1 of 2 values");
+    await expect(values.nth(0)).toHaveAttribute("data-chosen", "false");
+    await expect(values.nth(0).getByTestId("choice-tag")).toHaveText("Not chosen");
+    await expect(values.nth(1)).toHaveAttribute("data-chosen", "true");
+    await expect(values.nth(1).getByTestId("choice-tag")).toHaveText("Chosen");
+    await expect(conflict.getByTestId("select-value")).toHaveCount(0);
+
+    // The saved record names the chosen candidate and the one passed over.
+    await conflict.getByTestId("audit-details").locator("summary").first().click();
+    const payload = JSON.parse(await conflict.getByTestId("decision-payload").textContent() ?? "{}") as { spec: Record<string, unknown> };
+    expect(payload.spec.candidateId).toBe(secondId);
+    expect(payload.spec.unselectedCandidateIds).toEqual([firstId]);
+    expect(String((payload.spec.authorizing as { renderedPrompt?: string }).renderedPrompt)).toContain("Selected decision: Use this value: 52000 (not chosen: 48000).");
+    if (screenshots) {
+      await conflict.getByTestId("audit-details").locator("summary").first().click();
+      await conflict.screenshot({ path: `${screenshots}/conflict-selection-${testInfo.project.name}-chosen.png` });
+    }
+
+    // Change clears the choice and offers it again.
+    await conflict.getByTestId("undo-decision").click();
+    await expect(conflict.getByTestId("select-value")).toHaveCount(2);
+    await expect(page.getByTestId("queue-attestation")).toHaveCount(0);
+
+    expect(pageErrors).toEqual([]);
+    expect(consoleErrors).toEqual([]);
+  });
+
+  test("a queue checked against its stored import is attested; a diverging one is refused; an unchecked one is marked", async ({ page }) => {
+    const record = buildEnvelopeImportFixture().record;
+    const attested = await loadEmbed(page, { extractionImport: record });
+    await expect(page.getByTestId("review-workbench-shell")).toHaveAttribute("data-queue-attestation", "attested");
+    await expect(page.getByTestId("queue-attestation")).toHaveCount(0);
+    expect(attested.pageErrors).toEqual([]);
+
+    const session = envelopeReviewQueueSession();
+    const [first, ...rest] = session.items;
+    const tampered = { ...session, items: [{ ...first!, spec: { ...first!.spec, candidates: first!.spec.candidates.map((candidate) => ({ ...candidate, value: "edited" })) } }, ...rest] };
+    await loadEmbed(page, { session: tampered, extractionImport: record, expectFields: false });
+    await expect(page.getByTestId("queue-attestation")).toHaveAttribute("data-state", "diverges");
+    await expect(page.getByTestId("queue-attestation")).toContainText("does not match the extraction import stored with it");
+    await expect(page.getByTestId("review-field")).toHaveCount(0);
+
+    await loadEmbed(page);
+    await expect(page.getByTestId("queue-attestation")).toHaveAttribute("data-state", "unverified");
+    await expect(page.getByTestId("queue-attestation")).toContainText("Unverified queue:");
   });
 
   test("a failed extraction renders a failure posture, not the aligned one", async ({ page }) => {

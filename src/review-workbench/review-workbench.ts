@@ -2,9 +2,11 @@ import { canonicalJson } from "./canonical.js";
 import { assertReviewResolutionConsistency } from "../producer-discipline.js";
 import {
   candidateForDecision,
+  conflictSelectionIssue,
   decisionCandidateId,
   decisionSelectsNoCandidate,
   keepActionDecision,
+  unchosenProposedCandidates,
   buildReviewSessionEvent,
   buildReviewSessionEvents,
   buildReviewSessionResource,
@@ -53,6 +55,8 @@ import {
   type ReviewValueDescriptor,
 } from "../review-resource.js";
 import { validateAuthorizing, buildAuthorizedActionAuthorizing } from "../review-authorizing.js";
+import { attestReviewQueueExtraction, type ReviewQueueExtractionAttestation } from "./queue-binding.js";
+import type { ExtractionEnvelopeImport, ExtractionEnvelopeImportResult } from "../extraction-envelope.js";
 import { candidateVerificationNotes, excludedProposalsSentence, excludedProposalsUnreadableSentence, humanizeIdentifier, type CandidateVerificationNote } from "./review-presentation.js";
 import { editedValueFromEditorText, isIsoCalendarDate, parsePlainDecimal } from "./edited-value.js";
 import {
@@ -66,7 +70,10 @@ export { reviewAuditRowKeys, type ReviewAuditRowKey } from "./audit-rows.js";
 export {
   assertReviewQueueAgainstExtractionImport,
   assertReviewQueueBinding,
+  attestReviewQueueExtraction,
   bindReviewQueue,
+  reviewItemCarriesExtractionBinding,
+  unverifiedExtractionQueueSentence,
   hashReviewQueueSnapshot,
   UnattestedExtractionQueueError,
   UnattestedReviewQueueError,
@@ -76,6 +83,7 @@ export {
   type ReviewQueueBinding,
   type ReviewQueueBindingIssue,
   type ReviewQueueBindingIssueCode,
+  type ReviewQueueExtractionAttestation,
   type ReviewQueueExtractionIssue,
   type ReviewQueueExtractionIssueCode,
   type ValidateReviewQueueBindingOptions,
@@ -105,6 +113,8 @@ export {
   buildReviewSessionEvent,
   buildReviewSessionResource,
   candidateForDecision,
+  conflictSelectionIssue,
+  unchosenProposedCandidates,
   decisionCandidateId,
   decisionSelectsNoCandidate,
   keepActionDecision,
@@ -194,7 +204,8 @@ export function buildReviewDecision(state: ReviewWorkbenchState, options: Review
   if (state.decision === "could-not-confirm" && !state.note.trim()) {
     throw new Error("Could not confirm requires a non-empty reason.");
   }
-  const candidate = candidateForDecision(state.item, state.decision);
+  const candidate = candidateForDecision(state.item, state.decision, state.selectedCandidateId);
+  const unchosen = unchosenProposedCandidates(state.item, state.decision, state.selectedCandidateId);
   // A decision that selects no candidate (a value-neutral decision on a
   // conflict) records no candidate id and no candidate's projection hints.
   const selectsNone = decisionSelectsNoCandidate(state.item, state.decision);
@@ -235,6 +246,8 @@ export function buildReviewDecision(state: ReviewWorkbenchState, options: Review
       ...(state.decision === "accept-proposed" && state.editedValue !== undefined
         ? { editedValue: state.editedValue }
         : {}),
+      // A choice between conflicting values records the rivals it passed over.
+      ...(unchosen.length ? { unselectedCandidateIds: unchosen.map((entry) => entry.id) } : {}),
     },
     status: {
       ...(candidateProjection?.claimId ? { appliedToClaimIds: [candidateProjection.claimId] } : {}),
@@ -328,13 +341,20 @@ function decisionCardBasePrompt(state: ReviewWorkbenchState, targetLabel: string
   const valueText = (candidate: ReviewCandidate) => buildReviewCandidatePresentation(state.item, candidate, adapter, targetLabel).valueText;
   const currentCandidate = state.item.spec.candidates.find((c) => c.role === "current");
   const proposedCandidates = state.item.spec.candidates.filter((c) => c.role === "proposed");
-  // A conflict card lists every proposed value and offers reject-all or could
-  // not confirm; the prompt states the same, naming no single value.
+  // A conflict card lists every proposed value and offers a choice of one,
+  // reject-all or could not confirm; the prompt states the same: every value,
+  // and for a choice, which value was chosen and which were not.
   if (proposedCandidates.length > 1) {
+    const values = `For ${targetLabel}, ${proposedCandidates.length} different values were proposed: ${proposedCandidates.map(valueText).join(", ")}.`;
+    if (state.decision === "select-proposed") {
+      const chosen = proposedCandidates.find((c) => c.id === state.selectedCandidateId);
+      const unchosen = proposedCandidates.filter((c) => c.id !== state.selectedCandidateId);
+      return `${values} Selected decision: ${workbenchDecisionDefinitions[state.decision].label}: ${chosen ? valueText(chosen) : formatValue("")} (not chosen: ${unchosen.map(valueText).join(", ")}).`;
+    }
     const decisionLabel = state.decision === "reject-proposed"
       ? "Reject all values"
       : state.decision ? workbenchDecisionDefinitions[state.decision].label : "";
-    return `For ${targetLabel}, ${proposedCandidates.length} different values were proposed: ${proposedCandidates.map(valueText).join(", ")}. Selected decision: ${decisionLabel}.`;
+    return `${values} Selected decision: ${decisionLabel}.`;
   }
   const proposedCandidate = proposedCandidates[0];
   const currentValue = currentCandidate ? valueText(currentCandidate) : formatValue("");
@@ -441,6 +461,13 @@ export interface PersistentReviewSessionEventStoreOptions {
 export interface MountReviewWorkbenchOptions {
   readonly eventStore?: ReviewSessionEventStore;
   readonly presentationAdapter?: ReviewPresentationAdapter;
+  /**
+   * The extraction import record the queue was built from, as stored beside
+   * it. When supplied, the workbench checks the queue against it and refuses to
+   * present a queue that diverges. When absent and the queue's items came from
+   * an extraction import, the workbench shows an "Unverified queue" notice.
+   */
+  readonly extractionImport?: ExtractionEnvelopeImport | ExtractionEnvelopeImportResult;
   /** Maximum review cards mounted at once. Defaults to 50 and is capped at 250. */
   readonly pageSize?: number;
 }
@@ -765,11 +792,12 @@ export function buildReviewWorkbenchResultsFromSession(session: ReviewQueueSessi
         rationale: reviewDecision.spec.rationale,
       }];
     }
-    const selectedCandidate = candidateForDecision(item, decision);
+    const selectedCandidateId = session.selectedCandidateIdsByItemName?.[item.metadata.name];
+    const selectedCandidate = candidateForDecision(item, decision, selectedCandidateId);
     const editedValue = decision === "accept-proposed"
       ? session.editedValuesByItemName?.[item.metadata.name]
       : undefined;
-    const effectiveValue = effectiveValueForDecision(item, decision, editedValue);
+    const effectiveValue = effectiveValueForDecision(item, decision, editedValue, selectedCandidateId);
 
     return [{
       reviewItemName: item.metadata.name,
@@ -995,6 +1023,8 @@ export function renderReviewWorkbenchHtml(
   options: {
     readonly presentationAdapter?: ReviewPresentationAdapter;
     readonly queueView?: Partial<ReviewQueueView>;
+    /** See {@link MountReviewWorkbenchOptions.extractionImport}. */
+    readonly extractionImport?: ExtractionEnvelopeImport | ExtractionEnvelopeImportResult;
   } = {},
 ): string {
   const session = queueSessionFromStartState(state);
@@ -1002,6 +1032,7 @@ export function renderReviewWorkbenchHtml(
     session,
     options.presentationAdapter,
     normalizeReviewQueueView(options.queueView),
+    attestReviewQueueExtraction(session.items, options.extractionImport),
   );
 }
 
@@ -1013,7 +1044,7 @@ type FieldCardState = "review" | "accepted" | "kept" | "rejected" | "could-not-c
  * candidate set (e.g. a pre-decided item seeded by the host) as already-kept.
  */
 function fieldCardState(item: ReviewItem, decision: ReviewWorkbenchDecision | undefined): FieldCardState {
-  if (decision === "accept-proposed") return "accepted";
+  if (decision === "accept-proposed" || decision === "select-proposed") return "accepted";
   if (decision === "keep-current") return "kept";
   if (decision === "reject-proposed") return "rejected";
   if (decision === "could-not-confirm") return "could-not-confirm";
@@ -1031,7 +1062,9 @@ function fieldCardState(item: ReviewItem, decision: ReviewWorkbenchDecision | un
  */
 function chipLabel(state: FieldCardState, hasCurrentValue: boolean, conflictingValues?: number): string {
   switch (state) {
-    case "accepted": return "Accepted";
+    // On a conflict the only accepting decision is a choice of one value, and
+    // the chip says it was a choice, never a plain accept.
+    case "accepted": return conflictingValues ? `Chose 1 of ${conflictingValues} values` : "Accepted";
     case "kept": return hasCurrentValue ? "Kept current" : conflictingValues ? "All values rejected" : "Left unset";
     case "rejected": return hasCurrentValue ? "Kept — flagged wrong" : conflictingValues ? "All values rejected" : "Left unset";
     case "could-not-confirm": return "Could not confirm";
@@ -1098,7 +1131,17 @@ function renderReviewQueueSessionHtml(
   session: ReviewQueueSessionState,
   presentationAdapter: ReviewPresentationAdapter | undefined,
   queueView: ReviewQueueView,
+  attestation: ReviewQueueExtractionAttestation,
 ): string {
+  // A queue that does not match its stored extraction import is not reviewed:
+  // its items could hide or alter what the source said.
+  if (attestation.state === "diverges") {
+    return `
+    <section class="workbench-shell review" data-testid="review-workbench-shell" data-queue-attestation="diverges" aria-label="Survey review workbench">
+      <div class="queue-attestation diverges" data-testid="queue-attestation" data-state="diverges" role="alert">${WARNING_SVG}<span>${escapeHtml(attestation.message)}</span></div>
+    </section>
+  `;
+  }
   const totalCount = session.items.length;
   const decidedCount = session.items.filter((item) => session.decisionsByItemName[item.metadata.name] !== undefined
     || item.spec.candidateSetStatus === "resolved").length;
@@ -1109,7 +1152,10 @@ function renderReviewQueueSessionHtml(
   const window = buildReviewQueueWindow(session, queueView);
 
   return `
-    <section class="workbench-shell review" data-testid="review-workbench-shell" aria-label="Survey review workbench">
+    <section class="workbench-shell review" data-testid="review-workbench-shell" data-queue-attestation="${attestation.state}" aria-label="Survey review workbench">
+      ${attestation.state === "unverified"
+        ? `<div class="queue-attestation unverified" data-testid="queue-attestation" data-state="unverified" role="note">${WARNING_SVG}<span>${escapeHtml(attestation.message)}</span></div>`
+        : ""}
       <header class="rhead">
         <div class="top">
           <div class="subj">
@@ -1176,9 +1222,9 @@ function renderFieldCard(
   const decided = decision !== undefined;
   const current = item.spec.candidates.find((candidate) => candidate.role === "current");
   const proposedCandidates = item.spec.candidates.filter((candidate) => candidate.role === "proposed");
-  // Several proposed values for one claim are a conflict. A control names a
-  // role, not a value, so none may make one of them the trusted value; the
-  // reviewer can still reject them all or end the round as could-not-confirm.
+  // Several proposed values for one claim are a conflict. The reviewer can
+  // choose one of them by candidate id (select-proposed), reject them all, or
+  // end the round as could-not-confirm; no role-based control may pick one.
   const conflict = proposedCandidates.length > 1;
   const proposed = proposedCandidates.length === 1 ? proposedCandidates[0] : undefined;
   const presentation = buildReviewItemPresentation(item, presentationAdapter);
@@ -1221,7 +1267,7 @@ function renderFieldCard(
         ${proposed
           ? renderDiffRow(item, current, proposed, presentation.targetLabel, decided, effectiveProposedText, currentPresentationText)
           : proposedCandidates.length > 1
-            ? renderConflictingProposals(item, proposedCandidates, presentationAdapter, presentation.targetLabel)
+            ? renderConflictingProposals(item, proposedCandidates, presentationAdapter, presentation.targetLabel, decision, session.selectedCandidateIdsByItemName?.[item.metadata.name])
             : "<p class=\"field-value\">No proposed value is available for this field.</p>"}
         ${proposed ? renderProvenanceRow(item, proposed, presentationAdapter) : ""}
         ${renderExtractionImportNotes(presentation)}
@@ -1256,23 +1302,44 @@ function renderFieldCard(
 
 /**
  * The card body for an item whose candidate set holds several proposed values.
- * Lists every value with its excerpt; the workbench records a decision against
- * a role, so it cannot pick one of them, and says what the reviewer can do.
+ * Lists every value with its excerpt. Until the field is decided, each value
+ * has its own "Use this value" control, which records `select-proposed` with
+ * that candidate's id. Once a value is chosen, every value stays listed and is
+ * marked chosen or not chosen, so the card never reads as if there had been
+ * one value. Proposals excluded at import are not candidates: they are listed
+ * by {@link renderExtractionImportNotes} and cannot be chosen.
  */
 function renderConflictingProposals(
   item: ReviewItem,
   candidates: readonly ReviewCandidate[],
   presentationAdapter: ReviewPresentationAdapter | undefined,
   targetLabel: string,
+  decision: ReviewWorkbenchDecision | undefined,
+  selectedCandidateId: string | undefined,
 ): string {
+  const chose = decision === "select-proposed";
   const values = candidates.map((candidate) => {
     const text = buildReviewCandidatePresentation(item, candidate, presentationAdapter, targetLabel).valueText;
     const excerpt = candidate.locator?.excerpt;
-    return `<li data-testid="conflicting-value"><span class="vtext">${escapeHtml(text)}</span>${excerpt ? ` <q>${escapeHtml(excerpt)}</q>` : ""}</li>`;
+    const chosen = chose && candidate.id === selectedCandidateId;
+    const mark = chose
+      ? ` <span class="choice-tag ${chosen ? "chosen" : "not-chosen"}" data-testid="choice-tag">${chosen ? "Chosen" : "Not chosen"}</span>`
+      : "";
+    const control = decision === undefined
+      ? `<button class="btn choose" type="button" data-testid="select-value" data-item-name="${escapeHtml(item.metadata.name)}" data-candidate-id="${escapeHtml(candidate.id)}" aria-label="Use ${escapeHtml(text)} for ${escapeHtml(targetLabel)}">Use this value</button>`
+      : "";
+    return `<li data-testid="conflicting-value" data-candidate-id="${escapeHtml(candidate.id)}"${chose ? ` data-chosen="${chosen ? "true" : "false"}"` : ""}>
+        <span class="conflict-text"><span class="vtext">${escapeHtml(text)}</span>${excerpt ? ` <q>${escapeHtml(excerpt)}</q>` : ""}${mark}</span>${control}
+      </li>`;
   }).join("");
+  const intro = decision === undefined
+    ? `${candidates.length} different values were proposed for this field. Use the value the source supports, reject them all, or mark the field Could not confirm with a reason.`
+    : chose
+      ? `${candidates.length} different values were proposed for this field. One was chosen; ${candidates.length === 2 ? "the other was" : "the others were"} seen and not chosen.`
+      : `${candidates.length} different values were proposed for this field.`;
   return `
-    <div class="field-value" data-testid="conflicting-proposals">
-      <p>${candidates.length} different values were proposed for this field. This queue cannot choose one of them yet: reject them all, or mark the field Could not confirm with a reason.</p>
+    <div class="field-value conflict-values" data-testid="conflicting-proposals">
+      <p>${escapeHtml(intro)}</p>
       <ul>${values}</ul>
     </div>
   `;
@@ -1572,6 +1639,7 @@ function renderAuditDetails(
     note,
     decision,
     editedValue: session.editedValuesByItemName?.[item.metadata.name],
+    selectedCandidateId: session.selectedCandidateIdsByItemName?.[item.metadata.name],
     reviewedAt: session.reviewedAt,
     actorId: session.actorId,
   };
@@ -1895,7 +1963,7 @@ interface ReviewWorkbenchControllerBindings extends ReviewWorkbenchController {
   currentSession(): ReviewQueueSessionState;
   currentSessionExport(): ReviewWorkbenchSessionExport;
   readonly presentationAdapter: ReviewPresentationAdapter | undefined;
-  setDecision(itemName: string, decision: ReviewWorkbenchDecision, rawEditedValue?: string): void;
+  setDecision(itemName: string, decision: ReviewWorkbenchDecision, rawEditedValue?: string, selectedCandidateId?: string): void;
   clearDecision(itemName: string): void;
   updateReviewerNote(itemName: string, note: string): void;
   updateQueueView(update: Partial<ReviewQueueView>): void;
@@ -1911,6 +1979,9 @@ function createReviewWorkbenchController(
   let events = eventStore?.load(baseSession) ?? [];
   let session = events.length > 0 ? replayReviewSessionEvents(baseSession, events) : baseSession;
   let queueView = normalizeReviewQueueView({ pageSize: options.pageSize });
+  // The queue's items never change after mount (decisions live in events), so
+  // the check against its extraction import runs once.
+  const attestation = attestReviewQueueExtraction(baseSession.items, options.extractionImport);
 
   const persistEvents = (): void => {
     eventStore?.save(session, events);
@@ -1933,7 +2004,7 @@ function createReviewWorkbenchController(
     const session = sessionForEvent;
     const item = itemName ? session.items.find((entry) => entry.metadata.name === itemName) : undefined;
     const decision = itemName ? session.decisionsByItemName[itemName] : undefined;
-    const candidateId = item && decision ? decisionCandidateId(item, decision) : undefined;
+    const candidateId = item && decision ? decisionCandidateId(item, decision, session.selectedCandidateIdsByItemName?.[item.metadata.name]) : undefined;
     const definition = decision ? workbenchDecisionDefinitions[decision] : undefined;
     const note = itemName ? session.notesByItemName[itemName] : undefined;
     // Carry the reviewer's inline edit in the event (accept-proposed only), so
@@ -1984,7 +2055,7 @@ function createReviewWorkbenchController(
     persistEvents();
   };
 
-  const setDecision = (itemName: string, decision: ReviewWorkbenchDecision, rawEditedValue?: string): void => {
+  const setDecision = (itemName: string, decision: ReviewWorkbenchDecision, rawEditedValue?: string, selectedCandidateId?: string): void => {
     if (decision === "could-not-confirm" && !session.notesByItemName[itemName]?.trim()) {
       throw new Error("Could not confirm requires a non-empty reason.");
     }
@@ -2004,11 +2075,19 @@ function createReviewWorkbenchController(
       delete nextEditedValuesByItemName[itemName];
     }
 
+    const nextSelections: Record<string, string> = { ...session.selectedCandidateIdsByItemName };
+    if (decision === "select-proposed" && selectedCandidateId !== undefined) {
+      nextSelections[itemName] = selectedCandidateId;
+    } else {
+      delete nextSelections[itemName];
+    }
+
     commitSessionUpdate({
       ...session,
       activeItemName: itemName,
       decisionsByItemName: { ...session.decisionsByItemName, [itemName]: decision },
       editedValuesByItemName: nextEditedValuesByItemName,
+      selectedCandidateIdsByItemName: nextSelections,
     }, "decision-changed", itemName);
   };
 
@@ -2019,6 +2098,8 @@ function createReviewWorkbenchController(
     delete remainingEdits[itemName];
     const remainingAttemptEvidenceIds = { ...session.attemptEvidenceIdsByItemName };
     delete remainingAttemptEvidenceIds[itemName];
+    const remainingSelections = { ...session.selectedCandidateIdsByItemName };
+    delete remainingSelections[itemName];
 
     commitSessionUpdate({
       ...session,
@@ -2026,6 +2107,7 @@ function createReviewWorkbenchController(
       decisionsByItemName: remainingDecisions,
       editedValuesByItemName: remainingEdits,
       attemptEvidenceIdsByItemName: remainingAttemptEvidenceIds,
+      selectedCandidateIdsByItemName: remainingSelections,
     }, "decision-changed", itemName, { workbenchDecision: null });
   };
 
@@ -2041,7 +2123,7 @@ function createReviewWorkbenchController(
     currentSession: () => session,
     currentSessionExport: () => buildReviewWorkbenchSessionExport(session, events, { presentationAdapter: options.presentationAdapter }),
     presentationAdapter: options.presentationAdapter,
-    renderCurrentState: () => renderCurrentState(root, session, controller, options.presentationAdapter, queueView),
+    renderCurrentState: () => renderCurrentState(root, session, controller, options.presentationAdapter, queueView, attestation),
     setDecision,
     clearDecision,
     updateReviewerNote,
@@ -2072,8 +2154,14 @@ function renderCurrentState(
   controller: ReviewWorkbenchControllerBindings,
   presentationAdapter?: ReviewPresentationAdapter,
   queueView?: ReviewQueueView,
+  attestation?: ReviewQueueExtractionAttestation,
 ): void {
-  root.innerHTML = renderReviewWorkbenchHtml(session, undefined, { presentationAdapter, queueView });
+  root.innerHTML = renderReviewQueueSessionHtml(
+    session,
+    presentationAdapter,
+    queueView ?? normalizeReviewQueueView(undefined),
+    attestation ?? attestReviewQueueExtraction(session.items, undefined),
+  );
   bindFieldCardInteractions(root, controller);
   bindApplyButton(root, controller);
   bindClampToggles(root);
@@ -2129,6 +2217,9 @@ function queueSessionFromStartState(
       : {},
     ...(startState.attemptEvidenceIds?.length
       ? { attemptEvidenceIdsByItemName: { [startState.item.metadata.name]: [...startState.attemptEvidenceIds] } }
+      : {}),
+    ...(startState.decision === "select-proposed" && startState.selectedCandidateId !== undefined
+      ? { selectedCandidateIdsByItemName: { [startState.item.metadata.name]: startState.selectedCandidateId } }
       : {}),
     reviewedAt: startState.reviewedAt,
     actorId: startState.actorId,
@@ -2187,6 +2278,22 @@ function bindFieldCardInteractions(root: HTMLElement, controller: ReviewWorkbenc
         errorEl.hidden = true;
       }
       controller.setDecision(itemName, "accept-proposed", input?.value);
+      controller.renderCurrentState();
+    });
+  });
+
+  // One value of a conflict: the button names its candidate, and the decision
+  // records that id. The builder refuses an id that is not one of the item's
+  // proposed candidates, so a stale or forged button changes nothing.
+  root.querySelectorAll<HTMLButtonElement>("[data-testid='select-value']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const itemName = button.dataset.itemName ?? "";
+      const candidateId = button.dataset.candidateId ?? "";
+      const item = controller.currentSession().items.find((entry) => entry.metadata.name === itemName);
+      if (!item || conflictSelectionIssue(item, candidateId)) {
+        return;
+      }
+      controller.setDecision(itemName, "select-proposed", undefined, candidateId);
       controller.renderCurrentState();
     });
   });

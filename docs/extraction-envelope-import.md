@@ -84,9 +84,15 @@ decision is built, so it records what the card states for that item, not
 proof that a reviewer read it. Stored entries that cannot be shown, because
 they are malformed or the item's extraction binding is broken, are never
 dropped silently: the same surfaces say how many are not shown and why.
-An entry deleted outright leaves nothing to flag;
-`validateReviewQueueAgainstExtractionImport` catches that, because it requires
-each stored item to match its import byte for byte. The candidate set is judged on the candidates that
+An entry deleted outright leaves nothing on the item to flag. Only the import
+record reveals it: `validateReviewQueueAgainstExtractionImport` requires each
+stored item to match its import byte for byte, and the built-in reload paths
+call it (through `attestReviewQueueExtraction`) when the import is stored
+beside the queue: the session file's `extractionImport` for the MCP server and
+the console, `extractionImport` for the workbench mount, the element and
+`deriveServerReviewSessionApplyResult`. A queue that diverges is refused. A
+queue whose items came from an import but that has no import stored is shown
+everywhere as an "Unverified queue", because nothing checked it. The candidate set is judged on the candidates that
 remain: a rival value whose excerpt failed does not keep the set in
 `conflict`, because a conflict item offers only decisions that trust no
 value, and an unverifiable citation would then be enough to block the value
@@ -139,13 +145,23 @@ conflict, which fails closed to review) or different indices to the same item
 otherwise the import is refused, because one claim cannot carry two impact
 levels. The item's producer metadata lists every `proposalIndices` it stands for.
 
-The review workbench, the server session, and the MCP review tool record a
-decision against a candidate role, so none of them can choose one of several
-`proposed` values yet. On a `conflict` item:
+Role-based decisions cannot choose one of several `proposed` values. On a
+`conflict` item:
 
-- accept is refused: `candidateForDecision` throws instead of settling the
-  conflict by picking the first value, and the workbench and MCP card offer no
-  accept control;
+- a reviewer chooses one value by candidate id with `select-proposed` (see
+  [decisions/conflict-selection.md](https://github.com/kontourai/survey/blob/main/docs/decisions/conflict-selection.md)): the
+  workbench card offers "Use this value" per value, the MCP decide tool takes
+  `decision: "select"` with a `candidateId`, and the server session accepts the
+  event whose `candidateId` names the choice. The chosen value projects
+  `verified`; the decision records the values not chosen
+  (`unselectedCandidateIds`), each of those candidates carries a not-chosen
+  `rejectionReason`, and the Surface claim lists every value in
+  `metadata.survey.candidates` with `selected: true` on the chosen one.
+  Proposals excluded at import are shown but cannot be chosen;
+- role-based accept is refused: `candidateForDecision` throws instead of
+  settling the conflict by picking the first value, the workbench and MCP card
+  offer no plain accept control, and `buildCanonicalReviewedTrustInput`
+  refuses an `accept-proposed` result on a conflict;
 - rejecting all values (`reject-proposed`) and `could-not-confirm` are
   allowed, because they trust no value, and the round can complete. They
   select no candidate, and no record singles one out:

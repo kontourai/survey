@@ -462,12 +462,21 @@ export function buildReviewResultPresentation(
     selectedValueText: selectedCandidate && item
       ? buildReviewCandidatePresentation(item, selectedCandidate, adapter, targetLabel).valueText
       : result.selectedDisplayValue,
-    applyMeaning: result.selectedCandidateRole === "proposed"
-      ? "Saved decision applies proposed value"
-      : "Saved decision keeps current value",
+    applyMeaning: result.decision === "select-proposed"
+      ? "Saved decision applies the chosen value; the other proposed values were seen and not chosen"
+      : result.selectedCandidateRole === "proposed"
+        ? "Saved decision applies proposed value"
+        : "Saved decision keeps current value",
     reviewItemLink: item && itemContext ? adapter.linkForReviewItem?.(item, itemContext) : undefined,
     traceRefs: item
-      ? traceRefsForResult(item, result, selectedCandidate, adapter)
+      ? [
+          ...traceRefsForResult(item, result, selectedCandidate, adapter),
+          // A choice between conflicting values names the values it passed over.
+          ...(result.decision === "select-proposed"
+            ? result.unselectedCandidates.filter((candidate) => candidate.role === "proposed").flatMap((candidate) =>
+              withTraceLinks([{ label: "Not chosen candidate", value: candidate.id, kind: "candidate" }], { item, candidate }, adapter))
+            : []),
+        ]
       : [{ label: "Survey ReviewItem", value: result.reviewItemName, kind: "review-item" }],
   };
 }

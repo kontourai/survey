@@ -835,6 +835,100 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   font-size: 12px;
 }
 
+/* A queue that came from an extraction import but was not checked against
+   it (unverified), or that does not match it (diverges, shown instead of the
+   queue). */
+.survey-workbench-embed .queue-attestation{
+  display: flex;
+  align-items: flex-start;
+  gap: var(--k-space-2);
+  margin: 0 0 var(--k-space-3);
+  padding: var(--k-space-2) var(--k-space-3);
+  border-radius: 9px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--k-caution);
+  background: var(--k-caution-wash);
+}
+
+.survey-workbench-embed .queue-attestation svg{
+  flex: none;
+  margin-top: 2px;
+}
+
+.survey-workbench-embed .queue-attestation.diverges{
+  color: var(--k-negative);
+  background: var(--k-negative-wash);
+}
+
+/* Conflicting proposed values: each value is listed with its own choice
+   control until the field is decided, then marked chosen or not chosen. */
+.survey-workbench-embed .conflict-values ul{
+  list-style: none;
+  margin: var(--k-space-2) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--k-space-2);
+}
+
+.survey-workbench-embed .conflict-values li{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--k-space-3);
+  flex-wrap: wrap;
+  padding: var(--k-space-2) var(--k-space-3);
+  border: 1px solid var(--k-line);
+  border-radius: 9px;
+}
+
+.survey-workbench-embed .conflict-values li[data-chosen="true"]{
+  border-color: var(--k-positive);
+  background: var(--k-positive-wash);
+}
+
+.survey-workbench-embed .conflict-values .conflict-text{
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--k-space-2);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.survey-workbench-embed .conflict-values .vtext{
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.survey-workbench-embed .conflict-values q{
+  color: var(--k-muted);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.survey-workbench-embed .conflict-values .btn.choose{
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+
+.survey-workbench-embed .choice-tag{
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.survey-workbench-embed .choice-tag.chosen{
+  color: var(--k-positive);
+  background: var(--k-positive-wash);
+}
+
+.survey-workbench-embed .choice-tag.not-chosen{
+  color: var(--k-muted);
+  background: var(--k-sunken);
+}
+
 .survey-workbench-embed .excerpt-verification,
 .survey-workbench-embed .support-verification{
   margin: 0;
