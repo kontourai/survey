@@ -17,7 +17,8 @@ import type { ReviewCandidate, ReviewDecision, ReviewItem } from "./review-resou
  *
  * Survey does not invent slot or version identities: they come from the
  * producer, and every item and candidate must carry one. Survey additionally
- * compares each candidate's value, locator, excerpt and source evidence, so a
+ * compares each candidate's value, full locator, source evidence and full
+ * claim target, so a
  * decision is never carried across a candidate whose content changed, even if a
  * producer reused a version identity.
  *
@@ -106,7 +107,7 @@ export type NeedsReviewReason =
   | "no-prior-decision"
   /** The slot's candidate versions differ from the ones the prior decision saw. */
   | "candidate-changed"
-  /** A version id matched, but the candidate's value, excerpt, locator or source did not. */
+  /** A version id matched, but the candidate's value, locator, source or claim target did not. */
   | "candidate-content-changed"
   /** The prior decision's resolution is not one the policy carries. */
   | "resolution-not-carried"
@@ -334,13 +335,16 @@ function sameCandidateContent(prior: RoundReviewItem, next: RoundReviewItem): bo
   });
 }
 
-/** What a decision was made about: the value and the evidence behind it. */
+/** What a decision was made about: the value, the evidence behind it, and the claim it is for. */
 function candidateContent(candidate: ReviewCandidate): unknown {
   return {
     role: candidate.role ?? null,
     value: candidate.value,
-    locator: candidate.locator?.locator ?? null,
-    excerpt: candidate.locator?.excerpt ?? null,
+    // The whole locator (scheme, locator, excerpt) and the whole claim target
+    // (subject, field, impact and the rest): a decision is about this value,
+    // at this place in the source, for this claim.
+    locator: candidate.locator ?? null,
+    claimTarget: candidate.claimTarget,
     sourceRef: candidate.source.sourceRef,
     sourceChecksum: candidate.source.checksum ?? null,
   };

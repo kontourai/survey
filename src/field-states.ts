@@ -38,10 +38,13 @@ export const FIELD_STATE_METADATA_KEY = "survey.kontourai.io/field-state";
  * - `conflicting`: two or more distinct candidate values for the one claim.
  * - `unsupported`: every candidate has a verifier record saying contradicted
  *   or not-addressed for its current value, and none saying supported.
- * - `not_covered`: no candidate, and the extraction reported that part of the
- *   content was not read (a partial or failed run).
+ * - `excluded`: the extraction proposed values for the field, but the import
+ *   left every one out because its excerpt was not at its cited span. The
+ *   field was read; its proposals are unverifiable, not disproven.
+ * - `not_covered`: no proposal at all, and the extraction reported that part
+ *   of the content was not read (a partial or failed run).
  */
-export type FieldContentState = "value" | "conflicting" | "unsupported" | "not_covered";
+export type FieldContentState = "value" | "conflicting" | "unsupported" | "excluded" | "not_covered";
 
 /**
  * Where review stands for a field: `pending` (no decision), `accepted`,
@@ -170,7 +173,8 @@ export function deriveFieldStates(input: DeriveFieldStatesInput): FieldState[] {
       if (seen.has(key)) continue;
       seen.add(key);
       const index = [...excerptMismatchProposalIndices(record)].find((proposalIndex) => slotKey(proposalSlot(record, proposalIndex)) === key)!;
-      states.push({ importName, slot: proposalSlot(record, index), ...(incompleteRun ? { content: "not_covered" as const } : {}), signals: baseSignals(count) });
+      // Proposals were made, so the field was read: `excluded`, never `not_covered`.
+      states.push({ importName, slot: proposalSlot(record, index), content: "excluded", signals: baseSignals(count) });
     }
     for (const expected of entry.expectedFields ?? []) {
       const slot = normalizeSlot(expected);

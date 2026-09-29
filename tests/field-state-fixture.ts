@@ -26,6 +26,8 @@ export interface FieldEnvelopeOptions {
   readonly partial?: boolean;
   /** Proposal indices whose excerpt is not at their span in the supplied text. */
   readonly mismatched?: readonly number[];
+  /** Text after the excerpts; changing it changes the artifact digest and nothing else. */
+  readonly trailer?: string;
 }
 
 export const SUBJECT = { subjectType: "vendor", subjectId: "acme", facet: "vendor.contract", claimType: "vendor.field" } as const;
@@ -42,7 +44,7 @@ export function importFields(seeds: readonly FieldProposalSeed[], options: Field
     cursor = start + seed.excerpt.length + 1;
     return { start, end: start + seed.excerpt.length };
   });
-  const text = seeds.map((seed) => seed.excerpt).join(" ") + " ".repeat(40);
+  const text = seeds.map((seed) => seed.excerpt).join(" ") + (options.trailer ?? " ".repeat(40));
   // A mismatched proposal's excerpt is not what the verified text holds at its span.
   const verifiedText = [...text].map((char, index) =>
     (options.mismatched ?? []).some((proposal) => index >= spans[proposal]!.start && index < spans[proposal]!.end) ? "#" : char).join("");

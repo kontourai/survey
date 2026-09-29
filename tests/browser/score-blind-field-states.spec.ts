@@ -97,8 +97,9 @@ test.describe("field-state panel", () => {
     await expect(page.getByTestId("field-states-incomplete")).toBeVisible();
     const row = (field: string) => panel.locator(`[data-testid="field-state"][data-field="${field}"]`);
     await expect(row("terminationNotice")).toHaveAttribute("data-content", "not_covered");
-    await expect(row("renewalDate")).toHaveAttribute("data-content", "not_covered");
+    await expect(row("renewalDate")).toHaveAttribute("data-content", "excluded");
     await expect(row("renewalDate").getByTestId("field-state-signal")).toHaveCount(2);
+    await expect(page.getByTestId("field-states-incomplete")).toContainText("1 field was not read");
     await expect(row("vendorName")).toHaveAttribute("data-content", "conflicting");
     await expect(row("annualFee")).toHaveAttribute("data-lifecycle", "pending");
 

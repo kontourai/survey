@@ -78,10 +78,11 @@ export interface ReviewQueueSessionState {
    */
   readonly selectedCandidateIdsByItemName?: Readonly<Record<string, string>>;
   /**
-   * Session-level presentation, set when the session is opened. Part of the
-   * snapshot, so the server record's hash and the queue binding cover it and
-   * a reviewer cannot switch it. Absent: scores are shown and decisions record
-   * no presentation.
+   * Session-level presentation, set when the session is opened. Every
+   * decision event is stamped with it and replay refuses a mismatch; a
+   * `ReviewQueueBinding` also covers it. Without a binding, an edit to both the
+   * snapshot and every event stamp is not detectable. Absent: scores are shown
+   * and decisions record no presentation.
    */
   readonly presentation?: ReviewSessionPresentation;
   /** How the session's items were chosen. Absent: decisions record no sampling. */
@@ -121,6 +122,21 @@ export function assertReviewSessionConditions(session: { readonly presentation?:
   }
 }
 
+/**
+ * The session conditions a decision event carries, or `undefined` for a
+ * session that declares none. Stamped on every decision event so replay can
+ * refuse events recorded under other conditions than the snapshot's: sighted
+ * events replayed over a blind snapshot, or a snapshot whose presentation was
+ * changed after decisions were recorded.
+ */
+export function sessionConditionsStamp(session: { readonly presentation?: ReviewSessionPresentation; readonly sampling?: ReviewSessionSampling }): { presentation?: ReviewSessionPresentation; sampling?: ReviewSessionSampling } | undefined {
+  if (session.presentation === undefined && session.sampling === undefined) return undefined;
+  return {
+    ...(session.presentation !== undefined ? { presentation: { scoreBlind: session.presentation.scoreBlind } } : {}),
+    ...(session.sampling !== undefined ? { sampling: { ...session.sampling } } : {}),
+  };
+}
+
 export function assertAuditRate(rate: unknown): asserts rate is number {
   if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0 || rate > 1) {
     throw new Error("A random-audit rate must be a number greater than 0 and at most 1.");
@@ -128,10 +144,12 @@ export function assertAuditRate(rate: unknown): asserts rate is number {
 }
 
 export function assertAuditSeed(seed: unknown): asserts seed is string {
-  if (typeof seed !== "string" || seed.trim().length === 0) {
-    throw new Error("A random-audit seed must be a non-empty string.");
+  if (typeof seed !== "string" || !AUDIT_SEED.test(seed)) {
+    throw new Error("A random-audit seed must be a stable identity: 1-256 characters from letters, digits and . _ : @ / + ~ -, starting with a letter or digit.");
   }
 }
+
+const AUDIT_SEED = /^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{0,255}$/;
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -570,9 +588,13 @@ export function buildReviewSessionEvents(
       actor: session.actorId,
       reviewedAt: session.reviewedAt,
     });
-    const data: Record<string, unknown> = editedValue !== undefined
-      ? { workbenchDecision: decision, workbenchEditedValue: editedValue }
-      : { workbenchDecision: decision, ...(attemptEvidenceIds?.length ? { attemptEvidenceIds } : {}) };
+    const conditions = sessionConditionsStamp(session);
+    const data: Record<string, unknown> = {
+      ...(editedValue !== undefined
+        ? { workbenchDecision: decision, workbenchEditedValue: editedValue }
+        : { workbenchDecision: decision, ...(attemptEvidenceIds?.length ? { attemptEvidenceIds } : {}) }),
+      ...(conditions ? { sessionConditions: conditions } : {}),
+    };
 
     events.push(buildReviewSessionEvent(session, {
       sessionName,

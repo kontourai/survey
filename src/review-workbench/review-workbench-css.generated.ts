@@ -631,6 +631,7 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 .survey-workbench-embed .field-state-note.signal{ color: var(--k-caution); }
 .survey-workbench-embed .chip.state-content.value{ color: var(--k-positive); background: var(--k-positive-wash); }
 .survey-workbench-embed .chip.state-content.conflicting,
+.survey-workbench-embed .chip.state-content.excluded,
 .survey-workbench-embed .chip.state-content.not_covered{ color: var(--k-caution); background: var(--k-caution-wash); }
 .survey-workbench-embed .chip.state-content.unsupported{ color: var(--k-negative); background: var(--k-negative-wash); }
 .survey-workbench-embed .chip.state-content.none,

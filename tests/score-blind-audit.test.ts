@@ -140,6 +140,26 @@ describe("decisions record how they were made", () => {
     assert.equal(deriveCalibration(projection.surveyInput, { auditSamplesOnly: true }).sampleCount, 0);
   });
 
+  it("refuses decision events recorded under other conditions than the snapshot's", () => {
+    const items = itemsWithScores();
+    const name = items[0]!.metadata.name;
+    const blindSnapshot = blind(initialReviewQueueSessionState(items));
+    const sightedSnapshot = initialReviewQueueSessionState(items);
+    const sightedEvents = buildReviewSessionEvents({ ...sightedSnapshot, decisionsByItemName: { [name]: "accept-proposed" } }, "s");
+    const blindEvents = buildReviewSessionEvents({ ...blindSnapshot, decisionsByItemName: { [name]: "accept-proposed" } }, "s");
+    assert.deepEqual(blindEvents.find((event) => event.spec.eventType === "decision-submitted")!.spec.data?.sessionConditions, { presentation: { scoreBlind: true }, sampling: SAMPLING });
+    const refused = (snapshot: ReviewQueueSessionState, events: typeof blindEvents) => {
+      const result = applyReviewSession({ snapshot, events, sessionName: "s" });
+      assert.equal(result.ok, false);
+      assert.match(JSON.stringify(result.issues), /session conditions/);
+    };
+    refused(blindSnapshot, sightedEvents);
+    refused(sightedSnapshot, blindEvents);
+    refused({ ...blindSnapshot, presentation: { scoreBlind: false } }, blindEvents);
+    refused({ ...blindSnapshot, sampling: { kind: "random-audit", rate: 0.9, seed: "audit-2026-09" } }, blindEvents);
+    assert.equal(applyReviewSession({ snapshot: blindSnapshot, events: blindEvents, sessionName: "s" }).ok, true);
+  });
+
   it("refuses malformed session conditions instead of recording them", () => {
     const items = itemsWithScores();
     const state = { ...currentReviewWorkbenchState(initialReviewQueueSessionState(items)), decision: "accept-proposed" as const };
@@ -150,6 +170,7 @@ describe("decisions record how they were made", () => {
       ["rate above one", { sampling: { kind: "random-audit", rate: 1.5, seed: "s" } }],
       ["no seed", { sampling: { kind: "random-audit", rate: 0.2 } }],
       ["blank seed", { sampling: { kind: "random-audit", rate: 0.2, seed: " " } }],
+      ["seed with spaces", { sampling: { kind: "random-audit", rate: 0.2, seed: "audit seed" } }],
       ["queue with rate", { sampling: { kind: "queue", rate: 0.2 } }],
       ["unknown kind", { sampling: { kind: "manual" } }],
     ];

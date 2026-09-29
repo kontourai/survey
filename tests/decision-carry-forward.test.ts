@@ -143,6 +143,34 @@ describe("carry-forward across rounds", () => {
     assert.equal(moved.needsReview[0]!.reason, "candidate-content-changed");
   });
 
+  it("never carries across a changed claim target, locator scheme or source checksum, even under a reused version id", () => {
+    const sameVersion = () => "v:annualFee:reused";
+    const { one, two } = rounds([FEE], [FEE]);
+    const prior = decide(round(one, sameVersion)[0]!, "accept-proposed");
+    // Control: unchanged, it carries.
+    assert.equal(splitRoundForCarryForward({ roundId: "r", items: round(two, sameVersion), priorDecisions: [prior] }).carriedForward.length, 1);
+    const changes: Array<[string, (item: ReviewItem) => void]> = [
+      ["subjectId", (item) => { item.spec.candidates[0]!.claimTarget.subjectId = "globex"; }],
+      ["fieldOrBehavior", (item) => { item.spec.candidates[0]!.claimTarget.fieldOrBehavior = "annualFeeUsd"; }],
+      ["impactLevel", (item) => { item.spec.candidates[0]!.claimTarget.impactLevel = "high"; }],
+      ["locator.scheme", (item) => { item.spec.candidates[0]!.locator!.scheme = "text"; }],
+    ];
+    for (const [label, change] of changes) {
+      const [entry] = round(two, sameVersion);
+      const item = JSON.parse(JSON.stringify(entry!.item)) as ReviewItem;
+      change(item);
+      const split = splitRoundForCarryForward({ roundId: "r", items: [{ ...entry!, item }], priorDecisions: [prior] });
+      assert.equal(split.carriedForward.length, 0, label);
+      assert.equal(split.needsReview[0]!.reason, "candidate-content-changed", label);
+    }
+    // The same value, locator and excerpt in a different prepared artifact.
+    const reprepared = importFields([FEE], { runId: RUN_2, importName: "round-2", trailer: " appendix".padEnd(40, " ") });
+    const [moved] = round(reprepared, sameVersion);
+    assert.equal(moved!.item.spec.candidates[0]!.locator!.locator, round(one)[0]!.item.spec.candidates[0]!.locator!.locator);
+    assert.notEqual(moved!.item.spec.candidates[0]!.source.checksum, round(one)[0]!.item.spec.candidates[0]!.source.checksum);
+    assert.equal(splitRoundForCarryForward({ roundId: "r", items: [moved!], priorDecisions: [prior] }).needsReview[0]!.reason, "candidate-content-changed");
+  });
+
   it("does not carry a rejected or could-not-confirm decision unless the policy allows it", () => {
     const { one, two } = rounds([FEE], [FEE]);
     const [prior] = round(one);

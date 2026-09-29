@@ -28,7 +28,7 @@ import {
 } from "../src/review-workbench/review-workbench.js";
 import { importFields, slot } from "./field-state-fixture.js";
 
-const SHIPPED_CONTENT = new Set(["value", "conflicting", "unsupported", "not_covered"]);
+const SHIPPED_CONTENT = new Set(["value", "conflicting", "unsupported", "excluded", "not_covered"]);
 const SHIPPED_LIFECYCLE = new Set(["pending", "accepted", "rejected", "could_not_confirm", "superseded"]);
 
 function byField(states: readonly FieldState[], field: string): FieldState {
@@ -131,21 +131,22 @@ describe("field content states", () => {
     assert.equal(derive([moved as CandidateVerification, notAddressed]), "conflicting");
   });
 
-  it("an excluded proposal keeps its slot on record without a content state, or not_covered in a partial run", () => {
+  it("excluded: every proposal for the slot was left out; the field was read, so never not_covered", () => {
     const imported = importFields([
       { field: "annualFee", value: 48000, excerpt: "48000" },
       { field: "renewalDate", value: "2027-03-31", excerpt: "2027-03-31" },
     ], { mismatched: [1] });
     assert.equal(imported.reviewItems.length, 1);
     const renewal = byField(deriveFieldStates({ imports: [{ record: imported.record, expectedFields: [slot("renewalDate")] }] }), "renewalDate");
-    assert.equal(renewal.content, undefined, "a dropped proposal is not a finding that the value is absent");
+    assert.equal(renewal.content, "excluded");
+    assert.equal(renewal.lifecycle, undefined);
     assert.deepEqual(renewal.signals, { excludedProposals: 1 });
     const partial = importFields([
       { field: "annualFee", value: 48000, excerpt: "48000" },
       { field: "renewalDate", value: "2027-03-31", excerpt: "2027-03-31" },
     ], { mismatched: [1], partial: true });
     const partialRenewal = byField(deriveFieldStates({ imports: [{ record: partial.record }] }), "renewalDate");
-    assert.equal(partialRenewal.content, "not_covered");
+    assert.equal(partialRenewal.content, "excluded", "a slot with proposals was read, even in a partial run");
     assert.deepEqual(partialRenewal.signals, { incompleteRun: true, excludedProposals: 1 });
   });
 });
@@ -230,6 +231,32 @@ describe("the field-state panel in the workbench", () => {
     const decided = renderReviewWorkbenchHtml({ ...session, decisionsByItemName: { [imported.reviewItems[0]!.metadata.name]: "accept-proposed" } }, [], { fieldStates: states });
     assert.match(decided, /data-field="annualFee" data-content="value" data-lifecycle="accepted"/);
     assert.doesNotMatch(renderReviewWorkbenchHtml(session), /data-testid="field-states"/, "no panel without states");
+  });
+
+  it("shows an all-excluded slot as excluded, not as unread or unproposed", () => {
+    const imported = importFields([
+      { field: "annualFee", value: 48000, excerpt: "48000" },
+      { field: "renewalDate", value: "2027-03-31", excerpt: "2027-03-31" },
+    ], { mismatched: [1], partial: true });
+    const states = deriveFieldStates({ imports: [{ record: imported.record, expectedFields: [slot("annualFee"), slot("renewalDate"), slot("terminationNotice")] }] });
+    const html = renderReviewWorkbenchHtml(initialReviewQueueSessionState(imported.reviewItems), [], { fieldStates: states });
+    const row = /<li class="field-state-row"[^>]*data-field="renewalDate"[\s\S]*?<\/li>/.exec(html)![0];
+    assert.match(row, /data-content="excluded"/);
+    assert.match(row, /Proposals excluded/);
+    assert.match(row, /1 proposal was excluded/);
+    assert.doesNotMatch(row, /No proposal|No value was proposed|Not read/);
+    assert.match(html, /data-testid="field-states-incomplete">1 field was not read/, "only the field with no proposal is unread");
+  });
+
+  it("marks a carried-forward lifecycle as carried forward", () => {
+    const imported = importFields([{ field: "annualFee", value: 48000, excerpt: "48000" }]);
+    const [state] = deriveFieldStates({ imports: [{ record: imported.record }] });
+    const carried = { ...state!, lifecycle: "accepted" as const, decisionBasis: "carried-forward" as const, decisionName: "prior" };
+    const html = renderReviewWorkbenchHtml(initialReviewQueueSessionState(imported.reviewItems), [], { fieldStates: [carried] });
+    assert.match(html, /data-lifecycle="accepted" data-basis="carried-forward"/);
+    assert.match(html, /Accepted · carried forward/);
+    const affirmed = renderReviewWorkbenchHtml(initialReviewQueueSessionState(imported.reviewItems), [], { fieldStates: [{ ...carried, decisionBasis: "affirmed" as const }] });
+    assert.doesNotMatch(affirmed, /carried forward|data-basis/);
   });
 
   it("in a score-blind session shows no verifier-derived content state", () => {

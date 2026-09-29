@@ -94,6 +94,12 @@ export interface DeriveCalibrationOptions {
    * for a session opened with `openRandomAuditSession`. Default false (every
    * human outcome counts, as before). Other outcomes are skipped and counted
    * in `skippedCount`, as windowed-out outcomes are.
+   *
+   * Calibration reads these fields as recorded on the outcome. The review
+   * session validates them (a `random-audit` rate in (0, 1] and a stable seed)
+   * and replay refuses events recorded under other conditions than the
+   * snapshot's, but an outcome assembled outside Survey's apply path is taken
+   * at its word: only feed outcomes from a store you trust.
    */
   readonly auditSamplesOnly?: boolean;
 }

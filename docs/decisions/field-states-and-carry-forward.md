@@ -30,7 +30,10 @@ slot. A state appears only when the input that produces it is present.
 - Content: `value`, `conflicting` (two or more distinct values),
   `unsupported` (every candidate has a contradicted or not-addressed verifier
   record for its current value and none supported; precedence over the other
-  two), `not_covered` (no candidate, and the run was partial or failed).
+  two), `excluded` (proposals were made for the field but the import left
+  every one out because its excerpt was not at its span: the field was read,
+  so it is never `not_covered`), `not_covered` (no proposal at all, and the
+  run was partial or failed).
 - Lifecycle: `pending`, `accepted`, `rejected`, `could_not_confirm`,
   `superseded` (a supersession names the decision).
 - Signals, not states: `incompleteRun`, `excludedProposals`, `unresolvedImport`.
@@ -57,8 +60,9 @@ Claim status is unchanged.
 producer `slotId` and per-candidate version ids (Survey validates presence and
 never invents them) and the prior round's decisions. An item carries forward
 only when exactly one live prior decision names its slot, the version-id sets
-are equal, and each candidate's value, locator, excerpt, source ref and source
-checksum are unchanged. The last check means a decision never carries across
+are equal, and each candidate's value, full locator (scheme, locator, excerpt),
+source ref, source checksum and full claim target (subject, field, impact and
+the rest) are unchanged. The last check means a decision never carries across
 changed content even if a producer reuses a version id. By default only
 `accepted` carries; `rejected` and `could_not_confirm` carry only under an
 explicit `policy.carry`. The output is a content-addressed
@@ -68,8 +72,15 @@ The vocabulary is `carried-forward` versus `affirmed`, matching the round
 receipts producers already keep. Field states expose it as `decisionBasis`.
 
 **Score-blind audit.** A session's `presentation: { scoreBlind }` and
-`sampling` sit in the snapshot, so the server record hash and queue binding
-cover them and a reviewer cannot switch them. In a score-blind session the
+`sampling` sit in the snapshot, and every decision event is stamped with them
+(`data.sessionConditions`). Replay refuses an event whose stamp differs from
+the snapshot's, so sighted events cannot be replayed over a blind snapshot and
+a snapshot's presentation cannot be flipped after decisions were recorded.
+Full tamper evidence needs a `ReviewQueueBinding`: without one (the MCP and
+console file sessions), an edit that changes the snapshot and every event
+stamp together is not detectable. The session validates `sampling` (rate in
+(0, 1], seed a stable identity). Calibration takes outcome metadata at its
+word, so it should only read outcomes from Survey's apply path. In a score-blind session the
 workbench, the MCP item text, data and card, and the recorded decision prompt
 show no confidence and no verifier result, before or after a decision.
 Excerpt-verification notes and excluded proposals stay visible: they are about

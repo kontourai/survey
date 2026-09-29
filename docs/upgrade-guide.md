@@ -744,8 +744,8 @@ the extraction inspector) now refuse an `ExtractionEnvelopeImport` whose
 other than `"verified"` or `"unverified"`. `ExtractionEnvelopeImport.status.provenance`
 is no longer optional in the type.
 
-Survey 6.1.0 and later write the field on every record, so only records stored
-by 6.0.x or edited by hand are affected. **Action:** re-import such a record
+Survey 6.0.0 and later write the field on every record; records stored by
+5.x or earlier, or edited by hand, are refused. **Action:** re-import such a record
 from its envelope (`importExtractionEnvelope`); do not add the field by hand,
 because `"verified"` claims a check against the prepared text that was never
 run. The reason for the break: a record with the field deleted used to validate

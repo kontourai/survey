@@ -19,6 +19,7 @@ import {
   initialReviewWorkbenchState,
   isScoreBlind,
   assertReviewSessionConditions,
+  sessionConditionsStamp,
   nextUnresolvedItemName,
   replayReviewSessionEvents,
   reviewSessionSummary,
@@ -2054,10 +2055,14 @@ function createReviewWorkbenchController(
     const attemptEvidenceIds = itemName && decision === "could-not-confirm"
       ? session.attemptEvidenceIdsByItemName?.[itemName]
       : undefined;
+    const conditions = sessionConditionsStamp(session);
     const defaultData = decision
-      ? (editedValue !== undefined
-        ? { workbenchDecision: decision, workbenchEditedValue: editedValue }
-        : { workbenchDecision: decision, ...(attemptEvidenceIds?.length ? { attemptEvidenceIds } : {}) })
+      ? {
+          ...(editedValue !== undefined
+            ? { workbenchDecision: decision, workbenchEditedValue: editedValue }
+            : { workbenchDecision: decision, ...(attemptEvidenceIds?.length ? { attemptEvidenceIds } : {}) }),
+          ...(conditions ? { sessionConditions: conditions } : {}),
+        }
       : undefined;
 
     return buildReviewSessionEvent(session, {

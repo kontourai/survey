@@ -5,6 +5,7 @@ const CONTENT_TEXT: Record<FieldContentState, string> = {
   value: "Value found",
   conflicting: "Conflicting values",
   unsupported: "Not supported by verifier",
+  excluded: "Proposals excluded",
   not_covered: "Not read",
 };
 

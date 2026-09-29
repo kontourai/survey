@@ -423,6 +423,7 @@ h1, h2, h3, p {
 .field-state-note.signal { color: var(--k-caution); }
 .chip.state-content.value { color: var(--k-positive); background: var(--k-positive-wash); }
 .chip.state-content.conflicting,
+.chip.state-content.excluded,
 .chip.state-content.not_covered { color: var(--k-caution); background: var(--k-caution-wash); }
 .chip.state-content.unsupported { color: var(--k-negative); background: var(--k-negative-wash); }
 .chip.state-content.none,
