@@ -598,8 +598,9 @@ Everything else changes only when you pass `artifact`:
   `"verified"` when the text matched the envelope's prepared-artifact digest
   and length and each proposal's span was checked against its excerpt. Code
   that deep-compares `record.status` with `{ state, diagnostics }` must add the
-  field. Records stored before this release have no `provenance` and still
-  validate. Treat them as unverified. Older Survey versions reject records
+  field. Records stored before this release have no `provenance`; they
+  validated until the next major release, which requires the field (see
+  "`status.provenance` is required" below). Older Survey versions reject records
   that carry the field, so upgrade every reader before any writer.
 - **With `artifact`:** a proposal whose prepared text at its `chars:` span is
   not its excerpt gets no `ReviewItem` and an `excerpt-mismatch` diagnostic
@@ -732,6 +733,45 @@ only for carrying verification results that an import could have written.
   `unverified-extraction-queue` warning. **Action:** store the
   `ExtractionEnvelopeImport` record beside each queue built from an import and
   pass it to these paths. Queues that never came from an import are unaffected.
+
+## `status.provenance` is required on import records (#320) — breaking
+
+`validateExtractionEnvelopeImport`, `reimportExtractionEnvelope`,
+`exportExtractionEnvelopeImport` and every path that reloads a stored import
+(the MCP server, the console, the workbench mount, the server apply boundary,
+the extraction inspector) now refuse an `ExtractionEnvelopeImport` whose
+`status.provenance` is missing (`status.provenance is required`) or is anything
+other than `"verified"` or `"unverified"`. `ExtractionEnvelopeImport.status.provenance`
+is no longer optional in the type.
+
+Survey 6.0.0 and later write the field on every record; records stored by
+5.x or earlier, or edited by hand, are refused. **Action:** re-import such a record
+from its envelope (`importExtractionEnvelope`); do not add the field by hand,
+because `"verified"` claims a check against the prepared text that was never
+run. The reason for the break: a record with the field deleted used to validate
+as the older one-item-per-proposal shape, so a consumer could not tell a
+stripped record from a genuine older one.
+
+## Field states, carry-forward, score-blind audit (#294, #295, #296)
+
+All additive. See `docs/decisions/field-states-and-carry-forward.md`.
+
+- `deriveFieldStates({ imports, decisions?, verifications?, supersessions?, carryForwards? })`
+  returns per-slot content and lifecycle states. `buildCanonicalReviewedTrustInput`
+  takes `fieldStates: { imports, verifications?, supersessions? }` and writes
+  them under claim metadata `survey.kontourai.io/field-state`. The workbench
+  mount and `renderReviewWorkbenchHtml` take `fieldStates` for a field-state
+  panel.
+- `splitRoundForCarryForward`, `buildDecisionSupersession`,
+  `validateDecisionCarryForward` and `validateDecisionSupersession` carry
+  decisions across rounds for unchanged candidates. Callers supply producer
+  slot and version ids.
+- A session may set `presentation: { scoreBlind: true }` and `sampling`.
+  `openRandomAuditSession` / `drawRandomAuditSample` open a seeded audit
+  sample. Decisions record both in `ReviewDecision.spec.presentation` /
+  `.sampling` and in `ReviewOutcome.metadata`. Use
+  `deriveCalibration(..., { auditSamplesOnly: true })` to read only those
+  labels.
 
 ## See also
 

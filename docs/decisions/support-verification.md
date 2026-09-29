@@ -17,8 +17,10 @@ evidence:
 Survey owns a `SupportVerifier` port and an immutable `CandidateVerification`
 record. The record says what an identified verifier said about one candidate's
 value and evidence. It is not a trust decision. Nothing in Survey routes,
-auto-accepts, calibrates, or projects on it, so a record can never upgrade a
-candidate. Survey ships no verifier implementations. Deterministic producer-side
+auto-accepts, or calibrates on it, so a record can never upgrade a
+candidate. The one derivation that reads records is the descriptive
+`unsupported` field content state (see Field States and Carry-Forward), which
+can only mark a field as lacking support and never changes a claim's status. Survey ships no verifier implementations. Deterministic producer-side
 annotations stay with the producer, and model adapters live in separate
 packages, as the producer-profile decision already requires.
 

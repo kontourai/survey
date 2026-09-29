@@ -241,7 +241,34 @@ export interface ReviewDecisionSpec {
    * decisions recorded before choosing between conflicting values existed.
    */
   unselectedCandidateIds?: string[];
+  /**
+   * The presentation of the session the decision was made in, copied from the
+   * session (never supplied by the reviewer). `{ scoreBlind: true }` means the
+   * reviewer saw no confidence and no verifier result before deciding.
+   * Absent on decisions from sessions that declare none.
+   */
+  presentation?: ReviewSessionPresentation;
+  /** How the session's items were chosen, copied from the session. */
+  sampling?: ReviewSessionSampling;
 }
+
+/**
+ * How a session presents items to its reviewer, fixed by the session (never
+ * by the reviewer). `scoreBlind` hides every proposer confidence and every
+ * verifier result on every decision surface for the whole session, so the
+ * decision is made without them.
+ */
+export interface ReviewSessionPresentation {
+  readonly scoreBlind: boolean;
+}
+
+/**
+ * How the session's items were chosen: the ordinary review `queue`, or a
+ * seeded `random-audit` draw at `rate` (see `drawRandomAuditSample`).
+ */
+export type ReviewSessionSampling =
+  | { readonly kind: "queue" }
+  | { readonly kind: "random-audit"; readonly rate: number; readonly seed: string };
 
 export interface ReviewDecisionStatus {
   appliedToClaimIds?: string[];

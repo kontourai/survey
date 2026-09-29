@@ -4,11 +4,13 @@ import {
   conflictSelectionIssue,
   decisionSelectsNoCandidate,
   isClearedWorkbenchDecisionEvent,
+  sessionConditionsStamp,
   workbenchDecisionDefinitions,
   type ReviewQueueSessionState,
   type ReviewWorkbenchDecision,
 } from "./review-queue-session.js";
 import { checkEditedValueForItem } from "./edited-value.js";
+import { canonicalJson } from "./canonical.js";
 
 export type ReviewSessionReplayIssueCode =
   | "invalid-sequence"
@@ -25,7 +27,8 @@ export type ReviewSessionReplayIssueCode =
   | "decision-resolution-mismatch"
   | "missing-resolution-reason"
   | "edited-value-not-editable"
-  | "edited-value-type-mismatch";
+  | "edited-value-type-mismatch"
+  | "session-conditions-mismatch";
 
 export interface ReviewSessionReplayIssue {
   readonly code: ReviewSessionReplayIssueCode;
@@ -87,6 +90,19 @@ export function validateReviewSessionEventsForSnapshot(
       // expectations apply — the event carries no selected candidate.
     } else if (event.spec.eventType === "decision-changed" || event.spec.eventType === "decision-submitted") {
       const decision = replayableWorkbenchDecision(event.spec.data?.workbenchDecision);
+      // A decision recorded under other presentation or sampling than the
+      // snapshot's must not be replayed as if made under the snapshot's.
+      const expectedConditions = sessionConditionsStamp(snapshot);
+      const carried = event.spec.data?.sessionConditions;
+      if (decision && canonicalJson(carried ?? null) !== canonicalJson(expectedConditions ?? null)) {
+        issues.push({
+          ...eventRef,
+          code: "session-conditions-mismatch",
+          reviewItemName,
+          candidateId: event.spec.candidateId,
+          message: `ReviewSessionEvent ${event.metadata.name} was recorded under session conditions ${JSON.stringify(carried ?? "none")}, but the snapshot's are ${JSON.stringify(expectedConditions ?? "none")}.`,
+        });
+      }
       if (!decision) {
         issues.push({
           ...eventRef,

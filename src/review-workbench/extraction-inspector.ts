@@ -95,7 +95,7 @@ export interface ExtractionInspectorSource {
   extractionDiagnostic?: Extract<ExtractionEnvelopeImportDiagnostic, { kind: "extraction-failed" | "extraction-incomplete" }>;
   /**
    * Whether the import checked excerpts against the prepared artifact
-   * (`status.provenance`; a record without it is `unverified`). Always set by
+   * (`status.provenance`, required on every import record). Always set by
    * {@link buildExtractionInspectorModel}; optional for hand-authored models.
    */
   importProvenance?: "verified" | "unverified";
@@ -186,7 +186,7 @@ export function buildExtractionInspectorModel(input: ExtractionInspectorInput): 
       entry.artifact,
       envelope.result.ocrDerived,
       envelope.result.proposals,
-      record.status.provenance ?? "unverified",
+      record.status.provenance,
     );
     sources.push(source);
     const candidateStart = candidates.length;

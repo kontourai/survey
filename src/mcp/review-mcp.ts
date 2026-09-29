@@ -13,6 +13,7 @@ import {
   decisionSelectsNoCandidate,
   deriveQueueRowStatus,
   initialReviewQueueSessionState,
+  isScoreBlind,
   nextUnresolvedItemName,
   reviewSessionSummary,
   workbenchDecisionDefinitions,
@@ -95,6 +96,16 @@ function attestationLines(attestation: ReviewQueueExtractionAttestation): string
   return attestation.state === "unverified" ? [attestation.message, ``] : [];
 }
 
+/**
+ * A score-blind session shows no confidence and no verifier result on any
+ * surface (text, data or card), so the decision is made without them.
+ */
+const SCORE_BLIND_NOTICE = "Score-blind review: confidence and verifier results are hidden for this whole session. Decide from the source and its excerpt.";
+
+function scoreBlindLines(state: ReviewQueueSessionState): string[] {
+  return isScoreBlind(state) ? [`${state.sampling?.kind === "random-audit" ? "Random audit sample. " : ""}${SCORE_BLIND_NOTICE}`, ``] : [];
+}
+
 // ---- Queue helpers -------------------------------------------------------
 
 function queueSummaryText(snapshot: ReviewQueueSessionState, events: readonly ReviewSessionEvent[], attestation: ReviewQueueExtractionAttestation): string {
@@ -114,6 +125,7 @@ function queueSummaryText(snapshot: ReviewQueueSessionState, events: readonly Re
 
   return [
     ...attestationLines(attestation),
+    ...scoreBlindLines(current),
     `Review queue: ${resolved}/${total} resolved`,
     `Active item: ${activeItem.metadata.name} (${activeItem.spec.target})`,
     ...(nextItem ? [`Next unresolved: ${nextItem}`] : ["All items resolved."]),
@@ -140,9 +152,12 @@ function itemDetailText(item: ReviewItem, snapshot: ReviewQueueSessionState, eve
 
   const confStr = (c: number | undefined): string =>
     c !== undefined ? `${Math.round(c * 100)}%` : "unknown";
+  const blind = isScoreBlind(current);
+  const confidenceLine = (c: number | undefined): string[] => blind ? [] : [`  confidence: ${confStr(c)}`];
 
   const lines: string[] = [
     ...attestationLines(attestation),
+    ...scoreBlindLines(current),
     `Item: ${item.metadata.name}`,
     `Target: ${item.spec.target}`,
     `Status: ${status}`,
@@ -151,7 +166,7 @@ function itemDetailText(item: ReviewItem, snapshot: ReviewQueueSessionState, eve
     ...(note ? [`Note: ${note}`] : []),
     ``,
     `Current value: ${valueStr(currentCandidate?.value ?? "(none)")}`,
-    `  confidence: ${confStr(currentCandidate?.extraction?.confidence ?? currentCandidate?.confidence)}`,
+    ...confidenceLine(currentCandidate?.extraction?.confidence ?? currentCandidate?.confidence),
     `  source: ${currentCandidate?.source?.sourceRef ?? "none"}`,
     ...(currentCandidate?.locator?.excerpt ? [`  excerpt: ${currentCandidate.locator.excerpt}`] : []),
     ``,
@@ -164,12 +179,12 @@ function itemDetailText(item: ReviewItem, snapshot: ReviewQueueSessionState, eve
     ...(proposedCandidates.length === 0 ? [`Proposed value: (none)`] : proposedCandidates.flatMap((candidate) => [
       `Proposed value: ${valueStr(candidate.value)}${chosenId === undefined ? "" : candidate.id === chosenId ? " [chosen]" : " [not chosen]"}`,
       ...(proposedCandidates.length > 1 ? [`  candidateId: ${candidate.id}`] : []),
-      `  confidence: ${confStr(candidate.extraction?.confidence ?? candidate.confidence)}`,
+      ...confidenceLine(candidate.extraction?.confidence ?? candidate.confidence),
       `  source: ${candidate.source?.sourceRef ?? "none"}`,
       ...(candidate.locator?.excerpt ? [`  excerpt: ${candidate.locator.excerpt}`] : []),
     ])),
     ...extractionImportLines(item),
-    ...candidateVerificationNotes(item, editedValueFor(item, current)).flatMap((entry) => [``, `Verification: ${entry.sentence}`]),
+    ...(blind ? [] : candidateVerificationNotes(item, editedValueFor(item, current)).flatMap((entry) => [``, `Verification: ${entry.sentence}`])),
   ];
 
   if (item.spec.rationale) {
@@ -180,6 +195,14 @@ function itemDetailText(item: ReviewItem, snapshot: ReviewQueueSessionState, eve
 }
 
 /** The reviewer's edit when the item's decision accepts one; verifier records are read against it. */
+/** The session's presentation and sampling, as a client should read them. */
+function sessionConditions(snapshot: ReviewQueueSessionState): Record<string, unknown> {
+  return {
+    ...(snapshot.presentation !== undefined ? { presentation: snapshot.presentation } : {}),
+    ...(snapshot.sampling !== undefined ? { sampling: snapshot.sampling } : {}),
+  };
+}
+
 function editedValueFor(item: ReviewItem, state: ReviewQueueSessionState): unknown {
   return state.decisionsByItemName[item.metadata.name] === "accept-proposed" ? state.editedValuesByItemName?.[item.metadata.name] : undefined;
 }
@@ -239,9 +262,11 @@ function buildReviewCardHtml(
 
   const confStr = (c: number | undefined): string =>
     c !== undefined ? `${Math.round(c * 100)}%` : "—";
+  const blind = isScoreBlind(current);
+  const confHtml = (c: number | undefined): string => blind ? "" : `<div class="conf">confidence ${confStr(c)}</div>`;
 
   const currentValue = valueStr(currentCandidate?.value ?? "—");
-  const currentConf = confStr(currentCandidate?.extraction?.confidence ?? currentCandidate?.confidence);
+  const currentConf = confHtml(currentCandidate?.extraction?.confidence ?? currentCandidate?.confidence);
   const currentSource = currentCandidate?.source?.sourceRef ?? "—";
   const currentExcerpt = currentCandidate?.locator?.excerpt ?? "";
   const proposedCard = (candidate: ReviewItem["spec"]["candidates"][number] | undefined, label: string): string => {
@@ -257,7 +282,7 @@ function buildReviewCardHtml(
     return `<div class="card is-proposed"${conflict && candidate ? ` data-candidate-id="${escapeHtml(candidate.id)}"` : ""}>
     <div class="card-label">${escapeHtml(label)}</div>
     <div class="value">${value.includes("\n") ? `<pre>${escapeHtml(value)}</pre>` : escapeHtml(value)}</div>
-    <div class="conf">confidence ${confStr(candidate?.extraction?.confidence ?? candidate?.confidence)}</div>
+    ${confHtml(candidate?.extraction?.confidence ?? candidate?.confidence)}
     <div class="source-ref">${escapeHtml(candidate?.source?.sourceRef ?? "—")}</div>
     ${excerpt ? `<div class="excerpt">${escapeHtml(excerpt)}</div>` : ""}
     ${choice}
@@ -271,7 +296,7 @@ function buildReviewCardHtml(
   const itemPresentation = buildReviewItemPresentation(item);
   const excludedNote = excludedProposalsSentence(itemPresentation.excludedProposals);
   const unreadableNote = excludedProposalsUnreadableSentence(itemPresentation.excludedProposalsUnreadable);
-  const verificationNotes = candidateVerificationNotes(item, editedValueFor(item, current));
+  const verificationNotes = blind ? [] : candidateVerificationNotes(item, editedValueFor(item, current));
 
   const decisionBadge = decision
     ? `<span class="badge badge-${decision === "accept-proposed" || decision === "select-proposed" ? "accept" : decision === "reject-proposed" ? "reject" : "hold"}">${escapeHtml(decision === "select-proposed" ? `Chose 1 of ${proposedCandidates.length} values` : workbenchDecisionDefinitions[decision].label)}</span>`
@@ -362,6 +387,7 @@ h1{font-size:15px;font-weight:700;margin:0 0 4px}
 </head>
 <body>
 ${attestation.state === "unverified" ? `<p class="notice" id="unverified-queue-note">${escapeHtml(attestation.message)}</p>` : ""}
+${blind ? `<p class="notice" id="score-blind-note">${escapeHtml(scoreBlindLines(current)[0]!)}</p>` : ""}
 <p class="eyebrow">Survey Review</p>
 <h1>${escapeHtml(item.spec.target)}</h1>
 <div class="meta">
@@ -375,7 +401,7 @@ ${attestation.state === "unverified" ? `<p class="notice" id="unverified-queue-n
   <div class="card">
     <div class="card-label">Current</div>
     <div class="value">${currentValue.includes("\n") ? `<pre>${escapeHtml(currentValue)}</pre>` : escapeHtml(currentValue)}</div>
-    <div class="conf">confidence ${currentConf}</div>
+    ${currentConf}
     <div class="source-ref">${escapeHtml(currentSource)}</div>
     ${currentExcerpt ? `<div class="excerpt">${escapeHtml(currentExcerpt)}</div>` : ""}
   </div>
@@ -465,6 +491,7 @@ async function toolQueue(options: ReviewMcpOptions): Promise<ContentItem[]> {
   const text = queueSummaryText(snapshot, events, attestation);
   const queueData = {
     queueAttestation: attestation.state,
+    ...sessionConditions(snapshot),
     items: snapshot.items.map((item) => {
       const current = currentSessionState(snapshot, events);
       const selectedCandidateId = current.decisionsByItemName[item.metadata.name] === "select-proposed"
@@ -508,8 +535,10 @@ async function toolItem(itemName: string, options: ReviewMcpOptions): Promise<Co
   const text = itemDetailText(item, snapshot, events, attestation);
   const decision = current.decisionsByItemName[item.metadata.name];
   const selectedCandidateId = decision === "select-proposed" ? current.selectedCandidateIdsByItemName?.[item.metadata.name] : undefined;
+  const blind = isScoreBlind(current);
   const itemData = {
     queueAttestation: attestation.state,
+    ...sessionConditions(snapshot),
     name: item.metadata.name,
     target: item.spec.target,
     status: deriveQueueRowStatus(item, current),
@@ -526,14 +555,14 @@ async function toolItem(itemName: string, options: ReviewMcpOptions): Promise<Co
       };
     })(),
     candidates: (() => {
-      const notes = candidateVerificationNotes(item, editedValueFor(item, current));
+      const notes = blind ? [] : candidateVerificationNotes(item, editedValueFor(item, current));
       return item.spec.candidates.map((c, index) => {
         const note = notes.find((entry) => entry.candidateIndex === index);
         return {
           id: c.id,
           role: c.role,
           value: c.value,
-          confidence: c.extraction?.confidence ?? c.confidence,
+          ...(blind ? {} : { confidence: c.extraction?.confidence ?? c.confidence }),
           sourceRef: c.source?.sourceRef,
           excerpt: c.locator?.excerpt,
           ...(selectedCandidateId !== undefined && c.role === "proposed" ? { chosen: c.id === selectedCandidateId } : {}),

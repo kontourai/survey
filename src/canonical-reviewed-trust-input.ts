@@ -12,6 +12,7 @@ import type { ReviewCandidate, ReviewItem } from "./review-resource.js";
 import { canonicalJson } from "./review-workbench/canonical.js";
 import type { ReviewWorkbenchResult } from "./review-workbench/review-workbench.js";
 import { decisionSelectsNoCandidate, workbenchDecisionDefinitions } from "./review-workbench/review-queue-session.js";
+import { deriveFieldStates, fieldStateClaimMetadata, FIELD_STATE_METADATA_KEY, type DeriveFieldStatesInput, type FieldState } from "./field-states.js";
 
 export interface BuildCanonicalReviewedTrustInputOptions {
   /** Producer identity for the resulting SurveyInput batch. */
@@ -24,6 +25,15 @@ export interface BuildCanonicalReviewedTrustInputOptions {
   readonly items: readonly ReviewItem[];
   /** Results derived by Survey's server apply boundary from snapshot + events. */
   readonly results: readonly ReviewWorkbenchResult[];
+  /**
+   * The extraction imports the items came from (and optionally verifier
+   * records and supersessions). When present, each claim whose item one of
+   * these imports produced carries its derived content and lifecycle states
+   * under `metadata["survey.kontourai.io/field-state"]` (see
+   * `deriveFieldStates`). The states are derived here from the imports and the
+   * results' own decisions, never supplied as labels. Claim status is unchanged.
+   */
+  readonly fieldStates?: Omit<DeriveFieldStatesInput, "decisions" | "carryForwards">;
 }
 
 export interface CanonicalReviewedTrustInput {
@@ -55,6 +65,12 @@ export function buildCanonicalReviewedTrustInput(
   const resultsByName = uniqueBy(options.results, (result) => result.reviewItemName, "ReviewWorkbenchResult");
   if (itemsByName.size !== resultsByName.size) {
     throw new Error("Canonical review projection requires exactly one resolved result for every ReviewItem.");
+  }
+
+  const fieldStatesByItem = new Map<string, FieldState>();
+  if (options.fieldStates) {
+    const states = deriveFieldStates({ ...options.fieldStates, decisions: options.results.map((result) => result.reviewDecision) });
+    for (const state of states) if (state.reviewItemName !== undefined) fieldStatesByItem.set(state.reviewItemName, state);
   }
 
   const rawSources = new Map<string, RawSource>();
@@ -146,6 +162,10 @@ export function buildCanonicalReviewedTrustInput(
         ...(decision.unselectedCandidateIds?.length
           ? { unselectedCandidateIds: decision.unselectedCandidateIds.map((id) => recordIdFor(item, id)) }
           : {}),
+        // How the decision was made: whether scores were hidden, and how the
+        // item was sampled. Calibration reads these to select audit labels.
+        ...(decision.presentation !== undefined ? { presentation: { scoreBlind: decision.presentation.scoreBlind } } : {}),
+        ...(decision.sampling !== undefined ? { sampling: { ...decision.sampling } } : {}),
       },
     };
     addConsistent(reviewOutcomes, reviewOutcome, "review outcome");
@@ -187,6 +207,9 @@ export function buildCanonicalReviewedTrustInput(
       ...(hint.derivedFrom ? { derivedFrom: [...hint.derivedFrom] } : {}),
       collectedBy: hint.collectedBy ?? sharedExtractor(selected ? [selected] : item.spec.candidates) ?? options.source,
       ...(decision.actor?.id ? { actor: decision.actor.id } : {}),
+      ...(fieldStatesByItem.has(item.metadata.name)
+        ? { metadata: { [FIELD_STATE_METADATA_KEY]: fieldStateClaimMetadata(fieldStatesByItem.get(item.metadata.name)!) } }
+        : {}),
     };
     addConsistent(claims, claim, "claim target");
   }

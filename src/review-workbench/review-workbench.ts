@@ -17,6 +17,9 @@ import {
   effectiveValueForDecision,
   initialReviewQueueSessionState,
   initialReviewWorkbenchState,
+  isScoreBlind,
+  assertReviewSessionConditions,
+  sessionConditionsStamp,
   nextUnresolvedItemName,
   replayReviewSessionEvents,
   reviewSessionSummary,
@@ -59,6 +62,8 @@ import { attestReviewQueueExtraction, type ReviewQueueExtractionAttestation } fr
 import type { ExtractionEnvelopeImport, ExtractionEnvelopeImportResult } from "../extraction-envelope.js";
 import { candidateVerificationNotes, excludedProposalsSentence, excludedProposalsUnreadableSentence, humanizeIdentifier, type CandidateVerificationNote } from "./review-presentation.js";
 import { editedValueFromEditorText, isIsoCalendarDate, parsePlainDecimal } from "./edited-value.js";
+import { renderFieldStatesHtml } from "./field-state-view.js";
+import type { FieldState } from "../field-states.js";
 import {
   createAuditFactTrace,
   reviewAuditRowKeys,
@@ -108,6 +113,12 @@ export {
   type ResolvedExtractionArtifact,
 } from "./extraction-inspector.js";
 
+export { renderFieldStatesHtml } from "./field-state-view.js";
+export {
+  drawRandomAuditSample,
+  openRandomAuditSession,
+  type RandomAuditSampleOptions,
+} from "./audit-sample.js";
 export {
   buildReviewSessionEvents,
   buildReviewSessionEvent,
@@ -124,12 +135,16 @@ export {
   deriveQueueRowStatus,
   initialReviewQueueSessionState,
   initialReviewWorkbenchState,
+  isScoreBlind,
+  assertReviewSessionConditions,
   nextUnresolvedItemName,
   replayReviewSessionEvents,
   reviewSessionSummary,
   reviewWorkbenchSessionStorageKey,
   selectedCandidateRole,
   workbenchDecisionDefinitions,
+  type ReviewSessionPresentation,
+  type ReviewSessionSampling,
   type ReviewQueueRowStatus,
   type ReviewQueueSessionState,
   type ReviewSessionSummary,
@@ -201,6 +216,7 @@ export function buildReviewDecision(state: ReviewWorkbenchState, options: Review
   }
 
   const definition = workbenchDecisionDefinitions[state.decision];
+  assertReviewSessionConditions(state);
   if (state.decision === "could-not-confirm" && !state.note.trim()) {
     throw new Error("Could not confirm requires a non-empty reason.");
   }
@@ -248,6 +264,10 @@ export function buildReviewDecision(state: ReviewWorkbenchState, options: Review
         : {}),
       // A choice between conflicting values records the rivals it passed over.
       ...(unchosen.length ? { unselectedCandidateIds: unchosen.map((entry) => entry.id) } : {}),
+      // The session's conditions, never the reviewer's: a score-blind session
+      // records that the decision was made without scores on screen.
+      ...(state.presentation !== undefined ? { presentation: { scoreBlind: state.presentation.scoreBlind } } : {}),
+      ...(state.sampling !== undefined ? { sampling: { ...state.sampling } } : {}),
     },
     status: {
       ...(candidateProjection?.claimId ? { appliedToClaimIds: [candidateProjection.claimId] } : {}),
@@ -333,7 +353,8 @@ function decisionCardRenderedPrompt(state: ReviewWorkbenchState, presentation: R
   const excluded = excludedProposalsSentence(presentation.excludedProposals);
   const unreadable = excludedProposalsUnreadableSentence(presentation.excludedProposalsUnreadable);
   // Likewise the verifier records the card shows, read against the same value.
-  const verification = candidateVerificationNotes(state.item, state.decision === "accept-proposed" ? state.editedValue : undefined).map((note) => note.sentence);
+  // A score-blind card shows no verifier result, so the recorded prompt names none.
+  const verification = isScoreBlind(state) ? [] : candidateVerificationNotes(state.item, state.decision === "accept-proposed" ? state.editedValue : undefined).map((note) => note.sentence);
   return [decisionCardBasePrompt(state, presentation.targetLabel, adapter), ...(excluded ? [excluded] : []), ...(unreadable ? [unreadable] : []), ...verification].join(" ");
 }
 
@@ -470,6 +491,13 @@ export interface MountReviewWorkbenchOptions {
   readonly extractionImport?: ExtractionEnvelopeImport | ExtractionEnvelopeImportResult;
   /** Maximum review cards mounted at once. Defaults to 50 and is capped at 250. */
   readonly pageSize?: number;
+  /**
+   * The queue's derived field states (`deriveFieldStates`). When supplied, a
+   * field-state panel lists every field with its content state, lifecycle and
+   * signals, including fields that have no review card because they were not
+   * read. Lifecycles of queued fields follow the live session.
+   */
+  readonly fieldStates?: readonly FieldState[];
 }
 
 export type ReviewQueueDisposition =
@@ -1025,6 +1053,8 @@ export function renderReviewWorkbenchHtml(
     readonly queueView?: Partial<ReviewQueueView>;
     /** See {@link MountReviewWorkbenchOptions.extractionImport}. */
     readonly extractionImport?: ExtractionEnvelopeImport | ExtractionEnvelopeImportResult;
+    /** See {@link MountReviewWorkbenchOptions.fieldStates}. */
+    readonly fieldStates?: readonly FieldState[];
   } = {},
 ): string {
   const session = queueSessionFromStartState(state);
@@ -1033,6 +1063,7 @@ export function renderReviewWorkbenchHtml(
     options.presentationAdapter,
     normalizeReviewQueueView(options.queueView),
     attestReviewQueueExtraction(session.items, options.extractionImport),
+    options.fieldStates,
   );
 }
 
@@ -1132,6 +1163,7 @@ function renderReviewQueueSessionHtml(
   presentationAdapter: ReviewPresentationAdapter | undefined,
   queueView: ReviewQueueView,
   attestation: ReviewQueueExtractionAttestation,
+  fieldStates?: readonly FieldState[],
 ): string {
   // A queue that does not match its stored extraction import is not reviewed:
   // its items could hide or alter what the source said.
@@ -1156,6 +1188,9 @@ function renderReviewQueueSessionHtml(
       ${attestation.state === "unverified"
         ? `<div class="queue-attestation unverified" data-testid="queue-attestation" data-state="unverified" role="note">${WARNING_SVG}<span>${escapeHtml(attestation.message)}</span></div>`
         : ""}
+      ${isScoreBlind(session)
+        ? `<div class="queue-attestation score-blind" data-testid="score-blind-notice" data-sampling="${escapeHtml(session.sampling?.kind ?? "")}" role="note"><span>${escapeHtml(scoreBlindNotice(session))}</span></div>`
+        : ""}
       <header class="rhead">
         <div class="top">
           <div class="subj">
@@ -1172,6 +1207,7 @@ function renderReviewQueueSessionHtml(
           <button class="apply" type="button" data-testid="apply-button"${decidedCount === 0 ? " disabled" : ""}>Apply ${decidedCount} decision${decidedCount === 1 ? "" : "s"}</button>
         </div>
       </header>
+      ${fieldStates ? renderFieldStatesHtml(fieldStates, session) : ""}
       <nav class="queue-controls" aria-label="Review queue navigation">
         <label>
           <span>Find fields</span>
@@ -1269,9 +1305,9 @@ function renderFieldCard(
           : proposedCandidates.length > 1
             ? renderConflictingProposals(item, proposedCandidates, presentationAdapter, presentation.targetLabel, decision, session.selectedCandidateIdsByItemName?.[item.metadata.name])
             : "<p class=\"field-value\">No proposed value is available for this field.</p>"}
-        ${proposed ? renderProvenanceRow(item, proposed, presentationAdapter) : ""}
+        ${proposed ? renderProvenanceRow(item, proposed, presentationAdapter, isScoreBlind(session)) : ""}
         ${renderExtractionImportNotes(presentation)}
-        ${renderVerificationNotes(candidateVerificationNotes(item, decision === "accept-proposed" ? editedValue : undefined))}
+        ${isScoreBlind(session) ? "" : renderVerificationNotes(candidateVerificationNotes(item, decision === "accept-proposed" ? editedValue : undefined))}
         <div class="decide">
           ${keepDecision === undefined ? "" : `<button class="btn keep" type="button" data-testid="keep-current" data-item-name="${escapeHtml(item.metadata.name)}">${keepLabel}</button>`}
           ${proposed ? `<button class="btn use" type="button" data-testid="use-proposed" data-item-name="${escapeHtml(item.metadata.name)}">Use proposed</button>
@@ -1522,6 +1558,7 @@ function renderProvenanceRow(
   item: ReviewItem,
   proposed: ReviewCandidate,
   presentationAdapter: ReviewPresentationAdapter | undefined,
+  scoreBlind: boolean,
 ): string {
   const excerpt = proposed.locator?.excerpt;
   if (!excerpt) {
@@ -1536,7 +1573,8 @@ function renderProvenanceRow(
     `;
   }
 
-  const confidence = proposed.extraction.confidence ?? proposed.confidence;
+  // A score-blind session never renders the proposer's confidence.
+  const confidence = scoreBlind ? undefined : proposed.extraction.confidence ?? proposed.confidence;
   const presentation = buildReviewCandidatePresentation(item, proposed, presentationAdapter);
   const sourceLinkHtml = presentation.sourceLink
     ? `<a href="${escapeHtml(presentation.sourceLink.href)}">${escapeHtml(presentation.sourceLink.label ?? presentation.sourceText)}</a>`
@@ -1642,6 +1680,8 @@ function renderAuditDetails(
     selectedCandidateId: session.selectedCandidateIdsByItemName?.[item.metadata.name],
     reviewedAt: session.reviewedAt,
     actorId: session.actorId,
+    ...(session.presentation !== undefined ? { presentation: session.presentation } : {}),
+    ...(session.sampling !== undefined ? { sampling: session.sampling } : {}),
   };
   const reviewDecisionPayload = buildReviewDecision(state, { presentationAdapter });
   const preview = buildSurfaceProjectionPreview(item, reviewDecisionPayload, presentationAdapter);
@@ -2015,10 +2055,14 @@ function createReviewWorkbenchController(
     const attemptEvidenceIds = itemName && decision === "could-not-confirm"
       ? session.attemptEvidenceIdsByItemName?.[itemName]
       : undefined;
+    const conditions = sessionConditionsStamp(session);
     const defaultData = decision
-      ? (editedValue !== undefined
-        ? { workbenchDecision: decision, workbenchEditedValue: editedValue }
-        : { workbenchDecision: decision, ...(attemptEvidenceIds?.length ? { attemptEvidenceIds } : {}) })
+      ? {
+          ...(editedValue !== undefined
+            ? { workbenchDecision: decision, workbenchEditedValue: editedValue }
+            : { workbenchDecision: decision, ...(attemptEvidenceIds?.length ? { attemptEvidenceIds } : {}) }),
+          ...(conditions ? { sessionConditions: conditions } : {}),
+        }
       : undefined;
 
     return buildReviewSessionEvent(session, {
@@ -2123,7 +2167,7 @@ function createReviewWorkbenchController(
     currentSession: () => session,
     currentSessionExport: () => buildReviewWorkbenchSessionExport(session, events, { presentationAdapter: options.presentationAdapter }),
     presentationAdapter: options.presentationAdapter,
-    renderCurrentState: () => renderCurrentState(root, session, controller, options.presentationAdapter, queueView, attestation),
+    renderCurrentState: () => renderCurrentState(root, session, controller, options.presentationAdapter, queueView, attestation, options.fieldStates),
     setDecision,
     clearDecision,
     updateReviewerNote,
@@ -2155,12 +2199,14 @@ function renderCurrentState(
   presentationAdapter?: ReviewPresentationAdapter,
   queueView?: ReviewQueueView,
   attestation?: ReviewQueueExtractionAttestation,
+  fieldStates?: readonly FieldState[],
 ): void {
   root.innerHTML = renderReviewQueueSessionHtml(
     session,
     presentationAdapter,
     queueView ?? normalizeReviewQueueView(undefined),
     attestation ?? attestReviewQueueExtraction(session.items, undefined),
+    fieldStates,
   );
   bindFieldCardInteractions(root, controller);
   bindApplyButton(root, controller);
@@ -2223,7 +2269,14 @@ function queueSessionFromStartState(
       : {}),
     reviewedAt: startState.reviewedAt,
     actorId: startState.actorId,
+    ...(startState.presentation !== undefined ? { presentation: startState.presentation } : {}),
+    ...(startState.sampling !== undefined ? { sampling: startState.sampling } : {}),
   };
+}
+
+function scoreBlindNotice(session: ReviewQueueSessionState): string {
+  const audit = session.sampling?.kind === "random-audit" ? "Random audit sample. " : "";
+  return `${audit}Score-blind review: confidence and verifier results are hidden for this whole session. Decide from the source and its excerpt.`;
 }
 
 const COULD_NOT_CONFIRM_REASON_REQUIRED = "A reason is required when you could not confirm.";

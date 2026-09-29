@@ -258,7 +258,8 @@ unavailable, storage, identity, or invalid artifact state is an
 diagnostic. These are unresolved states rather than review candidates. When the
 caller supplies the prepared text at import, a proposal whose span does not match
 its excerpt is left out with an `excerpt-mismatch` diagnostic, and
-`status.provenance` says whether the import was verified. Candidate
+`status.provenance` (required, `verified` or `unverified`) says whether the
+import was verified. Candidate
 ids retain proposal and field identity; source evidence ids retain artifact,
 snapshot, and locator identity. See [Extraction Envelope Import](extraction-envelope-import.md).
 

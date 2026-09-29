@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Survey Review Workbench score-blind and field-state fixture</title>
+    <!-- The packaged embed stylesheet, as a downstream host links it. -->
+    <link rel="stylesheet" href="/dist/src/review-workbench/review-workbench.css">
+    <style>
+      body { margin: 0; background: #ffffff; }
+      #embed { min-height: 100vh; }
+    </style>
+  </head>
+  <body>
+    <div id="embed" class="workbench survey-workbench-embed theme-survey" data-testid="embed">
+      <div id="queue"></div>
+    </div>
+    <script type="module">
+      import { mountReviewWorkbench } from "/dist/src/review-workbench/review-workbench.js";
+
+      const fixture = window.__surveyStatesFixture;
+      mountReviewWorkbench(document.getElementById("queue"), fixture.session, {
+        ...(fixture.extractionImport ? { extractionImport: fixture.extractionImport } : {}),
+        ...(fixture.fieldStates ? { fieldStates: fixture.fieldStates } : {}),
+      });
+      document.body.dataset.embedReady = "1";
+    </script>
+  </body>
+</html>
