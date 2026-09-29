@@ -73,7 +73,7 @@ export function renderFieldStatesHtml(states: readonly FieldState[], session: Re
   return `
     <section class="field-states" data-testid="field-states" aria-label="Field states">
       <h2>Field states</h2>
-      ${unread > 0 ? `<p class="field-states-lead" data-testid="field-states-incomplete">${unread} field${unread === 1 ? " was" : "s were"} not read: the extraction stopped short. These fields have no value to review, and that does not mean the source lacks them.</p>` : ""}
+      ${unread > 0 ? `<p class="field-states-lead" data-testid="field-states-incomplete">${unread} field${unread === 1 ? " was" : "s were"} not read: the extraction stopped short. ${unread === 1 ? "It has" : "They have"} no value to review, and that does not mean the source lacks ${unread === 1 ? "it" : "them"}.</p>` : ""}
       <ul>${rows}</ul>
     </section>
   `;
