@@ -55,6 +55,7 @@ import { reviewResourceApiVersion, type ReviewItem } from "../review-resource.js
 import {
   buildReviewItemsFromExtractionEnvelopeImport,
   validateExtractionEnvelopeImport,
+  type ExtractionEnvelopeImport,
   type ExtractionEnvelopeImportResult,
 } from "../extraction-envelope.js";
 
@@ -261,6 +262,7 @@ export function assertReviewQueueBinding(
 }
 
 export type ReviewQueueExtractionIssueCode =
+  | "import-invalid"
   | "import-not-grounded"
   | "empty-queue"
   | "item-missing-from-queue"
@@ -376,6 +378,84 @@ export function validateReviewQueueAgainstExtractionImport(
   }
 
   return issues;
+}
+
+const EXTRACTION_ENVELOPE_PRODUCER = "survey.kontourai.io/extraction-envelope";
+
+/**
+ * What a reload path can say about a stored queue and the extraction import it
+ * came from:
+ *
+ * - `attested`: an import record was supplied and the queue matches it (see
+ *   {@link validateReviewQueueAgainstExtractionImport}).
+ * - `diverges`: an import record was supplied and the queue does not match it,
+ *   or the record itself is invalid. The queue must not be reviewed.
+ * - `unverified`: items carry the extraction-envelope binding but no import
+ *   record was supplied, so nothing checked them. A rival value deleted from
+ *   the stored queue would not show; every surface says so.
+ * - `not-extraction`: no item carries the binding and no record was supplied;
+ *   there is no import to check against.
+ *
+ * Detection reads the binding the import writes on every item and candidate.
+ * A writer that strips it from every item also strips every other extraction
+ * fact from the queue; keeping the stored import record beside the queue is
+ * what makes a reload path able to check it.
+ */
+export type ReviewQueueExtractionAttestation =
+  | { readonly state: "attested" }
+  | { readonly state: "not-extraction" }
+  | { readonly state: "unverified"; readonly itemNames: readonly string[]; readonly message: string }
+  | { readonly state: "diverges"; readonly issues: readonly ReviewQueueExtractionIssue[]; readonly message: string };
+
+/** Whether a ReviewItem, or any of its candidates, carries the extraction-envelope binding. */
+export function reviewItemCarriesExtractionBinding(item: ReviewItem): boolean {
+  const bound = (producer: Record<string, unknown> | undefined): boolean =>
+    producer !== undefined && producer !== null && typeof producer === "object" && Object.hasOwn(producer, EXTRACTION_ENVELOPE_PRODUCER);
+  return bound(item.metadata?.producer) || (Array.isArray(item.spec?.candidates) && item.spec.candidates.some((candidate) => bound(candidate?.producer)));
+}
+
+/**
+ * Check a queue a reload path is about to present against its extraction
+ * import. Pass the import record (or import result) stored beside the queue;
+ * pass `undefined` when the path has none, and the result says whether that
+ * leaves the queue unverified.
+ */
+export function attestReviewQueueExtraction(
+  items: readonly ReviewItem[],
+  extractionImport: ExtractionEnvelopeImport | ExtractionEnvelopeImportResult | undefined,
+): ReviewQueueExtractionAttestation {
+  if (extractionImport === undefined || extractionImport === null) {
+    const itemNames = items.filter(reviewItemCarriesExtractionBinding).map((item) => item.metadata.name);
+    return itemNames.length === 0
+      ? { state: "not-extraction" }
+      : { state: "unverified", itemNames, message: unverifiedExtractionQueueSentence(itemNames.length) };
+  }
+  const record = isImportResult(extractionImport) ? extractionImport.record : extractionImport;
+  let issues: ReviewQueueExtractionIssue[];
+  try {
+    issues = validateReviewQueueAgainstExtractionImport(items, { record, reviewItems: [] });
+  } catch (error) {
+    issues = [{
+      code: "import-invalid",
+      message: `The stored extraction import is invalid: ${error instanceof Error ? error.message : String(error)}`,
+    }];
+  }
+  return issues.length === 0
+    ? { state: "attested" }
+    : {
+        state: "diverges",
+        issues,
+        message: `This review queue does not match the extraction import stored with it, so it cannot be reviewed: ${issues.map((issue) => issue.message).join(" ")}`,
+      };
+}
+
+/** The notice every surface shows for an `unverified` queue. */
+export function unverifiedExtractionQueueSentence(itemCount: number): string {
+  return `Unverified queue: ${itemCount === 1 ? "1 item came" : `${itemCount} items came`} from an extraction import, but no import record was stored with this queue, so its items were not checked against it. A rival value removed from the stored queue would not be shown.`;
+}
+
+function isImportResult(value: ExtractionEnvelopeImport | ExtractionEnvelopeImportResult): value is ExtractionEnvelopeImportResult {
+  return typeof value === "object" && value !== null && "record" in value && !("kind" in value);
 }
 
 export function assertReviewQueueAgainstExtractionImport(

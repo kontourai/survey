@@ -75,11 +75,18 @@ export function buildCanonicalReviewedTrustInput(
     const rejectsAll = selectsNone && result.decision === "reject-proposed";
     const rejectedRole = workbenchDecisionDefinitions[result.decision].candidateRole;
     const rejectAllReason = result.rationale?.trim() || "Every proposed value for this claim was rejected.";
+    // A choice of one conflicting value passes over the others: each keeps a
+    // record that it was seen and not chosen (and so its own rejected-candidate
+    // learning), never silently dropped.
+    const unchosenIds = new Set(result.decision === "select-proposed" ? result.reviewDecision.spec.unselectedCandidateIds ?? [] : []);
+    const notChosenReason = `Not chosen: the reviewer chose candidate ${recordIdFor(item, result.selectedCandidateId ?? "")} for this claim.`;
 
     const candidates = item.spec.candidates.map((candidate) => {
       const records = projectCandidate(item, rejectsAll && candidate.role === rejectedRole
         ? { ...candidate, rejectionReason: candidate.rejectionReason ?? rejectAllReason }
-        : candidate);
+        : unchosenIds.has(candidate.id)
+          ? { ...candidate, rejectionReason: candidate.rejectionReason ?? notChosenReason }
+          : candidate);
       addConsistent(rawSources, records.rawSource, "raw source");
       addConsistent(extractions, records.extraction, "extraction");
       return records.candidate;
@@ -136,6 +143,9 @@ export function buildCanonicalReviewedTrustInput(
       metadata: {
         workbenchDecision: result.decision,
         ...(result.editedValue !== undefined ? { editedValue: result.editedValue } : {}),
+        ...(decision.unselectedCandidateIds?.length
+          ? { unselectedCandidateIds: decision.unselectedCandidateIds.map((id) => recordIdFor(item, id)) }
+          : {}),
       },
     };
     addConsistent(reviewOutcomes, reviewOutcome, "review outcome");
@@ -234,6 +244,20 @@ function assertCanonicalResult(item: ReviewItem, result: ReviewWorkbenchResult):
     || canonicalJson(decision.editedValue) !== canonicalJson(result.editedValue)) {
     throw new Error(`Review result ${result.reviewItemName} contradicts its canonical ReviewDecision.`);
   }
+  // Accepting one value of a conflict would project it as if it had been the
+  // only value; a choice between conflicting values is select-proposed.
+  if (result.decision === "accept-proposed" && item.spec.candidates.filter((candidate) => candidate.role === "proposed").length > 1) {
+    throw new Error(`Review result ${result.reviewItemName} accepts one proposed value of a conflict; a choice between conflicting values must be a select-proposed decision that records the values it passed over.`);
+  }
+  // A choice names exactly the proposed values it passed over; no other
+  // decision names any.
+  const expectedUnselected = result.decision === "select-proposed" && selected
+    ? item.spec.candidates.filter((candidate) => candidate.role === "proposed" && candidate.id !== selected!.id).map((candidate) => candidate.id)
+    : [];
+  if (canonicalJson(decision.unselectedCandidateIds ?? []) !== canonicalJson(expectedUnselected)
+    || (result.decision === "select-proposed" && expectedUnselected.length === 0)) {
+    throw new Error(`Review result ${result.reviewItemName} does not record the proposed values its ${result.decision} decision passed over.`);
+  }
   if ((result.decision === "could-not-confirm") !== (decision.resolution === "could_not_confirm")) {
     throw new Error(`Review result ${result.reviewItemName} contradicts its canonical review resolution.`);
   }
@@ -251,6 +275,12 @@ function assertCanonicalResult(item: ReviewItem, result: ReviewWorkbenchResult):
       throw new Error(`ReviewItem ${item.metadata.name} candidates carry conflicting claim targets.`);
     }
   }
+}
+
+/** The projected Candidate record id of a ReviewItem candidate. */
+function recordIdFor(item: ReviewItem, candidateId: string): string {
+  const candidate = item.spec.candidates.find((entry) => entry.id === candidateId);
+  return candidate?.projection?.candidateId ?? candidateId;
 }
 
 function claimTargetIdentity(target: ReviewCandidate["claimTarget"]): Omit<ReviewCandidate["claimTarget"], "claimId"> {

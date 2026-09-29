@@ -21,7 +21,13 @@ import {
   type ReviewSessionReplayWarning,
 } from "./review-session-replay.js";
 import type { ReviewDecision, ReviewSessionEvent } from "../review-resource.js";
-import { assertReviewQueueBinding, type ReviewQueueBinding } from "./queue-binding.js";
+import {
+  assertReviewQueueBinding,
+  attestReviewQueueExtraction,
+  UnattestedExtractionQueueError,
+  type ReviewQueueBinding,
+} from "./queue-binding.js";
+import type { ExtractionEnvelopeImport, ExtractionEnvelopeImportResult } from "../extraction-envelope.js";
 import { replayReviewSessionEvents, type ReviewQueueSessionState } from "./review-queue-session.js";
 import { canonicalJson } from "./canonical.js";
 import type { ReviewPresentationAdapter } from "./review-presentation.js";
@@ -117,6 +123,15 @@ export interface DeriveServerReviewSessionApplyResultOptions {
    * consumer's storage, not be recomputed at call time.
    */
   readonly binding?: ReviewQueueBinding;
+  /**
+   * The extraction import record the snapshot's items were built from, as
+   * stored beside the session. When present, the derivation refuses (throws
+   * {@link UnattestedExtractionQueueError}) unless the record's snapshot items
+   * match it (see `validateReviewQueueAgainstExtractionImport`). When absent and
+   * the snapshot's items carry the extraction-envelope binding, the result
+   * carries an `unverified-extraction-queue` warning: nothing checked them.
+   */
+  readonly extractionImport?: ExtractionEnvelopeImport | ExtractionEnvelopeImportResult;
 }
 
 export function createServerReviewSessionRecord(
@@ -230,13 +245,26 @@ export function deriveServerReviewSessionApplyResult(
     assertServerReviewSessionFreshness(options.record, options.currentSnapshot, options.currentEventCount);
   }
   assertServerReviewSessionEvents(options.record, options.events);
+  const attestation = attestReviewQueueExtraction(options.record.snapshot.items, options.extractionImport);
+  if (attestation.state === "diverges") {
+    throw new UnattestedExtractionQueueError(attestation.issues);
+  }
 
-  return deriveReviewSessionApplyResultForSnapshot({
+  const derived = deriveReviewSessionApplyResultForSnapshot({
     snapshot: options.record.snapshot,
     events: options.events,
     requiredResolvedItems: options.requiredResolvedItems,
     presentationAdapter: options.presentationAdapter,
   });
+  return attestation.state === "unverified"
+    ? {
+        ...derived,
+        warnings: [
+          ...(derived.warnings ?? []),
+          { code: "unverified-extraction-queue", itemNames: attestation.itemNames, message: attestation.message },
+        ],
+      }
+    : derived;
 }
 
 function staleIssuesForComparison(
@@ -290,6 +318,8 @@ export interface ApplyReviewSessionOptions<TAction = never> {
   readonly currentSnapshot?: ReviewQueueSessionState;
   readonly currentEventCount?: number;
   readonly requiredResolvedItems?: ReviewSessionApplyResolutionRequirement;
+  /** See {@link DeriveServerReviewSessionApplyResultOptions.extractionImport}. */
+  readonly extractionImport?: ExtractionEnvelopeImport | ExtractionEnvelopeImportResult;
   /** When true, each result is checked against its item's producerPolicy.decisionMode. */
   readonly enforceProducerPolicy?: boolean;
   /** When provided, results are mapped to product apply actions in the same call. */
@@ -304,6 +334,10 @@ export type ApplyReviewSessionIssue =
     }
   | {
       readonly code: "invalid-events";
+      readonly message: string;
+    }
+  | {
+      readonly code: "unattested-extraction-queue";
       readonly message: string;
     }
   | {
@@ -366,8 +400,12 @@ export function applyReviewSession<TAction = never>(
       currentSnapshot: options.currentSnapshot,
       currentEventCount: options.currentEventCount,
       requiredResolvedItems: options.requiredResolvedItems,
+      extractionImport: options.extractionImport,
     });
   } catch (error) {
+    if (error instanceof UnattestedExtractionQueueError) {
+      return { ok: false, issues: [{ code: "unattested-extraction-queue", message: error.message }], decisions: [], results: [], actions: [] };
+    }
     if (error instanceof StaleServerReviewSessionError) {
       return { ok: false, issues: [{ code: "stale-session", message: error.message }], decisions: [], results: [], actions: [] };
     }

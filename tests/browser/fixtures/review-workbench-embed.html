@@ -26,7 +26,7 @@
       } from "/dist/src/review-workbench/extraction-inspector.js";
 
       const fixture = window.__surveyEmbedFixture;
-      mountReviewWorkbench(document.getElementById("queue"), fixture.session);
+      mountReviewWorkbench(document.getElementById("queue"), fixture.session, fixture.extractionImport ? { extractionImport: fixture.extractionImport } : {});
       let inspectorModel = buildExtractionInspectorModel(fixture.inspectorEntry);
       if (fixture.collidingHighlightIds) {
         // Distinct candidates. The first publishes "highlight-beta-two"; the

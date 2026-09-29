@@ -40,6 +40,7 @@ import {
   type MountReviewWorkbenchOptions,
 } from "./review-workbench.js";
 import type { ReviewPresentationAdapter } from "./review-presentation.js";
+import type { ExtractionEnvelopeImport, ExtractionEnvelopeImportResult } from "../extraction-envelope.js";
 import {
   buildExtractionInspectorModel,
   mountExtractionInspector,
@@ -184,6 +185,7 @@ export class SurveyReviewWorkbenchElement extends HTMLElement {
   #session: ReviewQueueSessionState | ReviewWorkbenchState | null = null;
   #presentationAdapter: ReviewPresentationAdapter | undefined = undefined;
   #extractionInspector: ExtractionInspectorInput | null = null;
+  #extractionImport: ExtractionEnvelopeImport | ExtractionEnvelopeImportResult | null = null;
   #unmountInspector: (() => void) | undefined;
   #root: ShadowRoot;
   #mountRoot: HTMLDivElement;
@@ -357,6 +359,20 @@ export class SurveyReviewWorkbenchElement extends HTMLElement {
     this.#remount();
   }
 
+  /**
+   * The extraction import record the queue was built from, as stored beside
+   * it. The workbench checks the queue against it (see
+   * `MountReviewWorkbenchOptions.extractionImport`). When unset, the import of
+   * a single-import `extractionInspector` is used; with neither, a queue whose
+   * items came from an extraction import shows an "Unverified queue" notice.
+   */
+  get extractionImport(): ExtractionEnvelopeImport | ExtractionEnvelopeImportResult | null { return this.#extractionImport; }
+
+  set extractionImport(value: ExtractionEnvelopeImport | ExtractionEnvelopeImportResult | null | undefined) {
+    this.#extractionImport = value ?? null;
+    this.#remount();
+  }
+
   /** Optional read-only source pane attached to this workbench's existing review lifecycle. */
   get extractionInspector(): ExtractionInspectorInput | null { return this.#extractionInspector; }
 
@@ -444,9 +460,14 @@ export class SurveyReviewWorkbenchElement extends HTMLElement {
       return;
     }
 
-    const options: MountReviewWorkbenchOptions = this.#presentationAdapter
-      ? { presentationAdapter: this.#presentationAdapter }
-      : {};
+    const inspectorImport = this.#extractionInspector && !("imports" in this.#extractionInspector)
+      ? this.#extractionInspector.importResult
+      : undefined;
+    const extractionImport = this.#extractionImport ?? inspectorImport;
+    const options: MountReviewWorkbenchOptions = {
+      ...(this.#presentationAdapter ? { presentationAdapter: this.#presentationAdapter } : {}),
+      ...(extractionImport ? { extractionImport } : {}),
+    };
 
     this.#applyThemeClasses();
     mountReviewWorkbench(this.#mountRoot, this.#session, options);

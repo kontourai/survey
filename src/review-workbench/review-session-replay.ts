@@ -1,6 +1,7 @@
 import type { ReviewSessionEvent } from "../review-resource.js";
 import {
   candidateForDecision,
+  conflictSelectionIssue,
   decisionSelectsNoCandidate,
   isClearedWorkbenchDecisionEvent,
   workbenchDecisionDefinitions,
@@ -19,6 +20,7 @@ export type ReviewSessionReplayIssueCode =
   | "missing-review-item"
   | "invalid-workbench-decision"
   | "decision-candidate-mismatch"
+  | "invalid-conflict-selection"
   | "decision-status-mismatch"
   | "decision-resolution-mismatch"
   | "missing-resolution-reason"
@@ -93,6 +95,39 @@ export function validateReviewSessionEventsForSnapshot(
           candidateId: event.spec.candidateId,
           message: `ReviewSessionEvent ${event.metadata.name} is a decision event but does not include a replayable workbench decision.`,
         });
+      } else if (itemName && itemsByName.has(itemName) && decision === "select-proposed") {
+        // The event's candidateId is the choice; it must name one proposed
+        // candidate of an item that holds a conflict.
+        const item = itemsByName.get(itemName)!;
+        const selectionIssue = conflictSelectionIssue(item, event.spec.candidateId);
+        if (selectionIssue) {
+          issues.push({
+            ...eventRef,
+            code: "invalid-conflict-selection",
+            reviewItemName: itemName,
+            candidateId: event.spec.candidateId,
+            message: `ReviewSessionEvent ${event.metadata.name}: ${selectionIssue}`,
+          });
+        }
+        const expectedStatus = workbenchDecisionDefinitions[decision].status;
+        if (event.spec.status !== expectedStatus) {
+          issues.push({
+            ...eventRef,
+            code: "decision-status-mismatch",
+            reviewItemName: itemName,
+            candidateId: event.spec.candidateId,
+            message: `ReviewSessionEvent ${event.metadata.name} decision ${decision} expects status ${expectedStatus}, but references ${event.spec.status ?? "no status"}.`,
+          });
+        }
+        if (event.spec.resolution !== undefined) {
+          issues.push({
+            ...eventRef,
+            code: "decision-resolution-mismatch",
+            reviewItemName: itemName,
+            candidateId: event.spec.candidateId,
+            message: `ReviewSessionEvent ${event.metadata.name} decision ${decision} expects resolution none, but references ${event.spec.resolution}.`,
+          });
+        }
       } else if (itemName && itemsByName.has(itemName)) {
         const item = itemsByName.get(itemName);
         const expectedCandidate = item ? candidateForDecision(item, decision) : undefined;
@@ -210,6 +245,17 @@ export type ReviewSessionReplayWarning =
       readonly reviewItemName: string;
       readonly refusedCode: "edited-value-not-editable" | "edited-value-type-mismatch";
       readonly editedValue: unknown;
+      readonly message: string;
+    }
+  | {
+      /**
+       * The session's items came from an extraction import, but the apply
+       * boundary was not given the import record to check them against (see
+       * `DeriveServerReviewSessionApplyResultOptions.extractionImport`). Emitted
+       * by the server apply boundary, never by replay itself.
+       */
+      readonly code: "unverified-extraction-queue";
+      readonly itemNames: readonly string[];
       readonly message: string;
     };
 

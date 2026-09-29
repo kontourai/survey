@@ -6,7 +6,9 @@ import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { z } from "zod";
 
 import {
+  attestReviewQueueExtraction,
   buildReviewSessionEvents,
+  conflictSelectionIssue,
   currentReviewItem,
   decisionSelectsNoCandidate,
   deriveQueueRowStatus,
@@ -14,9 +16,11 @@ import {
   nextUnresolvedItemName,
   reviewSessionSummary,
   workbenchDecisionDefinitions,
+  type ReviewQueueExtractionAttestation,
   type ReviewQueueSessionState,
   type ReviewWorkbenchDecision,
 } from "../review-workbench/review-workbench.js";
+import type { ExtractionEnvelopeImport } from "../extraction-envelope.js";
 import {
   createServerReviewSessionRecord,
   currentSessionState,
@@ -43,6 +47,7 @@ const SERVER_INSTRUCTIONS =
 // MCP tool decision strings → ReviewWorkbenchDecision
 const MCP_DECISION_MAP: Record<string, ReviewWorkbenchDecision> = {
   accept: "accept-proposed",
+  select: "select-proposed",
   hold: "keep-current",
   reject: "reject-proposed",
   "could-not-confirm": "could-not-confirm",
@@ -59,15 +64,40 @@ interface SessionFileContent {
   readonly session: ReviewSession;
   readonly snapshot: ReviewQueueSessionState;
   readonly events: readonly ReviewSessionEvent[];
+  /** The extraction import record the snapshot's items were built from, stored beside them. */
+  readonly extractionImport?: ExtractionEnvelopeImport;
 }
 
-async function readSessionFile(path: string): Promise<SessionFileContent> {
-  return readReviewSessionFile<SessionFileContent>(path);
+interface AttestedSessionFile extends SessionFileContent {
+  readonly attestation: ReviewQueueExtractionAttestation;
+}
+
+/**
+ * Reads the session and checks its queue against the extraction import stored
+ * beside it. A queue that does not match its import is refused outright; one
+ * whose items came from an import but has no record stored is presented with
+ * an "Unverified queue" notice on every surface.
+ */
+async function readSessionFile(path: string): Promise<AttestedSessionFile> {
+  const file = await readReviewSessionFile<SessionFileContent>(path);
+  return { ...file, attestation: attestedQueue(file) };
+}
+
+function attestedQueue(file: SessionFileContent): ReviewQueueExtractionAttestation {
+  const attestation = attestReviewQueueExtraction(file.snapshot.items, file.extractionImport);
+  if (attestation.state === "diverges") {
+    throw new DomainError(attestation.message);
+  }
+  return attestation;
+}
+
+function attestationLines(attestation: ReviewQueueExtractionAttestation): string[] {
+  return attestation.state === "unverified" ? [attestation.message, ``] : [];
 }
 
 // ---- Queue helpers -------------------------------------------------------
 
-function queueSummaryText(snapshot: ReviewQueueSessionState, events: readonly ReviewSessionEvent[]): string {
+function queueSummaryText(snapshot: ReviewQueueSessionState, events: readonly ReviewSessionEvent[], attestation: ReviewQueueExtractionAttestation): string {
   const current = currentSessionState(snapshot, events);
   const summary = reviewSessionSummary(current);
   const total = current.items.length;
@@ -83,6 +113,7 @@ function queueSummaryText(snapshot: ReviewQueueSessionState, events: readonly Re
   });
 
   return [
+    ...attestationLines(attestation),
     `Review queue: ${resolved}/${total} resolved`,
     `Active item: ${activeItem.metadata.name} (${activeItem.spec.target})`,
     ...(nextItem ? [`Next unresolved: ${nextItem}`] : ["All items resolved."]),
@@ -94,11 +125,12 @@ function queueSummaryText(snapshot: ReviewQueueSessionState, events: readonly Re
   ].join("\n");
 }
 
-function itemDetailText(item: ReviewItem, snapshot: ReviewQueueSessionState, events: readonly ReviewSessionEvent[]): string {
+function itemDetailText(item: ReviewItem, snapshot: ReviewQueueSessionState, events: readonly ReviewSessionEvent[], attestation: ReviewQueueExtractionAttestation): string {
   const current = currentSessionState(snapshot, events);
   const status = deriveQueueRowStatus(item, current);
   const decision = current.decisionsByItemName[item.metadata.name];
   const note = current.notesByItemName[item.metadata.name];
+  const chosenId = decision === "select-proposed" ? current.selectedCandidateIdsByItemName?.[item.metadata.name] : undefined;
 
   const currentCandidate = item.spec.candidates.find((c) => c.role === "current");
   const proposedCandidates = item.spec.candidates.filter((c) => c.role === "proposed");
@@ -110,6 +142,7 @@ function itemDetailText(item: ReviewItem, snapshot: ReviewQueueSessionState, eve
     c !== undefined ? `${Math.round(c * 100)}%` : "unknown";
 
   const lines: string[] = [
+    ...attestationLines(attestation),
     `Item: ${item.metadata.name}`,
     `Target: ${item.spec.target}`,
     `Status: ${status}`,
@@ -123,10 +156,14 @@ function itemDetailText(item: ReviewItem, snapshot: ReviewQueueSessionState, eve
     ...(currentCandidate?.locator?.excerpt ? [`  excerpt: ${currentCandidate.locator.excerpt}`] : []),
     ``,
     ...(proposedCandidates.length > 1
-      ? [`Conflict: ${proposedCandidates.length} proposed values. Accept is refused; reject them all or use could-not-confirm with a reason.`]
+      ? [`Conflict: ${proposedCandidates.length} proposed values. Accept is refused; choose one with decision "select" and its candidateId, reject them all, or use could-not-confirm with a reason.`]
+      : []),
+    ...(chosenId !== undefined
+      ? [`Chosen value: ${valueStr(proposedCandidates.find((c) => c.id === chosenId)?.value)} (candidate ${chosenId}); not chosen: ${proposedCandidates.filter((c) => c.id !== chosenId).map((c) => `${valueStr(c.value)} (candidate ${c.id})`).join(", ")}`]
       : []),
     ...(proposedCandidates.length === 0 ? [`Proposed value: (none)`] : proposedCandidates.flatMap((candidate) => [
-      `Proposed value: ${valueStr(candidate.value)}`,
+      `Proposed value: ${valueStr(candidate.value)}${chosenId === undefined ? "" : candidate.id === chosenId ? " [chosen]" : " [not chosen]"}`,
+      ...(proposedCandidates.length > 1 ? [`  candidateId: ${candidate.id}`] : []),
       `  confidence: ${confStr(candidate.extraction?.confidence ?? candidate.confidence)}`,
       `  source: ${candidate.source?.sourceRef ?? "none"}`,
       ...(candidate.locator?.excerpt ? [`  excerpt: ${candidate.locator.excerpt}`] : []),
@@ -180,6 +217,7 @@ function buildReviewCardHtml(
   item: ReviewItem,
   snapshot: ReviewQueueSessionState,
   events: readonly ReviewSessionEvent[],
+  attestation: ReviewQueueExtractionAttestation,
 ): string {
   const current = currentSessionState(snapshot, events);
   const summary = reviewSessionSummary(current);
@@ -188,10 +226,12 @@ function buildReviewCardHtml(
 
   const currentCandidate = item.spec.candidates.find((c) => c.role === "current");
   const proposedCandidates = item.spec.candidates.filter((c) => c.role === "proposed");
-  // Several proposed values are a conflict: every value is shown, and accept
-  // (which names a role, not a value) is not offered.
+  // Several proposed values are a conflict: every value is shown, accept
+  // (which names a role, not a value) is not offered, and each value has its
+  // own "Use this value" control that names its candidate id.
   const conflict = proposedCandidates.length > 1;
   const decision = current.decisionsByItemName[item.metadata.name];
+  const chosenId = decision === "select-proposed" ? current.selectedCandidateIdsByItemName?.[item.metadata.name] : undefined;
   const status = deriveQueueRowStatus(item, current);
 
   const valueStr = (v: unknown): string =>
@@ -207,12 +247,20 @@ function buildReviewCardHtml(
   const proposedCard = (candidate: ReviewItem["spec"]["candidates"][number] | undefined, label: string): string => {
     const value = valueStr(candidate?.value ?? "—");
     const excerpt = candidate?.locator?.excerpt ?? "";
-    return `<div class="card is-proposed">
+    const choice = conflict && candidate
+      ? chosenId !== undefined
+        ? `<div class="choice ${candidate.id === chosenId ? "chosen" : "not-chosen"}" data-candidate-id="${escapeHtml(candidate.id)}">${candidate.id === chosenId ? "Chosen" : "Not chosen"}</div>`
+        : decision === undefined
+          ? `<button class="btn btn-accept btn-select" data-candidate-id="${escapeHtml(candidate.id)}">Use this value</button>`
+          : ""
+      : "";
+    return `<div class="card is-proposed"${conflict && candidate ? ` data-candidate-id="${escapeHtml(candidate.id)}"` : ""}>
     <div class="card-label">${escapeHtml(label)}</div>
     <div class="value">${value.includes("\n") ? `<pre>${escapeHtml(value)}</pre>` : escapeHtml(value)}</div>
     <div class="conf">confidence ${confStr(candidate?.extraction?.confidence ?? candidate?.confidence)}</div>
     <div class="source-ref">${escapeHtml(candidate?.source?.sourceRef ?? "—")}</div>
     ${excerpt ? `<div class="excerpt">${escapeHtml(excerpt)}</div>` : ""}
+    ${choice}
   </div>`;
   };
   const proposedCards = conflict
@@ -226,7 +274,7 @@ function buildReviewCardHtml(
   const verificationNotes = candidateVerificationNotes(item, editedValueFor(item, current));
 
   const decisionBadge = decision
-    ? `<span class="badge badge-${decision === "accept-proposed" ? "accept" : decision === "reject-proposed" ? "reject" : "hold"}">${escapeHtml(workbenchDecisionDefinitions[decision].label)}</span>`
+    ? `<span class="badge badge-${decision === "accept-proposed" || decision === "select-proposed" ? "accept" : decision === "reject-proposed" ? "reject" : "hold"}">${escapeHtml(decision === "select-proposed" ? `Chose 1 of ${proposedCandidates.length} values` : workbenchDecisionDefinitions[decision].label)}</span>`
     : `<span class="badge badge-pending">${escapeHtml(status)}</span>`;
 
   return `<!doctype html>
@@ -305,9 +353,15 @@ h1{font-size:15px;font-weight:700;margin:0 0 4px}
 .btn-reject:hover,.btn-reject.active{background:color-mix(in srgb,var(--k-negative) 16%,transparent);border-color:var(--k-negative);color:var(--k-negative)}
 .btn-unconfirmed:hover,.btn-unconfirmed.active{background:color-mix(in srgb,var(--k-caution) 16%,transparent);border-color:var(--k-caution);color:var(--k-caution)}
 .feedback{font-size:11px;color:var(--k-text-faint);margin-top:8px;min-height:16px}
+.btn-select{width:100%;margin-top:8px}
+.choice{font-family:var(--k-font-mono);font-size:10px;font-weight:600;margin-top:8px;text-transform:uppercase;letter-spacing:.06em}
+.choice.chosen{color:var(--k-positive)}
+.choice.not-chosen{color:var(--k-text-faint)}
+.notice{font-size:11px;color:var(--k-caution);background:color-mix(in srgb,var(--k-caution) 12%,transparent);border-radius:var(--k-radius-sm);padding:7px 10px;margin:0 0 12px}
 </style>
 </head>
 <body>
+${attestation.state === "unverified" ? `<p class="notice" id="unverified-queue-note">${escapeHtml(attestation.message)}</p>` : ""}
 <p class="eyebrow">Survey Review</p>
 <h1>${escapeHtml(item.spec.target)}</h1>
 <div class="meta">
@@ -330,7 +384,9 @@ h1{font-size:15px;font-weight:700;margin:0 0 4px}
 ${excludedNote ? `<p class="feedback" id="excluded-note">${escapeHtml(excludedNote)}</p>` : ""}
 ${unreadableNote ? `<p class="feedback" id="excluded-unreadable-note">${escapeHtml(unreadableNote)}</p>` : ""}
 ${verificationNotes.map((entry) => `<p class="feedback verification-note" data-candidate-id="${escapeHtml(entry.candidateId)}">${escapeHtml(entry.sentence)}</p>`).join("\n")}
-${conflict ? `<p class="feedback" id="conflict-note">${proposedCandidates.length} different values were proposed. This card cannot choose one of them yet: reject them all, or use Could not confirm with a reason.</p>` : ""}
+${conflict ? `<p class="feedback" id="conflict-note">${escapeHtml(chosenId !== undefined
+    ? `${proposedCandidates.length} different values were proposed. One was chosen; ${proposedCandidates.length === 2 ? "the other was" : "the others were"} seen and not chosen.`
+    : `${proposedCandidates.length} different values were proposed. Use the value the source supports, reject them all, or use Could not confirm with a reason.`)}</p>` : ""}
 
 <div class="divider"></div>
 
@@ -350,7 +406,7 @@ ${conflict ? `<p class="feedback" id="conflict-note">${proposedCandidates.length
   var itemName = ${itemNameJson};
   var msgId = 1;
 
-  function postDecision(decision) {
+  function postDecision(decision, candidateId) {
     var note = document.getElementById('note').value;
     if (decision === 'could-not-confirm' && !note.trim()) {
       document.getElementById('feedback').textContent = 'A reason is required when you could not confirm.';
@@ -365,11 +421,17 @@ ${conflict ? `<p class="feedback" id="conflict-note">${proposedCandidates.length
         name: "survey_review_decide",
         arguments: decision === 'could-not-confirm'
           ? { itemName: itemName, decision: decision, reason: note }
-          : { itemName: itemName, decision: decision, note: note || undefined }
+          : decision === 'select'
+            ? { itemName: itemName, decision: decision, candidateId: candidateId, note: note || undefined }
+            : { itemName: itemName, decision: decision, note: note || undefined }
       }
     }, "*");
     return true;
   }
+
+  Array.prototype.forEach.call(document.querySelectorAll('.btn-select'), function (button) {
+    button.addEventListener('click', function () { postDecision('select', button.getAttribute('data-candidate-id')); document.getElementById('feedback').textContent = 'Submitting choice…'; });
+  });
 
   var acceptButton = document.getElementById('btn-accept');
   if (acceptButton) acceptButton.addEventListener('click', function () { postDecision('accept'); document.getElementById('feedback').textContent = 'Submitting accept…'; });
@@ -398,17 +460,22 @@ ${conflict ? `<p class="feedback" id="conflict-note">${proposedCandidates.length
 
 async function toolQueue(options: ReviewMcpOptions): Promise<ContentItem[]> {
   const file = await readSessionFile(options.sessionPath);
-  const { snapshot, events } = file;
+  const { snapshot, events, attestation } = file;
 
-  const text = queueSummaryText(snapshot, events);
+  const text = queueSummaryText(snapshot, events, attestation);
   const queueData = {
+    queueAttestation: attestation.state,
     items: snapshot.items.map((item) => {
       const current = currentSessionState(snapshot, events);
+      const selectedCandidateId = current.decisionsByItemName[item.metadata.name] === "select-proposed"
+        ? current.selectedCandidateIdsByItemName?.[item.metadata.name]
+        : undefined;
       return {
         name: item.metadata.name,
         target: item.spec.target,
         status: deriveQueueRowStatus(item, current),
         decision: current.decisionsByItemName[item.metadata.name],
+        ...(selectedCandidateId !== undefined ? { selectedCandidateId } : {}),
         candidateSetStatus: item.spec.candidateSetStatus,
       };
     }),
@@ -422,7 +489,7 @@ async function toolQueue(options: ReviewMcpOptions): Promise<ContentItem[]> {
 
   if (!options.noUi) {
     const activeItem = currentReviewItem(currentSessionState(snapshot, events));
-    content.push(buildUiResource(activeItem, snapshot, events, "queue"));
+    content.push(buildUiResource(activeItem, snapshot, events, "queue", attestation));
   }
 
   return content;
@@ -430,7 +497,7 @@ async function toolQueue(options: ReviewMcpOptions): Promise<ContentItem[]> {
 
 async function toolItem(itemName: string, options: ReviewMcpOptions): Promise<ContentItem[]> {
   const file = await readSessionFile(options.sessionPath);
-  const { snapshot, events } = file;
+  const { snapshot, events, attestation } = file;
   const current = currentSessionState(snapshot, events);
 
   const item = current.items.find((i) => i.metadata.name === itemName);
@@ -438,12 +505,16 @@ async function toolItem(itemName: string, options: ReviewMcpOptions): Promise<Co
     throw new DomainError(`Unknown review item: ${itemName}`);
   }
 
-  const text = itemDetailText(item, snapshot, events);
+  const text = itemDetailText(item, snapshot, events, attestation);
+  const decision = current.decisionsByItemName[item.metadata.name];
+  const selectedCandidateId = decision === "select-proposed" ? current.selectedCandidateIdsByItemName?.[item.metadata.name] : undefined;
   const itemData = {
+    queueAttestation: attestation.state,
     name: item.metadata.name,
     target: item.spec.target,
     status: deriveQueueRowStatus(item, current),
-    decision: current.decisionsByItemName[item.metadata.name],
+    decision,
+    ...(selectedCandidateId !== undefined ? { selectedCandidateId } : {}),
     note: current.notesByItemName[item.metadata.name],
     candidateSetStatus: item.spec.candidateSetStatus,
     ...(() => {
@@ -465,6 +536,7 @@ async function toolItem(itemName: string, options: ReviewMcpOptions): Promise<Co
           confidence: c.extraction?.confidence ?? c.confidence,
           sourceRef: c.source?.sourceRef,
           excerpt: c.locator?.excerpt,
+          ...(selectedCandidateId !== undefined && c.role === "proposed" ? { chosen: c.id === selectedCandidateId } : {}),
           ...(note ? { verification: { subject: note.subjectLabel, status: note.status, records: note.records, inapplicableCount: note.inapplicableCount, rejectedCount: note.rejectedCount } } : {}),
         };
       });
@@ -476,7 +548,7 @@ async function toolItem(itemName: string, options: ReviewMcpOptions): Promise<Co
   ];
 
   if (!options.noUi) {
-    content.push(buildUiResource(item, snapshot, events, itemName));
+    content.push(buildUiResource(item, snapshot, events, itemName, attestation));
   }
 
   return content;
@@ -488,10 +560,11 @@ async function toolDecide(
   note: string | undefined,
   attemptEvidenceIds: readonly string[] | undefined,
   options: ReviewMcpOptions,
+  selectedCandidateId?: string,
 ): Promise<ContentItem[]> {
   const wbDecision = MCP_DECISION_MAP[mcpDecision];
   if (!wbDecision) {
-    throw new DomainError(`Invalid decision: ${mcpDecision}. Must be accept, hold, reject, or could-not-confirm.`);
+    throw new DomainError(`Invalid decision: ${mcpDecision}. Must be accept, select, hold, reject, or could-not-confirm.`);
   }
   if (wbDecision === "could-not-confirm" && !note?.trim()) {
     throw new DomainError("survey_review_decide requires a non-empty reason for could-not-confirm");
@@ -499,12 +572,14 @@ async function toolDecide(
 
   // Read, validate and write inside the shared session lock so a concurrent
   // decide or console save cannot interleave and drop this decision (#281).
-  const { snapshot, sessionWithDecision, newEvents } = await updateReviewSessionFile<SessionFileContent, {
+  const { snapshot, sessionWithDecision, newEvents, attestation } = await updateReviewSessionFile<SessionFileContent, {
     snapshot: ReviewQueueSessionState;
     sessionWithDecision: ReviewQueueSessionState;
     newEvents: ReviewSessionEvent[];
+    attestation: ReviewQueueExtractionAttestation;
   }>(options.sessionPath, (file) => {
     const { snapshot, events } = file;
+    const attestation = attestedQueue(file);
     const current = currentSessionState(snapshot, events);
 
     const item = current.items.find((i) => i.metadata.name === itemName);
@@ -515,6 +590,12 @@ async function toolDecide(
     const existingDecision = current.decisionsByItemName[item.metadata.name];
     if (existingDecision) {
       throw new DomainError(`Item ${itemName} already has a decision: ${existingDecision}. Use a new session to re-decide.`);
+    }
+    if (wbDecision === "select-proposed") {
+      const selectionIssue = conflictSelectionIssue(item, selectedCandidateId);
+      if (selectionIssue) {
+        throw new DomainError(selectionIssue);
+      }
     }
 
     // Build the updated session state with the decision
@@ -537,6 +618,14 @@ async function toolDecide(
             attemptEvidenceIdsByItemName: {
               ...current.attemptEvidenceIdsByItemName,
               [itemName]: [...attemptEvidenceIds],
+            },
+          }
+        : {}),
+      ...(wbDecision === "select-proposed" && selectedCandidateId !== undefined
+        ? {
+            selectedCandidateIdsByItemName: {
+              ...current.selectedCandidateIdsByItemName,
+              [itemName]: selectedCandidateId,
             },
           }
         : {}),
@@ -567,6 +656,7 @@ async function toolDecide(
       record,
       events: newEvents,
       requiredResolvedItems: "none",
+      extractionImport: file.extractionImport,
     });
 
     if (!applyResult.ok) {
@@ -576,23 +666,32 @@ async function toolDecide(
     }
 
     const updatedFile: SessionFileContent = {
+      ...file,
       session: file.session,
       snapshot,
       events: newEvents,
     };
-    return { next: updatedFile, result: { snapshot, sessionWithDecision, newEvents } };
+    return { next: updatedFile, result: { snapshot, sessionWithDecision, newEvents, attestation } };
   });
 
   // Summarize the result
   const updatedItem = sessionWithDecision.items.find((i) => i.metadata.name === itemName);
-  const itemText = updatedItem ? itemDetailText(updatedItem, snapshot, newEvents) : `Item: ${itemName}`;
-  const remainingText = queueSummaryText(snapshot, newEvents);
+  const itemText = updatedItem ? itemDetailText(updatedItem, snapshot, newEvents, attestation) : `Item: ${itemName}`;
+  const remainingText = queueSummaryText(snapshot, newEvents, attestation);
   const definition = workbenchDecisionDefinitions[wbDecision];
   const conflictRejected = wbDecision === "reject-proposed" && updatedItem !== undefined && decisionSelectsNoCandidate(updatedItem, wbDecision);
+  const valueStr = (v: unknown): string => (typeof v === "string" ? v : JSON.stringify(v));
+  const proposed = updatedItem?.spec.candidates.filter((c) => c.role === "proposed") ?? [];
+  const chosen = proposed.find((c) => c.id === selectedCandidateId);
+  const effect = conflictRejected
+    ? "Every proposed value is rejected; none becomes the claim's value."
+    : wbDecision === "select-proposed"
+      ? `${valueStr(chosen?.value)} becomes the verified value; not chosen: ${proposed.filter((c) => c.id !== selectedCandidateId).map((c) => valueStr(c.value)).join(", ")}.`
+      : definition.effect;
 
   const text = [
     `Decision recorded: ${conflictRejected ? "Reject all values" : definition.label}`,
-    `Effect: ${conflictRejected ? "Every proposed value is rejected; none becomes the claim's value." : definition.effect}`,
+    `Effect: ${effect}`,
     "",
     itemText,
     "",
@@ -627,13 +726,14 @@ function buildUiResource(
   snapshot: ReviewQueueSessionState,
   events: readonly ReviewSessionEvent[],
   instance: string,
+  attestation: ReviewQueueExtractionAttestation,
 ): ResourceContent {
   return {
     type: "resource",
     resource: {
       uri: `ui://survey/review-card/${encodeURIComponent(instance)}`,
       mimeType: "text/html;profile=mcp-app",
-      text: buildReviewCardHtml(item, snapshot, events),
+      text: buildReviewCardHtml(item, snapshot, events, attestation),
       _meta: {
         ui: {
           csp: {
@@ -652,10 +752,10 @@ function buildUiResource(
 async function readQueuePanelResource(
   options: ReviewMcpOptions,
 ): Promise<ResourceContent["resource"]> {
-  const { snapshot, events } = await readSessionFile(options.sessionPath);
+  const { snapshot, events, attestation } = await readSessionFile(options.sessionPath);
   const current = currentSessionState(snapshot, events);
   const activeItem = currentReviewItem(current);
-  return buildUiResource(activeItem, snapshot, events, "queue").resource;
+  return buildUiResource(activeItem, snapshot, events, "queue", attestation).resource;
 }
 
 // ---- Domain error (maps to isError:true, not a JSON-RPC error) -----------
@@ -731,7 +831,7 @@ function createReviewMcpServer(
     {
       title: "Record a review decision",
       description:
-        "Apply a decision to a review item and persist it through Survey's server-owned validation boundary. Decision must be accept, hold, reject, or could-not-confirm. Could-not-confirm requires a reason. Domain failures return isError:true.",
+        "Apply a decision to a review item and persist it through Survey's server-owned validation boundary. Decision must be accept, select, hold, reject, or could-not-confirm. Select chooses one value of a conflict (several proposed values) by candidateId. Could-not-confirm requires a reason. Domain failures return isError:true.",
       inputSchema: z.discriminatedUnion("decision", [
         z.object({
           itemName: z.string().min(1).describe("The ReviewItem name to decide."),
@@ -757,6 +857,17 @@ function createReviewMcpServer(
             .optional()
             .describe("Evidence ids attempted before a could-not-confirm decision."),
         }),
+        z.object({
+          itemName: z.string().min(1).describe("The ReviewItem name to decide."),
+          decision: z
+            .literal("select")
+            .describe("select = select-proposed: choose one value of a conflict; the other proposed values are recorded as seen and not chosen."),
+          candidateId: z
+            .string()
+            .min(1)
+            .describe("The id of the proposed candidate to use, from survey_review_item."),
+          note: z.string().optional().describe("Optional reviewer note or rationale."),
+        }),
       ]),
     },
     async (input) =>
@@ -769,13 +880,22 @@ function createReviewMcpServer(
               input.attemptEvidenceIds,
               options,
             )
-          : toolDecide(
-              input.itemName,
-              input.decision,
-              input.note,
-              undefined,
-              options,
-            ),
+          : input.decision === "select"
+            ? toolDecide(
+                input.itemName,
+                input.decision,
+                input.note,
+                undefined,
+                options,
+                input.candidateId,
+              )
+            : toolDecide(
+                input.itemName,
+                input.decision,
+                input.note,
+                undefined,
+                options,
+              ),
       ),
   );
 

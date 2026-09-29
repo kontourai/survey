@@ -12,7 +12,17 @@ import {
   type ReviewSessionEventSpec,
 } from "../../src/review-resource.js";
 
-export type ReviewWorkbenchDecision = "accept-proposed" | "keep-current" | "reject-proposed" | "could-not-confirm";
+/**
+ * The decisions a reviewer can record on a ReviewItem.
+ *
+ * `select-proposed` chooses one value of a conflict (two or more `proposed`
+ * candidates) by candidate id, which the state carries beside the decision
+ * (`selectedCandidateId` / `selectedCandidateIdsByItemName`). It is its own
+ * kind rather than `accept-proposed` with an id so that the record always says
+ * a rival was seen and not chosen, and `accept-proposed` keeps its meaning:
+ * accept the one proposed value, refused on a conflict.
+ */
+export type ReviewWorkbenchDecision = "accept-proposed" | "select-proposed" | "keep-current" | "reject-proposed" | "could-not-confirm";
 export type ReviewQueueRowStatus = "pending" | "in-review" | "resolved" | "rejected" | "could-not-confirm" | "escalated";
 
 export const reviewWorkbenchSessionStorageKey = "kontourai.survey.review-workbench.session-events.v1";
@@ -31,6 +41,11 @@ export interface ReviewWorkbenchState {
    */
   readonly editedValue?: unknown;
   readonly attemptEvidenceIds?: readonly string[];
+  /**
+   * The candidate a `select-proposed` decision chose. Required for that
+   * decision and ignored for every other one.
+   */
+  readonly selectedCandidateId?: string;
 }
 
 export interface ReviewQueueSessionState {
@@ -48,6 +63,12 @@ export interface ReviewQueueSessionState {
    */
   readonly editedValuesByItemName?: Readonly<Record<string, unknown>>;
   readonly attemptEvidenceIdsByItemName?: Readonly<Record<string, readonly string[]>>;
+  /**
+   * The candidate each `select-proposed` decision chose, keyed by ReviewItem
+   * name. Additive/optional: sessions stored before this field existed have no
+   * `select-proposed` decision and never read it.
+   */
+  readonly selectedCandidateIdsByItemName?: Readonly<Record<string, string>>;
 }
 
 export interface ReviewSessionSummary {
@@ -70,6 +91,12 @@ export const workbenchDecisionDefinitions = {
   "accept-proposed": {
     label: "Accept proposed",
     effect: "Proposed value becomes the verified review outcome.",
+    candidateRole: "proposed",
+    status: "verified",
+  },
+  "select-proposed": {
+    label: "Use this value",
+    effect: "The chosen value becomes the verified review outcome; the other proposed values were seen and not chosen.",
     candidateRole: "proposed",
     status: "verified",
   },
@@ -126,6 +153,7 @@ export function currentReviewWorkbenchState(session: ReviewQueueSessionState): R
     decision: session.decisionsByItemName[item.metadata.name],
     editedValue: session.editedValuesByItemName?.[item.metadata.name],
     attemptEvidenceIds: session.attemptEvidenceIdsByItemName?.[item.metadata.name],
+    selectedCandidateId: session.selectedCandidateIdsByItemName?.[item.metadata.name],
     reviewedAt: session.reviewedAt,
     actorId: session.actorId,
   };
@@ -149,7 +177,7 @@ export function deriveQueueRowStatus(item: ReviewItem, session: ReviewQueueSessi
     return "could-not-confirm";
   }
 
-  if (decision === "accept-proposed" || decision === "keep-current" || item.spec.candidateSetStatus === "resolved") {
+  if (decision === "accept-proposed" || decision === "select-proposed" || decision === "keep-current" || item.spec.candidateSetStatus === "resolved") {
     return "resolved";
   }
 
@@ -177,7 +205,7 @@ export function nextUnresolvedItemName(session: ReviewQueueSessionState): string
 export function reviewSessionSummary(session: ReviewQueueSessionState): ReviewSessionSummary {
   return session.items.reduce<ReviewSessionSummary>((summary, item) => {
     const decision = session.decisionsByItemName[item.metadata.name];
-    if (decision === "accept-proposed") {
+    if (decision === "accept-proposed" || decision === "select-proposed") {
       return { ...summary, accepted: summary.accepted + 1 };
     }
     if (decision === "keep-current") {
@@ -261,7 +289,18 @@ const VALUE_NEUTRAL_DECISIONS: ReadonlySet<ReviewWorkbenchDecision> = new Set(["
  * {@link decisionCandidateId} is `undefined` for it, so the decision, its
  * session events and the canonical projection name no candidate.
  */
-export function candidateForDecision(item: ReviewItem, decision: ReviewWorkbenchDecision): ReviewCandidate {
+export function candidateForDecision(
+  item: ReviewItem,
+  decision: ReviewWorkbenchDecision,
+  selectedCandidateId?: string,
+): ReviewCandidate {
+  if (decision === "select-proposed") {
+    const issue = conflictSelectionIssue(item, selectedCandidateId);
+    if (issue) {
+      throw new Error(issue);
+    }
+    return item.spec.candidates.find((entry) => entry.id === selectedCandidateId)!;
+  }
   const definition = workbenchDecisionDefinitions[decision];
   const matches = item.spec.candidates.filter((entry) => entry.role === definition.candidateRole);
   const candidate = matches[0];
@@ -277,6 +316,51 @@ export function candidateForDecision(item: ReviewItem, decision: ReviewWorkbench
   return candidate;
 }
 
+/**
+ * Why a `select-proposed` decision naming `candidateId` cannot be recorded on
+ * this item, or `undefined` when it can.
+ *
+ * The choice must name, by a unique id, one of the item's `proposed`
+ * candidates, and the item must hold at least two of them: choosing "over a
+ * rival" on an item with no rival would record a conflict that never existed
+ * (use `accept-proposed` there). Proposals excluded at import are not
+ * candidates, so they can never be chosen.
+ */
+export function conflictSelectionIssue(item: ReviewItem, candidateId: string | undefined): string | undefined {
+  const proposed = item.spec.candidates.filter((entry) => entry.role === "proposed");
+  if (proposed.length < 2) {
+    return `ReviewItem ${item.metadata.name} has ${proposed.length} proposed candidate${proposed.length === 1 ? "" : "s"}; select-proposed chooses between conflicting proposed values, so it needs at least two.`;
+  }
+  if (!candidateId) {
+    return `ReviewItem ${item.metadata.name}: select-proposed must name the chosen candidate id.`;
+  }
+  const matches = item.spec.candidates.filter((entry) => entry.id === candidateId);
+  if (matches.length === 0) {
+    return `ReviewItem ${item.metadata.name} has no candidate ${candidateId}; select-proposed can only choose one of its proposed candidates.`;
+  }
+  if (matches.length > 1) {
+    return `ReviewItem ${item.metadata.name} has ${matches.length} candidates with id ${candidateId}; candidate ids must be unique.`;
+  }
+  if (matches[0]!.role !== "proposed") {
+    return `ReviewItem ${item.metadata.name} candidate ${candidateId} has role ${matches[0]!.role ?? "none"}; select-proposed can only choose a proposed candidate.`;
+  }
+  return undefined;
+}
+
+/**
+ * The proposed candidates a `select-proposed` decision saw and did not choose,
+ * in item order. Empty for every other decision.
+ */
+export function unchosenProposedCandidates(
+  item: ReviewItem,
+  decision: ReviewWorkbenchDecision,
+  selectedCandidateId: string | undefined,
+): ReviewCandidate[] {
+  return decision === "select-proposed"
+    ? item.spec.candidates.filter((entry) => entry.role === "proposed" && entry.id !== selectedCandidateId)
+    : [];
+}
+
 /** Whether a decision on this item selects no candidate at all (see {@link candidateForDecision}). */
 export function decisionSelectsNoCandidate(item: ReviewItem, decision: ReviewWorkbenchDecision): boolean {
   const role = workbenchDecisionDefinitions[decision].candidateRole;
@@ -287,8 +371,8 @@ export function decisionSelectsNoCandidate(item: ReviewItem, decision: ReviewWor
  * The candidate id a decision records: the selected candidate's, or
  * `undefined` when the decision selects no candidate.
  */
-export function decisionCandidateId(item: ReviewItem, decision: ReviewWorkbenchDecision): string | undefined {
-  const candidate = candidateForDecision(item, decision);
+export function decisionCandidateId(item: ReviewItem, decision: ReviewWorkbenchDecision, selectedCandidateId?: string): string | undefined {
+  const candidate = candidateForDecision(item, decision, selectedCandidateId);
   return decisionSelectsNoCandidate(item, decision) ? undefined : candidate.id;
 }
 
@@ -304,8 +388,9 @@ export function effectiveValueForDecision(
   item: ReviewItem,
   decision: ReviewWorkbenchDecision,
   editedValue?: unknown,
+  selectedCandidateId?: string,
 ): unknown {
-  const candidate = candidateForDecision(item, decision);
+  const candidate = candidateForDecision(item, decision, selectedCandidateId);
   return decision === "accept-proposed" && editedValue !== undefined ? editedValue : candidate.value;
 }
 
@@ -397,7 +482,7 @@ export function buildReviewSessionEvents(
       throw new Error(`ReviewItem ${item.metadata.name} could not confirm requires a non-empty reason.`);
     }
 
-    const candidateId = decisionCandidateId(item, decision);
+    const candidateId = decisionCandidateId(item, decision, session.selectedCandidateIdsByItemName?.[item.metadata.name]);
     const definition = workbenchDecisionDefinitions[decision];
     const reviewDecisionName = `${item.metadata.name}-${decision}`;
     // Carry the reviewer's inline edit in the event itself (accept-proposed
@@ -503,11 +588,13 @@ export function replayReviewSessionEvents(
         const { [itemName]: _removedDecision, ...remainingDecisions } = session.decisionsByItemName;
         const { [itemName]: _removedEdit, ...remainingEdits } = session.editedValuesByItemName ?? {};
         const { [itemName]: _removedAttempts, ...remainingAttempts } = session.attemptEvidenceIdsByItemName ?? {};
+        const { [itemName]: _removedSelection, ...remainingSelections } = session.selectedCandidateIdsByItemName ?? {};
         return {
           ...session,
           decisionsByItemName: remainingDecisions,
           editedValuesByItemName: remainingEdits,
           attemptEvidenceIdsByItemName: remainingAttempts,
+          ...(session.selectedCandidateIdsByItemName ? { selectedCandidateIdsByItemName: remainingSelections } : {}),
         };
       }
 
@@ -538,6 +625,14 @@ export function replayReviewSessionEvents(
       } else {
         delete attemptEvidenceIdsByItemName[itemName];
       }
+      // A choice between conflicting values is the event's candidateId: that
+      // id is the authority for select-proposed (validated replay checks it).
+      const selectedCandidateIdsByItemName = { ...session.selectedCandidateIdsByItemName };
+      if (decision === "select-proposed" && event.spec.candidateId) {
+        selectedCandidateIdsByItemName[itemName] = event.spec.candidateId;
+      } else {
+        delete selectedCandidateIdsByItemName[itemName];
+      }
       return {
         ...session,
         decisionsByItemName: {
@@ -546,6 +641,7 @@ export function replayReviewSessionEvents(
         },
         editedValuesByItemName,
         attemptEvidenceIdsByItemName,
+        ...(session.selectedCandidateIdsByItemName || decision === "select-proposed" ? { selectedCandidateIdsByItemName } : {}),
       };
     }
 

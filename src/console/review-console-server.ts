@@ -25,6 +25,8 @@ import {
   deriveServerReviewSessionApplyResult,
 } from "../review-workbench/server-review-session.js";
 import type { ReviewQueueSessionState } from "../review-workbench/review-queue-session.js";
+import { attestReviewQueueExtraction } from "../review-workbench/queue-binding.js";
+import type { ExtractionEnvelopeImport } from "../extraction-envelope.js";
 import type { ReviewSessionEvent } from "../review-resource.js";
 import {
   appendReviewSessionEvents,
@@ -58,6 +60,8 @@ interface SessionFileContent {
   readonly session: unknown;
   readonly snapshot: ReviewQueueSessionState;
   readonly events: readonly ReviewSessionEvent[];
+  /** The extraction import record the snapshot's items were built from, stored beside them. */
+  readonly extractionImport?: ExtractionEnvelopeImport;
 }
 
 // ---------------------------------------------------------------------------
@@ -469,9 +473,15 @@ let activeItemName = null;
 async function fetchAndMount() {
   try {
     const res = await fetch("/api/session");
-    if (!res.ok) throw new Error("Session fetch failed: " + res.status);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      showSaveStatus(body.error || ("The session could not be loaded (HTTP " + res.status + ")."));
+      const root = document.getElementById("review-workbench");
+      if (root) root.innerHTML = "";
+      return;
+    }
     const data = await res.json();
-    const { snapshot, events, revision } = data;
+    const { snapshot, events, revision, extractionImport } = data;
     const state = events && events.length > 0
       ? replayReviewSessionEvents(snapshot, events)
       : snapshot;
@@ -484,7 +494,7 @@ async function fetchAndMount() {
     const root = document.getElementById("review-workbench");
     if (!root) return;
 
-    mountReviewWorkbench(root, state, { eventStore: createConsoleEventStore(revision) });
+    mountReviewWorkbench(root, state, { eventStore: createConsoleEventStore(revision), ...(extractionImport ? { extractionImport } : {}) });
   } catch (err) {
     console.error("[console] Mount error:", err);
   }
@@ -681,12 +691,22 @@ export async function startReviewConsoleServer(
       // ---- Session read ----
       if (pathname === "/api/session" && req.method === "GET") {
         const content = await readSession(sessionPath);
+        // A queue that does not match the extraction import stored with it is
+        // not served for review; one without a stored import is served, and the
+        // workbench marks it unverified.
+        const attestation = attestReviewQueueExtraction(content.snapshot.items, content.extractionImport);
+        if (attestation.state === "diverges") {
+          sendJson(res, 409, { error: attestation.message, queueAttestation: attestation.state });
+          return;
+        }
         sendJson(res, 200, {
           session: content.session,
           snapshot: content.snapshot,
           events: content.events,
           revision: reviewSessionRevision(content.events),
           state: currentSessionState(content.snapshot, content.events),
+          queueAttestation: attestation.state,
+          ...(content.extractionImport !== undefined ? { extractionImport: content.extractionImport } : {}),
         });
         return;
       }
@@ -748,6 +768,7 @@ export async function startReviewConsoleServer(
                 record,
                 events: nextEvents,
                 requiredResolvedItems: "none",
+                extractionImport: content.extractionImport,
               });
               issueMessages = applyResult.ok
                 ? []
@@ -760,7 +781,7 @@ export async function startReviewConsoleServer(
             }
 
             return {
-              next: { session: content.session, snapshot, events: nextEvents },
+              next: { ...content, session: content.session, snapshot, events: nextEvents },
               result: {
                 status: 200,
                 body: { ok: true, eventCount: nextEvents.length, revision: reviewSessionRevision(nextEvents) },

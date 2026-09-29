@@ -49,8 +49,10 @@ values make the set a conflict, so conflicting values for one claim within one
 envelope import cannot both be verified. Across imports (two runs, or one
 envelope under two import names) items stay separate; that needs a stable slot
 identity (kontourai/fieldwork#52, kontourai/survey#295). Role-based review
-decisions refuse to accept one of several proposed values; rejecting all of them
-or could-not-confirm stay available and never project verified. Typed partial reasons and per-chunk coverage are validated and
+decisions refuse to accept one of several proposed values; a reviewer chooses
+one by candidate id instead (`select-proposed`, see
+[conflict-selection](./conflict-selection.md)), and rejecting all of them or
+could-not-confirm stay available and never project verified. Typed partial reasons and per-chunk coverage are validated and
 carried to candidates as producer metadata, and a missing proposer confidence
 stays missing.
 

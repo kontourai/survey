@@ -39,7 +39,7 @@ Options:
 | --- | --- | --- |
 | `survey_review_queue` | _(none)_ | Text summary + JSON of all items with status, active item, queue progress, and session totals |
 | `survey_review_item` | `itemName: string` | Full item detail: current vs proposed values, confidence, source refs, excerpts, and current decision |
-| `survey_review_decide` | `itemName: string`, `decision: "accept" \| "hold" \| "reject" \| "could-not-confirm"`, `note?: string`, `reason?: string`, `attemptEvidenceIds?: string[]` | Applies the decision through the real session APIs and persists atomically. `reason` is required and non-empty for `could-not-confirm`. |
+| `survey_review_decide` | `itemName: string`, `decision: "accept" \| "hold" \| "reject" \| "could-not-confirm" \| "select"`, `note?: string`, `reason?: string`, `attemptEvidenceIds?: string[]`, `candidateId?: string` | Applies the decision through the real session APIs and persists atomically. `reason` is required and non-empty for `could-not-confirm`. `candidateId` is required for `select`. |
 
 Decision mapping:
 
@@ -49,6 +49,15 @@ Decision mapping:
 | `hold` | `keep-current` | Current value remains the verified outcome |
 | `reject` | `reject-proposed` | Proposed value is rejected; current value is unmodified |
 | `could-not-confirm` | `could-not-confirm` | Review round ends without changing, rejecting, or escalating the claim; a reason is required |
+| `select` | `select-proposed` | On a conflict (several proposed values), the value named by `candidateId` becomes the verified outcome; the other proposed values are recorded as seen and not chosen |
+
+On a conflict item, `survey_review_item` lists each proposed value with its
+`candidateId`, and the card offers "Use this value" per value. `select` is
+refused for an id that is not one of the item's proposed candidates, and for an
+item with a single proposed value (use `accept`). `accept` stays refused on a
+conflict. After a choice the item text, data (`selectedCandidateId`, and
+`chosen` on each proposed candidate) and card mark every value chosen or not
+chosen.
 
 ### Rejected calls
 
@@ -114,15 +123,25 @@ read the nested shape.
 
 ## Session file contract
 
-The session file is a JSON object with three keys:
+The session file is a JSON object with three keys, and an optional fourth:
 
 ```json
 {
   "session": { ... },    // ReviewSession resource (metadata only)
   "snapshot": { ... },  // ReviewQueueSessionState at session creation
-  "events": [ ... ]     // ReviewSessionEvent array (appended by decide)
+  "events": [ ... ],    // ReviewSessionEvent array (appended by decide)
+  "extractionImport": { ... } // optional: the ExtractionEnvelopeImport record the snapshot's items came from
 }
 ```
+
+When `extractionImport` is present, every tool checks the snapshot's items
+against it (`attestReviewQueueExtraction`). A queue that does not match it (for
+example an excluded rival value deleted from a stored item) is refused: every
+tool returns `isError` and nothing is written. When it is absent and the items
+came from an extraction import, the queue is served with an "Unverified queue"
+notice at the top of the queue and item text and on the card, and the data
+carries `queueAttestation: "unverified"`. Store the import record with the
+session when you create it.
 
 The `snapshot` field is the baseline state. All decisions are recorded as append-only `ReviewSessionEvent` records in `events`. When a tool reads state it replays the events over the snapshot using `replayReviewSessionEvents`. When `survey_review_decide` applies a new decision it:
 
