@@ -617,6 +617,29 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 .survey-workbench-embed .chip.rejected{ color: var(--k-negative); background: var(--k-negative-wash); }
 .survey-workbench-embed .chip.could-not-confirm{ color: var(--k-caution); background: var(--k-caution-wash); }
 
+/* Field-state panel: one row per field, content and lifecycle derived from
+   the records, never stored labels. A field that was not read is listed. */
+.survey-workbench-embed .field-states{ padding: var(--k-space-3, 12px) 1rem; border-bottom: 1px solid var(--k-line); background: var(--k-panel); }
+.survey-workbench-embed .field-states h2{ margin: 0 0 8px; font-size: 13px; font-weight: 700; color: var(--k-text); }
+.survey-workbench-embed .field-states ul{ list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.survey-workbench-embed .field-states-lead{ margin: 0 0 8px; font-size: 13px; line-height: 1.45; color: var(--k-caution); }
+.survey-workbench-embed .field-state-row{ display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 6px 0; border-top: 1px solid var(--k-line); }
+.survey-workbench-embed .field-state-row:first-child{ border-top: 0; }
+.survey-workbench-embed .field-state-name{ font-family: var(--k-font-mono, ui-monospace, monospace); font-size: 12px; color: var(--k-text); overflow-wrap: anywhere; }
+.survey-workbench-embed .field-state-chips{ display: inline-flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.survey-workbench-embed .field-state-note{ grid-column: 1 / -1; font-size: 12px; color: var(--k-muted); }
+.survey-workbench-embed .field-state-note.signal{ color: var(--k-caution); }
+.survey-workbench-embed .chip.state-content.value{ color: var(--k-positive); background: var(--k-positive-wash); }
+.survey-workbench-embed .chip.state-content.conflicting,
+.survey-workbench-embed .chip.state-content.not_covered{ color: var(--k-caution); background: var(--k-caution-wash); }
+.survey-workbench-embed .chip.state-content.unsupported{ color: var(--k-negative); background: var(--k-negative-wash); }
+.survey-workbench-embed .chip.state-content.none,
+.survey-workbench-embed .chip.state-lifecycle.superseded{ color: var(--k-muted); background: var(--k-sunken); }
+.survey-workbench-embed .chip.state-lifecycle.pending{ color: var(--k-brand); background: var(--k-brand-wash); }
+.survey-workbench-embed .chip.state-lifecycle.accepted{ color: var(--k-positive); background: var(--k-positive-wash); }
+.survey-workbench-embed .chip.state-lifecycle.rejected{ color: var(--k-negative); background: var(--k-negative-wash); }
+.survey-workbench-embed .chip.state-lifecycle.could_not_confirm{ color: var(--k-caution); background: var(--k-caution-wash); }
+
 .survey-workbench-embed .frow1 .push{
   margin-left: auto;
 }
@@ -859,6 +882,12 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 .survey-workbench-embed .queue-attestation.diverges{
   color: var(--k-negative);
   background: var(--k-negative-wash);
+}
+
+/* A score-blind session: an informational note, not a warning. */
+.survey-workbench-embed .queue-attestation.score-blind{
+  color: var(--k-active);
+  background: var(--k-active-soft);
 }
 
 /* Conflicting proposed values: each value is listed with its own choice
@@ -1421,6 +1450,8 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
 /* The diff-collapse must also hold in host contexts without a query container
    (e.g. an embed that doesn't establish \`container-type\`): fall back to viewport. */
 @media (max-width: 620px) {
+  .survey-workbench-embed .field-state-row{ grid-template-columns: minmax(0, 1fr); }
+  .survey-workbench-embed .field-state-chips{ justify-content: flex-start; }
   .survey-workbench-embed .diff{
     grid-template-columns: 1fr;
   }

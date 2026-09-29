@@ -87,6 +87,15 @@ export interface DeriveCalibrationOptions {
    * labeled samples. Default false — see the module note on circularity.
    */
   readonly includeAutoAccepted?: boolean;
+  /**
+   * Count only audit labels: outcomes whose metadata records a score-blind
+   * decision (`presentation.scoreBlind === true`) on a random audit sample
+   * (`sampling.kind === "random-audit"`), as the review workbench writes them
+   * for a session opened with `openRandomAuditSession`. Default false (every
+   * human outcome counts, as before). Other outcomes are skipped and counted
+   * in `skippedCount`, as windowed-out outcomes are.
+   */
+  readonly auditSamplesOnly?: boolean;
 }
 
 const DEFAULT_BIN_COUNT = 10;
@@ -242,6 +251,10 @@ export function deriveCalibration(
   let skippedCount = 0;
 
   for (const outcome of input.reviewOutcomes) {
+    if (options.auditSamplesOnly && !isScoreBlindAuditOutcome(outcome)) {
+      skippedCount++;
+      continue;
+    }
     if (outcome.resolution === "could_not_confirm") {
       skippedCount++;
       continue;
@@ -312,6 +325,14 @@ export function deriveCalibration(
 // ---------------------------------------------------------------------------
 // Internal: sample construction
 // ---------------------------------------------------------------------------
+
+/** A decision recorded score-blind on a random audit sample (see `openRandomAuditSession`). */
+function isScoreBlindAuditOutcome(outcome: ReviewOutcome): boolean {
+  const presentation = outcome.metadata?.presentation;
+  const sampling = outcome.metadata?.sampling;
+  return typeof presentation === "object" && presentation !== null && (presentation as { scoreBlind?: unknown }).scoreBlind === true
+    && typeof sampling === "object" && sampling !== null && (sampling as { kind?: unknown }).kind === "random-audit";
+}
 
 function toSample(
   outcome: ReviewOutcome,

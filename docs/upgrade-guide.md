@@ -752,6 +752,27 @@ run. The reason for the break: a record with the field deleted used to validate
 as the older one-item-per-proposal shape, so a consumer could not tell a
 stripped record from a genuine older one.
 
+## Field states, carry-forward, score-blind audit (#294, #295, #296)
+
+All additive. See `docs/decisions/field-states-and-carry-forward.md`.
+
+- `deriveFieldStates({ imports, decisions?, verifications?, supersessions?, carryForwards? })`
+  returns per-slot content and lifecycle states. `buildCanonicalReviewedTrustInput`
+  takes `fieldStates: { imports, verifications?, supersessions? }` and writes
+  them under claim metadata `survey.kontourai.io/field-state`. The workbench
+  mount and `renderReviewWorkbenchHtml` take `fieldStates` for a field-state
+  panel.
+- `splitRoundForCarryForward`, `buildDecisionSupersession`,
+  `validateDecisionCarryForward` and `validateDecisionSupersession` carry
+  decisions across rounds for unchanged candidates. Callers supply producer
+  slot and version ids.
+- A session may set `presentation: { scoreBlind: true }` and `sampling`.
+  `openRandomAuditSession` / `drawRandomAuditSample` open a seeded audit
+  sample. Decisions record both in `ReviewDecision.spec.presentation` /
+  `.sampling` and in `ReviewOutcome.metadata`. Use
+  `deriveCalibration(..., { auditSamplesOnly: true })` to read only those
+  labels.
+
 ## See also
 
 - [consumer-integration-guide.md](consumer-integration-guide.md) — first-time

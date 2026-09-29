@@ -14,6 +14,7 @@ Numbered ADRs under `docs/adr/` are frozen history and are not listed here.
 | [conflict-selection](./conflict-selection.md) | current | Choosing One Value of a Conflict |
 | [could-not-confirm](./could-not-confirm.md) | current | Could Not Confirm Review Outcome |
 | [extraction-envelope-import](./extraction-envelope-import.md) | current | Extraction Envelope Import |
+| [field-states-and-carry-forward](./field-states-and-carry-forward.md) | current | Field States, Carry-Forward and Score-Blind Audit |
 | [governed-extraction-improvement-proposals](./governed-extraction-improvement-proposals.md) | current | Extraction Improvement Proposal |
 | [interpretation-record](./interpretation-record.md) | current | Interpretation Record |
 | [producer-profile](./producer-profile.md) | current | Producer Profile |

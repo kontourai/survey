@@ -10,7 +10,11 @@ import {
   type ReviewSession,
   type ReviewSessionEvent,
   type ReviewSessionEventSpec,
+  type ReviewSessionPresentation,
+  type ReviewSessionSampling,
 } from "../../src/review-resource.js";
+
+export type { ReviewSessionPresentation, ReviewSessionSampling } from "../../src/review-resource.js";
 
 /**
  * The decisions a reviewer can record on a ReviewItem.
@@ -46,6 +50,10 @@ export interface ReviewWorkbenchState {
    * decision and ignored for every other one.
    */
   readonly selectedCandidateId?: string;
+  /** The session's presentation; recorded on the decision. See {@link ReviewSessionPresentation}. */
+  readonly presentation?: ReviewSessionPresentation;
+  /** How the session's items were chosen; recorded on the decision. */
+  readonly sampling?: ReviewSessionSampling;
 }
 
 export interface ReviewQueueSessionState {
@@ -69,6 +77,64 @@ export interface ReviewQueueSessionState {
    * `select-proposed` decision and never read it.
    */
   readonly selectedCandidateIdsByItemName?: Readonly<Record<string, string>>;
+  /**
+   * Session-level presentation, set when the session is opened. Part of the
+   * snapshot, so the server record's hash and the queue binding cover it and
+   * a reviewer cannot switch it. Absent: scores are shown and decisions record
+   * no presentation.
+   */
+  readonly presentation?: ReviewSessionPresentation;
+  /** How the session's items were chosen. Absent: decisions record no sampling. */
+  readonly sampling?: ReviewSessionSampling;
+}
+
+/** Whether the session hides confidence and verifier results from its reviewer. */
+export function isScoreBlind(session: { readonly presentation?: ReviewSessionPresentation }): boolean {
+  return session.presentation?.scoreBlind === true;
+}
+
+/**
+ * Throws unless the session's presentation and sampling are well formed:
+ * `scoreBlind` a boolean, and a `random-audit` sampling with a rate in (0, 1]
+ * and a non-empty seed. Unknown keys are refused so a decision never records
+ * a condition nothing reads.
+ */
+export function assertReviewSessionConditions(session: { readonly presentation?: unknown; readonly sampling?: unknown }): void {
+  const { presentation, sampling } = session;
+  if (presentation !== undefined) {
+    if (!isPlainRecord(presentation) || Object.keys(presentation).join(",") !== "scoreBlind" || typeof presentation.scoreBlind !== "boolean") {
+      throw new Error("Review session presentation must be { scoreBlind: boolean }.");
+    }
+  }
+  if (sampling !== undefined) {
+    if (!isPlainRecord(sampling)) throw new Error("Review session sampling must be an object.");
+    const keys = Object.keys(sampling).sort().join(",");
+    if (sampling.kind === "queue") {
+      if (keys !== "kind") throw new Error("Review session sampling of kind queue takes no rate or seed.");
+    } else if (sampling.kind === "random-audit") {
+      if (keys !== "kind,rate,seed") throw new Error("Review session sampling of kind random-audit requires exactly rate and seed.");
+      assertAuditRate(sampling.rate);
+      assertAuditSeed(sampling.seed);
+    } else {
+      throw new Error("Review session sampling kind must be queue or random-audit.");
+    }
+  }
+}
+
+export function assertAuditRate(rate: unknown): asserts rate is number {
+  if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0 || rate > 1) {
+    throw new Error("A random-audit rate must be a number greater than 0 and at most 1.");
+  }
+}
+
+export function assertAuditSeed(seed: unknown): asserts seed is string {
+  if (typeof seed !== "string" || seed.trim().length === 0) {
+    throw new Error("A random-audit seed must be a non-empty string.");
+  }
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export interface ReviewSessionSummary {
@@ -156,6 +222,8 @@ export function currentReviewWorkbenchState(session: ReviewQueueSessionState): R
     selectedCandidateId: session.selectedCandidateIdsByItemName?.[item.metadata.name],
     reviewedAt: session.reviewedAt,
     actorId: session.actorId,
+    ...(session.presentation !== undefined ? { presentation: session.presentation } : {}),
+    ...(session.sampling !== undefined ? { sampling: session.sampling } : {}),
   };
 }
 
