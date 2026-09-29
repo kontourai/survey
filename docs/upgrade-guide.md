@@ -598,8 +598,9 @@ Everything else changes only when you pass `artifact`:
   `"verified"` when the text matched the envelope's prepared-artifact digest
   and length and each proposal's span was checked against its excerpt. Code
   that deep-compares `record.status` with `{ state, diagnostics }` must add the
-  field. Records stored before this release have no `provenance` and still
-  validate. Treat them as unverified. Older Survey versions reject records
+  field. Records stored before this release have no `provenance`; they
+  validated until the next major release, which requires the field (see
+  "`status.provenance` is required" below). Older Survey versions reject records
   that carry the field, so upgrade every reader before any writer.
 - **With `artifact`:** a proposal whose prepared text at its `chars:` span is
   not its excerpt gets no `ReviewItem` and an `excerpt-mismatch` diagnostic
@@ -732,6 +733,24 @@ only for carrying verification results that an import could have written.
   `unverified-extraction-queue` warning. **Action:** store the
   `ExtractionEnvelopeImport` record beside each queue built from an import and
   pass it to these paths. Queues that never came from an import are unaffected.
+
+## `status.provenance` is required on import records (#320) — breaking
+
+`validateExtractionEnvelopeImport`, `reimportExtractionEnvelope`,
+`exportExtractionEnvelopeImport` and every path that reloads a stored import
+(the MCP server, the console, the workbench mount, the server apply boundary,
+the extraction inspector) now refuse an `ExtractionEnvelopeImport` whose
+`status.provenance` is missing (`status.provenance is required`) or is anything
+other than `"verified"` or `"unverified"`. `ExtractionEnvelopeImport.status.provenance`
+is no longer optional in the type.
+
+Survey 6.1.0 and later write the field on every record, so only records stored
+by 6.0.x or edited by hand are affected. **Action:** re-import such a record
+from its envelope (`importExtractionEnvelope`); do not add the field by hand,
+because `"verified"` claims a check against the prepared text that was never
+run. The reason for the break: a record with the field deleted used to validate
+as the older one-item-per-proposal shape, so a consumer could not tell a
+stripped record from a genuine older one.
 
 ## See also
 

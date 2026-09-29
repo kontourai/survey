@@ -193,14 +193,22 @@ describe("import-time excerpt verification against the prepared artifact (#293)"
     assert.throws(() => validateExtractionEnvelopeImport(edit((r) => { r.status.diagnostics.push(r.status.diagnostics[0]); })), /Import status does not match/);
     assert.throws(() => validateExtractionEnvelopeImport(edit((r) => { r.status.provenance = "unverified"; })), /Import status does not match/);
     assert.throws(() => validateExtractionEnvelopeImport(edit((r) => { r.status.state = "unresolved"; })), /Import status does not match/);
-    assert.throws(() => validateExtractionEnvelopeImport(edit((r) => { r.status.provenance = "trusted"; })), /Import status does not match/);
+    assert.throws(() => validateExtractionEnvelopeImport(edit((r) => { r.status.provenance = "trusted"; })), /status\.provenance must be "verified" or "unverified"/);
     const bare = importExtractionEnvelope((() => { const e = envelope([matching]); delete e.result.preparedArtifact; return e; })(), options()).record as Record<string, any>;
     bare.status.provenance = "verified";
     assert.throws(() => validateExtractionEnvelopeImport(bare), /Import status does not match/, "nothing to have verified against");
-    // A record written before `provenance` existed still loads, and cannot carry verification results.
-    const legacy = importExtractionEnvelope(envelope([matching]), options()).record as Record<string, any>;
-    delete legacy.status.provenance;
-    assert.equal(validateExtractionEnvelopeImport(legacy).status.provenance, undefined);
-    assert.throws(() => validateExtractionEnvelopeImport(edit((r) => { delete r.status.provenance; })), /Import status does not match/);
+    // `provenance` is required (#320): a record without it is refused, so a
+    // producer that strips it cannot pass the record off as the older shape.
+    const stripped = importExtractionEnvelope(envelope([matching]), options()).record as Record<string, any>;
+    delete stripped.status.provenance;
+    assert.throws(() => validateExtractionEnvelopeImport(stripped), /status\.provenance is required/);
+    assert.throws(() => reimportExtractionEnvelope(JSON.stringify(stripped)), /status\.provenance is required/);
+    assert.throws(() => validateExtractionEnvelopeImport(edit((r) => { delete r.status.provenance; })), /status\.provenance is required/);
+    for (const invalid of [null, "", "Verified", true, 1]) {
+      assert.throws(() => validateExtractionEnvelopeImport(edit((r) => { r.status.provenance = invalid; })), /status\.provenance must be "verified" or "unverified"/, String(invalid));
+    }
+    // Both valid values still load where the import could have written them.
+    assert.equal(validateExtractionEnvelopeImport(importExtractionEnvelope(envelope([matching]), options()).record).status.provenance, "unverified");
+    assert.equal(validateExtractionEnvelopeImport(mixed).status.provenance, "verified");
   });
 });

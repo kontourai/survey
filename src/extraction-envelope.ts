@@ -162,8 +162,9 @@ export type ResolvedExtractionArtifact =
  * artifact text. `verified` means the supplied text matched the envelope's
  * digest and length and every proposal that produced a ReviewItem matched its
  * span; `unverified` means no text was supplied, or the text did not verify
- * (a diagnostic then says why). Records written before this field existed have
- * no `provenance` and are unverified.
+ * (a diagnostic then says why). Required: a record without it, or with any
+ * other value, is refused, so a record whose provenance was stripped cannot
+ * pass as the one-item-per-proposal shape Survey wrote before 6.0.0.
  */
 export type ExtractionEnvelopeImportProvenance = "verified" | "unverified";
 
@@ -189,7 +190,7 @@ export interface ExtractionEnvelopeImport {
   kind: "ExtractionEnvelopeImport";
   metadata: { name: string; producerNamespace: string };
   spec: { envelope: PortableExtractionResultEnvelope; sourceKind: RawSource["kind"]; claimTargets: ClaimTargetHint[] };
-  status: { state: "grounded" | "unresolved"; diagnostics: ExtractionEnvelopeImportDiagnostic[]; provenance?: ExtractionEnvelopeImportProvenance };
+  status: { state: "grounded" | "unresolved"; diagnostics: ExtractionEnvelopeImportDiagnostic[]; provenance: ExtractionEnvelopeImportProvenance };
 }
 
 export interface ExtractionEnvelopeImportResult { record: ExtractionEnvelopeImport; reviewItems: ReviewItem[] }
@@ -515,7 +516,6 @@ function excerptMismatchDiagnostic(index: number, proposal: PortableExtractionPr
  * written: each diagnostic is rebuilt from its own fields and must match.
  */
 function verificationDiagnosticsAreCoherent(envelope: PortableExtractionResultEnvelope, provenance: unknown, diagnostics: readonly unknown[]): boolean {
-  if (provenance === undefined) return diagnostics.length === 0;
   const prepared = envelope.result.preparedArtifact;
   const rebuild = (value: unknown): ExtractionEnvelopeImportDiagnostic | undefined => {
     if (!value || typeof value !== "object" || Array.isArray(value) || !prepared) return undefined;
@@ -584,7 +584,8 @@ function validateImport(value: unknown): asserts value is ExtractionEnvelopeImpo
   if (!RAW_SOURCE_KINDS.has(spec.sourceKind as RawSource["kind"])) throw new Error("spec.sourceKind is invalid.");
   const targets = array(spec.claimTargets, "spec.claimTargets"); targets.forEach(validateClaimTarget);
   if (targets.length !== envelope.result.proposals.length) throw new Error("spec.claimTargets must align with proposals.");
-  const status = obj(record.status, "status"); exact(status, ["state", "diagnostics"], "status", ["provenance"]);
+  const status = obj(record.status, "status"); exact(status, ["state", "diagnostics", "provenance"], "status");
+  if (status.provenance !== "verified" && status.provenance !== "unverified") throw new Error("status.provenance must be \"verified\" or \"unverified\".");
   const diagnostics = array(status.diagnostics, "status.diagnostics");
   const expected = diagnosticsFor(envelope);
   if (canonicalJson(diagnostics.slice(0, expected.length)) !== canonicalJson(expected)
