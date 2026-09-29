@@ -1,5 +1,17 @@
 # Changelog
 
+## [7.0.0](https://github.com/kontourai/survey/compare/v6.1.0...v7.0.0) (2026-09-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* ReviewWorkbenchDecision gains the select-proposed member, ReviewQueueExtractionIssueCode gains import-invalid, ReviewSessionReplayIssueCode gains invalid-conflict-selection, and ReviewSessionReplayWarning gains unverified-extraction-queue. buildCanonicalReviewedTrustInput refuses an accept-proposed result on a conflict item. Stored sessions and existing decision kinds keep their meaning.
+
+### Features
+
+* choose one value of a conflict in review; reload paths check the stored extraction import ([#318](https://github.com/kontourai/survey/issues/318)) ([9570ceb](https://github.com/kontourai/survey/commit/9570ceb7f762b9bde603ca4bfcac3a5e9a2b1797))
+* export confidence-less proposals to Surface 4.1+; flag unreadable excluded entries ([#316](https://github.com/kontourai/survey/issues/316)) ([69b7d69](https://github.com/kontourai/survey/commit/69b7d69ab6ca92c298134bfc4913fc09b55a947e)), closes [#310](https://github.com/kontourai/survey/issues/310) [#315](https://github.com/kontourai/survey/issues/315)
+
 ## [6.1.0](https://github.com/kontourai/survey/compare/v6.0.0...v6.1.0) (2026-09-28)
 
 
