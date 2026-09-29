@@ -1,5 +1,16 @@
 # Changelog
 
+## [8.0.0](https://github.com/kontourai/survey/compare/v7.0.0...v8.0.0) (2026-09-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* field states, decision carry-forward, score-blind audit; require import provenance ([#321](https://github.com/kontourai/survey/issues/321))
+
+### Features
+
+* field states, decision carry-forward, score-blind audit; require import provenance ([#321](https://github.com/kontourai/survey/issues/321)) ([0d8b6c7](https://github.com/kontourai/survey/commit/0d8b6c78387a68820c6ab667c130141e35ebbdac))
+
 ## [7.0.0](https://github.com/kontourai/survey/compare/v6.1.0...v7.0.0) (2026-09-29)
 
 
