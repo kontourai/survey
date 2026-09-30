@@ -318,7 +318,7 @@ function buildReviewCardHtml(
   --k-line-strong: rgba(150,180,210,0.22);
   --k-text: #eef3f8;
   --k-text-muted: #aebccb;
-  --k-text-faint: #72869b;
+  --k-text-faint: #75889d;
   --k-brand: #5ce0c6;
   --k-positive: #34d399;
   --k-caution: #f3b14b;
@@ -339,7 +339,11 @@ function buildReviewCardHtml(
     --k-line-strong: rgba(36,40,46,0.20);
     --k-text: #202124;
     --k-text-muted: #5b626b;
-    --k-text-faint: #707782;
+    --k-text-faint: #6a707b;
+    /* The dark brand (#5ce0c6) reads at ~1.6:1 on the light canvas; the eyebrow
+       and source link use --k-brand as text, so light mode takes @kontourai/ui's
+       survey light brand, retinted in 1.18 to clear 4.5:1. */
+    --k-brand: #107e6d;
     --k-positive: #168257;
     --k-caution: #8a5a00;
     --k-negative: #c83b3b;
