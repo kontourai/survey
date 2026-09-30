@@ -764,4 +764,158 @@ test.describe("LIGHT MODE: color-scheme=light produces correct token flip", () =
     expect(pageErrors).toEqual([]);
     expect(consoleErrors).toEqual([]);
   });
+
+  test("light mode resolves derived aliases and the survey brand against light values", async ({ page }) => {
+    const { consoleErrors, pageErrors } = await loadFixture(page);
+    await page.evaluate(() => {
+      const el = document.getElementById("wbe")!;
+      el.setAttribute("theme", "survey");
+      el.setAttribute("color-scheme", "light");
+    });
+    await assignSession(page, SESSION_FIXTURE);
+
+    const resolved = await page.evaluate(() => {
+      const embed = document.getElementById("wbe")!.shadowRoot!.querySelector<HTMLElement>(".survey-workbench-embed")!;
+      const search = embed.querySelector<HTMLElement>(".queue-controls input")!;
+      return {
+        brand: getComputedStyle(embed).getPropertyValue("--k-brand").trim(),
+        // .queue-controls input paints var(--k-sunken), an alias derived from --k-bg/--k-panel.
+        searchBackground: getComputedStyle(search).backgroundColor,
+      };
+    });
+
+    // @kontourai/ui 1.18 survey light brand, retinted to read as text at 4.5:1
+    // (it was #16806f, 4.38:1 on the page). Pinned here rather than read from
+    // the package so a stale generated sheet cannot satisfy it.
+    expect(resolved.brand).toBe("#107e6d");
+    // A var()-derived alias declared only on the dark :host would be inherited as
+    // its dark computed value; the light scope must re-declare it.
+    // color-mix(in srgb, ...) computes to `color(srgb r g b)` with 0..1 channels.
+    const scale = resolved.searchBackground.startsWith("color(srgb") ? 255 : 1;
+    const channels = resolved.searchBackground.match(/\d+(\.\d+)?/g)!.slice(0, 3).map((channel) => Number(channel) * scale);
+    expect(Math.min(...channels), `search box background ${resolved.searchBackground}`).toBeGreaterThan(200);
+
+    expect(pageErrors).toEqual([]);
+    expect(consoleErrors).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HOST OVERRIDES AND PRESETS: every --k-* value is decided on :host
+// ---------------------------------------------------------------------------
+
+async function embedTokens(page: Page, names: readonly string[]): Promise<Record<string, string>> {
+  return page.evaluate((tokenNames) => {
+    const embed = document.getElementById("wbe")!.shadowRoot!.querySelector<HTMLElement>(".survey-workbench-embed")!;
+    const styles = getComputedStyle(embed);
+    return Object.fromEntries(tokenNames.map((name) => [name, styles.getPropertyValue(name).trim()]));
+  }, names);
+}
+
+async function mountWith(page: Page, attributes: Record<string, string>, hostCss?: string): Promise<void> {
+  await loadFixture(page);
+  if (hostCss) await page.addStyleTag({ content: hostCss });
+  await page.evaluate((attrs) => {
+    const el = document.getElementById("wbe")!;
+    for (const [name, value] of Object.entries(attrs)) el.setAttribute(name, value);
+  }, attributes);
+  await assignSession(page, SESSION_FIXTURE);
+}
+
+const OVERRIDE_NAMES = ["--k-bg", "--k-brand", "--k-sunken", "--k-radius"] as const;
+const OVERRIDES = { "--k-bg": "#123456", "--k-brand": "#ff00aa", "--k-sunken": "#abcdef", "--k-radius": "2px" };
+const overrideDeclarations = Object.entries(OVERRIDES).map(([name, value]) => `${name}: ${value}`).join("; ");
+
+test.describe("HOST OVERRIDES: base tokens and aliases set on the element win in every mode", () => {
+  for (const scheme of ["light", "dark"] as const) {
+    test(`inline style on the element reaches the embed (${scheme}, theme=survey)`, async ({ page }) => {
+      await mountWith(page, { theme: "survey", "color-scheme": scheme, style: overrideDeclarations });
+      expect(await embedTokens(page, OVERRIDE_NAMES)).toEqual(OVERRIDES);
+    });
+
+    test(`a page rule targeting the element reaches the embed (${scheme}, theme=survey)`, async ({ page }) => {
+      await mountWith(page, { theme: "survey", "color-scheme": scheme }, `survey-review-workbench { ${overrideDeclarations}; }`);
+      expect(await embedTokens(page, OVERRIDE_NAMES)).toEqual(OVERRIDES);
+    });
+  }
+
+  test("an override does not leak into the defaults it did not name (light)", async ({ page }) => {
+    await mountWith(page, { theme: "survey", "color-scheme": "light", style: "--k-brand: #ff00aa" });
+    const tokens = await embedTokens(page, ["--k-brand", "--k-bg", "--k-text"]);
+    expect(tokens).toEqual({ "--k-brand": "#ff00aa", "--k-bg": "#f5f4ef", "--k-text": "#202124" });
+  });
+});
+
+test.describe("PRESETS: the theme attribute picks the preset in both modes", () => {
+  // Literals pinned from @kontourai/ui 1.18 themes.css, not read from it, so a
+  // stale generated sheet cannot satisfy them.
+  const cases = [
+    { theme: "survey", scheme: "dark", bg: "#06080b", brand: "#5ce0c6" },
+    { theme: "survey", scheme: "light", bg: "#f5f4ef", brand: "#107e6d" },
+    { theme: "console", scheme: "dark", bg: "#11120f", brand: "#c9ff4a" },
+    { theme: "console", scheme: "light", bg: "#f3f5eb", brand: "#577800" },
+    { theme: "custom", scheme: "dark", bg: "#0a0e13", brand: "#5ce0c6" },
+    { theme: "custom", scheme: "light", bg: "#f5f4ef", brand: "#0e7c64" },
+  ] as const;
+  for (const { theme, scheme, bg, brand } of cases) {
+    test(`theme=${theme} color-scheme=${scheme}`, async ({ page }) => {
+      await mountWith(page, { theme, "color-scheme": scheme });
+      expect(await embedTokens(page, ["--k-bg", "--k-brand"])).toEqual({ "--k-bg": bg, "--k-brand": brand });
+    });
+  }
+
+  for (const { scheme, bg, brand } of [
+    { scheme: "dark", bg: "#06080b", brand: "#5ce0c6" },
+    { scheme: "light", bg: "#f5f4ef", brand: "#107e6d" },
+  ] as const) {
+    test(`no theme attribute renders the survey preset (color-scheme=${scheme})`, async ({ page }) => {
+      await mountWith(page, { "color-scheme": scheme });
+      expect(await embedTokens(page, ["--k-bg", "--k-brand"])).toEqual({ "--k-bg": bg, "--k-brand": brand });
+    });
+  }
+
+  test("every token the embed is forced to inherit is declared on :host", async ({ page }) => {
+    await mountWith(page, { "color-scheme": "dark" });
+    // A name forced to `inherit` that :host never declares resolves empty (as
+    // --k-font-mono did), so read the forced names from the live token sheet.
+    const resolved = await page.evaluate(() => {
+      const root = document.getElementById("wbe")!.shadowRoot!;
+      const sheets = [...root.adoptedStyleSheets, ...[...root.querySelectorAll("style")].map((style) => style.sheet!)];
+      const rule = sheets.flatMap((sheet) => [...sheet.cssRules])
+        .find((candidate) => candidate instanceof CSSStyleRule && candidate.selectorText.includes(".survey-workbench-embed[class][class]")) as CSSStyleRule;
+      const embed = root.querySelector<HTMLElement>(".survey-workbench-embed")!;
+      const styles = getComputedStyle(embed);
+      return [...rule.style].filter((name) => name.startsWith("--k-")).map((name) => [name, styles.getPropertyValue(name).trim()]);
+    });
+    expect(resolved.length).toBeGreaterThan(30);
+    for (const [name, value] of resolved) expect(value, name).not.toBe("");
+    expect(Object.fromEntries(resolved)["--k-font-mono"]).toContain("IBM Plex Mono");
+  });
+});
+
+test.describe("NO adoptedStyleSheets: the <style> fallback carries the same token sheet", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      // Runs before the element module loads, so #adoptCss takes the fallback.
+      delete (ShadowRoot.prototype as { adoptedStyleSheets?: unknown }).adoptedStyleSheets;
+    });
+  });
+
+  for (const { scheme, bg, brand } of [
+    { scheme: "dark", bg: "#06080b", brand: "#5ce0c6" },
+    { scheme: "light", bg: "#f5f4ef", brand: "#107e6d" },
+  ] as const) {
+    test(`defaults and host overrides resolve in the fallback (${scheme})`, async ({ page }) => {
+      await mountWith(page, { theme: "survey", "color-scheme": scheme });
+      const fallbackInUse = await page.evaluate(() => {
+        const root = document.getElementById("wbe")!.shadowRoot!;
+        return root.adoptedStyleSheets === undefined && root.querySelectorAll("style").length >= 2;
+      });
+      expect(fallbackInUse).toBe(true);
+      expect(await embedTokens(page, ["--k-bg", "--k-brand"])).toEqual({ "--k-bg": bg, "--k-brand": brand });
+
+      await page.evaluate((declarations) => document.getElementById("wbe")!.setAttribute("style", declarations), overrideDeclarations);
+      expect(await embedTokens(page, OVERRIDE_NAMES)).toEqual(OVERRIDES);
+    });
+  }
 });

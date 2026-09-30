@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
+import { createRequire } from "node:module";
+import path from "node:path";
 
 const execFileAsync = promisify(execFile);
 
@@ -53,6 +55,40 @@ describe("review-workbench-element", () => {
         `${property} is declared against itself, which is invalid at computed-value time`,
       );
     }
+  });
+
+  it("generated CSS scopes whole selectors, never the arguments of :where/:not/:is", async () => {
+    const source = await readFile("src/review-workbench/review-workbench-css.generated.ts", "utf8");
+    // @kontourai/ui 1.17+ theme selectors carry comma lists inside
+    // :where(:not(a, b)). Splitting those on every comma scoped each fragment,
+    // injecting the embed class into the argument list and changing what the
+    // "nearest theme" guard matches.
+    assert.match(source, /:where\(:not\(/, "fixture precondition: the package ships nested selector arguments");
+    let checked = 0;
+    for (const match of source.matchAll(/:(?:where|not|is)\(/g)) {
+      let depth = 1;
+      let index = match.index! + match[0].length;
+      while (depth > 0 && index < source.length) {
+        if (source[index] === "(") depth += 1;
+        else if (source[index] === ")") depth -= 1;
+        index += 1;
+      }
+      const argument = source.slice(match.index! + match[0].length, index - 1);
+      assert.doesNotMatch(argument, /survey-workbench-embed/, `scoped selector argument: ${match[0]}${argument})`);
+      checked += 1;
+    }
+    assert.ok(checked > 0);
+  });
+
+  it("the selector splitter treats escaped commas and quoted values as text", () => {
+    const { splitSelectorList } = createRequire(import.meta.url)(
+      path.resolve("scripts/copy-review-workbench-package-assets.cjs"),
+    ) as { splitSelectorList(selectorText: string): string[] };
+    assert.deepEqual(
+      splitSelectorList('a[title="x,y"], .b\\,c, :where(:not(d, e)), f').map((selector) => selector.trim()),
+      ['a[title="x,y"]', ".b\\,c", ":where(:not(d, e))", "f"],
+    );
+    assert.throws(() => splitSelectorList('a[title="x]'), /Unbalanced selector list/);
   });
 
   it("review-workbench-element imports the generated CSS module directly", async () => {
