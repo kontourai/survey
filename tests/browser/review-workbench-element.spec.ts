@@ -864,9 +864,21 @@ test.describe("PRESETS: the theme attribute picks the preset in both modes", () 
     });
   }
 
-  test("every token the embed inherits is declared on :host (font-mono is not empty)", async ({ page }) => {
+  test("every token the embed is forced to inherit is declared on :host", async ({ page }) => {
     await mountWith(page, { "color-scheme": "dark" });
-    const tokens = await embedTokens(page, ["--k-font-mono", "--k-font-display", "--k-font-ui"]);
-    for (const [name, value] of Object.entries(tokens)) expect(value, name).not.toBe("");
+    // A name forced to `inherit` that :host never declares resolves empty (as
+    // --k-font-mono did), so read the forced names from the live token sheet.
+    const resolved = await page.evaluate(() => {
+      const root = document.getElementById("wbe")!.shadowRoot!;
+      const sheets = [...root.adoptedStyleSheets, ...[...root.querySelectorAll("style")].map((style) => style.sheet!)];
+      const rule = sheets.flatMap((sheet) => [...sheet.cssRules])
+        .find((candidate) => candidate instanceof CSSStyleRule && candidate.selectorText.includes(".survey-workbench-embed[class][class]")) as CSSStyleRule;
+      const embed = root.querySelector<HTMLElement>(".survey-workbench-embed")!;
+      const styles = getComputedStyle(embed);
+      return [...rule.style].filter((name) => name.startsWith("--k-")).map((name) => [name, styles.getPropertyValue(name).trim()]);
+    });
+    expect(resolved.length).toBeGreaterThan(30);
+    for (const [name, value] of resolved) expect(value, name).not.toBe("");
+    expect(Object.fromEntries(resolved)["--k-font-mono"]).toContain("IBM Plex Mono");
   });
 });
