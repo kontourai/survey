@@ -655,8 +655,9 @@ state message.
 
 **Theming token contract**
 
-CSS custom properties inherit through the shadow boundary. Set any `--k-*` token
-on `survey-review-workbench` itself (inline `style` or a page rule targeting the
+CSS custom properties inherit through the shadow boundary. Set a color, radius,
+shadow, font or alias `--k-*` token (the inherited set; see "Where the override
+has to go" below) on `survey-review-workbench` itself (inline `style` or a page rule targeting the
 element) to override the shadow defaults in either color scheme. The element
 declares its default token values on `:host`, and host-page rules on the element
 always beat `:host` rules; a token set only on an ancestor does not reach it.
@@ -777,8 +778,13 @@ The two mount paths differ in one way that matters:
 - `<survey-review-workbench>` keeps its defaults, its light mode and its presets
   on the shadow `:host`. A `--k-*` token declared **on the element** — an inline
   `style`, or any page rule that targets the element (for example
-  `survey-review-workbench { --k-brand: … }`) — beats every `:host` rule and
-  reaches the whole workbench, in both color schemes and with any `theme`. A
+  `survey-review-workbench { --k-brand: … }`) — beats every `:host` rule, in both
+  color schemes and with any `theme`. This holds for the tokens the element hands
+  to the workbench: the color, radius, shadow and font tokens listed in
+  `ELEMENT_DARK_TOKENS` (`scripts/copy-review-workbench-package-assets.cjs`) plus
+  the field-diff aliases (`DERIVED_TOKEN_DECLARATIONS` in
+  `src/review-workbench/review-workbench-element.ts`). Other tokens, such as
+  `--k-space-*`, keep the bundled values. A
   token set only on an **ancestor** (including `:root`) does not: the element's
   own `:host` default beats the inherited value. To hand over a page-level token
   layer, restate it on the element:

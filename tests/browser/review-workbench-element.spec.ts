@@ -864,6 +864,16 @@ test.describe("PRESETS: the theme attribute picks the preset in both modes", () 
     });
   }
 
+  for (const { scheme, bg, brand } of [
+    { scheme: "dark", bg: "#06080b", brand: "#5ce0c6" },
+    { scheme: "light", bg: "#f5f4ef", brand: "#107e6d" },
+  ] as const) {
+    test(`no theme attribute renders the survey preset (color-scheme=${scheme})`, async ({ page }) => {
+      await mountWith(page, { "color-scheme": scheme });
+      expect(await embedTokens(page, ["--k-bg", "--k-brand"])).toEqual({ "--k-bg": bg, "--k-brand": brand });
+    });
+  }
+
   test("every token the embed is forced to inherit is declared on :host", async ({ page }) => {
     await mountWith(page, { "color-scheme": "dark" });
     // A name forced to `inherit` that :host never declares resolves empty (as
@@ -881,4 +891,31 @@ test.describe("PRESETS: the theme attribute picks the preset in both modes", () 
     for (const [name, value] of resolved) expect(value, name).not.toBe("");
     expect(Object.fromEntries(resolved)["--k-font-mono"]).toContain("IBM Plex Mono");
   });
+});
+
+test.describe("NO adoptedStyleSheets: the <style> fallback carries the same token sheet", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      // Runs before the element module loads, so #adoptCss takes the fallback.
+      delete (ShadowRoot.prototype as { adoptedStyleSheets?: unknown }).adoptedStyleSheets;
+    });
+  });
+
+  for (const { scheme, bg, brand } of [
+    { scheme: "dark", bg: "#06080b", brand: "#5ce0c6" },
+    { scheme: "light", bg: "#f5f4ef", brand: "#107e6d" },
+  ] as const) {
+    test(`defaults and host overrides resolve in the fallback (${scheme})`, async ({ page }) => {
+      await mountWith(page, { theme: "survey", "color-scheme": scheme });
+      const fallbackInUse = await page.evaluate(() => {
+        const root = document.getElementById("wbe")!.shadowRoot!;
+        return root.adoptedStyleSheets === undefined && root.querySelectorAll("style").length >= 2;
+      });
+      expect(fallbackInUse).toBe(true);
+      expect(await embedTokens(page, ["--k-bg", "--k-brand"])).toEqual({ "--k-bg": bg, "--k-brand": brand });
+
+      await page.evaluate((declarations) => document.getElementById("wbe")!.setAttribute("style", declarations), overrideDeclarations);
+      expect(await embedTokens(page, OVERRIDE_NAMES)).toEqual(OVERRIDES);
+    });
+  }
 });
