@@ -321,7 +321,7 @@ body {
   gap: 5px;
   font-family: var(--k-font-mono, monospace);
   font-size: 10px;
-  color: var(--k-text-faint, #72869b);
+  color: var(--k-text-faint, #75889d);
   padding: 3px 8px;
   border: 1px solid var(--k-line, rgba(150,180,210,0.12));
   border-radius: 999px;

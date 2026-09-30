@@ -326,7 +326,7 @@ function buildReviewCardHtml(
   --k-active: #7aa2ff;
   --k-radius-sm: 9px;
   --k-radius-md: 14px;
-  --k-font-ui: "Hanken Grotesk",ui-sans-serif,system-ui,-apple-system,sans-serif;
+  --k-font-ui: "Hanken Grotesk",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
   --k-font-mono: "IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
 }
 @media (prefers-color-scheme: light) {
