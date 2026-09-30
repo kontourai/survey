@@ -14,9 +14,11 @@ const checkOnly = process.argv.includes("--check");
 
 // Tokens the <survey-review-workbench> element declares as literal :host
 // defaults (dark, from tokens.css :root) and re-declares for color-scheme="light"
-// (from tokens.css [data-theme="light"]). Emitted from the package so the
-// element carries no hand-copied color values. A name the package stops
-// declaring fails generation rather than silently dropping out.
+// (from tokens.css [data-theme="light"]), plus each built-in preset's values
+// from themes.css. Emitted from the package so the element carries no
+// hand-copied color values. A name the package stops declaring fails
+// generation rather than silently dropping out. The element's embed root
+// inherits exactly the dark list, so every name here is always set on :host.
 const ELEMENT_DARK_TOKENS = [
   "--k-bg", "--k-panel", "--k-panel-raised",
   "--k-text", "--k-text-muted", "--k-text-faint",
@@ -24,7 +26,8 @@ const ELEMENT_DARK_TOKENS = [
   "--k-brand", "--k-brand-contrast",
   "--k-active", "--k-positive", "--k-caution", "--k-negative", "--k-neutral",
   "--k-positive-soft", "--k-caution-soft", "--k-negative-soft", "--k-active-soft",
-  "--k-radius-md", "--k-radius-sm", "--k-shadow", "--k-font-ui",
+  "--k-radius-md", "--k-radius-sm", "--k-shadow",
+  "--k-font-ui", "--k-font-mono", "--k-font-display",
 ];
 const ELEMENT_LIGHT_TOKENS = [
   "--k-bg", "--k-panel", "--k-panel-raised",
@@ -35,10 +38,17 @@ const ELEMENT_LIGHT_TOKENS = [
   "--k-positive-soft", "--k-caution-soft", "--k-negative-soft", "--k-active-soft",
 ];
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+// The element's `theme` presets (KNOWN_WORKBENCH_THEMES in review-workbench-element.ts).
+const ELEMENT_THEMES = ["survey", "console", "flow", "surface"];
+
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { readRuleDeclarations, pickTokenDeclarations, splitSelectorList };
 
 async function main() {
   const tokenRoot = await resolveInstalledTokenRoot();
@@ -48,6 +58,7 @@ async function main() {
   const generatedModule = buildCssGeneratedModule(cssText, {
     dark: pickTokenDeclarations(tokensCss, ":root", ELEMENT_DARK_TOKENS),
     light: pickTokenDeclarations(tokensCss, '[data-theme="light"]', ELEMENT_LIGHT_TOKENS),
+    themes: Object.fromEntries(ELEMENT_THEMES.map((theme) => [theme, pickThemeDeclarations(themesCss, theme)])),
   });
 
   if (checkOnly) {
@@ -98,27 +109,62 @@ async function resolveInstalledTokenRoot() {
 }
 
 /**
- * Read the named custom properties from the one rule whose selector list is
- * exactly `selector`, and return them as declaration lines in the order asked.
- * Throws when the rule is missing, ambiguous, or lacks a requested name.
+ * Return the --k-* declarations (name -> whitespace-normalized value) of the
+ * one rule whose selector list satisfies `matches`. `matches` receives the
+ * list's top-level selectors, trimmed. Throws when no rule or several match.
  */
-function pickTokenDeclarations(css, selector, names) {
+function readRuleDeclarations(css, matches, description) {
   const uncommented = css.replace(/\/\*[\s\S]*?\*\//g, "");
   const rules = [...uncommented.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
-    .filter((match) => match[1].trim() === selector);
+    .filter((match) => matches(splitSelectorList(match[1]).map((selector) => selector.trim())));
   if (rules.length !== 1) {
-    throw new Error(`Expected exactly one \`${selector}\` rule in @kontourai/ui tokens.css, found ${rules.length}.`);
+    throw new Error(`Expected exactly one ${description} rule in @kontourai/ui tokens, found ${rules.length}.`);
   }
   const declarations = new Map();
   for (const [, name, value] of rules[0][2].matchAll(/(--k-[\w-]+)\s*:\s*([^;]+);/g)) {
     declarations.set(name, value.replace(/\s+/g, " ").trim());
   }
+  return declarations;
+}
+
+/**
+ * Read the named custom properties from the one rule whose selector list is
+ * exactly `selector`, and return them as declaration lines in the order asked.
+ * Throws when the rule is missing, ambiguous, or lacks a requested name.
+ */
+function pickTokenDeclarations(css, selector, names) {
+  const declarations = readRuleDeclarations(
+    css,
+    (selectors) => selectors.length === 1 && selectors[0] === selector,
+    `\`${selector}\``,
+  );
   return names.map((name) => {
     if (!declarations.has(name)) {
       throw new Error(`@kontourai/ui tokens.css \`${selector}\` no longer declares ${name}.`);
     }
     return `  ${name}: ${declarations.get(name)};`;
   }).join("\n");
+}
+
+/**
+ * A preset's dark (`.theme-<name>`) and light (`[data-theme="light"].theme-<name>`, …)
+ * values from themes.css, limited to the tokens the element's embed inherits.
+ */
+function pickThemeDeclarations(themesCss, theme) {
+  const pick = (matches, description) => {
+    const declarations = readRuleDeclarations(themesCss, matches, description);
+    return [...declarations]
+      .filter(([name]) => ELEMENT_DARK_TOKENS.includes(name))
+      .map(([name, value]) => `  ${name}: ${value};`)
+      .join("\n");
+  };
+  return {
+    dark: pick((selectors) => selectors.length === 1 && selectors[0] === `.theme-${theme}`, `\`.theme-${theme}\``),
+    light: pick(
+      (selectors) => selectors[0] === `[data-theme="light"].theme-${theme}`,
+      `\`[data-theme="light"].theme-${theme}\``,
+    ),
+  };
 }
 
 async function buildEmbeddedWorkbenchCss(tokensCss, themesCss) {
@@ -167,6 +213,8 @@ function buildCssGeneratedModule(cssText, elementTokens) {
     `export const REVIEW_WORKBENCH_DARK_TOKEN_DECLARATIONS: string = \`${escapeTemplateLiteral(elementTokens.dark)}\`;`,
     "/** Literal light token values for the element's color-scheme=\"light\", from @kontourai/ui tokens.css [data-theme=\"light\"]. */",
     `export const REVIEW_WORKBENCH_LIGHT_TOKEN_DECLARATIONS: string = \`${escapeTemplateLiteral(elementTokens.light)}\`;`,
+    "/** Each built-in preset's dark and light values, from @kontourai/ui themes.css. */",
+    `export const REVIEW_WORKBENCH_THEME_TOKEN_DECLARATIONS: Readonly<Record<string, { readonly dark: string; readonly light: string }>> = ${JSON.stringify(elementTokens.themes, null, 2)};`,
     "export default REVIEW_WORKBENCH_CSS;",
     "",
   ].join("\n");
@@ -290,16 +338,22 @@ function splitSelectorList(selectorText) {
   const selectors = [];
   let depth = 0;
   let start = 0;
+  let quote = null;
   for (let index = 0; index < selectorText.length; index += 1) {
     const char = selectorText[index];
-    if (char === "(" || char === "[") depth += 1;
+    // An escaped character (`\,`) or anything inside a quoted attribute value
+    // is literal text, never structure.
+    if (char === "\\") index += 1;
+    else if (quote) { if (char === quote) quote = null; }
+    else if (char === "\"" || char === "'") quote = char;
+    else if (char === "(" || char === "[") depth += 1;
     else if (char === ")" || char === "]") depth -= 1;
     else if (char === "," && depth === 0) {
       selectors.push(selectorText.slice(start, index));
       start = index + 1;
     }
   }
-  if (depth !== 0) throw new Error(`Unbalanced selector list: ${selectorText.trim()}`);
+  if (depth !== 0 || quote) throw new Error(`Unbalanced selector list: ${selectorText.trim()}`);
   selectors.push(selectorText.slice(start));
   return selectors;
 }

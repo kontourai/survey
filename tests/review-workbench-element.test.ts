@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
+import { createRequire } from "node:module";
+import path from "node:path";
 
 const execFileAsync = promisify(execFile);
 
@@ -76,6 +78,17 @@ describe("review-workbench-element", () => {
       checked += 1;
     }
     assert.ok(checked > 0);
+  });
+
+  it("the selector splitter treats escaped commas and quoted values as text", () => {
+    const { splitSelectorList } = createRequire(import.meta.url)(
+      path.resolve("scripts/copy-review-workbench-package-assets.cjs"),
+    ) as { splitSelectorList(selectorText: string): string[] };
+    assert.deepEqual(
+      splitSelectorList('a[title="x,y"], .b\\,c, :where(:not(d, e)), f').map((selector) => selector.trim()),
+      ['a[title="x,y"]', ".b\\,c", ":where(:not(d, e))", "f"],
+    );
+    assert.throws(() => splitSelectorList('a[title="x]'), /Unbalanced selector list/);
   });
 
   it("review-workbench-element imports the generated CSS module directly", async () => {

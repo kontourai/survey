@@ -1808,7 +1808,9 @@ export const REVIEW_WORKBENCH_DARK_TOKEN_DECLARATIONS: string = `  --k-bg: #0a0e
   --k-radius-md: 14px;
   --k-radius-sm: 9px;
   --k-shadow: 0 26px 60px -42px rgba(0, 0, 0, 0.95);
-  --k-font-ui: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;`;
+  --k-font-ui: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --k-font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --k-font-display: "Fraunces", Georgia, "Times New Roman", serif;`;
 /** Literal light token values for the element's color-scheme="light", from @kontourai/ui tokens.css [data-theme="light"]. */
 export const REVIEW_WORKBENCH_LIGHT_TOKEN_DECLARATIONS: string = `  --k-bg: #f5f4ef;
   --k-panel: #ffffff;
@@ -1830,4 +1832,23 @@ export const REVIEW_WORKBENCH_LIGHT_TOKEN_DECLARATIONS: string = `  --k-bg: #f5f
   --k-caution-soft: color-mix(in oklab, var(--k-caution) 14%, transparent);
   --k-negative-soft: color-mix(in oklab, var(--k-negative) 14%, transparent);
   --k-active-soft: color-mix(in oklab, var(--k-active) 14%, transparent);`;
+/** Each built-in preset's dark and light values, from @kontourai/ui themes.css. */
+export const REVIEW_WORKBENCH_THEME_TOKEN_DECLARATIONS: Readonly<Record<string, { readonly dark: string; readonly light: string }>> = {
+  "survey": {
+    "dark": "  --k-bg: #06080b;\n  --k-brand: #5ce0c6;\n  --k-text-faint: #78889b;",
+    "light": "  --k-bg: #f5f4ef;\n  --k-text-faint: #6a707b;\n  --k-brand: #107e6d;"
+  },
+  "console": {
+    "dark": "  --k-font-ui: \"Aptos Narrow\", \"DIN Condensed\", \"IBM Plex Sans Condensed\", \"Gill Sans\", sans-serif;\n  --k-font-display: \"Aptos Narrow\", \"DIN Condensed\", \"IBM Plex Sans Condensed\", \"Gill Sans\", sans-serif;\n  --k-radius-sm: 0;\n  --k-radius-md: 0;\n  --k-brand: #c9ff4a;\n  --k-brand-contrast: #11120f;\n  --k-bg: #11120f;\n  --k-panel: #191b16;\n  --k-panel-raised: #20231e;\n  --k-line: #3a4035;\n  --k-line-strong: #8ea36e;\n  --k-text: #f2f0e8;\n  --k-text-muted: #a6ab9c;\n  --k-text-faint: #858b7e;\n  --k-positive: #a6d37b;\n  --k-caution: #e8c15f;\n  --k-negative: #ee776f;\n  --k-active: #84d8c8;\n  --k-positive-soft: color-mix(in oklab, var(--k-positive) 14%, transparent);\n  --k-caution-soft: color-mix(in oklab, var(--k-caution) 14%, transparent);\n  --k-negative-soft: color-mix(in oklab, var(--k-negative) 14%, transparent);\n  --k-active-soft: color-mix(in oklab, var(--k-active) 14%, transparent);",
+    "light": "  --k-brand: #577800;\n  --k-brand-contrast: #ffffff;\n  --k-bg: #f3f5eb;\n  --k-panel: #fbfcf7;\n  --k-panel-raised: #eef2e6;\n  --k-line: #ccd5bf;\n  --k-line-strong: #8fa36f;\n  --k-text: #1e2319;\n  --k-text-muted: #596250;\n  --k-text-faint: #68705f;\n  --k-positive: #2f7d32;\n  --k-caution: #8a6500;\n  --k-negative: #b93a36;\n  --k-active: #247f75;\n  --k-positive-soft: color-mix(in oklab, var(--k-positive) 14%, transparent);\n  --k-caution-soft: color-mix(in oklab, var(--k-caution) 14%, transparent);\n  --k-negative-soft: color-mix(in oklab, var(--k-negative) 14%, transparent);\n  --k-active-soft: color-mix(in oklab, var(--k-active) 14%, transparent);"
+  },
+  "flow": {
+    "dark": "  --k-brand: #3890ae;",
+    "light": "  --k-brand: #1f6f88;"
+  },
+  "surface": {
+    "dark": "  --k-brand: #14a37a;",
+    "light": "  --k-brand: #0f6b52;"
+  }
+};
 export default REVIEW_WORKBENCH_CSS;

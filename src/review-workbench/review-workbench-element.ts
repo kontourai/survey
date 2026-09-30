@@ -50,13 +50,14 @@ import {
   REVIEW_WORKBENCH_CSS,
   REVIEW_WORKBENCH_DARK_TOKEN_DECLARATIONS,
   REVIEW_WORKBENCH_LIGHT_TOKEN_DECLARATIONS,
+  REVIEW_WORKBENCH_THEME_TOKEN_DECLARATIONS,
 } from "./review-workbench-css.generated.js";
 
 /** @internal Field-diff card aliases (Theming section of
- *  docs/consumer-integration-guide.md), derived from the base tokens. A var()
- *  alias resolves where it is declared and is inherited as a computed value, so
- *  every scope that changes a base token re-declares these: without that, the
- *  light embed would keep the dark :host's sunken, wash and muted colors. */
+ *  docs/consumer-integration-guide.md), derived from the base tokens. Declared
+ *  on :host only: a var() alias resolves on the element that declares it, and
+ *  every mode and preset below also lands on :host, so the aliases always see
+ *  the final base values there and the embed inherits the result. */
 const DERIVED_TOKEN_DECLARATIONS = `  --k-muted: var(--k-text-muted);
   --k-faint: var(--k-text-faint);
   --k-raised: var(--k-panel-raised);
@@ -68,91 +69,54 @@ const DERIVED_TOKEN_DECLARATIONS = `  --k-muted: var(--k-text-muted);
   --k-negative-wash: var(--k-negative-soft);
   --k-radius: var(--k-radius-md);`;
 
-/** @internal Second adopted stylesheet: host token defaults + inheritance delegation.
+/** @internal Token names the embed root inherits from :host: every base token
+ *  :host always declares, plus the derived aliases. */
+const INHERITED_TOKEN_NAMES = [
+  ...`${REVIEW_WORKBENCH_DARK_TOKEN_DECLARATIONS}\n${DERIVED_TOKEN_DECLARATIONS}`.matchAll(/^\s*(--k-[\w-]+)\s*:/gm),
+].map((match) => match[1]);
+
+/** @internal Preset selectors per theme. A missing `theme` attribute renders as
+ *  "survey" (see #applyThemeClasses), so it takes the survey preset too. */
+function presetHostRules(theme: string, declarations: { readonly dark: string; readonly light: string }): string {
+  const dark = theme === "survey" ? `:host(:not([theme])), :host([theme="survey"])` : `:host([theme="${theme}"])`;
+  const light = theme === "survey"
+    ? `:host(:not([theme])[color-scheme="light"]), :host([theme="survey"][color-scheme="light"])`
+    : `:host([theme="${theme}"][color-scheme="light"])`;
+  return `${dark} {\n${declarations.dark}\n}\n${light} {\n${declarations.light}\n}`;
+}
+
+/** @internal Token sheet: every --k-* value the workbench reads is decided on
+ *  :host, and the embed root only inherits it.
  *
- * This sheet is adopted AFTER the main workbench CSS (adoptedStyleSheets[1]).
- * It serves two purposes:
+ * Adopted AFTER the main workbench CSS (adoptedStyleSheets[1]); appended after it
+ * as a <style> where adoptedStyleSheets is unavailable.
  *
- * 1.  :host literal defaults — non-self-referential literal values for all --k-* tokens.
- *     These provide a baseline when the host page does not load Console Kit.
- *     Because they are literal (not var()), there is no self-reference cycle.
- *     Inline styles on the host element always win over :host rules, so setting
- *     `--k-brand: hotpink` on the element naturally overrides the #5ce0c6 default.
- *
- * 2.  .survey-workbench-embed[class] inherit delegation — using specificity (0,2,0)
- *     to match the theme class selectors (e.g. .survey-workbench-embed.theme-survey).
- *     Source order (after the workbench sheet) makes these inherit rules win, so the
- *     embed's tokens propagate upward to :host, picking up any host overrides.
+ * 1. :host carries the defaults, the light mode and the preset values, all as
+ *    literals from @kontourai/ui (emitted by the CSS generator; never
+ *    `var(--k-x, …)`, which would be a self-reference cycle). A declaration from
+ *    the host document — the element's inline style, or any page rule targeting
+ *    the element — beats every :host rule, whatever its specificity, so a host
+ *    override of a base token or an alias wins in both modes and every preset.
+ *    Values set on an ancestor of the element do not: the :host declaration
+ *    beats inheritance.
+ * 2. The embed root inherits those tokens from :host. The generated sheet also
+ *    sets them on the embed (its scoped :root, [data-theme="light"] and
+ *    [data-theme="light"].theme-* rules, up to (0,3,0)); `:host >` plus the
+ *    doubled [class] lifts this rule to (0,4,0) so it wins regardless of order.
  */
-const TOKEN_INHERIT_CSS = `/* 1. Host token defaults — literal values from @kontourai/ui tokens.css :root
-   (emitted by the CSS generator), not var() self-references.
-   Inline styles on the host element always win over :host rules so external
-   overrides (e.g. style="--k-brand: hotpink") propagate through automatically. */
-:host {
+const TOKEN_INHERIT_CSS = `:host {
   display: block;
   container-type: inline-size;
 ${REVIEW_WORKBENCH_DARK_TOKEN_DECLARATIONS}
-  /* Derived from the tokens above by default; a host may override any of these
-     directly for finer control without touching the base token it derives from. */
 ${DERIVED_TOKEN_DECLARATIONS}
 }
-/* 2. Token inheritance delegation — re-delegate --k-* tokens on the embed root
-   to inherit from :host, so external overrides set on the host element propagate
-   through the shadow boundary. The [class] attribute selector raises specificity
-   to (0,2,0) — matching the theme class selectors — and this sheet comes AFTER
-   the workbench defaults, so source order makes these rules win. Every token the
-   workbench CSS reads is listed here so a host can override ANY of them (the full
-   --k-* set, not just a fixed subset) without forking styles or picking a preset. */
-.survey-workbench-embed[class] {
-  --k-bg: inherit;
-  --k-panel: inherit;
-  --k-panel-raised: inherit;
-  --k-text: inherit;
-  --k-text-muted: inherit;
-  --k-text-faint: inherit;
-  --k-line: inherit;
-  --k-line-strong: inherit;
-  --k-brand: inherit;
-  --k-brand-contrast: inherit;
-  --k-active: inherit;
-  --k-positive: inherit;
-  --k-caution: inherit;
-  --k-negative: inherit;
-  --k-neutral: inherit;
-  --k-positive-soft: inherit;
-  --k-caution-soft: inherit;
-  --k-negative-soft: inherit;
-  --k-active-soft: inherit;
-  --k-radius-md: inherit;
-  --k-radius-sm: inherit;
-  --k-shadow: inherit;
-  --k-font-ui: inherit;
-  --k-font-mono: inherit;
-  --k-font-display: inherit;
-  --k-muted: inherit;
-  --k-faint: inherit;
-  --k-raised: inherit;
-  --k-sunken: inherit;
-  --k-brand-ink: inherit;
-  --k-brand-wash: inherit;
-  --k-positive-wash: inherit;
-  --k-caution-wash: inherit;
-  --k-negative-wash: inherit;
-  --k-radius: inherit;
-}
-/* 3. Light mode token overrides — applied when color-scheme="light" sets data-theme="light"
-   on the embed root. The base values are literals from @kontourai/ui tokens.css
-   [data-theme="light"] (not var(), to avoid self-reference cycles); a theme preset's
-   own [data-theme="light"].theme-* rule in the generated sheet is more specific and
-   sets that preset's brand. The derived aliases are re-declared so they resolve
-   against the light values here.
-   The [data-theme="light"] selector has specificity (0,1,0) which is overridden by the
-   .survey-workbench-embed[class] inheritance block above for the embed container,
-   but the override chain means host-level --k-* tokens still win. */
-.survey-workbench-embed[data-theme="light"] {
+:host([color-scheme="light"]) {
   color-scheme: light;
 ${REVIEW_WORKBENCH_LIGHT_TOKEN_DECLARATIONS}
-${DERIVED_TOKEN_DECLARATIONS}
+}
+${Object.entries(REVIEW_WORKBENCH_THEME_TOKEN_DECLARATIONS).map(([theme, declarations]) => presetHostRules(theme, declarations)).join("\n")}
+:host > .survey-workbench-embed[class][class] {
+${INHERITED_TOKEN_NAMES.map((name) => `  ${name}: inherit;`).join("\n")}
 }`;
 
 /** The four built-in theme presets from vendor kontourai-ui/tokens/themes.css. Any
@@ -181,26 +145,16 @@ export class SurveyReviewWorkbenchElement extends HTMLElement {
     // `import "@kontourai/survey/review-workbench/element"` is all that's needed.
     const sheet = this.#adoptCss();
     if (!sheet) {
-      const styleEl = document.createElement("style");
-      styleEl.textContent = REVIEW_WORKBENCH_CSS;
-      this.#root.appendChild(styleEl);
+      // No adoptedStyleSheets: the same two sheets, in the same order, as <style>.
+      for (const css of [REVIEW_WORKBENCH_CSS, TOKEN_INHERIT_CSS]) {
+        const styleEl = document.createElement("style");
+        styleEl.textContent = css;
+        this.#root.appendChild(styleEl);
+      }
     }
 
-    // Fallback <style> element for browsers that do not support adoptedStyleSheets.
-    // When adoptedStyleSheets are available, TOKEN_INHERIT_CSS (the second adopted
-    // sheet) handles :host defaults and embed token delegation — and wins over this
-    // <style> element in the cascade.  This <style> is only active in the fallback
-    // path, so using literal values here is safe: there is no self-reference cycle.
-    const hostStyle = document.createElement("style");
-    hostStyle.textContent = `
-      :host {
-        display: block;
-        container-type: inline-size;
-        /* Literal token defaults (no var() self-references) so the values resolve
-           correctly even when the adopted inheritance sheet is unavailable. */
-${REVIEW_WORKBENCH_DARK_TOKEN_DECLARATIONS}
-${DERIVED_TOKEN_DECLARATIONS}
-      }
+    const stateStyle = document.createElement("style");
+    stateStyle.textContent = `
       .workbench-empty, .workbench-error {
         display: flex;
         align-items: center;
@@ -216,47 +170,8 @@ ${DERIVED_TOKEN_DECLARATIONS}
       .workbench-error {
         color: var(--k-negative);
       }
-      /* Delegate k-tokens from :host to the embed container so host-element inline
-         style overrides propagate through the shadow boundary. This rule has same
-         specificity as the workbench CSS token defaults but comes after them in
-         document order, so it wins and allows inheritance from :host. */
-      .survey-workbench-embed {
-        --k-bg: inherit;
-        --k-panel: inherit;
-        --k-panel-raised: inherit;
-        --k-text: inherit;
-        --k-text-muted: inherit;
-        --k-text-faint: inherit;
-        --k-line: inherit;
-        --k-line-strong: inherit;
-        --k-brand: inherit;
-        --k-brand-contrast: inherit;
-        --k-active: inherit;
-        --k-positive: inherit;
-        --k-caution: inherit;
-        --k-negative: inherit;
-        --k-positive-soft: inherit;
-        --k-caution-soft: inherit;
-        --k-negative-soft: inherit;
-        --k-radius-md: inherit;
-        --k-radius-sm: inherit;
-        --k-shadow: inherit;
-        --k-font-ui: inherit;
-        --k-font-mono: inherit;
-        --k-font-display: inherit;
-        --k-muted: inherit;
-        --k-faint: inherit;
-        --k-raised: inherit;
-        --k-sunken: inherit;
-        --k-brand-ink: inherit;
-        --k-brand-wash: inherit;
-        --k-positive-wash: inherit;
-        --k-caution-wash: inherit;
-        --k-negative-wash: inherit;
-        --k-radius: inherit;
-      }
     `;
-    this.#root.appendChild(hostStyle);
+    this.#root.appendChild(stateStyle);
 
     this.#mountRoot = document.createElement("div");
     this.#mountRoot.className = "workbench survey-workbench-embed";
@@ -442,12 +357,9 @@ ${DERIVED_TOKEN_DECLARATIONS}
 
   /** Attempt to inject the workbench CSS via constructable CSSStyleSheet.
    *
-   * Two sheets are adopted: the main workbench CSS first, then a
-   * token-inheritance sheet that resets all --k-* tokens to `inherit`
-   * on .survey-workbench-embed.  Because later entries in adoptedStyleSheets
-   * win over earlier ones at equal specificity, the inheritance rules
-   * override the workbench token defaults.  This allows host-element inline
-   * style overrides (or any ancestor's CSS custom properties) to propagate
+   * Two sheets are adopted: the main workbench CSS first, then the token sheet
+   * (TOKEN_INHERIT_CSS), which decides every --k-* token on :host and makes the
+   * embed root inherit it, so host-document overrides on the element propagate
    * through the shadow boundary.
    */
   #adoptCss(): boolean {
