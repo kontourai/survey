@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.0.1](https://github.com/kontourai/survey/compare/v8.0.0...v8.0.1) (2026-09-30)
+
+
+### Fixes
+
+* **review-workbench:** resync @kontourai/ui 1.18 tokens; host overrides win in every mode ([#325](https://github.com/kontourai/survey/issues/325)) ([25fc27c](https://github.com/kontourai/survey/commit/25fc27c3c6d3451ee3d4ad522778f2ed0ec03448)), closes [#323](https://github.com/kontourai/survey/issues/323)
+
 ## [8.0.0](https://github.com/kontourai/survey/compare/v7.0.0...v8.0.0) (2026-09-29)
 
 
