@@ -764,4 +764,38 @@ test.describe("LIGHT MODE: color-scheme=light produces correct token flip", () =
     expect(pageErrors).toEqual([]);
     expect(consoleErrors).toEqual([]);
   });
+
+  test("light mode resolves derived aliases and the survey brand against light values", async ({ page }) => {
+    const { consoleErrors, pageErrors } = await loadFixture(page);
+    await page.evaluate(() => {
+      const el = document.getElementById("wbe")!;
+      el.setAttribute("theme", "survey");
+      el.setAttribute("color-scheme", "light");
+    });
+    await assignSession(page, SESSION_FIXTURE);
+
+    const resolved = await page.evaluate(() => {
+      const embed = document.getElementById("wbe")!.shadowRoot!.querySelector<HTMLElement>(".survey-workbench-embed")!;
+      const search = embed.querySelector<HTMLElement>(".queue-controls input")!;
+      return {
+        brand: getComputedStyle(embed).getPropertyValue("--k-brand").trim(),
+        // .queue-controls input paints var(--k-sunken), an alias derived from --k-bg/--k-panel.
+        searchBackground: getComputedStyle(search).backgroundColor,
+      };
+    });
+
+    // @kontourai/ui 1.18 survey light brand, retinted to read as text at 4.5:1
+    // (it was #16806f, 4.38:1 on the page). Pinned here rather than read from
+    // the package so a stale generated sheet cannot satisfy it.
+    expect(resolved.brand).toBe("#107e6d");
+    // A var()-derived alias declared only on the dark :host would be inherited as
+    // its dark computed value; the light scope must re-declare it.
+    // color-mix(in srgb, ...) computes to `color(srgb r g b)` with 0..1 channels.
+    const scale = resolved.searchBackground.startsWith("color(srgb") ? 255 : 1;
+    const channels = resolved.searchBackground.match(/\d+(\.\d+)?/g)!.slice(0, 3).map((channel) => Number(channel) * scale);
+    expect(Math.min(...channels), `search box background ${resolved.searchBackground}`).toBeGreaterThan(200);
+
+    expect(pageErrors).toEqual([]);
+    expect(consoleErrors).toEqual([]);
+  });
 });

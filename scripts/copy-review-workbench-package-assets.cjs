@@ -5,7 +5,35 @@ const root = path.resolve(__dirname, "..");
 const sourceRoot = path.join(root, "examples", "review-workbench");
 const distRoot = path.join(root, "dist", "src", "review-workbench");
 const generatedTsPath = path.join(root, "src", "review-workbench", "review-workbench-css.generated.ts");
+// Token CSS is read from the INSTALLED @kontourai/ui, not from the vendored
+// copy, so `--check` fails as soon as the committed module drifts from the
+// package the lockfile resolves (kontourai/survey#323). The vendored copy under
+// examples/ is held to the same package by sync-review-workbench-assets.cjs --check.
+const installedKitRoot = path.join(root, "node_modules", "@kontourai", "ui");
 const checkOnly = process.argv.includes("--check");
+
+// Tokens the <survey-review-workbench> element declares as literal :host
+// defaults (dark, from tokens.css :root) and re-declares for color-scheme="light"
+// (from tokens.css [data-theme="light"]). Emitted from the package so the
+// element carries no hand-copied color values. A name the package stops
+// declaring fails generation rather than silently dropping out.
+const ELEMENT_DARK_TOKENS = [
+  "--k-bg", "--k-panel", "--k-panel-raised",
+  "--k-text", "--k-text-muted", "--k-text-faint",
+  "--k-line", "--k-line-strong",
+  "--k-brand", "--k-brand-contrast",
+  "--k-active", "--k-positive", "--k-caution", "--k-negative", "--k-neutral",
+  "--k-positive-soft", "--k-caution-soft", "--k-negative-soft", "--k-active-soft",
+  "--k-radius-md", "--k-radius-sm", "--k-shadow", "--k-font-ui",
+];
+const ELEMENT_LIGHT_TOKENS = [
+  "--k-bg", "--k-panel", "--k-panel-raised",
+  "--k-line", "--k-line-strong", "--k-shadow",
+  "--k-text", "--k-text-muted", "--k-text-faint",
+  "--k-brand", "--k-brand-contrast",
+  "--k-positive", "--k-caution", "--k-negative", "--k-neutral", "--k-active",
+  "--k-positive-soft", "--k-caution-soft", "--k-negative-soft", "--k-active-soft",
+];
 
 main().catch((error) => {
   console.error(error);
@@ -13,14 +41,21 @@ main().catch((error) => {
 });
 
 async function main() {
-  const cssText = await buildEmbeddedWorkbenchCss();
-  const generatedModule = buildCssGeneratedModule(cssText);
+  const tokenRoot = await resolveInstalledTokenRoot();
+  const tokensCss = await fs.readFile(path.join(tokenRoot, "tokens.css"), "utf8");
+  const themesCss = await fs.readFile(path.join(tokenRoot, "themes.css"), "utf8");
+  const cssText = await buildEmbeddedWorkbenchCss(tokensCss, themesCss);
+  const generatedModule = buildCssGeneratedModule(cssText, {
+    dark: pickTokenDeclarations(tokensCss, ":root", ELEMENT_DARK_TOKENS),
+    light: pickTokenDeclarations(tokensCss, '[data-theme="light"]', ELEMENT_LIGHT_TOKENS),
+  });
 
   if (checkOnly) {
     const existing = await fs.readFile(generatedTsPath, "utf8").catch(() => null);
     if (existing !== generatedModule) {
       throw new Error(
-        "review-workbench-css.generated.ts is out of date. " +
+        "review-workbench-css.generated.ts is out of date with the installed @kontourai/ui " +
+          "or examples/review-workbench/review-workbench.css. " +
           "Run `node scripts/copy-review-workbench-package-assets.cjs` to regenerate it.",
       );
     }
@@ -50,10 +85,43 @@ async function main() {
   console.log("Emitted review-workbench-css.generated.ts.");
 }
 
-async function buildEmbeddedWorkbenchCss() {
-  const tokenRoot = path.join(sourceRoot, "vendor", "kontourai-ui", "tokens");
-  const tokensCss = await fs.readFile(path.join(tokenRoot, "tokens.css"), "utf8");
-  const themesCss = await fs.readFile(path.join(tokenRoot, "themes.css"), "utf8");
+async function resolveInstalledTokenRoot() {
+  const packageJson = JSON.parse(
+    await fs.readFile(path.join(installedKitRoot, "package.json"), "utf8").catch(() => {
+      throw new Error("Missing @kontourai/ui. Run pnpm install before generating review workbench CSS.");
+    }),
+  );
+  if (packageJson.name !== "@kontourai/ui") {
+    throw new Error(`Expected @kontourai/ui at ${installedKitRoot}, found ${packageJson.name ?? "unnamed package"}.`);
+  }
+  return path.join(installedKitRoot, "tokens");
+}
+
+/**
+ * Read the named custom properties from the one rule whose selector list is
+ * exactly `selector`, and return them as declaration lines in the order asked.
+ * Throws when the rule is missing, ambiguous, or lacks a requested name.
+ */
+function pickTokenDeclarations(css, selector, names) {
+  const uncommented = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const rules = [...uncommented.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .filter((match) => match[1].trim() === selector);
+  if (rules.length !== 1) {
+    throw new Error(`Expected exactly one \`${selector}\` rule in @kontourai/ui tokens.css, found ${rules.length}.`);
+  }
+  const declarations = new Map();
+  for (const [, name, value] of rules[0][2].matchAll(/(--k-[\w-]+)\s*:\s*([^;]+);/g)) {
+    declarations.set(name, value.replace(/\s+/g, " ").trim());
+  }
+  return names.map((name) => {
+    if (!declarations.has(name)) {
+      throw new Error(`@kontourai/ui tokens.css \`${selector}\` no longer declares ${name}.`);
+    }
+    return `  ${name}: ${declarations.get(name)};`;
+  }).join("\n");
+}
+
+async function buildEmbeddedWorkbenchCss(tokensCss, themesCss) {
   const workbenchCss = await fs.readFile(path.join(sourceRoot, "review-workbench.css"), "utf8");
   const scopedWorkbenchCss = containEmbeddedWorkbenchOverlay(
     scopeCssForEmbeddedWorkbench(stripCssImports(workbenchCss)),
@@ -89,17 +157,24 @@ async function buildEmbeddedWorkbenchCss() {
  * Wrap CSS text in a TS module that exports it as a default string.
  * The element imports this at build time so no runtime fetch is required.
  */
-function buildCssGeneratedModule(cssText) {
-  // Escape backticks and template-literal sigils in the CSS text.
-  const escaped = cssText.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
+function buildCssGeneratedModule(cssText, elementTokens) {
   return [
     "// Generated by scripts/copy-review-workbench-package-assets.cjs from CSS sources.",
-    "// Do not edit directly; edit examples/review-workbench/review-workbench.css or vendor tokens instead.",
+    "// Do not edit directly; edit examples/review-workbench/review-workbench.css or bump @kontourai/ui instead.",
     "/* eslint-disable */",
-    `export const REVIEW_WORKBENCH_CSS: string = \`${escaped}\`;`,
+    `export const REVIEW_WORKBENCH_CSS: string = \`${escapeTemplateLiteral(cssText)}\`;`,
+    "/** Literal dark token defaults for the element's :host, from @kontourai/ui tokens.css :root. */",
+    `export const REVIEW_WORKBENCH_DARK_TOKEN_DECLARATIONS: string = \`${escapeTemplateLiteral(elementTokens.dark)}\`;`,
+    "/** Literal light token values for the element's color-scheme=\"light\", from @kontourai/ui tokens.css [data-theme=\"light\"]. */",
+    `export const REVIEW_WORKBENCH_LIGHT_TOKEN_DECLARATIONS: string = \`${escapeTemplateLiteral(elementTokens.light)}\`;`,
     "export default REVIEW_WORKBENCH_CSS;",
     "",
   ].join("\n");
+}
+
+function escapeTemplateLiteral(text) {
+  // Escape backslashes, backticks and template-literal sigils.
+  return text.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
 }
 
 function stripCssImports(css) {
@@ -200,12 +275,33 @@ function scopeSelectorBlock(block) {
   const openBraceIndex = block.indexOf("{");
   const selectorText = block.slice(0, openBraceIndex);
   const rest = block.slice(openBraceIndex);
-  const scopedSelectorText = selectorText
-    .split(",")
+  const scopedSelectorText = splitSelectorList(selectorText)
     .map((selector) => scopeSelector(selector))
     .join(",");
 
   return `${scopedSelectorText}${rest}`;
+}
+
+// Split a selector list on its top-level commas only. The commas inside
+// :where(:not(a, b)) / :is(...) belong to one compound selector: scoping each
+// fragment would inject the embed class inside the argument list and change
+// what the selector matches (@kontourai/ui 1.17's nearest-scope selectors).
+function splitSelectorList(selectorText) {
+  const selectors = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < selectorText.length; index += 1) {
+    const char = selectorText[index];
+    if (char === "(" || char === "[") depth += 1;
+    else if (char === ")" || char === "]") depth -= 1;
+    else if (char === "," && depth === 0) {
+      selectors.push(selectorText.slice(start, index));
+      start = index + 1;
+    }
+  }
+  if (depth !== 0) throw new Error(`Unbalanced selector list: ${selectorText.trim()}`);
+  selectors.push(selectorText.slice(start));
+  return selectors;
 }
 
 function scopeSelector(selector) {

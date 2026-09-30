@@ -25,8 +25,8 @@ importers:
         specifier: ^3.0.1
         version: 3.0.1(@anthropic-ai/sdk@0.74.0(zod@4.4.3))(@kontourai/relay@0.4.0(@ai-sdk/provider@4.0.4)(@anthropic-ai/sdk@0.74.0(zod@4.4.3)))(playwright@1.62.1)(typescript@7.0.2)
       '@kontourai/ui':
-        specifier: ^1.1.0
-        version: 1.12.0(react@19.2.7)
+        specifier: ^1.18.0
+        version: 1.18.0(react@19.2.7)
       '@playwright/test':
         specifier: ^1.62.0
         version: 1.62.1
@@ -314,8 +314,8 @@ packages:
       typescript:
         optional: true
 
-  '@kontourai/ui@1.12.0':
-    resolution: {integrity: sha512-DsbMTv8PIGN2c71vdOxrH2W3Rt6SwTunYtp/+xB+2XP+xt789nX1RfJPmfdv58EQmfsms0Z3k3C+CS3GfFJVMw==}
+  '@kontourai/ui@1.18.0':
+    resolution: {integrity: sha512-VR5vHBpQ8q7CVOSlR4YINJ05ghZ4Ao7J5vM8pxk+CBkadnMLHnnnsB6EaXjK83K5blffBwMOkKBwOvr2TC/Tsw==}
     engines: {node: '>=22'}
     peerDependencies:
       react: ^19.0.0
@@ -1016,7 +1016,7 @@ snapshots:
       - canvas
       - playwright
 
-  '@kontourai/ui@1.12.0(react@19.2.7)':
+  '@kontourai/ui@1.18.0(react@19.2.7)':
     dependencies:
       react: 19.2.7
 

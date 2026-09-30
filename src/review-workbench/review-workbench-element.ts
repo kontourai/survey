@@ -46,7 +46,27 @@ import {
   mountExtractionInspector,
   type ExtractionInspectorInput,
 } from "./extraction-inspector.js";
-import { REVIEW_WORKBENCH_CSS } from "./review-workbench-css.generated.js";
+import {
+  REVIEW_WORKBENCH_CSS,
+  REVIEW_WORKBENCH_DARK_TOKEN_DECLARATIONS,
+  REVIEW_WORKBENCH_LIGHT_TOKEN_DECLARATIONS,
+} from "./review-workbench-css.generated.js";
+
+/** @internal Field-diff card aliases (Theming section of
+ *  docs/consumer-integration-guide.md), derived from the base tokens. A var()
+ *  alias resolves where it is declared and is inherited as a computed value, so
+ *  every scope that changes a base token re-declares these: without that, the
+ *  light embed would keep the dark :host's sunken, wash and muted colors. */
+const DERIVED_TOKEN_DECLARATIONS = `  --k-muted: var(--k-text-muted);
+  --k-faint: var(--k-text-faint);
+  --k-raised: var(--k-panel-raised);
+  --k-sunken: color-mix(in srgb, var(--k-bg) 55%, var(--k-panel) 45%);
+  --k-brand-ink: var(--k-brand-contrast);
+  --k-brand-wash: color-mix(in srgb, var(--k-brand) 14%, transparent);
+  --k-positive-wash: var(--k-positive-soft);
+  --k-caution-wash: var(--k-caution-soft);
+  --k-negative-wash: var(--k-negative-soft);
+  --k-radius: var(--k-radius-md);`;
 
 /** @internal Second adopted stylesheet: host token defaults + inheritance delegation.
  *
@@ -64,48 +84,17 @@ import { REVIEW_WORKBENCH_CSS } from "./review-workbench-css.generated.js";
  *     Source order (after the workbench sheet) makes these inherit rules win, so the
  *     embed's tokens propagate upward to :host, picking up any host overrides.
  */
-const TOKEN_INHERIT_CSS = `/* 1. Host token defaults — literal values, not var() self-references.
+const TOKEN_INHERIT_CSS = `/* 1. Host token defaults — literal values from @kontourai/ui tokens.css :root
+   (emitted by the CSS generator), not var() self-references.
    Inline styles on the host element always win over :host rules so external
    overrides (e.g. style="--k-brand: hotpink") propagate through automatically. */
 :host {
   display: block;
   container-type: inline-size;
-  --k-bg: #060a10;
-  --k-panel: #101822;
-  --k-panel-raised: #161e2b;
-  --k-text: #e8eaf0;
-  --k-text-muted: #8b93a8;
-  --k-text-faint: #4e5870;
-  --k-line: rgba(255,255,255,0.08);
-  --k-line-strong: rgba(255,255,255,0.14);
-  --k-brand: #5ce0c6;
-  --k-brand-contrast: #06080b;
-  --k-active: #7aa2ff;
-  --k-positive: #34d399;
-  --k-caution: #f3b14b;
-  --k-negative: #ff6f6f;
-  --k-neutral: #8b93a8;
-  --k-positive-soft: rgba(52,211,153,0.14);
-  --k-caution-soft: rgba(243,177,75,0.14);
-  --k-negative-soft: rgba(255,111,111,0.14);
-  --k-active-soft: rgba(122,162,255,0.14);
-  --k-radius-md: 10px;
-  --k-radius-sm: 6px;
-  --k-shadow: 0 26px 60px -42px rgba(0, 0, 0, 0.95);
-  --k-font-ui: "Hanken Grotesk", system-ui, sans-serif;
-  /* Field-diff card aliases (Theming section of docs/consumer-integration-guide.md).
-     Derived from the tokens above by default; a host may override any of these
+${REVIEW_WORKBENCH_DARK_TOKEN_DECLARATIONS}
+  /* Derived from the tokens above by default; a host may override any of these
      directly for finer control without touching the base token it derives from. */
-  --k-muted: var(--k-text-muted);
-  --k-faint: var(--k-text-faint);
-  --k-raised: var(--k-panel-raised);
-  --k-sunken: color-mix(in srgb, var(--k-bg) 55%, var(--k-panel) 45%);
-  --k-brand-ink: var(--k-brand-contrast);
-  --k-brand-wash: color-mix(in srgb, var(--k-brand) 14%, transparent);
-  --k-positive-wash: var(--k-positive-soft);
-  --k-caution-wash: var(--k-caution-soft);
-  --k-negative-wash: var(--k-negative-soft);
-  --k-radius: var(--k-radius-md);
+${DERIVED_TOKEN_DECLARATIONS}
 }
 /* 2. Token inheritance delegation — re-delegate --k-* tokens on the embed root
    to inherit from :host, so external overrides set on the host element propagate
@@ -152,26 +141,18 @@ const TOKEN_INHERIT_CSS = `/* 1. Host token defaults — literal values, not var
   --k-radius: inherit;
 }
 /* 3. Light mode token overrides — applied when color-scheme="light" sets data-theme="light"
-   on the embed root. These are literal values (not var()) to avoid self-reference cycles.
+   on the embed root. The base values are literals from @kontourai/ui tokens.css
+   [data-theme="light"] (not var(), to avoid self-reference cycles); a theme preset's
+   own [data-theme="light"].theme-* rule in the generated sheet is more specific and
+   sets that preset's brand. The derived aliases are re-declared so they resolve
+   against the light values here.
    The [data-theme="light"] selector has specificity (0,1,0) which is overridden by the
    .survey-workbench-embed[class] inheritance block above for the embed container,
    but the override chain means host-level --k-* tokens still win. */
 .survey-workbench-embed[data-theme="light"] {
   color-scheme: light;
-  --k-bg: #f5f4ef;
-  --k-panel: #ffffff;
-  --k-panel-raised: #fbfaf7;
-  --k-line: rgba(36, 40, 46, 0.12);
-  --k-line-strong: rgba(36, 40, 46, 0.20);
-  --k-text: #202124;
-  --k-text-muted: #5b626b;
-  --k-text-faint: #707782;
-  --k-brand: #16806f;
-  --k-brand-contrast: #ffffff;
-  --k-positive: #168257;
-  --k-caution: #8a5a00;
-  --k-negative: #c83b3b;
-  --k-active: #3f6fd6;
+${REVIEW_WORKBENCH_LIGHT_TOKEN_DECLARATIONS}
+${DERIVED_TOKEN_DECLARATIONS}
 }`;
 
 /** The four built-in theme presets from vendor kontourai-ui/tokens/themes.css. Any
@@ -217,37 +198,8 @@ export class SurveyReviewWorkbenchElement extends HTMLElement {
         container-type: inline-size;
         /* Literal token defaults (no var() self-references) so the values resolve
            correctly even when the adopted inheritance sheet is unavailable. */
-        --k-bg: #060a10;
-        --k-panel: #101822;
-        --k-panel-raised: #161e2b;
-        --k-text: #e8eaf0;
-        --k-text-muted: #8b93a8;
-        --k-text-faint: #4e5870;
-        --k-line: rgba(255,255,255,0.08);
-        --k-line-strong: rgba(255,255,255,0.14);
-        --k-brand: #5ce0c6;
-        --k-brand-contrast: #06080b;
-        --k-active: #7aa2ff;
-        --k-positive: #34d399;
-        --k-caution: #f3b14b;
-        --k-negative: #ff6f6f;
-        --k-positive-soft: rgba(52,211,153,0.14);
-        --k-caution-soft: rgba(243,177,75,0.14);
-        --k-negative-soft: rgba(255,111,111,0.14);
-        --k-radius-md: 10px;
-        --k-radius-sm: 6px;
-        --k-shadow: 0 26px 60px -42px rgba(0, 0, 0, 0.95);
-        --k-font-ui: "Hanken Grotesk", system-ui, sans-serif;
-        --k-muted: var(--k-text-muted);
-        --k-faint: var(--k-text-faint);
-        --k-raised: var(--k-panel-raised);
-        --k-sunken: color-mix(in srgb, var(--k-bg) 55%, var(--k-panel) 45%);
-        --k-brand-ink: var(--k-brand-contrast);
-        --k-brand-wash: color-mix(in srgb, var(--k-brand) 14%, transparent);
-        --k-positive-wash: var(--k-positive-soft);
-        --k-caution-wash: var(--k-caution-soft);
-        --k-negative-wash: var(--k-negative-soft);
-        --k-radius: var(--k-radius-md);
+${REVIEW_WORKBENCH_DARK_TOKEN_DECLARATIONS}
+${DERIVED_TOKEN_DECLARATIONS}
       }
       .workbench-empty, .workbench-error {
         display: flex;
@@ -255,14 +207,14 @@ export class SurveyReviewWorkbenchElement extends HTMLElement {
         justify-content: center;
         min-height: 6rem;
         padding: 1.5rem;
-        font-family: var(--k-font-ui, system-ui, sans-serif);
+        font-family: var(--k-font-ui);
         font-size: 0.9rem;
-        color: var(--k-text-muted, #8b93a8);
-        background: var(--k-panel, #101822);
-        border-radius: var(--k-radius-md, 10px);
+        color: var(--k-text-muted);
+        background: var(--k-panel);
+        border-radius: var(--k-radius-md);
       }
       .workbench-error {
-        color: var(--k-negative, #ff6f6f);
+        color: var(--k-negative);
       }
       /* Delegate k-tokens from :host to the embed container so host-element inline
          style overrides propagate through the shadow boundary. This rule has same

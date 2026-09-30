@@ -91,31 +91,13 @@
 .queue-result-count { margin-left: auto; color: var(--k-muted); }
 .queue-empty { padding: 2rem; color: var(--k-muted); text-align: center; }
 
-/* Re-assert the base structural tokens for light mode. themes.css's `.theme-*`
-   preset classes hardcode a dark --k-bg/--k-panel/etc (so the preset "just
-   works" without requiring [data-theme] to be set), and a bare class selector
-   ties with the `[data-theme="light"]` selector in tokens.css on specificity —
-   so source order decides, and themes.css loads after tokens.css. Re-declaring
-   the light values here (loaded after themes.css) wins that tie-break. Presets
-   still control --k-brand (and theme-console's fuller palette) via their own,
-   more specific `[data-theme="light"].theme-*` rules in themes.css. */
+/* Light-mode token values come from @kontourai/ui (tokens.css plus each
+   theme's light block, which since 1.17 re-sets every mode-dependent value
+   its dark preset sets). Only color-scheme is re-asserted here: the :root rule
+   above sets it to dark and would otherwise win the source-order tie with
+   tokens.css's [data-theme="light"], leaving native controls dark. */
 [data-theme="light"] {
   color-scheme: light;
-  --k-bg: #f5f4ef;
-  --k-panel: #ffffff;
-  --k-panel-raised: #fbfaf7;
-  --k-line: rgba(36, 40, 46, 0.12);
-  --k-line-strong: rgba(36, 40, 46, 0.20);
-  --k-shadow: 0 18px 50px -30px rgba(0, 0, 0, 0.25);
-  --k-text: #202124;
-  --k-text-muted: #5b626b;
-  --k-text-faint: #707782;
-  --k-brand-contrast: #ffffff;
-  --k-positive: #168257;
-  --k-caution: #8a5a00;
-  --k-negative: #c83b3b;
-  --k-neutral: #5f6975;
-  --k-active: #3f6fd6;
 }
 
 * {
