@@ -12,7 +12,7 @@
       "default_skill": "deliver",
       "conditional_skills": [{ "when": "user-requested-tdd", "skill": "tdd-workflow" }],
       "required_sequence": ["ensure-session", "plan-work", "execute-plan", "review-work", "verify-work"],
-      "post_verify_targets": ["release-readiness", "trust-verify", "learning-review"]
+      "post_verify_targets": ["release-readiness", "learning-review"]
     }
   ]
 }
