@@ -21,3 +21,5 @@ jobs:
       pages: write
       id-token: write
     uses: kontourai/.github/.github/workflows/docs-pages.yml@main
+    with:
+      extra-build-command: npm run docs:demo

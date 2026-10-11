@@ -67,6 +67,7 @@
     "validate:repo-hooks": "node scripts/validate-repo-hooks.cjs",
     "docs:build": "npx -y github:kontourai/docs-kit#482fb2e691fe7686f79a9a4da8bc2247384b85c3 docs-kit build",
     "docs:check": "npx -y github:kontourai/docs-kit#482fb2e691fe7686f79a9a4da8bc2247384b85c3 docs-kit check",
+    "docs:demo": "npm run build && node scripts/build-demo.mjs",
     "check:generated-css": "node scripts/copy-review-workbench-package-assets.cjs --check",
     "check:ui-token-drift": "npm run check:generated-css && npm run check:review-workbench-assets",
     "workflow:sidecar": "flow-agents-workflow-sidecar",
