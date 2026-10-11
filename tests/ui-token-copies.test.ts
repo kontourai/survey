@@ -1,9 +1,8 @@
 /**
- * Survey keeps two hand-written token blocks that cannot load @kontourai/ui:
- * the docs site's stylesheet and the MCP review card's inline <style>. This
- * holds their literal values to the installed package, so a ui retint (such
- * as 1.18's survey light brand, kontourai/survey#323) fails here instead of
- * drifting silently. Deliberate brand variants are allowlisted, each mapped to
+ * Survey keeps one hand-written token block that cannot load @kontourai/ui:
+ * the MCP review card's inline <style>. This holds its literal values to the
+ * installed package, so a ui retint (such as 1.18's survey light brand,
+ * kontourai/survey#323) fails here instead of drifting silently. Deliberate brand variants are allowlisted, each mapped to
  * the themes.css rule it must still equal.
  */
 import assert from "node:assert/strict";
@@ -28,7 +27,6 @@ const exactly = (selector: string) => (selectors: string[]) => selectors.length 
 const reference = {
   dark: () => packageRule("tokens.css", exactly(":root"), ":root"),
   light: () => packageRule("tokens.css", exactly('[data-theme="light"]'), '[data-theme="light"]'),
-  surfaceDark: () => packageRule("themes.css", exactly(".theme-surface"), ".theme-surface"),
   surveyLight: () => packageRule(
     "themes.css",
     (selectors) => selectors[0] === '[data-theme="light"].theme-survey',
@@ -39,21 +37,6 @@ const reference = {
 interface Variant { readonly rule: keyof typeof reference; readonly token: string }
 
 const copies: ReadonlyArray<{ file: string; variants: Partial<Record<Mode, Record<string, Variant>>> }> = [
-  {
-    file: "scripts/docs-site/styles.css",
-    variants: {
-      // The docs site brands itself with the surface accent in dark mode, and
-      // --k-brand-bright (link and accent text) is not a ui token.
-      dark: {
-        "--k-brand": { rule: "surfaceDark", token: "--k-brand" },
-        "--k-brand-bright": { rule: "dark", token: "--k-brand" },
-      },
-      light: {
-        "--k-brand": { rule: "surveyLight", token: "--k-brand" },
-        "--k-brand-bright": { rule: "surveyLight", token: "--k-brand" },
-      },
-    },
-  },
   {
     file: "src/mcp/review-mcp.ts",
     variants: { light: { "--k-brand": { rule: "surveyLight", token: "--k-brand" } } },

@@ -16,6 +16,10 @@ source ref, locator and excerpt, extraction confidence, candidate values,
 reviewer note, decision controls, decision effect, a compact Surface preview,
 and generated JSON payload.
 
+Try it without a checkout in the
+[live demo](https://kontourai.github.io/survey/demo/), which the docs site
+publishes from this example on every push to `main`.
+
 ## Running Locally
 
 Build the package first so the browser can load the compiled example module:

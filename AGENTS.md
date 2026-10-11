@@ -6,7 +6,7 @@ Survey is the producer-side contract: source → extraction → candidate → re
 
 - Vocabulary: `CONTEXT.md`; deep record reference: [docs/record-contracts.md](docs/record-contracts.md).
 - Library source in `src/` (CJS-style TS); Survey keeps zero AI runtime dependencies. Model-backed producers live in their owning product and inject normalized results through Survey's framework-neutral interfaces.
-- `dist/` and `site/` are generated; the review-workbench demo assets sync via `npm run check:review-workbench-assets`.
+- `dist/` and `dist-pages/` are generated; the review-workbench demo assets sync via `npm run check:review-workbench-assets`.
 
 ## Pull More Context When Needed
 
@@ -20,7 +20,7 @@ Survey is the producer-side contract: source → extraction → candidate → re
 
 - Library/types changes: `npm test` (build + Node tests against dist).
 - Workbench UI/embed changes: `npm run check:review-workbench` and `npm run test:browser`.
-- Docs or docs-site changes: `npm run docs:check`.
+- Docs changes: `npm run docs:check`. Docs are published with docs-kit: `docs-kit.json` lists the published docs and MCP topics, and `npm run docs:check` is the gate. When you change code a document `covers`, update that document.
 - Anything before push: `npm run verify` (the pre-push hook runs repo-hook validation + verify; never bypass hooks).
 - Releases use release-please with conventional commits; bump `.release-please-manifest.json` in any manual release PR.
 

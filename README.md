@@ -30,7 +30,7 @@ Survey does not decide whether a real-world value is true. It preserves the prod
 
 ## See it
 
-The Review Workbench rendering a real example queue — current vs proposed values, source evidence, decision effect, and the Surface projection preview:
+The Review Workbench rendering a real example queue — current vs proposed values, source evidence, decision effect, and the Surface projection preview. [Open the live demo](https://kontourai.github.io/survey/demo/).
 
 ![Survey Review Workbench showing a review queue, current versus proposed values, decision controls, and a Surface preview](docs/assets/review-workbench-desktop.png)
 
