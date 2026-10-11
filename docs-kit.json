@@ -195,5 +195,18 @@
       "source": "docs/upgrade-guide.md#consuming-decisioneffects-safely"
     }
   ],
-  "exclude": []
+  "exclude": [],
+  "redirects": {
+    "record-contracts.html": "docs/record-contracts.md",
+    "extraction-envelope-import.html": "docs/extraction-envelope-import.md",
+    "adversarial-and-learning.html": "docs/adversarial-and-learning.md",
+    "consumer-integration-guide.html": "docs/consumer-integration-guide.md",
+    "upgrade-guide.html": "docs/upgrade-guide.md",
+    "review-resource-contract.html": "docs/review-resource-contract.md",
+    "source-authority-review-pattern.html": "docs/source-authority-review-pattern.md",
+    "review-workbench-prototype.html": "docs/review-workbench-prototype.md",
+    "releasing.html": "docs/RELEASING.md",
+    "adr/0001-reviewed-current-proposed-resolution.html": "docs/adr/0001-reviewed-current-proposed-resolution.md",
+    "adr/0003-inquiry-mapping-and-producer-proposals.html": "docs/adr/0003-inquiry-mapping-and-producer-proposals.md"
+  }
 }
