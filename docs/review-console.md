@@ -111,3 +111,13 @@ console interactions retain the producer's host-observed operator classification
 Human-authenticated review requires the consuming host's authentication and
 policy. Survey does not turn a browser reference or simulated UI interaction
 into a human approval claim.
+
+## Server shutdown
+
+The public `startReviewConsoleServer` handle's `close()` stops its file watcher,
+ends its own active event-stream responses, and waits for its HTTP server to
+close. A browser may remain open; the caller does not need to close the page or
+abort its event stream first. Repeated calls share the same shutdown promise.
+Other console instances remain available. Ordinary in-flight requests finish
+through the HTTP server's existing close behavior; shutdown does not cancel a
+producer's canonical application mid-write.
