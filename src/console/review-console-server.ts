@@ -23,9 +23,11 @@ import {
   createServerReviewSessionRecord,
   currentSessionState,
   deriveServerReviewSessionApplyResult,
+  type ServerReviewSessionRecord,
 } from "../review-workbench/server-review-session.js";
 import type { ReviewQueueSessionState } from "../review-workbench/review-queue-session.js";
-import { attestReviewQueueExtraction } from "../review-workbench/queue-binding.js";
+import { attestReviewQueueExtraction, type ReviewQueueBinding } from "../review-workbench/queue-binding.js";
+import type { ReviewWorkbenchResult } from "../review-workbench/review-workbench.js";
 import type { ExtractionEnvelopeImport } from "../extraction-envelope.js";
 import type { ReviewSessionEvent } from "../review-resource.js";
 import {
@@ -47,6 +49,23 @@ export interface ReviewConsoleServerOptions {
   readonly port?: number;
   /** Host to bind on. Must be a loopback address. Defaults to 127.0.0.1. */
   readonly host?: string;
+  /** Producer-owned application. The binding must come from queue construction. */
+  readonly producerApply?: {
+    readonly binding: ReviewQueueBinding;
+    /** Revalidate domain currency/authentication and apply idempotently under the producer's lock. */
+    readonly apply: (input: ReviewConsoleApplyInput) => Promise<ReviewConsoleApplication>;
+  };
+}
+
+export interface ReviewConsoleApplyInput {
+  readonly record: ServerReviewSessionRecord;
+  readonly events: readonly ReviewSessionEvent[];
+  readonly results: readonly ReviewWorkbenchResult[];
+  readonly revision: string;
+}
+export interface ReviewConsoleApplication {
+  readonly reference: string;
+  readonly summary: string;
 }
 
 export interface ReviewConsoleServerHandle {
@@ -62,6 +81,7 @@ interface SessionFileContent {
   readonly events: readonly ReviewSessionEvent[];
   /** The extraction import record the snapshot's items were built from, stored beside them. */
   readonly extractionImport?: ExtractionEnvelopeImport;
+  readonly producerApplication?: ReviewConsoleApplication & { readonly revision: string };
 }
 
 // ---------------------------------------------------------------------------
@@ -230,7 +250,7 @@ async function serveDistFile(
 // HTML shell
 // ---------------------------------------------------------------------------
 
-function buildConsoleHtml(sessionPath: string): string {
+function buildConsoleHtml(sessionPath: string, canApply: boolean): string {
   const escapedPath = sessionPath.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/'/g, "\\'");
   // workbench.js lives at dist/src/review-workbench/review-workbench.js relative to distRoot
   const workbenchJsPath = "/dist/src/review-workbench/review-workbench.js";
@@ -382,6 +402,7 @@ body {
     </button>
   </div>
 </header>
+${canApply ? '<div style="display:flex;justify-content:flex-end;padding:8px 16px"><button type="button" id="apply-review" class="theme-toggle">Send review to workflow</button></div>' : ''}
 <div id="console-save-status" class="console-save-status" role="alert" data-testid="console-save-status" hidden></div>
 <main id="review-workbench" class="workbench survey-workbench-embed" data-testid="review-workbench"></main>
 <script type="module">
@@ -444,7 +465,7 @@ function createConsoleEventStore(baseRevision) {
     }
     if (res.ok) {
       const body = await res.json().catch(() => ({}));
-      if (typeof body.revision === "string") revision = body.revision;
+      if (typeof body.revision === "string") { revision = body.revision; currentRevision = revision; }
       persistedCount = localEvents.length;
       showSaveStatus("");
       return;
@@ -463,12 +484,34 @@ function createConsoleEventStore(baseRevision) {
     save: (_session, events) => {
       const localEvents = [...events];
       saveChain = saveChain.then(() => persist(localEvents));
+      pendingSave = saveChain;
       return saveChain;
     },
   };
 }
 
 let activeItemName = null;
+let currentRevision = null;
+let applying = false;
+let wasApplied = false;
+let pendingSave = Promise.resolve();
+const applyButton = document.getElementById("apply-review");
+applyButton?.addEventListener("click", async () => {
+  if (applying || !currentRevision) return;
+  applying = true;
+  applyButton.disabled = true;
+  try {
+    await pendingSave;
+    const response = await fetch("/api/apply", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseRevision: currentRevision }),
+    });
+    const body = await response.json();
+    showSaveStatus(response.ok ? body.application.summary : body.error);
+    await fetchAndMount();
+  } catch { showSaveStatus("The review could not reach the workflow. Reload before trying again."); }
+  finally { applying = false; applyButton.disabled = wasApplied || !currentRevision; }
+});
 
 async function fetchAndMount() {
   try {
@@ -482,6 +525,9 @@ async function fetchAndMount() {
     }
     const data = await res.json();
     const { snapshot, events, revision, extractionImport } = data;
+    currentRevision = revision;
+    wasApplied = Boolean(data.producerApplication);
+    if (applyButton) applyButton.disabled = applying || wasApplied;
     const state = events && events.length > 0
       ? replayReviewSessionEvents(snapshot, events)
       : snapshot;
@@ -652,6 +698,10 @@ export async function startReviewConsoleServer(
   }
 
   const sessionPath = resolve(options.sessionPath);
+  const producerApply = options.producerApply ? {
+    binding: structuredClone(options.producerApply.binding),
+    apply: options.producerApply.apply,
+  } : undefined;
   const distDir = distRoot();
   const broadcaster = createSseBroadcaster();
   const stopWatcher = watchSessionFile(sessionPath, () => {
@@ -706,6 +756,7 @@ export async function startReviewConsoleServer(
           revision: reviewSessionRevision(content.events),
           state: currentSessionState(content.snapshot, content.events),
           queueAttestation: attestation.state,
+          ...(content.producerApplication ? { producerApplication: content.producerApplication } : {}),
           ...(content.extractionImport !== undefined ? { extractionImport: content.extractionImport } : {}),
         });
         return;
@@ -738,6 +789,7 @@ export async function startReviewConsoleServer(
           (content) => {
             const { snapshot, events: existingEvents } = content;
             const revision = reviewSessionRevision(existingEvents);
+            if (content.producerApplication) return { result: { status: 409, body: { error: "This review was sent to its workflow; open a new review session", revision } } };
 
             // Compare-and-swap: the appended events express decisions made on
             // the reviewer's view of the log, so they are only safe to append
@@ -794,6 +846,33 @@ export async function startReviewConsoleServer(
         return;
       }
 
+      // ---- Producer-owned workflow application ----
+      if (pathname === "/api/apply" && req.method === "POST") {
+        if (!producerApply) { sendJson(res, 404, { error: "No workflow application is configured" }); return; }
+        const guardError = originGuard(req, listenPort) ?? contentTypeGuard(req);
+        if (guardError) { sendJson(res, 403, { error: guardError }); return; }
+        const body = await readJsonBody(req);
+        const outcome = await updateReviewSessionFile<SessionFileContent, { status: number; body: Record<string, unknown> }>(sessionPath, async content => {
+          const revision = reviewSessionRevision(content.events);
+          if (typeof body.baseRevision !== "string") return { result: { status: 428, body: { error: "baseRevision is required" } } };
+          if (body.baseRevision !== revision) return { result: { status: 409, body: { error: "Session changed since it was read; reload before sending it" } } };
+          if (content.producerApplication) return { result: { status: 409, body: { error: "This review was already sent to its workflow" } } };
+          const record = createServerReviewSessionRecord({ sessionName: storedReviewSessionName(content), snapshot: content.snapshot, eventCount: content.events.length });
+          try {
+            const derived = deriveServerReviewSessionApplyResult({ record, events: content.events, binding: producerApply.binding, extractionImport: content.extractionImport, requiredResolvedItems: "all" });
+            if (!derived.ok) return { result: { status: 422, body: { error: "Resolve every review item before sending it to the workflow" } } };
+            const application = await producerApply.apply(structuredClone({ record, events: content.events, results: derived.results, revision }));
+            if (!application || typeof application.reference !== "string" || !application.reference.trim() || application.reference.length > 2048 || typeof application.summary !== "string" || !application.summary.trim() || application.summary.length > 4096) throw new Error("Workflow returned an invalid application receipt");
+            const stored = { reference: application.reference, summary: application.summary, revision };
+            return { next: { ...content, producerApplication: stored }, result: { status: 200, body: { application: stored } } };
+          } catch (error) {
+            return { result: { status: 409, body: { error: error instanceof Error ? error.message : "Workflow refused this review" } } };
+          }
+        });
+        sendJson(res, outcome.status, outcome.body);
+        return;
+      }
+
       // ---- Health ----
       if (pathname === "/health" && req.method === "GET") {
         sendJson(res, 200, { ok: true });
@@ -802,7 +881,7 @@ export async function startReviewConsoleServer(
 
       // ---- HTML shell (catch-all for GET) ----
       if (req.method === "GET" || req.method === "HEAD") {
-        const html = buildConsoleHtml(sessionPath);
+        const html = buildConsoleHtml(sessionPath, Boolean(producerApply));
         send(res, 200, html, "text/html; charset=utf-8");
         return;
       }

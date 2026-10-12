@@ -35,7 +35,11 @@
     "./example-data/public-field-review": "./dist/example-data/public-field-review.js",
     "./example-data/corrected-document-candidates": "./dist/example-data/corrected-document-candidates.js",
     "./example-data/public-directory-review-resource": "./dist/example-data/public-directory-review-resource.js",
-    "./example-data/regulated-document-review-resource": "./dist/example-data/regulated-document-review-resource.js"
+    "./example-data/regulated-document-review-resource": "./dist/example-data/regulated-document-review-resource.js",
+    "./review-console": {
+      "types": "./dist/src/console/review-console-server.d.ts",
+      "default": "./dist/src/console/review-console-server.js"
+    }
   },
   "files": [
     "bin/",
