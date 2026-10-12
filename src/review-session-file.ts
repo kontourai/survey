@@ -29,6 +29,8 @@ export interface ReviewSessionFileContent {
    * from an import is presented as an unverified queue.
    */
   readonly extractionImport?: unknown;
+  /** Presentation receipt after a producer consumed this session; further appends refuse. */
+  readonly producerApplication?: { readonly reference: string; readonly summary: string; readonly revision: string };
 }
 
 export interface ReviewSessionFileLockOptions {
@@ -341,6 +343,7 @@ export function appendReviewSessionEvents(
   content: ReviewSessionFileContent,
   appended: readonly ReviewSessionEvent[],
 ): ReviewSessionEvent[] {
+  if (content.producerApplication !== undefined) throw new Error("This review was already sent to its workflow; open a new review session");
   const sessionName = storedReviewSessionName(content);
   const start = content.events.length;
   const renumbered = [...appended]

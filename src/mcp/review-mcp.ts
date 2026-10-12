@@ -65,6 +65,7 @@ interface SessionFileContent {
   readonly session: ReviewSession;
   readonly snapshot: ReviewQueueSessionState;
   readonly events: readonly ReviewSessionEvent[];
+  readonly producerApplication?: { readonly reference: string; readonly summary: string; readonly revision: string };
   /** The extraction import record the snapshot's items were built from, stored beside them. */
   readonly extractionImport?: ExtractionEnvelopeImport;
 }
@@ -611,6 +612,7 @@ async function toolDecide(
     newEvents: ReviewSessionEvent[];
     attestation: ReviewQueueExtractionAttestation;
   }>(options.sessionPath, (file) => {
+    if (file.producerApplication !== undefined) throw new DomainError("This review was already sent to its workflow; open a new review session");
     const { snapshot, events } = file;
     const attestation = attestedQueue(file);
     const current = currentSessionState(snapshot, events);
