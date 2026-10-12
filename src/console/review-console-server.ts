@@ -137,8 +137,13 @@ async function readSession(path: string): Promise<SessionFileContent> {
 
 function createSseBroadcaster() {
   const clients = new Set<ServerResponse>();
+  let closed = false;
 
   function add(res: ServerResponse): void {
+    if (closed) {
+      res.end();
+      return;
+    }
     clients.add(res);
     res.on("close", () => clients.delete(res));
   }
@@ -154,7 +159,13 @@ function createSseBroadcaster() {
     }
   }
 
-  return { add, broadcast };
+  function close(): void {
+    closed = true;
+    for (const res of clients) res.end();
+    clients.clear();
+  }
+
+  return { add, broadcast, close };
 }
 
 // ---------------------------------------------------------------------------
@@ -907,14 +918,16 @@ export async function startReviewConsoleServer(
   listenPort = address.port;
   const normalizedHost = host === "::1" ? "[::1]" : host;
   const url = `http://${normalizedHost}:${address.port}/`;
+  let closing: Promise<void> | undefined;
 
   return {
     url,
     port: address.port,
     host,
     close: () =>
-      new Promise<void>((resolveClosed, reject) => {
+      closing ??= new Promise<void>((resolveClosed, reject) => {
         stopWatcher();
+        broadcaster.close();
         server.close((err) => (err ? reject(err) : resolveClosed()));
       }),
   };

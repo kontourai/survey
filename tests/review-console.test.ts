@@ -324,3 +324,41 @@ describe("bundled example session fixture", () => {
     );
   });
 });
+
+// A browser keeps this response open; stopping a console must not require the
+// caller to close its page first or close another console's clients.
+test('close ends its active event streams and is idempotent while another console remains available', async () => {
+  const first = await makeIsolatedServer();
+  const peer = await makeIsolatedServer();
+  const signals = [new AbortController(), new AbortController(), new AbortController()];
+  let closing: Promise<void> | undefined;
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const responses = await Promise.all([
+      fetch(`${first.handle.url}api/stream`, { signal: signals[0].signal }),
+      fetch(`${first.handle.url}api/stream`, { signal: signals[1].signal }),
+      fetch(`${peer.handle.url}api/stream`, { signal: signals[2].signal }),
+    ]);
+    const readers = responses.map(response => response.body!.getReader());
+    for (const reader of readers) assert.equal((await reader.read()).done, false);
+    closing = first.handle.close();
+    await Promise.race([
+      closing,
+      new Promise<never>((_, reject) => { deadline = setTimeout(() => reject(new Error('Console close waited for a still-open browser event stream')), 1500); }),
+    ]);
+    clearTimeout(deadline);
+    assert.equal((await readers[0].read()).done, true);
+    assert.equal((await readers[1].read()).done, true);
+    assert.equal(first.handle.close(), closing, 'Repeated shutdown shares the same completion');
+    const live = await fetch(`${peer.handle.url}api/session`);
+    assert.equal(live.status, 200);
+    await live.json();
+  } finally {
+    clearTimeout(deadline);
+    for (const signal of signals) signal.abort();
+    await (closing ?? first.handle.close());
+    await peer.handle.close();
+    await rm(first.tmpDir, { recursive: true, force: true });
+    await rm(peer.tmpDir, { recursive: true, force: true });
+  }
+});
