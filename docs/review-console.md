@@ -5,7 +5,7 @@
 ## Start the console
 
 ```sh
-npx survey-review-console --session path/to/session.json
+npx --yes --package=@kontourai/survey@8.0.0 survey-review-console --session path/to/session.json
 ```
 
 Options:
@@ -58,3 +58,56 @@ Appending is a compare-and-swap. The body carries `events` (the events to append
 
 - [review-mcp.md](review-mcp.md) — MCP server for agent-driven review
 - [review-workbench-prototype.md](review-workbench-prototype.md) — standalone browser demo (no server)
+
+## Send a saved review to a workflow
+
+The optional programmatic `@kontourai/survey/review-console` entrypoint accepts a
+producer-owned application callback. It adds a **Send review to workflow**
+control to the existing console; the standalone CLI continues to save review
+records without applying domain decisions.
+
+```ts
+import { startReviewConsoleServer } from '@kontourai/survey/review-console';
+import { bindReviewQueue } from '@kontourai/survey/review-workbench';
+
+// Construct once from the actual producer queue, before review starts.
+const binding = bindReviewQueue(snapshot, { sessionName });
+await startReviewConsoleServer({
+  sessionPath,
+  producerApply: {
+    binding,
+    async apply({ record, events, results, revision }) {
+      // Authenticate the operator and check current workflow state under
+      // the owning producer's lock. Never trust browser-supplied identity.
+      return applyCurrentWorkflowReview({ record, events, results, revision });
+    },
+  },
+});
+```
+
+Survey checks the persisted event revision, resolves every queued item and
+validates the queue against the producer's original binding. The browser sends
+only its saved-event revision; it cannot supply replacement results or a queue
+binding. A successful callback returns `{reference, summary}`. Survey retains
+that reference and refuses repeated application or further event appends to the
+consumed session. Opening a new review requires a producer-created session.
+
+The producer must recheck its current signed request, workflow visit, source
+and artifact bytes, deadlines, revision budgets and unconsumed decision identity
+before domain effects. It must distinguish approval, decline, could-not-confirm
+and requests for changes, rather than mapping every resolved item to approval.
+Questionnaire confirmation is distinct from approval of produced artifacts.
+Display only public rationale and actual evidence appropriate to that review.
+
+The callback must apply idempotently using its own durable decision identity.
+Survey's file lock serializes console submissions, but cannot transactionally
+commit another product's store. If domain application succeeds and Survey's
+receipt write subsequently fails, retry must return the existing producer
+receipt without repeating effects. Survey's saved receipt is a presentation
+record, not the producer's workflow authority.
+
+Loopback access and a session actor string do not authenticate a human. Local
+console interactions retain the producer's host-observed operator classification.
+Human-authenticated review requires the consuming host's authentication and
+policy. Survey does not turn a browser reference or simulated UI interaction
+into a human approval claim.

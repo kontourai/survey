@@ -23,7 +23,7 @@ resource responses are private with a zero TTL because the session is mutable.
 ## Start the server
 
 ```sh
-npx survey-review-mcp --session path/to/session.json
+npx --yes --package=@kontourai/survey@8.0.0 survey-review-mcp --session path/to/session.json
 ```
 
 Options:
@@ -123,7 +123,8 @@ read the nested shape.
 
 ## Session file contract
 
-The session file is a JSON object with three keys, and an optional fourth:
+The session file contains `session`, `snapshot`, and `events`, with optional
+`extractionImport` provenance:
 
 ```json
 {
@@ -160,3 +161,12 @@ file. The embedded HTML card contains no external `<script>`, `<link>`, `<img>`,
 or `@import` references, and its Apps CSP declares no connect or resource
 domains. Standard output is reserved for JSON-RPC; sanitized SDK and transport
 diagnostics are written only to standard error.
+
+### Workflow-consumed sessions
+
+A producer-connected console can retain a `producerApplication` receipt after
+sending the saved review to its workflow. MCP inspection remains available;
+`survey_review_decide` refuses further changes to that consumed session before
+writing events. The shared event append API applies the same refusal. Open a
+fresh producer-created review session for another round. This receipt is a
+presentation record; the producer's durable decision remains authoritative.
