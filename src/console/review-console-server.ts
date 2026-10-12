@@ -789,7 +789,7 @@ export async function startReviewConsoleServer(
           (content) => {
             const { snapshot, events: existingEvents } = content;
             const revision = reviewSessionRevision(existingEvents);
-            if (content.producerApplication) return { result: { status: 409, body: { error: "This review was sent to its workflow; open a new review session", revision } } };
+            if (content.producerApplication !== undefined) return { result: { status: 409, body: { error: "This review was sent to its workflow; open a new review session", revision } } };
 
             // Compare-and-swap: the appended events express decisions made on
             // the reviewer's view of the log, so they are only safe to append
@@ -856,7 +856,7 @@ export async function startReviewConsoleServer(
           const revision = reviewSessionRevision(content.events);
           if (typeof body.baseRevision !== "string") return { result: { status: 428, body: { error: "baseRevision is required" } } };
           if (body.baseRevision !== revision) return { result: { status: 409, body: { error: "Session changed since it was read; reload before sending it" } } };
-          if (content.producerApplication) return { result: { status: 409, body: { error: "This review was already sent to its workflow" } } };
+          if (content.producerApplication !== undefined) return { result: { status: 409, body: { error: "This review was already sent to its workflow" } } };
           const record = createServerReviewSessionRecord({ sessionName: storedReviewSessionName(content), snapshot: content.snapshot, eventCount: content.events.length });
           try {
             const derived = deriveServerReviewSessionApplyResult({ record, events: content.events, binding: producerApply.binding, extractionImport: content.extractionImport, requiredResolvedItems: "all" });

@@ -755,3 +755,27 @@ describe("survey-review-mcp", () => {
     }
   });
 });
+
+test("MCP decision calls cannot append to a workflow-consumed console session", async () => {
+  const tmpDir = await mkdtemp(join(tmpdir(), "survey-mcp-consumed-"));
+  const sessionPath = join(tmpDir, "session.json");
+  const content = JSON.parse(await readFile("example-data/mcp-review-session.json", "utf8"));
+  content.producerApplication = { reference: "workflow:consumed", summary: "Workflow recorded review", revision: "retained-revision" };
+  const original = JSON.stringify(content);
+  await writeFile(sessionPath, original);
+  const server = spawn("node", ["bin/survey-review-mcp.mjs", "--session", sessionPath], { stdio: ["pipe", "pipe", "inherit"] });
+  const responses = collectResponses(server.stdout!);
+  try {
+    send(server, { jsonrpc: "2.0", id: 1, method: "server/discover", params: { _meta: modernMeta() } });
+    await responses.next(1);
+    send(server, { jsonrpc: "2.0", id: 2, method: "tools/call", params: { _meta: modernMeta(), name: "survey_review_decide", arguments: { itemName: content.snapshot.items[0].metadata.name, decision: "accept" } } });
+    const response = await responses.next(2);
+    assert.equal(response.result?.isError, true);
+    assert.match(response.result?.content[0]?.text ?? "", /already sent to its workflow/);
+    assert.equal(await readFile(sessionPath, "utf8"), original);
+  } finally {
+    server.stdin!.end();
+    await once(server, "exit");
+    await rm(tmpDir, { recursive: true });
+  }
+});

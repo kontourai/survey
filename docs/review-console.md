@@ -5,7 +5,7 @@
 ## Start the console
 
 ```sh
-npx survey-review-console --session path/to/session.json
+npx --yes --package=@kontourai/survey@8.0.0 survey-review-console --session path/to/session.json
 ```
 
 Options:
