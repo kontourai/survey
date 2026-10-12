@@ -1,5 +1,13 @@
 # Changelog
 
+## [8.1.1](https://github.com/kontourai/survey/compare/v8.1.0...v8.1.1) (2026-10-12)
+
+
+### Fixes
+
+* close active review event streams during server shutdown ([#337](https://github.com/kontourai/survey/issues/337)) ([87f82c6](https://github.com/kontourai/survey/commit/87f82c602f1e11fdc70c86bf228f6269670e42fa))
+* close owned event streams during review console shutdown ([9f2c6d0](https://github.com/kontourai/survey/commit/9f2c6d013eede07f1f963e0f2c4811ca741fb744))
+
 ## [8.1.0](https://github.com/kontourai/survey/compare/v8.0.0...v8.1.0) (2026-10-12)
 
 
