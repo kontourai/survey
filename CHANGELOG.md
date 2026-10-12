@@ -1,5 +1,25 @@
 # Changelog
 
+## [8.1.0](https://github.com/kontourai/survey/compare/v8.0.0...v8.1.0) (2026-10-12)
+
+
+### Features
+
+* connect saved Survey reviews to producer workflows ([#335](https://github.com/kontourai/survey/issues/335)) ([cf46424](https://github.com/kontourai/survey/commit/cf464247efba98351ac955f62369c49d93676105))
+* let producers apply saved console reviews ([17b47f7](https://github.com/kontourai/survey/commit/17b47f786254f94a07e497c7b66225f68c085edf))
+
+
+### Fixes
+
+* keep consumed review sessions immutable across MCP and console ([3122abc](https://github.com/kontourai/survey/commit/3122abc9142deb87b4efafd8b6e241250a8c4d90))
+* **review-workbench:** resync @kontourai/ui 1.18 tokens; host overrides win in every mode ([#325](https://github.com/kontourai/survey/issues/325)) ([25fc27c](https://github.com/kontourai/survey/commit/25fc27c3c6d3451ee3d4ad522778f2ed0ec03448)), closes [#323](https://github.com/kontourai/survey/issues/323)
+
+
+### Documentation
+
+* adopt docs-kit gate, Pages site, and MCP bundle ([#330](https://github.com/kontourai/survey/issues/330)) ([84074f2](https://github.com/kontourai/survey/commit/84074f2041efb5933d6d9a1513268e0d94e8b2ab))
+* **readme:** add Docs badge to the header ([#334](https://github.com/kontourai/survey/issues/334)) ([6bd149d](https://github.com/kontourai/survey/commit/6bd149d90e2f99e8b5e752b2555057e982c9235d))
+
 ## [8.0.0](https://github.com/kontourai/survey/compare/v7.0.0...v8.0.0) (2026-09-29)
 
 
