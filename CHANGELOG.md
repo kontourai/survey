@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.2.0](https://github.com/kontourai/survey/compare/v8.1.1...v8.2.0) (2026-10-13)
+
+
+### Features
+
+* clarify producer review actions and saved submission ([#341](https://github.com/kontourai/survey/issues/341)) ([9cc03cd](https://github.com/kontourai/survey/commit/9cc03cd6e8ab028d895ad49eae0542f2422b45d8))
+
 ## [8.1.1](https://github.com/kontourai/survey/compare/v8.1.0...v8.1.1) (2026-10-12)
 
 
