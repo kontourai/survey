@@ -1,5 +1,18 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "purpose": "Preserve the source-to-reviewed-claim evidence chain and named reviewer decisions after approval.",
+  "builtOn": [
+    {
+      "product": "surface",
+      "via": "@kontourai/surface",
+      "for": "Project reviewed producer records into portable trust bundles."
+    },
+    {
+      "product": "ui",
+      "via": "@kontourai/ui",
+      "for": "Style the embeddable review workbench with shared tokens and themes."
+    }
+  ],
   "product": "survey",
   "title": "Kontour Survey",
   "tagline": "The producer side of trust: source, extraction, candidate, and review contracts projected into Surface.",

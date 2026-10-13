@@ -20,7 +20,7 @@ Survey is the producer-side contract: source → extraction → candidate → re
 
 - Library/types changes: `npm test` (build + Node tests against dist).
 - Workbench UI/embed changes: `npm run check:review-workbench` and `npm run test:browser`.
-- Docs changes: `npm run docs:check`. Docs are published with docs-kit: `docs-kit.json` lists the published docs and MCP topics, and `npm run docs:check` is the gate. When you change code a document `covers`, update that document.
+- Docs changes: `npm run docs:check`. Docs are published with docs-kit: `corpus.json` lists the published docs and MCP topics, and `npm run docs:check` is the gate. When you change code a document `covers`, update that document.
 - Anything before push: `npm run verify` (the pre-push hook runs repo-hook validation + verify; never bypass hooks).
 - Releases use release-please with conventional commits; bump `.release-please-manifest.json` in any manual release PR.
 
