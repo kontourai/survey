@@ -118,3 +118,16 @@ multi-product tenant administration, a queue/session workflow, a backend
 builder abstraction, or live downstream integration. Producers still own
 review UX, workflow state, assignment, policy, and adapters. Survey owns the
 portable review resource shape and projection hints.
+
+## Producer display hints
+
+The reusable workbench accepts `queuePresentation` for a producer-owned title,
+escaped multiline context and per-item display hints. A sole-proposal
+`acknowledgment` renders **Mark reviewed**; a `choice` renders named candidate
+actions, **Choose an action**, and a visible reviewer note. These controls keep
+the same event/replay semantics and **Could not confirm** handling. Ordinary
+field review remains unchanged. `hideApply` lets a submitting host provide one
+final action; the producer-backed console uses that option automatically. See
+[the consumer guide](consumer-integration-guide.md#serializable-queue-presentation)
+for the serializable shape and [the console guide](review-console.md) for saved
+submission and completion behavior.

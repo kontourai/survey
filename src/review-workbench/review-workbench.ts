@@ -340,10 +340,12 @@ function buildDecisionCardAuthorizing(
  * Renders the decision card's prompt for a review item and decision.
  *
  * It is rebuilt from the item when the decision is built, not captured from
- * what a reviewer's screen showed: it records what the card states for this
- * item, with the same presentation adapter, target label and value text.
+ * what a reviewer's screen showed: it records a deterministic semantic basis
+ * from the canonical item, decision and presentation adapter. Queue display
+ * hints (title, context, action labels) are not a verbatim prompt capture and
+ * do not change this server-reconstructable authorizing basis.
  *
- * Format mirrors the review question shown in the workbench header:
+ * The current/proposed semantic form is:
  * "For {target}, decide whether {proposed} should replace {current}."
  * followed by the selected decision label so the block is self-contained.
  */
@@ -479,7 +481,21 @@ export interface PersistentReviewSessionEventStoreOptions {
   readonly onStatusChange?: (state: ReviewSessionPersistenceState) => void;
 }
 
+/** Serializable producer-owned display hints. Never alter canonical items, events or apply authority. */
+export interface ReviewQueuePresentation {
+  readonly title?: string;
+  readonly context?: string;
+  readonly items?: Readonly<Record<string, {
+    readonly title?: string;
+    readonly kind?: "acknowledgment" | "choice";
+    readonly candidateLabels?: Readonly<Record<string, string>>;
+  }>>;
+}
+
 export interface MountReviewWorkbenchOptions {
+  readonly queuePresentation?: ReviewQueuePresentation;
+  /** A host that owns submission can hide the local apply/export control. */
+  readonly hideApply?: boolean;
   readonly eventStore?: ReviewSessionEventStore;
   readonly presentationAdapter?: ReviewPresentationAdapter;
   /**
@@ -1051,6 +1067,8 @@ export function renderReviewWorkbenchHtml(
   options: {
     readonly presentationAdapter?: ReviewPresentationAdapter;
     readonly queueView?: Partial<ReviewQueueView>;
+    readonly queuePresentation?: ReviewQueuePresentation;
+    readonly hideApply?: boolean;
     /** See {@link MountReviewWorkbenchOptions.extractionImport}. */
     readonly extractionImport?: ExtractionEnvelopeImport | ExtractionEnvelopeImportResult;
     /** See {@link MountReviewWorkbenchOptions.fieldStates}. */
@@ -1064,6 +1082,8 @@ export function renderReviewWorkbenchHtml(
     normalizeReviewQueueView(options.queueView),
     attestReviewQueueExtraction(session.items, options.extractionImport),
     options.fieldStates,
+    options.queuePresentation,
+    options.hideApply,
   );
 }
 
@@ -1164,6 +1184,8 @@ function renderReviewQueueSessionHtml(
   queueView: ReviewQueueView,
   attestation: ReviewQueueExtractionAttestation,
   fieldStates?: readonly FieldState[],
+  queuePresentation?: ReviewQueuePresentation,
+  hideApply?: boolean,
 ): string {
   // A queue that does not match its stored extraction import is not reviewed:
   // its items could hide or alter what the source said.
@@ -1195,7 +1217,7 @@ function renderReviewQueueSessionHtml(
         <div class="top">
           <div class="subj">
             <p class="eyebrow">Proposed changes</p>
-            <h1>${escapeHtml(headerTitle)}</h1>
+            <h1>${escapeHtml(queuePresentation?.title ?? headerTitle)}</h1>
           </div>
         </div>
         <div class="meta">
@@ -1204,9 +1226,10 @@ function renderReviewQueueSessionHtml(
         <div class="progress">
           <div class="bar"><i style="width:${progressPct}%"></i></div>
           <span class="ptext"><b data-testid="decided-count">${decidedCount}</b> of <b>${totalCount}</b> decided</span>
-          <button class="apply" type="button" data-testid="apply-button"${decidedCount === 0 ? " disabled" : ""}>Apply ${decidedCount} decision${decidedCount === 1 ? "" : "s"}</button>
+          ${hideApply ? "" : `<button class="apply" type="button" data-testid="apply-button"${decidedCount === 0 ? " disabled" : ""}>Apply ${decidedCount} decision${decidedCount === 1 ? "" : "s"}</button>`}
         </div>
       </header>
+      ${queuePresentation?.context ? `<section class="review-context" data-testid="review-context" aria-label="Review context">${escapeHtml(queuePresentation.context)}</section>` : ""}
       ${fieldStates ? renderFieldStatesHtml(fieldStates, session) : ""}
       <nav class="queue-controls" aria-label="Review queue navigation">
         <label>
@@ -1227,7 +1250,7 @@ function renderReviewQueueSessionHtml(
         </div>` : ""}
       </nav>
       <div class="fields" data-testid="review-fields">
-        ${window.items.map((item) => renderFieldCard(item, session, presentationAdapter)).join("")
+        ${window.items.map((item) => renderFieldCard(item, session, presentationAdapter, queuePresentation?.items?.[item.metadata.name])).join("")
           || '<p class="queue-empty">No review fields match the current search and disposition.</p>'}
       </div>
       ${renderFooterTally(session)}
@@ -1252,6 +1275,7 @@ function renderFieldCard(
   item: ReviewItem,
   session: ReviewQueueSessionState,
   presentationAdapter: ReviewPresentationAdapter | undefined,
+  hints?: NonNullable<ReviewQueuePresentation["items"]>[string],
 ): string {
   const decision = session.decisionsByItemName[item.metadata.name];
   const state = fieldCardState(item, decision);
@@ -1264,6 +1288,10 @@ function renderFieldCard(
   const conflict = proposedCandidates.length > 1;
   const proposed = proposedCandidates.length === 1 ? proposedCandidates[0] : undefined;
   const presentation = buildReviewItemPresentation(item, presentationAdapter);
+  const title = hints?.title ?? presentation.targetLabel;
+  const acknowledgment = hints?.kind === "acknowledgment" && proposed !== undefined;
+  const choice = hints?.kind === "choice";
+  const statusLabel = decision === "could-not-confirm" ? "Could not confirm" : choice ? (decided ? "Action recorded" : "Choose an action") : acknowledgment ? (decided ? "Reviewed" : "Needs review") : chipLabel(state, current !== undefined && !isEmptyValue(current.value), conflict ? proposedCandidates.length : undefined);
   const hasCurrentValue = current !== undefined && !isEmptyValue(current.value);
   const kind = hasCurrentValue ? "Update" : "New";
   const keepLabel = hasCurrentValue ? "Keep current" : conflict ? "Reject all values" : "Leave unset";
@@ -1296,26 +1324,28 @@ function renderFieldCard(
       <div class="stripe"></div>
       <div class="fbody">
         <div class="frow1">
-          <span class="fname">${escapeHtml(presentation.targetLabel)}</span>
+          <span class="fname">${escapeHtml(title)}</span>
           <span class="fkind">${kind}</span>
-          <span class="chip ${state} push" data-testid="field-chip">${chipLabel(state, hasCurrentValue, conflict ? proposedCandidates.length : undefined)}</span>
+          <span class="chip ${state} push" data-testid="field-chip">${statusLabel}</span>
         </div>
         ${proposed
           ? renderDiffRow(item, current, proposed, presentation.targetLabel, decided, effectiveProposedText, currentPresentationText)
           : proposedCandidates.length > 1
-            ? renderConflictingProposals(item, proposedCandidates, presentationAdapter, presentation.targetLabel, decision, session.selectedCandidateIdsByItemName?.[item.metadata.name])
+            ? renderConflictingProposals(item, proposedCandidates, presentationAdapter, presentation.targetLabel, decision, session.selectedCandidateIdsByItemName?.[item.metadata.name], choice ? hints : undefined)
             : "<p class=\"field-value\">No proposed value is available for this field.</p>"}
         ${proposed ? renderProvenanceRow(item, proposed, presentationAdapter, isScoreBlind(session)) : ""}
         ${renderExtractionImportNotes(presentation)}
         ${isScoreBlind(session) ? "" : renderVerificationNotes(candidateVerificationNotes(item, decision === "accept-proposed" ? editedValue : undefined))}
+        ${choice ? renderReviewerNote(item, session) : ""}
         <div class="decide">
-          ${keepDecision === undefined ? "" : `<button class="btn keep" type="button" data-testid="keep-current" data-item-name="${escapeHtml(item.metadata.name)}">${keepLabel}</button>`}
-          ${proposed ? `<button class="btn use" type="button" data-testid="use-proposed" data-item-name="${escapeHtml(item.metadata.name)}">Use proposed</button>
-          <label class="wrong">
+          ${acknowledgment || keepDecision === undefined || (choice && !current) ? "" : `<button class="btn keep" type="button" data-testid="keep-current" data-item-name="${escapeHtml(item.metadata.name)}">${escapeHtml(choice && current ? hints?.candidateLabels?.[current.id] ?? keepLabel : keepLabel)}</button>`}
+          ${proposed ? `<button class="btn use" type="button" data-testid="use-proposed" data-item-name="${escapeHtml(item.metadata.name)}">${acknowledgment ? "Mark reviewed" : choice ? escapeHtml(hints?.candidateLabels?.[proposed.id] ?? proposedPresentationText) : "Use proposed"}</button>
+          ${acknowledgment || choice ? "" : `<label class="wrong">
             <input type="checkbox" class="wrongbox" data-testid="wrong-toggle" data-item-name="${escapeHtml(item.metadata.name)}">
             Suggestion was wrong
           </label>
-          <button class="btn unconfirmed" type="button" data-testid="could-not-confirm" data-item-name="${escapeHtml(item.metadata.name)}">Could not confirm</button>` : ""}
+          <button class="btn unconfirmed" type="button" data-testid="could-not-confirm" data-item-name="${escapeHtml(item.metadata.name)}">Could not confirm</button>`}
+          ${acknowledgment || choice ? `<button class="btn unconfirmed" type="button" data-testid="could-not-confirm" data-item-name="${escapeHtml(item.metadata.name)}">Could not confirm</button>` : ""}` : ""}
           ${conflict ? `<button class="btn unconfirmed" type="button" data-testid="could-not-confirm" data-item-name="${escapeHtml(item.metadata.name)}">Could not confirm</button>` : ""}
         </div>
         <!--
@@ -1327,10 +1357,10 @@ function renderFieldCard(
         -->
         <span class="derr" data-testid="decision-error" role="alert" hidden></span>
         <div class="decided">
-          <span class="chip ${state}" data-testid="decided-chip">${chipLabel(state, hasCurrentValue, conflict ? proposedCandidates.length : undefined)}</span>
+          <span class="chip ${state}" data-testid="decided-chip">${statusLabel}</span>
           <button class="undo" type="button" data-testid="undo-decision" data-item-name="${escapeHtml(item.metadata.name)}">Change</button>
         </div>
-        ${renderAuditDetails(item, current, proposed, session, presentationAdapter)}
+        ${renderAuditDetails(item, current, proposed, session, presentationAdapter, choice)}
       </div>
     </section>
   `;
@@ -1352,23 +1382,25 @@ function renderConflictingProposals(
   targetLabel: string,
   decision: ReviewWorkbenchDecision | undefined,
   selectedCandidateId: string | undefined,
+  hints?: NonNullable<ReviewQueuePresentation["items"]>[string],
 ): string {
   const chose = decision === "select-proposed";
   const values = candidates.map((candidate) => {
     const text = buildReviewCandidatePresentation(item, candidate, presentationAdapter, targetLabel).valueText;
+    const actionLabel = hints?.candidateLabels?.[candidate.id] ?? text;
     const excerpt = candidate.locator?.excerpt;
     const chosen = chose && candidate.id === selectedCandidateId;
     const mark = chose
       ? ` <span class="choice-tag ${chosen ? "chosen" : "not-chosen"}" data-testid="choice-tag">${chosen ? "Chosen" : "Not chosen"}</span>`
       : "";
     const control = decision === undefined
-      ? `<button class="btn choose" type="button" data-testid="select-value" data-item-name="${escapeHtml(item.metadata.name)}" data-candidate-id="${escapeHtml(candidate.id)}" aria-label="Use ${escapeHtml(text)} for ${escapeHtml(targetLabel)}">Use this value</button>`
+      ? `<button class="btn choose" type="button" data-testid="select-value" data-item-name="${escapeHtml(item.metadata.name)}" data-candidate-id="${escapeHtml(candidate.id)}" aria-label="${hints ? escapeHtml(actionLabel) : `Use ${escapeHtml(text)} for ${escapeHtml(targetLabel)}`}">${hints ? escapeHtml(actionLabel) : "Use this value"}</button>`
       : "";
     return `<li data-testid="conflicting-value" data-candidate-id="${escapeHtml(candidate.id)}"${chose ? ` data-chosen="${chosen ? "true" : "false"}"` : ""}>
         <span class="conflict-text"><span class="vtext">${escapeHtml(text)}</span>${excerpt ? ` <q>${escapeHtml(excerpt)}</q>` : ""}${mark}</span>${control}
       </li>`;
   }).join("");
-  const intro = decision === undefined
+  const intro = hints ? (decision === undefined ? "Choose an action. Add a reviewer note when a correction or explanation is needed." : "Action recorded.") : decision === undefined
     ? `${candidates.length} different values were proposed for this field. Use the value the source supports, reject them all, or mark the field Could not confirm with a reason.`
     : chose
       ? `${candidates.length} different values were proposed for this field. One was chosen; ${candidates.length === 2 ? "the other was" : "the others were"} seen and not chosen.`
@@ -1662,12 +1694,17 @@ function renderConfidenceMeter(confidence: number): string {
  * here is secondary detail tucked behind one `<details>` toggle, kept off the
  * primary review surface.
  */
+function renderReviewerNote(item: ReviewItem, session: ReviewQueueSessionState): string {
+  return `<label class="note-field"><span class="field-label">Reviewer note</span><textarea data-testid="reviewer-note" data-item-name="${escapeHtml(item.metadata.name)}">${escapeHtml(session.notesByItemName[item.metadata.name] ?? "")}</textarea></label>`;
+}
+
 function renderAuditDetails(
   item: ReviewItem,
   current: ReviewCandidate | undefined,
   proposed: ReviewCandidate | undefined,
   session: ReviewQueueSessionState,
   presentationAdapter: ReviewPresentationAdapter | undefined,
+  noteOnCard = false,
 ): string {
   const decision = session.decisionsByItemName[item.metadata.name];
   const note = session.notesByItemName[item.metadata.name] ?? "";
@@ -1696,10 +1733,7 @@ function renderAuditDetails(
     <details class="audit-details" data-testid="audit-details">
       <summary>Audit details</summary>
       <div class="audit-body">
-        <label class="note-field">
-          <span class="field-label">Reviewer note</span>
-          <textarea data-testid="reviewer-note" data-item-name="${escapeHtml(item.metadata.name)}">${escapeHtml(note)}</textarea>
-        </label>
+        ${noteOnCard ? "" : renderReviewerNote(item, session)}
         ${definition ? `<p class="field-value"><span class="field-label">Decision effect</span> ${escapeHtml(definition.effect)}</p>` : ""}
         ${renderProducerFeedbackTags(item)}
         <dl class="field-stack compact">
@@ -2167,7 +2201,7 @@ function createReviewWorkbenchController(
     currentSession: () => session,
     currentSessionExport: () => buildReviewWorkbenchSessionExport(session, events, { presentationAdapter: options.presentationAdapter }),
     presentationAdapter: options.presentationAdapter,
-    renderCurrentState: () => renderCurrentState(root, session, controller, options.presentationAdapter, queueView, attestation, options.fieldStates),
+    renderCurrentState: () => renderCurrentState(root, session, controller, options.presentationAdapter, queueView, attestation, options.fieldStates, options.queuePresentation, options.hideApply),
     setDecision,
     clearDecision,
     updateReviewerNote,
@@ -2200,6 +2234,8 @@ function renderCurrentState(
   queueView?: ReviewQueueView,
   attestation?: ReviewQueueExtractionAttestation,
   fieldStates?: readonly FieldState[],
+  queuePresentation?: ReviewQueuePresentation,
+  hideApply?: boolean,
 ): void {
   root.innerHTML = renderReviewQueueSessionHtml(
     session,
@@ -2207,6 +2243,8 @@ function renderCurrentState(
     queueView ?? normalizeReviewQueueView(undefined),
     attestation ?? attestReviewQueueExtraction(session.items, undefined),
     fieldStates,
+    queuePresentation,
+    hideApply,
   );
   bindFieldCardInteractions(root, controller);
   bindApplyButton(root, controller);

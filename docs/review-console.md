@@ -63,7 +63,13 @@ Appending is a compare-and-swap. The body carries `events` (the events to append
 
 The optional programmatic `@kontourai/survey/review-console` entrypoint accepts a
 producer-owned application callback. It adds a **Send review to workflow**
-control to the existing console; the standalone CLI continues to save review
+control to the existing console. This is its sole submission action; the local
+workbench Apply/export control is hidden when a producer owns application.
+Submission stays disabled until every item has an explicit persisted decision
+and no event save is pending or failed. A failed save reloads stored state, keeps
+the error visible and requires reloading or successfully retrying the change.
+The producer receipt summary remains visible as a success status after reload;
+consumed sessions cannot be edited or submitted again. The standalone CLI continues to save review
 records without applying domain decisions.
 
 ```ts
@@ -121,3 +127,38 @@ abort its event stream first. Repeated calls share the same shutdown promise.
 Other console instances remain available. Ordinary in-flight requests finish
 through the HTTP server's existing close behavior; shutdown does not cancel a
 producer's canonical application mid-write.
+
+## Producer-owned review presentation
+
+Pass optional `presentation: ReviewQueuePresentation` to
+`startReviewConsoleServer` for a titled review with prominent multiline context
+(for example, the reason for waiting and observed findings). The context and
+labels render as escaped text, not HTML. `items` is keyed by canonical item name;
+`candidateLabels` is keyed by canonical candidate ID.
+
+```ts
+const presentation = {
+  title: 'Proposal review',
+  context: 'Open finding: a required entity is missing.\nReview the proposal before continuing.',
+  items: {
+    document: { title: 'Proposal document', kind: 'acknowledgment' },
+    decision: {
+      title: 'Decision', kind: 'choice',
+      candidateLabels: { approve: 'Approve', correct: 'Request changes', decline: 'Decline' },
+    },
+  },
+};
+```
+
+An acknowledgment with a sole proposed candidate uses **Mark reviewed** and
+hides Keep/Flag controls. A choice uses named candidate actions, **Choose an
+action** copy and a visible reviewer note. **Could not confirm** remains
+available and still requires a reason. Ordinary field-review presentation is
+unchanged when hints are absent.
+
+These hints are display-only. They do not change canonical items, stored source
+bytes, decision events, candidate IDs, queue bindings or producer admission. An
+acknowledgment records the same candidate acceptance event; selecting among several named
+actions records the same `select-proposed` event for that candidate. The producer
+still decides whether a recorded action can advance its workflow and provides
+the completion summary and next step.
