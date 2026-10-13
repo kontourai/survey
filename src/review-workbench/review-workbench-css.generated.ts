@@ -1781,6 +1781,17 @@ export const REVIEW_WORKBENCH_CSS: string = `/* Bundled, scoped Survey Review Wo
   }
 }
 
+.survey-workbench-embed .review-context{
+  margin: var(--k-space-4);
+  padding: var(--k-space-4);
+  border: var(--k-border-thin) solid var(--k-line-strong);
+  border-radius: var(--k-radius-sm);
+  background: var(--k-panel-raised);
+  color: var(--k-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 
 .survey-workbench-embed {
   overflow: hidden;

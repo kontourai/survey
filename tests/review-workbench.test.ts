@@ -58,6 +58,41 @@ function assertNoOwnUndefined(value: unknown, path = "decision"): void {
 }
 
 describe("review workbench prototype", () => {
+  it("queue display hints label acknowledgment/actions and escape context without changing canonical review", () => {
+    const session = initialReviewQueueSessionState();
+    const acknowledgment = structuredClone(session.items[0]!);
+    acknowledgment.spec.candidates = acknowledgment.spec.candidates.filter(c => c.role === "proposed");
+    const choice = structuredClone(session.items[1]!);
+    const candidate = choice.spec.candidates.find(c => c.role === "proposed")!;
+    choice.spec.candidates = [candidate, { ...structuredClone(candidate), id: "alternate-action", value: "Decline" }];
+    const queue = { ...session, items: [acknowledgment, choice] };
+    const original = structuredClone(queue);
+    const html = renderReviewWorkbenchHtml(queue, undefined, { hideApply: true, queuePresentation: {
+      title: "Proposal review", context: "Open finding: <script>alert(1)</script>\nReview before continuing.",
+      items: { [acknowledgment.metadata.name]: { title: "Proposal document", kind: "acknowledgment" },
+        [choice.metadata.name]: { title: "Decision", kind: "choice", candidateLabels: { [candidate.id]: "Approve", "alternate-action": "Decline" } } },
+    } });
+    assert.match(html, /Mark reviewed/);
+    assert.match(html, /Choose an action/);
+    assert.match(html, /aria-label="Approve">Approve/);
+    assert.match(html, /aria-label="Decline">Decline/);
+    assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+    assert.doesNotMatch(html, /data-testid="apply-button"|data-testid="keep-current"|data-testid="wrong-toggle"|Conflict: 2 values|Use this value/);
+    assert.equal((html.match(/data-testid="reviewer-note"/g) ?? []).length, 2);
+    assert.deepEqual(queue, original);
+    const withCurrent = structuredClone(choice);
+    const current = { ...structuredClone(candidate), id: "current-choice", role: "current" as const };
+    withCurrent.spec.candidates.push(current);
+    const currentChoiceHtml = renderReviewWorkbenchHtml({ ...queue, items: [withCurrent] }, undefined, { queuePresentation: {
+      items: { [withCurrent.metadata.name]: { kind: "choice", candidateLabels: { [current.id]: "Keep existing decision" } } },
+    } });
+    assert.match(currentChoiceHtml, /data-testid="keep-current"[^>]*>Keep existing decision/);
+    const ordinary = renderReviewWorkbenchHtml(queue);
+    assert.match(ordinary, /Use proposed/);
+    assert.match(ordinary, /Conflict: 2 values/);
+    assert.match(ordinary, /data-testid="apply-button"/);
+  });
+
   it("bounds and filters high-cardinality review queues without changing canonical session state", () => {
     const seed = initialReviewQueueSessionState();
     const template = seed.items[0]!;

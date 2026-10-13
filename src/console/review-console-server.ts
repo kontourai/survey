@@ -27,7 +27,7 @@ import {
 } from "../review-workbench/server-review-session.js";
 import type { ReviewQueueSessionState } from "../review-workbench/review-queue-session.js";
 import { attestReviewQueueExtraction, type ReviewQueueBinding } from "../review-workbench/queue-binding.js";
-import type { ReviewWorkbenchResult } from "../review-workbench/review-workbench.js";
+import type { ReviewWorkbenchResult, ReviewQueuePresentation } from "../review-workbench/review-workbench.js";
 import type { ExtractionEnvelopeImport } from "../extraction-envelope.js";
 import type { ReviewSessionEvent } from "../review-resource.js";
 import {
@@ -43,6 +43,8 @@ import {
 // ---------------------------------------------------------------------------
 
 export interface ReviewConsoleServerOptions {
+  /** Producer-owned display hints; independent of queue binding and application authority. */
+  readonly presentation?: ReviewQueuePresentation;
   /** Absolute path to the session JSON file. */
   readonly sessionPath: string;
   /** TCP port. Defaults to 0 (OS-assigned). */
@@ -374,6 +376,7 @@ body {
   color: var(--k-text, #eef3f8);
   font-size: 13px;
 }
+.console-save-status[data-state="success"] { border-color: var(--k-positive); }
 .console-save-status[hidden] { display: none; }
 #review-workbench {
   flex: 1;
@@ -413,7 +416,7 @@ body {
     </button>
   </div>
 </header>
-${canApply ? '<div style="display:flex;justify-content:flex-end;padding:8px 16px"><button type="button" id="apply-review" class="theme-toggle">Send review to workflow</button></div>' : ''}
+${canApply ? '<div style="display:flex;justify-content:flex-end;padding:8px 16px"><button type="button" id="apply-review" class="theme-toggle" disabled>Send review to workflow</button></div>' : ''}
 <div id="console-save-status" class="console-save-status" role="alert" data-testid="console-save-status" hidden></div>
 <main id="review-workbench" class="workbench survey-workbench-embed" data-testid="review-workbench"></main>
 <script type="module">
@@ -430,11 +433,13 @@ import { mountReviewWorkbench, replayReviewSessionEvents, defaultReviewSessionNa
 // stored session, re-mounts from it and tells the reviewer once.
 let saveChain = Promise.resolve();
 
-function showSaveStatus(message) {
+function showSaveStatus(message, state = "error") {
   const el = document.getElementById("console-save-status");
   if (!el) return;
   if (message) {
     el.textContent = message;
+    el.dataset.state = state;
+    el.setAttribute("role", state === "success" ? "status" : "alert");
     el.hidden = false;
   } else {
     el.textContent = "";
@@ -454,7 +459,9 @@ function createConsoleEventStore(baseRevision) {
 
   async function refused(message) {
     abandoned = true;
-    showSaveStatus(message);
+    saveFailed = true;
+    updateApplyButton();
+    showSaveStatus(message + " Reload before sending the review, or retry the change.");
     await fetchAndMount();
   }
 
@@ -475,9 +482,11 @@ function createConsoleEventStore(baseRevision) {
       return;
     }
     if (res.ok) {
-      const body = await res.json().catch(() => ({}));
-      if (typeof body.revision === "string") { revision = body.revision; currentRevision = revision; }
+      const body = await res.json();
+      if (typeof body.revision !== "string") throw new Error("Missing saved revision");
+      revision = body.revision; currentRevision = revision;
       persistedCount = localEvents.length;
+      saveFailed = false;
       showSaveStatus("");
       return;
     }
@@ -492,9 +501,18 @@ function createConsoleEventStore(baseRevision) {
   return {
     // The mount state is already replayed from the stored log.
     load: () => undefined,
-    save: (_session, events) => {
+    save: (session, events) => {
+      currentState = session;
+      stateGeneration++;
+      pendingSaveCount++;
+      updateApplyButton();
       const localEvents = [...events];
-      saveChain = saveChain.then(() => persist(localEvents));
+      saveChain = saveChain.then(() => persist(localEvents)).catch(async () => {
+        await refused("Your last change was not saved. The console reloaded the stored session.");
+      }).finally(() => {
+        pendingSaveCount--;
+        updateApplyButton();
+      });
       pendingSave = saveChain;
       return saveChain;
     },
@@ -506,9 +524,19 @@ let currentRevision = null;
 let applying = false;
 let wasApplied = false;
 let pendingSave = Promise.resolve();
+let pendingSaveCount = 0;
+let saveFailed = false;
+let currentState = null;
+let stateGeneration = 0;
+let fetchGeneration = 0;
+function updateApplyButton() {
+  if (!applyButton) return;
+  const complete = currentState?.items?.length > 0 && currentState.items.every(item => currentState.decisionsByItemName[item.metadata.name] !== undefined);
+  applyButton.disabled = applying || wasApplied || pendingSaveCount > 0 || saveFailed || !currentRevision || !complete;
+}
 const applyButton = document.getElementById("apply-review");
 applyButton?.addEventListener("click", async () => {
-  if (applying || !currentRevision) return;
+  if (applyButton.disabled || applying || !currentRevision) return;
   applying = true;
   applyButton.disabled = true;
   try {
@@ -518,30 +546,40 @@ applyButton?.addEventListener("click", async () => {
       body: JSON.stringify({ baseRevision: currentRevision }),
     });
     const body = await response.json();
-    showSaveStatus(response.ok ? body.application.summary : body.error);
+    showSaveStatus(response.ok ? body.application.summary : body.error, response.ok ? "success" : "error");
     await fetchAndMount();
-  } catch { showSaveStatus("The review could not reach the workflow. Reload before trying again."); }
-  finally { applying = false; applyButton.disabled = wasApplied || !currentRevision; }
+  } catch { saveFailed = true; showSaveStatus("The review could not reach the workflow. Reload before trying again."); }
+  finally { applying = false; updateApplyButton(); }
 });
 
 async function fetchAndMount() {
+  const fetchBasis = ++fetchGeneration;
+  const stateBasis = stateGeneration;
   try {
     const res = await fetch("/api/session");
+    if (fetchBasis !== fetchGeneration || stateBasis !== stateGeneration) return;
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
+      if (fetchBasis !== fetchGeneration || stateBasis !== stateGeneration) return;
+      currentRevision = null;
+      updateApplyButton();
       showSaveStatus(body.error || ("The session could not be loaded (HTTP " + res.status + ")."));
       const root = document.getElementById("review-workbench");
       if (root) root.innerHTML = "";
       return;
     }
     const data = await res.json();
-    const { snapshot, events, revision, extractionImport } = data;
+    if (fetchBasis !== fetchGeneration || stateBasis !== stateGeneration) return;
+    const { snapshot, events, revision, extractionImport, presentation } = data;
     currentRevision = revision;
     wasApplied = Boolean(data.producerApplication);
-    if (applyButton) applyButton.disabled = applying || wasApplied;
+    if (data.producerApplication) showSaveStatus(data.producerApplication.summary, "success");
     const state = events && events.length > 0
       ? replayReviewSessionEvents(snapshot, events)
       : snapshot;
+
+    currentState = state;
+    updateApplyButton();
 
     // Preserve active item selection across reloads
     if (activeItemName && state.items && state.items.some(i => i.metadata.name === activeItemName)) {
@@ -551,8 +589,14 @@ async function fetchAndMount() {
     const root = document.getElementById("review-workbench");
     if (!root) return;
 
-    mountReviewWorkbench(root, state, { eventStore: createConsoleEventStore(revision), ...(extractionImport ? { extractionImport } : {}) });
+    mountReviewWorkbench(root, state, { hideApply: Boolean(applyButton), queuePresentation: presentation, eventStore: createConsoleEventStore(revision), ...(extractionImport ? { extractionImport } : {}) });
+    if (wasApplied) root.querySelectorAll("button[data-item-name], input[data-item-name], textarea[data-item-name], select[data-item-name]").forEach(control => { control.disabled = true; });
   } catch (err) {
+    if (fetchBasis !== fetchGeneration || stateBasis !== stateGeneration) return;
+    currentRevision = null;
+    currentState = null;
+    updateApplyButton();
+    showSaveStatus("The session could not be loaded. Reload before sending the review.");
     console.error("[console] Mount error:", err);
   }
 }
@@ -574,7 +618,7 @@ function connectSse() {
     if (label) label.textContent = "live";
   });
   sse.addEventListener("update", () => {
-    fetchAndMount();
+    if (pendingSaveCount === 0 && !applying) fetchAndMount();
   });
   sse.addEventListener("error", () => {
     if (dot) dot.classList.add("disconnected");
@@ -766,6 +810,7 @@ export async function startReviewConsoleServer(
           events: content.events,
           revision: reviewSessionRevision(content.events),
           state: currentSessionState(content.snapshot, content.events),
+          ...(options.presentation ? { presentation: options.presentation } : {}),
           queueAttestation: attestation.state,
           ...(content.producerApplication ? { producerApplication: content.producerApplication } : {}),
           ...(content.extractionImport !== undefined ? { extractionImport: content.extractionImport } : {}),

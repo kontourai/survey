@@ -1267,3 +1267,24 @@ Use this checklist before adding Survey to a producer:
 - Product write routes stamp mutating actor and time from authenticated server
   context.
 - Surface projection uses `buildSurveyTrustBundle`, not private review UI state.
+
+### Serializable queue presentation
+
+`ReviewQueuePresentation`, exported from `@kontourai/survey/review-workbench`,
+provides producer-owned display hints without callbacks. Its shape is
+`{ title?, context?, items?: Record<itemName, { title?, kind?:
+'acknowledgment' | 'choice', candidateLabels?: Record<candidateId, string> }> }`.
+Pass it as `queuePresentation` to `mountReviewWorkbench` or
+`renderReviewWorkbenchHtml`, or as `presentation` to `startReviewConsoleServer`.
+Queue context is prominently rendered as escaped multiline text. Item title
+overrides avoid exposing technical names as headings while canonical names stay
+in the records. A choice offers named candidate actions and a visible note; a
+sole-proposal acknowledgment says **Mark reviewed**. Both preserve existing
+events and uncertainty handling.
+
+Hosts that own submission may pass `hideApply: true` to hide the workbench's
+local apply/export action. The producer-backed console does this automatically,
+waits for every explicit decision and completed persistence, and retains the
+producer's success summary on reload. Presentation is separate from canonical
+queue bindings and never grants application authority. See
+[producer-owned review presentation](review-console.md#producer-owned-review-presentation).
