@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "purpose": "Preserve the source-to-reviewed-claim evidence chain and explicit reviewer authority after approval.",
+  "purpose": "Preserve the source-to-reviewed-claim evidence chain and named reviewer decisions after approval.",
   "builtOn": [
     {
       "product": "surface",
