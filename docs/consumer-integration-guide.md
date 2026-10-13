@@ -1288,3 +1288,10 @@ waits for every explicit decision and completed persistence, and retains the
 producer's success summary on reload. Presentation is separate from canonical
 queue bindings and never grants application authority. See
 [producer-owned review presentation](review-console.md#producer-owned-review-presentation).
+
+The decision's `authorizing.renderedPrompt` remains a deterministic semantic
+summary rebuilt from the canonical item, selected decision and
+`presentationAdapter`. It is not a verbatim capture of the browser or its
+`queuePresentation` labels/context. Display hints supply neither testimony nor
+authority; producers that need to retain their exact presentation must preserve
+it separately alongside their domain review basis.

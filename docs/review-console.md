@@ -158,7 +158,7 @@ unchanged when hints are absent.
 
 These hints are display-only. They do not change canonical items, stored source
 bytes, decision events, candidate IDs, queue bindings or producer admission. An
-acknowledgment records the same candidate acceptance event; selecting a named
-action records the same `select-proposed` event for that candidate. The producer
+acknowledgment records the same candidate acceptance event; selecting among several named
+actions records the same `select-proposed` event for that candidate. The producer
 still decides whether a recorded action can advance its workflow and provides
 the completion summary and next step.

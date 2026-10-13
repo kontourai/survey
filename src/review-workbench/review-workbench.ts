@@ -340,10 +340,12 @@ function buildDecisionCardAuthorizing(
  * Renders the decision card's prompt for a review item and decision.
  *
  * It is rebuilt from the item when the decision is built, not captured from
- * what a reviewer's screen showed: it records what the card states for this
- * item, with the same presentation adapter, target label and value text.
+ * what a reviewer's screen showed: it records a deterministic semantic basis
+ * from the canonical item, decision and presentation adapter. Queue display
+ * hints (title, context, action labels) are not a verbatim prompt capture and
+ * do not change this server-reconstructable authorizing basis.
  *
- * Format mirrors the review question shown in the workbench header:
+ * The current/proposed semantic form is:
  * "For {target}, decide whether {proposed} should replace {current}."
  * followed by the selected decision label so the block is self-contained.
  */
