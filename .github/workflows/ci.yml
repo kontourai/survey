@@ -25,6 +25,9 @@ jobs:
         uses: actions/checkout@v7
         with:
           path: survey
+          # check:decisions diffs DECISIONS_BASE...HEAD to refuse new numbered
+          # ADRs; that needs the merge base, which a shallow clone lacks.
+          fetch-depth: 0
 
       # Reads the exact pnpm version from package.json's packageManager field.
       - name: Setup pnpm
@@ -50,6 +53,12 @@ jobs:
       - name: Verify
         run: npm run verify
         working-directory: survey
+        env:
+          # The ADR freeze in check:decisions compares against this ref. A pull
+          # request checks its own changes against its base; a push to main
+          # checks the pushed range, so an ADR that reached main without a pull
+          # request still turns main red.
+          DECISIONS_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
 
   # One leg per supported @kontourai/surface major: the lowest version the
   # dependency range admits and the newest published 3.x and 4.x (@kontourai/*
