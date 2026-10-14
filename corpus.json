@@ -209,6 +209,9 @@
     }
   ],
   "exclude": [],
+  "decisions": {
+    "adr": { "dir": "docs/adr" }
+  },
   "redirects": {
     "record-contracts.html": "docs/record-contracts.md",
     "extraction-envelope-import.html": "docs/extraction-envelope-import.md",
