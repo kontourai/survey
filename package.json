@@ -90,8 +90,8 @@
     }
   },
   "devDependencies": {
-    "@kontourai/flow-agents": "5.10.0",
-    "@kontourai/traverse": "^3.0.1",
+    "@kontourai/flow-agents": "7.1.0",
+    "@kontourai/traverse": "^5.0.2",
     "@kontourai/ui": "^1.20.0",
     "@kontourai/veritas": "1.11.2",
     "@playwright/test": "^1.62.0",
