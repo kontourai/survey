@@ -38,12 +38,14 @@ The Review Workbench rendering a real example queue — current vs proposed valu
 ## Quickstart
 
 ```sh
-npm install @kontourai/survey @kontourai/surface
+npm install @kontourai/survey @kontourai/surface@^4
 ```
 
-Survey supports `@kontourai/surface` 2.13 and later 2.x, and 3.x, and CI tests
-the lowest 2.x and the newest 3.x. Install either major and your project and
-Survey share one Surface copy (`npm ls @kontourai/surface` shows one entry).
+Survey supports `@kontourai/surface` 2.13 and later 2.x, 3.x, and 4.x. CI tests
+2.13.0 and the newest 3.x and 4.x. Install a Surface version in that range so
+your project and Survey share one Surface copy (`npm ls @kontourai/surface`
+shows one entry). Without a version, npm installs the latest Surface, which
+can fall outside that range; npm then installs a separate copy for Survey.
 
 Requires Node.js >=22. TypeScript >=5.0 is required to compile against
 Survey's published type declarations (`defineProductVocabulary`'s `const`
