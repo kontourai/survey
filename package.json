@@ -56,7 +56,7 @@
     "test": "npm run build && node --test dist/tests/*.test.js",
     "test:package-smoke": "npm run build && node --test dist/tests/package-smoke/*.test.js",
     "test:browser": "playwright test",
-    "test:browser:concurrent": "npm run build && node scripts/test-playwright-concurrency.mjs",
+    "test:browser:concurrent": "npm run build && node --test tests/playwright-ownership.test.mjs && node scripts/test-playwright-concurrency.mjs",
     "verify": "npm run check:ui-token-drift && npm run check:content-boundary && npm run check:decisions && npm run typecheck && npm test && npm run test:package-smoke && npm run check:review-workbench && npm run test:browser && npm run test:browser:concurrent",
     "check:content-boundary": "node --test tests/content-boundary-script.test.cjs && node scripts/check-content-boundary.cjs",
     "check:decisions": "npx -y --package=https://codeload.github.com/kontourai/corpus/tar.gz/08c62ccd72880ff4bd4c378ae252ad437b4b4fb5 -- corpus decisions check --base ${DECISIONS_BASE:-origin/main}",
