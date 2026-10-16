@@ -1,5 +1,13 @@
 # Changelog
 
+## [8.2.1](https://github.com/kontourai/survey/compare/v8.2.0...v8.2.1) (2026-10-14)
+
+
+### Documentation
+
+* declare product purpose and verified building blocks ([#343](https://github.com/kontourai/survey/issues/343)) ([cacc0d8](https://github.com/kontourai/survey/commit/cacc0d82ec41da95e03180efaa20139e38ef7a56))
+* pin a Surface major that shares Survey's copy ([#347](https://github.com/kontourai/survey/issues/347)) ([18972ca](https://github.com/kontourai/survey/commit/18972ca970c1ebafbed5219618957c158f47e493))
+
 ## [8.2.0](https://github.com/kontourai/survey/compare/v8.1.1...v8.2.0) (2026-10-13)
 
 
