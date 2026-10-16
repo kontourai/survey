@@ -119,3 +119,32 @@ test("fixture launch preserves a working directory containing spaces", async () 
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("Windows teardown kills the owned tree before its leader and joins close", async () => {
+  const { stopBrowserProbe } = await import("../scripts/playwright-owned-server.mjs");
+  let resolveClose;
+  const closed = new Promise((resolve) => { resolveClose = resolve; });
+  let descendantAlive = true;
+  const calls = [];
+  const child = { pid: 4242, exitCode: null, signalCode: null, kill() { assert.fail("leader killed before its tree"); } };
+  await stopBrowserProbe(child, closed, { platform: "win32", execFile(file, args, options) {
+    calls.push({ file, args, options });
+    assert.equal(child.exitCode, null);
+    descendantAlive = false;
+    child.exitCode = 1;
+    resolveClose({ code: 1 });
+  } });
+  assert.equal(descendantAlive, false);
+  assert.deepEqual(calls, [{ file: "taskkill.exe", args: ["/pid", "4242", "/T", "/F"], options: { windowsHide: true, stdio: "ignore", timeout: 5_000 } }]);
+});
+
+test("failed Windows tree termination rejects on a bounded close instead of hanging", async () => {
+  const { stopBrowserProbe } = await import("../scripts/playwright-owned-server.mjs");
+  const signals = [];
+  const child = { pid: 4242, exitCode: null, signalCode: null, kill(signal) { signals.push(signal); } };
+  await assert.rejects(stopBrowserProbe(child, new Promise(() => {}), {
+    platform: "win32", joinMs: 10,
+    execFile() { throw new Error("synthetic tree failure"); },
+  }), /teardown timed out/);
+  assert.deepEqual(signals, ["SIGKILL"]);
+});

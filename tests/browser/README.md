@@ -16,8 +16,8 @@ The config verifies this identity in the caller and each reevaluating worker;
 only this verified path omits Playwright's webServer launch. It does not enable
 `reuseExistingServer`. Browser navigations assert the serving token and port,
 and both expected project outcomes must reach the coordinator before success.
-A foreign or mismatched endpoint fails verification. Probe failures and signals
-join teardown of owned probes and servers; the Python fixture also exits on
+A foreign or mismatched endpoint fails verification. Concurrency retries are disabled, including in CI. Probe failures and signals
+join bounded teardown of owned probes and servers; Windows kills the process tree before terminating its leader; the Python fixture also exits on
 parent-pipe EOF. Readiness and run deadlines are failures, never skipped passes.
 
 The retained 2026-10-16 Node 22 publisher failure was a Python address-in-use

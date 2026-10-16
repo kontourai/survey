@@ -34,8 +34,11 @@ export async function startOwnedServer({ cwd = process.cwd() } = {}) {
   const stop = async () => {
     child.stdin.destroy();
     if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
-    const timer = setTimeout(() => child.kill("SIGKILL"), 5_000);
-    try { await closed; } finally { clearTimeout(timer); }
+    try { await boundedClose(closed, 5_000); }
+    catch (error) {
+      child.kill("SIGKILL");
+      await boundedClose(closed, 5_000);
+    }
   };
   try {
     const identity = await new Promise((resolve, reject) => {
@@ -117,7 +120,7 @@ export async function runOwnedProbes({ runProbe, onEvent = (event) => console.lo
 export function startBrowserProbe(identity, index) {
   const child = spawn(process.execPath, [
     playwrightCli, "test", "tests/browser/review-workbench.spec.ts", "--grep", "renders field-diff cards",
-    `--output=test-results/concurrent-${index}`, "--reporter=list",
+    `--output=test-results/concurrent-${index}`, "--reporter=list", "--retries=0",
   ], {
     windowsHide: true,
     detached: process.platform !== "win32",
@@ -157,29 +160,60 @@ export function startBrowserProbe(identity, index) {
   done.catch(() => {});
   return {
     child, done,
-    async stop() {
-      // SIGINT lets Playwright join workers/browsers. Bound escalation also
-      // terminates the owned process group, rather than only its CLI leader.
-      const killGroup = (signal) => {
-        if (!child.pid) return;
-        if (process.platform === "win32") {
-          if (child.exitCode === null && child.signalCode === null) {
-            execFileSync("taskkill.exe", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
-          }
-        } else {
-          try { process.kill(-child.pid, signal); } catch (error) { if (error.code !== "ESRCH") throw error; }
-        }
-      };
-      if (child.exitCode === null && child.signalCode === null) child.kill("SIGINT");
-      let escalationError;
-      const timer = setTimeout(() => {
-        try { killGroup("SIGKILL"); } catch (error) { escalationError = error; child.kill("SIGKILL"); }
-      }, 10_000);
-      try {
-        await closed;
-        killGroup("SIGKILL");
-        if (escalationError) throw escalationError;
-      } finally { clearTimeout(timer); }
-    },
+    stop: () => stopBrowserProbe(child, closed),
   };
+}
+
+// The injected platform/process functions are narrow seams for Windows ordering
+// controls on POSIX. They do not replace the actual browser-probe validation.
+export async function stopBrowserProbe(child, closed, {
+  platform = process.platform,
+  execFile = execFileSync,
+  kill = process.kill.bind(process),
+  graceMs = 10_000,
+  joinMs = 5_000,
+} = {}) {
+  const live = () => child.exitCode === null && child.signalCode === null;
+  const killGroup = () => {
+    if (!child.pid) return;
+    try { kill(-child.pid, "SIGKILL"); } catch (error) { if (error.code !== "ESRCH") throw error; }
+  };
+  if (platform === "win32") {
+    let treeError;
+    if (live()) {
+      // Windows child.kill(SIGINT) kills the leader immediately. Terminate its
+      // tree first, while taskkill can still discover the owned descendants.
+      try {
+        execFile("taskkill.exe", ["/pid", String(child.pid), "/T", "/F"], {
+          windowsHide: true, stdio: "ignore", timeout: joinMs,
+        });
+      } catch (error) {
+        treeError = error;
+        if (live()) child.kill("SIGKILL");
+      }
+    }
+    await boundedClose(closed, joinMs);
+    if (treeError) throw treeError;
+  } else {
+    if (live()) child.kill("SIGINT");
+    try {
+      await boundedClose(closed, graceMs);
+    } catch (error) {
+      killGroup();
+      await boundedClose(closed, joinMs);
+    } finally {
+      // Also remove a surviving worker after a leader that already exited.
+      killGroup();
+    }
+  }
+}
+
+async function boundedClose(closed, milliseconds) {
+  let timer;
+  try {
+    await Promise.race([
+      closed,
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("Survey probe teardown timed out")), milliseconds); }),
+    ]);
+  } finally { clearTimeout(timer); }
 }
