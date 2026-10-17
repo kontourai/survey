@@ -23,7 +23,7 @@ importers:
         version: 5.10.0(@ai-sdk/provider@4.0.4)(typescript@7.0.2)(zod@4.4.3)
       '@kontourai/traverse':
         specifier: ^3.0.1
-        version: 3.0.1(@anthropic-ai/sdk@0.74.0(zod@4.4.3))(@kontourai/relay@0.4.0(@ai-sdk/provider@4.0.4)(@anthropic-ai/sdk@0.74.0(zod@4.4.3)))(playwright@1.62.1)(typescript@7.0.2)
+        version: 3.0.1(@anthropic-ai/sdk@0.74.0(zod@4.4.3))(@kontourai/relay@0.4.0(@ai-sdk/provider@4.0.4)(@anthropic-ai/sdk@0.74.0(zod@4.4.3)))(playwright@1.64.1)(typescript@7.0.2)
       '@kontourai/ui':
         specifier: ^1.20.0
         version: 1.20.0(react@19.2.7)
@@ -32,10 +32,10 @@ importers:
         version: 1.11.2(zod@4.4.3)
       '@playwright/test':
         specifier: ^1.62.0
-        version: 1.62.1
+        version: 1.64.1
       '@types/node':
         specifier: ^26.1.2
-        version: 26.2.0
+        version: 26.6.5
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
@@ -374,8 +374,8 @@ packages:
     resolution: {integrity: sha512-3zcN5Q3yEmeyxXBzqB6fXPQFzYa2ROsGFSr69W0ArXIAGJqxl/aFECOVPD2kbkYPm0U/EHxFKgclK3UA9WQg5A==}
     engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
 
-  '@playwright/test@1.62.1':
-    resolution: {integrity: sha512-DTcUc8qii+cpHvtOwggMtBRMjKZHXYWdw8syRYu2vtzuq4Wxphqq4NfCs5Zt44L6mA8rfDfj+PHnxFc/FeK6mQ==}
+  '@playwright/test@1.64.1':
+    resolution: {integrity: sha512-IaYGml/nSOiZWROfPtuIL7neuu9qDOZ3TNvNljUIrhDMxiGTgPjzj/g9p9RxpS2tSepPDRY+UwAaEeiKtUvIAg==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -399,8 +399,8 @@ packages:
     resolution: {integrity: sha512-BfD9eLrz3A/DG58aSgfgZYmIR6V9Yw96QVN/frtu2bEH7ctSTk2TDvHU12un3JsDPBTqTNkqkIkucjxljpOFqQ==}
     engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
 
-  '@types/node@26.2.0':
-    resolution: {integrity: sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg==}
+  '@types/node@26.6.5':
+    resolution: {integrity: sha512-uMzsv9stDdofIZBx4UGh4Z9ZgXnGC9seRDscilBcTHAeOFk67MZg/k9bWVfO+bk4qZmG+l52hRnLwUiH2LnJTg==}
 
   '@typescript/typescript-aix-ppc64@7.0.2':
     resolution: {integrity: sha512-MTKKkWB7p/0E9xi1d1tHtZ5PiLkGEMIq88pK2CubZjOsLtYTLqhgIgi6zepFa+9GHZ6h05NMCkQxGKiPXMxXtQ==}
@@ -747,11 +747,6 @@ packages:
     resolution: {integrity: sha512-XUBA9XClHbnJWSfBzjkm6RvPsyg3sryZt06BEQoXcF7EK/xpGaQYJgQKDJSUH5SGZ76Y7pFx1QBnXz09rU5Fbw==}
     engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0}
 
-  fsevents@2.3.2:
-    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
-    engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
-    os: [darwin]
-
   function-bind@1.1.2:
     resolution: {integrity: sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==}
 
@@ -983,13 +978,13 @@ packages:
     resolution: {integrity: sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ==}
     engines: {node: '>=16.20.0'}
 
-  playwright-core@1.62.1:
-    resolution: {integrity: sha512-wPYSwEBJY9GHraISXqyqtx0na0LpO3XEX7jNDhntbex7tzUS7kLnZsOlFruFJB4Hi/rhDMjXGqHewDZ68nYZVw==}
+  playwright-core@1.64.1:
+    resolution: {integrity: sha512-BC4s8y6SEVA6Q1rSxZTto8hI1KUI3xXlHGZgvGqP4IqPdI/a6FX9H29IDNz7vKo9l21b6LfYosScPL6M3xxyDQ==}
     engines: {node: '>=20'}
     hasBin: true
 
-  playwright@1.62.1:
-    resolution: {integrity: sha512-0M+L3LAD8/nm554LOla9Ayx0j0tmFZ0FBcoQ7F1VuVHpM/XpiC8RcDzBQB8W5+hA8L22THxELzeF+2WcUzvcLg==}
+  playwright@1.64.1:
+    resolution: {integrity: sha512-HCrVhHr5QQuwYoswEUGTb7gGp522yflbv/ST8nF4sFWGuLjQCt17Q/EubpGGSNKYn1tsTCPZxqHhHCfVURu7UA==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -1132,8 +1127,8 @@ packages:
   uhyphen@0.2.0:
     resolution: {integrity: sha512-qz3o9CHXmJJPGBdqzab7qAYuW8kQGKNEuoHFYrBwV6hWIMcpAmxDLXojcHfFr9US1Pe6zUswEIJIbLI610fuqA==}
 
-  undici-types@8.3.0:
-    resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
+  undici-types@8.9.0:
+    resolution: {integrity: sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==}
 
   unpipe@1.0.0:
     resolution: {integrity: sha512-pjy2bYhSsufwWlKwPc+l3cN7+wuJlK6uz0YdJEOlQDbl6jo/YlPi4mb8agUkVC8BF7V8NuzeyPNqRksA3hztKQ==}
@@ -1304,9 +1299,9 @@ snapshots:
       - kerberos
       - supports-color
 
-  '@kontourai/forage@0.5.1(playwright@1.62.1)':
+  '@kontourai/forage@0.5.1(playwright@1.64.1)':
     optionalDependencies:
-      playwright: 1.62.1
+      playwright: 1.64.1
 
   '@kontourai/plumb@0.2.0': {}
 
@@ -1339,9 +1334,9 @@ snapshots:
       - kerberos
       - supports-color
 
-  '@kontourai/traverse@3.0.1(@anthropic-ai/sdk@0.74.0(zod@4.4.3))(@kontourai/relay@0.4.0(@ai-sdk/provider@4.0.4)(@anthropic-ai/sdk@0.74.0(zod@4.4.3)))(playwright@1.62.1)(typescript@7.0.2)':
+  '@kontourai/traverse@3.0.1(@anthropic-ai/sdk@0.74.0(zod@4.4.3))(@kontourai/relay@0.4.0(@ai-sdk/provider@4.0.4)(@anthropic-ai/sdk@0.74.0(zod@4.4.3)))(playwright@1.64.1)(typescript@7.0.2)':
     dependencies:
-      '@kontourai/forage': 0.5.1(playwright@1.62.1)
+      '@kontourai/forage': 0.5.1(playwright@1.64.1)
       linkedom: 0.18.13
       turndown: 7.2.4
     optionalDependencies:
@@ -1425,9 +1420,9 @@ snapshots:
   '@npmcli/redact@5.0.0':
     optional: true
 
-  '@playwright/test@1.62.1':
+  '@playwright/test@1.64.1':
     dependencies:
-      playwright: 1.62.1
+      playwright: 1.64.1
 
   '@sigstore/bundle@5.0.0':
     dependencies:
@@ -1460,9 +1455,9 @@ snapshots:
       '@sigstore/protobuf-specs': 0.5.1
     optional: true
 
-  '@types/node@26.2.0':
+  '@types/node@26.6.5':
     dependencies:
-      undici-types: 8.3.0
+      undici-types: 8.9.0
 
   '@typescript/typescript-aix-ppc64@7.0.2':
     optional: true
@@ -1805,9 +1800,6 @@ snapshots:
       minipass: 7.1.3
     optional: true
 
-  fsevents@2.3.2:
-    optional: true
-
   function-bind@1.1.2: {}
 
   get-intrinsic@1.3.0:
@@ -2063,13 +2055,11 @@ snapshots:
 
   pkce-challenge@5.0.1: {}
 
-  playwright-core@1.62.1: {}
+  playwright-core@1.64.1: {}
 
-  playwright@1.62.1:
+  playwright@1.64.1:
     dependencies:
-      playwright-core: 1.62.1
-    optionalDependencies:
-      fsevents: 2.3.2
+      playwright-core: 1.64.1
 
   proc-log@7.0.0:
     optional: true
@@ -2257,7 +2247,7 @@ snapshots:
 
   uhyphen@0.2.0: {}
 
-  undici-types@8.3.0: {}
+  undici-types@8.9.0: {}
 
   unpipe@1.0.0: {}
 
