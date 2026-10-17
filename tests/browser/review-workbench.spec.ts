@@ -628,7 +628,14 @@ async function loadWorkbench(page: Page): Promise<string[]> {
     consoleErrors.push(error.message);
   });
 
-  await page.goto(workbenchPath);
+  const response = await page.goto(workbenchPath);
+  const owner = process.env.SURVEY_PLAYWRIGHT_OWNER;
+  if (owner !== undefined) {
+    const identity = JSON.parse(owner);
+    expect(new URL(page.url()).port).toBe(String(identity.port));
+    expect(response?.headers()["x-survey-playwright-owner"]).toBe(identity.token);
+    console.log(JSON.stringify({ event: "browser-owned-response", project: test.info().project.name, port: identity.port, serverPid: identity.pid, workerPid: process.pid }));
+  }
   await expect(page.getByTestId("review-workbench")).toBeVisible();
   return consoleErrors;
 }
