@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.2.2](https://github.com/kontourai/survey/compare/v8.2.1...v8.2.2) (2026-10-17)
+
+
+### Fixes
+
+* retain ownership of browser concurrency probe ports ([#351](https://github.com/kontourai/survey/issues/351)) ([669e927](https://github.com/kontourai/survey/commit/669e9272bc9a90c9313cccb0e586cedf63fdbc81))
+
 ## [8.2.1](https://github.com/kontourai/survey/compare/v8.2.0...v8.2.1) (2026-10-14)
 
 
