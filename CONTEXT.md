@@ -248,3 +248,13 @@ Domain expert: "Set withinComfortZone to false on the Review Outcome and add a c
 Developer: "The reviewer rejected a proposed phone number and kept the current value."
 
 Domain expert: "Record the proposed Candidate's rejectionReason and the Review Outcome. Do not set withinComfortZone to false unless the reviewer also says a different authority or domain specialist needs to confirm the decision."
+
+**Reviewed Entity Relationship**:
+A producer-reviewed assertion over entity subjects and a relation, with exact
+source evidence, alternatives, policy and immutable decision ancestry. Merge,
+alias and same-as can map to a Surface equivalent IdentityLink; a later split
+supersedes the reviewed mapping without rewriting it. Abstention is not an
+identity assertion. Survey records the decisions; Surface owns admission and
+projection of identity over time.
+_Avoid_: Treating name similarity as identity, treating a reviewed mapping as
+an automatically admitted current identity, rewriting a merge to split it

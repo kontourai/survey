@@ -80,6 +80,10 @@
       "section": "Decisions"
     },
     {
+      "source": "docs/decisions/entity-review.md",
+      "section": "Decisions"
+    },
+    {
       "source": "docs/decisions/extraction-envelope-import.md",
       "section": "Decisions"
     },
