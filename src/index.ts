@@ -442,3 +442,6 @@ export {
   type SplitRoundForCarryForwardResult,
   type SupersessionReason,
 } from "./decision-carry-forward.js";
+
+export { createEntityProposal, entityProposalToReviewItem, entityOutcomeFromDecision, projectEntityReviews, planEntityReviewBatch } from "./entity-review.js";
+export type { EntityEvidence, EntityOperation, EntityAlternative, EntityProposalInput, EntityProposal, EntityDisposition, EntityOutcome, EntityProjectionRecord } from "./entity-review.js";

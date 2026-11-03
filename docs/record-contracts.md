@@ -1553,3 +1553,61 @@ Calibration is **advisory**, and honest about what it does not know:
 - **Prefer a longer history.** Deriving from the current batch folds a claim's own
   outcome into the group that sets its value; pass precomputed `metrics` over more
   than the batch when you can.
+
+## Reviewed entity relationships
+
+`createEntityProposal` records producer-supplied alternatives, exact source
+references, checksums, locators, excerpts and supporting or contradictory
+stances, proposer/model/rule, component scores, policy and revision. It sorts
+and deduplicates alternatives by content; different content under the same
+candidate identity fails closed. Scores are descriptive and never decide review.
+The producer supplies source locators and checksums; Survey does not fetch or
+verify source material. Support-verification records can be attached to the
+candidate after building its ReviewItem and obtaining its stable candidate ID.
+
+`entityProposalToReviewItem` makes an ordinary, non-editable `ReviewItem`.
+Every alternative includes its evidence in the displayed value, and the first
+source is available to the inspector. Confidence components stay in the API
+record and are not rendered in the value, so score-blind sessions cannot leak
+them through candidate text. Alternatives that differ only in their component
+scores remain distinct records and may appear identical in a score-blind
+session; the API retains the components. A Workbench `ReviewDecision` can be bound
+with `entityOutcomeFromDecision`: verified selection accepts, rejected rejects,
+and `could_not_confirm` abstains with a reason. An API caller can record a
+reasoned dispute using a proposed decision with label
+`survey.kontourai.io/entity-disposition: disputed`. Review events and decisions
+remain the existing Workbench resources. Identity is content-addressed; this
+is tamper detection, not authentication or proof of reviewer authority. Hosts
+must bind decisions to authenticated actors and policy before persisting or
+using them. No similarity or confidence threshold promotes a candidate.
+
+A split is a reviewed replacement whose complete ancestry reaches an accepted
+merge, alias, or same-as. A later merge can supersede the split. A later review
+can also supersede a rejected or disputed candidate, preserving the prior
+disposition. A split can be accepted again after a reviewed rejection or
+dispute, or replace a rejected or disputed mapping, when that ancestry is
+complete. The full prior outcome must be supplied for projection, and the
+subject pair and relation must agree. Projection records carry both `supersedes` on the new
+record and `supersededBy` on the predecessor. A rejected split does not
+contradict a merge, and a clean split is not itself a conflict. Abstention never
+supersedes a prior decision. Missing, branching, or cyclic supersession fails
+closed. `projectEntityReviews` reports proposed, accepted, rejected, disputed,
+abstained and superseded records with ancestry. Accepted merge, alias and
+same-as decisions can carry a Surface `equivalent` IdentityLink and its mapping
+claim, evidence and review event. A split or a general relationship is not an
+identity link. Conflicting decisions for one proposal, or incompatible live reviews of the
+same subject pair, suppress candidate links and report `conflicting-reviews`.
+Abstention does not suppress an earlier accepted link. These are
+review assertions, **not an admitted current-state projection**: hosts must
+supply complete custody, authority and knowledge-cut inputs and let Surface
+admit links, as described by [Surface's knowledge accumulation decision](https://github.com/kontourai/surface/blob/main/docs/decisions/knowledge-accumulation.md).
+Do not append a superseded link to an active Surface bundle. The supplied record set must be complete: Surface still owns cross-bundle
+admission, transitive identity conflicts and time-based current state.
+
+`planEntityReviewBatch` is a side-effect-free dry run of at most 50 explicit
+decisions. It validates the complete supplied ancestry and returns the exact
+outcomes and projected evidence to inspect before a host persists them. Survey
+does not provide transactional storage: hosts must atomically persist the
+returned records, protect concurrent revisions, and record later reviewed
+supersessions for rollback rather than deleting or rewriting outcomes. The plan
+is not an authorization, commit, or rollback operation.
