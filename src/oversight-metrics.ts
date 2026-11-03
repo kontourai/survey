@@ -10,6 +10,8 @@
 
 import type { Claim, Evidence, TrustBundle, VerificationEvent } from "@kontourai/surface";
 import type { ReviewDecision } from "./review-resource.js";
+import { assertReviewerKind, resolveReviewerKind, REVIEWER_KINDS } from "./producer-discipline.js";
+import type { ReviewerKind } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Per-reviewer metrics
@@ -72,6 +74,18 @@ export interface AggregateOversightMetrics {
   readonly samplingCoverage: number | undefined;
 }
 
+/**
+ * Aggregate indicators for the decisions of one reviewer kind. A human's
+ * decisions and an agent's are not interchangeable oversight evidence, so
+ * they are never pooled into one rate without this breakdown beside them.
+ */
+export interface ReviewerKindOversightMetrics extends AggregateOversightMetrics {
+  /** The host-attested kind, or the kind inferred for decisions that carry none. */
+  readonly reviewerKind: ReviewerKind;
+  /** Decisions in this row whose kind was inferred rather than host-attested. */
+  readonly inferredDecisionCount: number;
+}
+
 // ---------------------------------------------------------------------------
 // Full metrics output
 // ---------------------------------------------------------------------------
@@ -81,6 +95,13 @@ export interface OversightMetrics {
   readonly byReviewer: readonly ReviewerOversightMetrics[];
   /** Aggregate across all reviewers. */
   readonly aggregate: AggregateOversightMetrics;
+  /**
+   * The same aggregate split by reviewer kind: one row per kind that has
+   * decisions, in `human`, `agent`, `rule` order. A decision without a
+   * host-attested kind is counted under its inferred kind and in that row's
+   * `inferredDecisionCount`.
+   */
+  readonly byReviewerKind: readonly ReviewerKindOversightMetrics[];
   /** ISO 8601 timestamp of the earliest decision in the window. */
   readonly windowStart: string | undefined;
   /** ISO 8601 timestamp of the latest decision in the window. */
@@ -132,6 +153,11 @@ export function deriveOversightMetrics(
     ? new Date(options.now.getTime() - options.windowDays * 24 * 60 * 60 * 1000)
     : undefined;
 
+  // Refuse an unknown or contradictory kind before any metric is computed from it.
+  for (const d of decisions) {
+    assertReviewerKind(`ReviewDecision ${d.metadata?.name ?? "(unnamed)"}`, { reviewerKind: d.spec.reviewerKind, actor: d.spec.actor?.id });
+  }
+
   const windowed = cutoff
     ? decisions.filter((d) => {
         const t = d.spec.reviewedAt ? Date.parse(d.spec.reviewedAt) : NaN;
@@ -152,6 +178,7 @@ export function deriveOversightMetrics(
         medianInterDecisionSeconds: undefined,
         samplingCoverage: options.presentedCount !== undefined ? 0 : undefined,
       },
+      byReviewerKind: [],
       windowStart: undefined,
       windowEnd: undefined,
       windowDays: options.windowDays,
@@ -185,9 +212,25 @@ export function deriveOversightMetrics(
   // Aggregate
   const aggregate = computeAggregateMetrics(windowed, allTimestamps, options.presentedCount);
 
+  const byReviewerKind: ReviewerKindOversightMetrics[] = [];
+  for (const reviewerKind of REVIEWER_KINDS) {
+    const ofKind = windowed.filter((d) => resolveReviewerKind({ reviewerKind: d.spec.reviewerKind, actor: d.spec.actor?.id }).kind === reviewerKind);
+    if (ofKind.length === 0) continue;
+    const timestamps = ofKind
+      .map((d) => d.spec.reviewedAt ? Date.parse(d.spec.reviewedAt) : NaN)
+      .filter((t) => !isNaN(t))
+      .sort((a, b) => a - b);
+    byReviewerKind.push({
+      reviewerKind,
+      inferredDecisionCount: ofKind.filter((d) => d.spec.reviewerKind === undefined).length,
+      ...computeAggregateMetrics(ofKind, timestamps, options.presentedCount),
+    });
+  }
+
   return {
     byReviewer,
     aggregate,
+    byReviewerKind,
     windowStart,
     windowEnd,
     windowDays: options.windowDays,
@@ -420,6 +463,7 @@ export function oversightMetricsToClaims(
           windowStart: metrics.windowStart,
           windowEnd: metrics.windowEnd,
           windowDays: metrics.windowDays,
+          decisionsByReviewerKind: Object.fromEntries(metrics.byReviewerKind.map((row) => [row.reviewerKind, row.decisionCount])),
         },
       },
     };

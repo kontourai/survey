@@ -150,6 +150,8 @@ export function buildCanonicalReviewedTrustInput(
       ...(decision.resolutionReason ? { resolutionReason: decision.resolutionReason } : {}),
       ...(decision.attemptEvidenceIds?.length ? { attemptEvidenceIds: [...decision.attemptEvidenceIds] } : {}),
       ...(decision.actor?.id ? { actor: decision.actor.id } : {}),
+      // The host's attestation, carried as recorded on the server-derived decision.
+      ...(decision.reviewerKind !== undefined ? { reviewerKind: decision.reviewerKind } : {}),
       ...(decision.reviewedAt ? { reviewedAt: decision.reviewedAt } : {}),
       ...(decision.rationale ? { rationale: decision.rationale } : {}),
       ...(decision.evidenceIds?.length ? { evidenceIds: [...decision.evidenceIds] } : {}),

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Claim, Evidence, TrustBundle, TrustStatus, VerificationEvent } from "@kontourai/surface";
 import { buildReviewProofAnchor } from "./review-proof.js";
-import { assertReviewOutcomeDiscipline } from "./producer-discipline.js";
+import { assertReviewOutcomeDiscipline, resolveReviewerKind, reviewerAuthorityForKind } from "./producer-discipline.js";
 import { deriveCalibration, type CalibrationMetrics } from "./calibration.js";
 import { AUTO_ACCEPT_ACTOR } from "./producer-profile.js";
 import { canonicalJson } from "./review-workbench/canonical.js";
@@ -15,6 +15,7 @@ import type {
   InterpretationReadingKind,
   RawSource,
   ReviewOutcome,
+  ReviewerKind,
   SurveyInput,
 } from "./types.js";
 
@@ -153,6 +154,7 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
     const updatedAt = projection.updatedAt ?? projectionReview?.reviewedAt ?? input.generatedAt;
     const evidenceId = projectionRecordId(projection.id, projectionContextId, "claim-evidence", "evidence.source");
     const autoAccepted = projectionReview?.actor === AUTO_ACCEPT_ACTOR;
+    const reviewer = projectionReview ? resolveReviewerKind(projectionReview) : undefined;
 
     const claim: Claim = {
       id: projection.id,
@@ -172,11 +174,12 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
         sourceQuality: "moderate",
         // An absent confidence stays absent; no key, no default.
         ...((candidate.confidence ?? extraction.confidence) !== undefined ? { extractionConfidence: candidate.confidence ?? extraction.confidence } : {}),
-        // An auto-accept policy checked nothing but the proposer's own
-        // confidence, so its claims carry system authority and weak evidence;
-        // only a human review earns operator authority.
+        // Only a human review earns operator authority; an agent or a rule is
+        // the system. An auto-accept policy checked nothing but the proposer's
+        // own confidence, so its claims also carry weak evidence. A record
+        // with no host-attested kind keeps the authority it always had.
         reviewerAuthority: status === "verified" || status === "assumed"
-          ? (autoAccepted ? "system" : "operator")
+          ? (reviewer ? reviewerAuthorityForKind(reviewer.kind) : "operator")
           : "none",
         evidenceStrength: (status === "verified" || status === "assumed") && !autoAccepted ? "moderate" : "weak",
         impactLevel: projection.impactLevel,
@@ -191,6 +194,7 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
           candidateSet,
           candidate,
           review: projectionReview,
+          reviewer,
           comfortZoneReview: review,
           valueEdit: (status === "verified" || status === "assumed") && review ? acceptedEdit(review) : undefined,
         }),
@@ -764,10 +768,14 @@ function buildSurveyMetadata(input: {
   candidateSet: CandidateSet;
   candidate: Candidate;
   review?: ReviewOutcome;
+  reviewer?: { kind: ReviewerKind; inferred: boolean };
   comfortZoneReview?: ReviewOutcome;
   valueEdit?: { value: unknown };
 }): Record<string, unknown> {
-  const producerSurveyMetadata = isRecord(input.projection.metadata?.survey) ? input.projection.metadata.survey : {};
+  // `reviewerKind` and `reviewerKindInferred` are computed from the review,
+  // never producer-supplied: a producer cannot mark an unreviewed or
+  // agent-reviewed claim as human-reviewed.
+  const { reviewerKind: _producerReviewerKind, reviewerKindInferred: _producerReviewerKindInferred, ...producerSurveyMetadata } = isRecord(input.projection.metadata?.survey) ? input.projection.metadata.survey : {};
   const producerCandidateMetadata = isRecord(producerSurveyMetadata.candidate) ? producerSurveyMetadata.candidate : {};
   return {
     ...producerSurveyMetadata,
@@ -776,6 +784,10 @@ function buildSurveyMetadata(input: {
     candidateSetId: input.candidateSet.id,
     candidateId: input.candidate.id,
     reviewOutcomeId: input.review?.id,
+    // The kind of reviewer, so a consumer can require a human decision.
+    // `reviewerKindInferred: true` means the record carried no host-attested
+    // kind; a consumer that requires a human refuses it.
+    ...(input.reviewer ? { reviewerKind: input.reviewer.kind, reviewerKindInferred: input.reviewer.inferred } : {}),
     ...(input.candidate.rejectionReason !== undefined
       ? {
           candidate: {

@@ -22,5 +22,6 @@ Numbered ADRs under `docs/adr/` are frozen history and are not listed here.
 | [proposed-value-edit](./proposed-value-edit.md) | current | Proposed-Value Edit |
 | [review-workbench](./review-workbench.md) | current | Review Workbench |
 | [reviewed-current-proposed-resolution](./reviewed-current-proposed-resolution.md) | needs-decision | Reviewed Current/Proposed Resolution |
+| [reviewer-kind](./reviewer-kind.md) | current | Reviewer Kind |
 | [source-linked-extraction-inspector](./source-linked-extraction-inspector.md) | current | Source-Linked Extraction Inspector |
 | [support-verification](./support-verification.md) | current | Support Verification |

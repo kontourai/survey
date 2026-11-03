@@ -990,6 +990,77 @@ source -> extraction -> candidate -> review -> claim projection path. Surface
 owns dependency semantics such as recompute pressure and status ceilings.
 
 
+## Reviewer kind
+
+A `ReviewOutcome` names its reviewer by `actor`, which is a label. `reviewerKind:
+"human" | "agent" | "rule"` says what the reviewer is, so a host that requires a
+person for certain items (for example, routed contradictions in accumulated
+memory) can tell from the record whether one decided.
+
+```ts
+reviewOutcome: {
+  status: "verified",
+  actor: "records-operator",
+  reviewerKind: "human",
+  reviewedAt: new Date().toISOString(),
+},
+```
+
+**The host attests it; the reviewer never does.** Set `reviewerKind` on the
+review session snapshot (`ReviewQueueSessionState.reviewerKind`) once the host
+has authenticated the reviewer. Survey stamps it from there on every
+`ReviewDecision` and `ReviewSessionEvent`, and carries it to the `ReviewOutcome`.
+Replay and apply never read it from a posted event: the console and any host that
+uses `appendReviewSessionEvents` store the snapshot's value over whatever an
+event carried, and a snapshot with no kind stores none. The Workbench has no
+control that sets it. A host that builds `ReviewOutcome` records itself sets it
+from its own authentication, not from a request body.
+
+**Projection.** The kind decides `confidenceBasis.reviewerAuthority` of a
+`verified` or `assumed` claim, and is carried as structured metadata:
+
+| `reviewerKind` | `confidenceBasis.reviewerAuthority` | `metadata.survey.reviewerKind` |
+| --- | --- | --- |
+| `human` | `operator` | `"human"` |
+| `agent` | `system` | `"agent"` |
+| `rule` | `system` | `"rule"` |
+
+`metadata.survey.reviewerKindInferred` is `false` for an attested kind. A claim
+that is not `verified` or `assumed` keeps `reviewerAuthority: "none"` and still
+records the kind. Producer-supplied `metadata.survey.reviewerKind` and
+`reviewerKindInferred` are discarded: they are computed from the review.
+`evidenceStrength` is unchanged by the kind (an auto-accept policy actor still
+projects `"weak"`).
+
+**Legacy records.** A review with no `reviewerKind` keeps the authority it has
+always had: `auto-accept-policy` is inferred as `rule` (`system`) and any other
+actor as `human` (`operator`). The projection marks this with
+`metadata.survey.reviewerKindInferred: true`. **A consumer that requires a human
+decision must check `reviewerKind === "human"` and `reviewerKindInferred ===
+false`**: an inferred `human` is only a default for an unlabelled actor, not an
+attestation.
+
+**Validation.** An unknown value (including `null`) is refused with
+`reviewerKind must be one of human, agent, rule`, and `reviewerKind: "human"`
+on the `auto-accept-policy` actor is refused as a contradiction (a threshold rule
+is never a person). The check runs where a review is built or projected:
+`buildSurveyTrustBundle`, `SurveyInputBuilder.addReviewOutcome`, the Workbench
+decision and event builders, `entityOutcomeFromDecision`, and
+`deriveOversightMetrics`. Survey's own auto-accept outcomes (`surveySchemaMapping`)
+attest `reviewerKind: "rule"`. `REVIEWER_KINDS` and `isReviewerKind`
+are exported for hosts.
+
+`deriveOversightMetrics` also returns `byReviewerKind`, the aggregate indicators
+split by kind (one row per kind that has decisions, in `human`, `agent`, `rule`
+order, each with `inferredDecisionCount`). Human and agent decisions are different
+oversight evidence; do not read the pooled `aggregate` as a measure of human
+review.
+
+Not covered: the review proof (`buildReviewProofAnchor`) does not yet bind
+`reviewerKind`, so it is not tamper-evident through the proof. Entity outcomes
+are content-addressed over the decision, so a changed kind is a different outcome
+id.
+
 ## Comfort zone flags
 
 Use `withinComfortZone: false` on a `ReviewOutcome` when the reviewer is
@@ -1401,6 +1472,8 @@ const metrics = deriveOversightMetrics(decisions, {
 // metrics.aggregate: decisionCount, decisionsPerHour, overrideRate,
 //   typedRationaleRate, medianInterDecisionSeconds, samplingCoverage?
 // metrics.byReviewer: one row per actorId
+// metrics.byReviewerKind: the aggregate split by host-attested reviewer kind
+//   (see "Reviewer kind"); decisions without one are counted under their inferred kind
 
 const subject = {
   subjectType: "review-session",
@@ -1579,7 +1652,12 @@ reasoned dispute using a proposed decision with label
 remain the existing Workbench resources. Identity is content-addressed; this
 is tamper detection, not authentication or proof of reviewer authority. Hosts
 must bind decisions to authenticated actors and policy before persisting or
-using them. No similarity or confidence threshold promotes a candidate.
+using them. A decision carries the host-attested `reviewerKind` (see
+[Reviewer kind](#reviewer-kind)), which is part of the outcome identity:
+`projectEntityReviews` reports `reviewerKind` and `reviewerKindInferred` on each
+record and sets the mapping claim's `confidenceBasis.reviewerAuthority`
+(`human` is `operator`, `agent` and `rule` are `system`). Survey does not require
+a human for entity merges; a host that does checks the record. No similarity or confidence threshold promotes a candidate.
 
 A split is a reviewed replacement whose complete ancestry reaches an accepted
 merge, alias, or same-as. A later merge can supersede the split. A later review

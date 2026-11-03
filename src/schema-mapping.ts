@@ -403,6 +403,8 @@ export async function surveySchemaMapping(
           candidateId: selectedCandidate.id,
           status: "assumed",
           actor: decision.actor,
+          // The policy is a threshold rule; Survey is the host that applies it.
+          reviewerKind: "rule",
           reviewedAt: decision.reviewedAt,
           rationale: decision.rationale,
           withinComfortZone: decision.withinComfortZone,

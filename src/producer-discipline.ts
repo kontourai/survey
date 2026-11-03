@@ -1,5 +1,45 @@
 import type { TrustStatus } from "@kontourai/surface";
-import type { CandidateSetStatus, ReviewResolution } from "./types.js";
+import { AUTO_ACCEPT_ACTOR } from "./producer-profile.js";
+import type { CandidateSetStatus, ReviewResolution, ReviewerKind } from "./types.js";
+
+/** Every reviewer kind a host may attest. */
+export const REVIEWER_KINDS: readonly ReviewerKind[] = ["human", "agent", "rule"];
+
+export function isReviewerKind(value: unknown): value is ReviewerKind {
+  return typeof value === "string" && (REVIEWER_KINDS as readonly string[]).includes(value);
+}
+
+/**
+ * Refuses an unknown `reviewerKind`, and `human` on the auto-accept policy
+ * actor (a threshold rule is never a person). An absent kind is legacy and
+ * passes. `reviewerKind` is typed `unknown` here because the value comes off
+ * the wire: a typed field alone does not stop a JSON record carrying `"admin"`.
+ */
+export function assertReviewerKind(subject: string, review: { reviewerKind?: unknown; actor?: string }): void {
+  if (review.reviewerKind === undefined) return;
+  if (!isReviewerKind(review.reviewerKind)) {
+    throw new Error(`${subject} reviewerKind must be one of ${REVIEWER_KINDS.join(", ")}`);
+  }
+  if (review.actor === AUTO_ACCEPT_ACTOR && review.reviewerKind === "human") {
+    throw new Error(`${subject} reviewerKind human contradicts actor ${AUTO_ACCEPT_ACTOR}`);
+  }
+}
+
+/**
+ * The reviewer kind a record carries, or the one inferred for a legacy record
+ * with none (the policy actor is a rule, every other actor a human: the
+ * authority this projection has always assigned). `inferred` is true only for
+ * the latter, so a consumer that requires a human decision can refuse it.
+ */
+export function resolveReviewerKind(review: { reviewerKind?: ReviewerKind; actor?: string }): { kind: ReviewerKind; inferred: boolean } {
+  if (review.reviewerKind !== undefined) return { kind: review.reviewerKind, inferred: false };
+  return { kind: review.actor === AUTO_ACCEPT_ACTOR ? "rule" : "human", inferred: true };
+}
+
+/** Surface reviewer authority for a reviewer kind: a person is an operator, an agent or a rule is the system. */
+export function reviewerAuthorityForKind(kind: ReviewerKind): "operator" | "system" {
+  return kind === "human" ? "operator" : "system";
+}
 
 /**
  * Producer Discipline core — CONTEXT.md "Producer Discipline" /
@@ -33,6 +73,8 @@ import type { CandidateSetStatus, ReviewResolution } from "./types.js";
 export interface ReviewOutcomePosture {
   status?: TrustStatus;
   actor?: string;
+  /** Checked by {@link assertReviewerKind}; `unknown` because it arrives off the wire. */
+  reviewerKind?: unknown;
   reviewedAt?: string;
   resolution?: ReviewResolution;
   resolutionReason?: string;
@@ -44,6 +86,9 @@ export interface ReviewOutcomePosture {
  * pre-existing posture; could_not_confirm -> proposed/assumed with reviewer,
  * time, and reason. */
 export function assertReviewResolutionConsistency(subject: string, review: ReviewOutcomePosture): void {
+  // Every review-building and review-projecting site already calls this, so the
+  // reviewer-kind rules ride the same gate rather than a second one.
+  assertReviewerKind(subject, review);
   if (review.resolution === undefined) return;
 
   const statusAllowed = review.resolution === "accepted"

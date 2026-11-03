@@ -512,11 +512,14 @@ describe("surveySchemaMapping — auto-accept range validation and projection (#
     });
     const outcome = out.surveyInput.reviewOutcomes[0];
     assert.equal(outcome?.actor, "auto-accept-policy");
+    // Survey applies the policy itself, so it attests the kind (#359) rather than leave it inferred.
+    assert.equal(outcome?.reviewerKind, "rule");
     // Documented producer-profile policy: an auto-accept is within the comfort zone.
     assert.equal(outcome?.withinComfortZone, true);
     const claim = buildSurveyTrustBundle(out.surveyInput).claims[0];
     assert.equal(claim?.status, "assumed");
     assert.equal(claim?.confidenceBasis?.reviewerAuthority, "system");
+    assert.equal((claim?.metadata?.survey as { reviewerKindInferred?: boolean }).reviewerKindInferred, false);
     assert.equal(claim?.confidenceBasis?.evidenceStrength, "weak");
     assert.equal(claim?.conclusionConfidence?.comfortZone?.within, true);
   });

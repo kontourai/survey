@@ -160,7 +160,10 @@ this helper: a human-reviewed `verified` or `assumed` claim projects
 `reviewerAuthority: "operator"` and `evidenceStrength: "moderate"`, and a claim
 whose review actor is the auto-accept policy (`"auto-accept-policy"`) projects
 `reviewerAuthority: "system"` and `evidenceStrength: "weak"`, because the policy
-checked nothing but the proposer's self-reported confidence. Auto-accept
+checked nothing but the proposer's self-reported confidence. When the review
+carries a host-attested `reviewerKind`, that decides `reviewerAuthority`
+instead: `human` is `"operator"`, `agent` and `rule` are `"system"` (see
+[Reviewer kind](./record-contracts.md#reviewer-kind)). Auto-accept
 (`autoAcceptMinConfidence`, `applyAutoAcceptPolicy`) is opt-in and experimental:
 thresholds outside (0, 1] throw `RangeError`, and proposals whose confidence is
 not a finite number in [0, 1] are never auto-accepted (they are reported as

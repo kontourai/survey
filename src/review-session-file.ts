@@ -353,8 +353,15 @@ export function appendReviewSessionEvents(
       return {
         ...event,
         metadata: { ...event.metadata, name: `${sessionName}-${String(sequence).padStart(4, "0")}-${event.spec.eventType}` },
-        spec: { ...event.spec, sessionName, sequence },
+        // The host's attestation overwrites whatever the poster put in the
+        // event, so the stored log never records a kind the host did not attest.
+        spec: { ...stripReviewerKind(event.spec), sessionName, sequence, ...(content.snapshot.reviewerKind !== undefined ? { reviewerKind: content.snapshot.reviewerKind } : {}) },
       };
     });
   return [...content.events, ...renumbered];
+}
+
+function stripReviewerKind(spec: ReviewSessionEvent["spec"]): ReviewSessionEvent["spec"] {
+  const { reviewerKind: _postedReviewerKind, ...rest } = spec;
+  return rest;
 }

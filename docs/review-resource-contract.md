@@ -121,11 +121,12 @@ Field ownership:
 | `ReviewCandidate.source.sourceRef`, `kind`, `observedAt`, `checksum`, `locatorScheme` | `RawSource` |
 | `ReviewCandidate.extraction.target`, `confidence`, `extractor`, `extractedAt` plus `locator` | `Extraction` |
 | `ReviewItem.spec.target`, `candidates`, `selectedCandidateId`, `candidateSetStatus`, `rationale`, `candidate.rejectionReason` | `CandidateSet` and `Candidate` |
-| `ReviewDecision.spec.status`, `resolution`, `resolutionReason`, `attemptEvidenceIds`, `actor`, `reviewedAt`, `rationale`, `evidenceIds`, `withinComfortZone` | `ReviewOutcome` |
+| `ReviewDecision.spec.status`, `resolution`, `resolutionReason`, `attemptEvidenceIds`, `actor`, `reviewerKind`, `reviewedAt`, `rationale`, `evidenceIds`, `withinComfortZone` | `ReviewOutcome` |
 | `ReviewCandidate.claimTarget` | `ClaimTarget` |
 | `projection` | Optional id bridge for tests and adapters |
 | `ReviewSession.spec.snapshot`, `itemCount`, `eventCount` | Replay envelope for session validation |
 | `ReviewSessionEvent.spec.type`, `reviewItemName`, `candidateId`, `status`, `actor` | Replayable event log for derive/apply |
+| `ReviewSessionEvent.spec.reviewerKind` | Audit stamp only: replay and apply read the kind from the host's session snapshot, never from an event |
 
 Session resource mapping and the snapshot-safe replay/export helpers are covered
 in detail in [`consumer-integration-guide.md`](consumer-integration-guide.md).
