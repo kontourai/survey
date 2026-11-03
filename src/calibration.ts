@@ -84,8 +84,10 @@ export interface DeriveCalibrationOptions {
    */
   readonly minBinSamples?: number;
   /**
-   * Include machine auto-accepted outcomes (actor === AUTO_ACCEPT_ACTOR) as
-   * labeled samples. Default false — see the module note on circularity.
+   * Include machine outcomes as labeled samples: the auto-accept policy
+   * (actor === AUTO_ACCEPT_ACTOR) and any review the host attested as an
+   * `agent` or a `rule` (`reviewerKind`). Default false — see the module note
+   * on circularity.
    */
   readonly includeAutoAccepted?: boolean;
   /**

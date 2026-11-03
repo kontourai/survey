@@ -45,9 +45,14 @@ human review. Entity review outcomes carry the kind through the decision they
 bind, so it is part of the outcome identity, and their mapping claims project
 the same authority.
 
+The kind is per session, so it attests the authenticated principal writing to
+it. The MCP server authenticates nobody, so `survey_review_decide` refuses a
+session attested human rather than stamp an agent's tool call as a person's.
+Producer `confidenceBasis` overrides cannot raise an attested agent or rule to a
+human authority. The review proof binds an attested kind (absent kind, same
+digest), and calibration counts human labels only.
+
 ## Not decided
 
-- The review proof does not bind `reviewerKind`. Doing so changes the canonical
-  payload and needs a proof version decision.
 - Survey does not require a human for any record. Which items need one is the
   host's policy; Survey makes the requirement checkable.

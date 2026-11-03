@@ -1010,10 +1010,16 @@ reviewOutcome: {
 review session snapshot (`ReviewQueueSessionState.reviewerKind`) once the host
 has authenticated the reviewer. Survey stamps it from there on every
 `ReviewDecision` and `ReviewSessionEvent`, and carries it to the `ReviewOutcome`.
-Replay and apply never read it from a posted event: the console and any host that
-uses `appendReviewSessionEvents` store the snapshot's value over whatever an
-event carried, and a snapshot with no kind stores none. The Workbench has no
-control that sets it. A host that builds `ReviewOutcome` records itself sets it
+Replay and apply never read it from a posted event: the console, the MCP server
+and any host that uses `appendReviewSessionEvents` store the snapshot's kind and
+actor over whatever an event carried, and a snapshot with no kind stores none. The
+Workbench has no control that sets it.
+
+The kind is per session, so it attests the authenticated principal who writes to
+it. `survey-review-mcp` authenticates nobody and cannot tell a person from the
+agent driving its client, so `survey_review_decide` refuses a session attested
+`human`: decide that session in the review console (or a host's own writer that
+authenticates the reviewer), or open it attested `agent`. A host that builds `ReviewOutcome` records itself sets it
 from its own authentication, not from a request body.
 
 **Projection.** The kind decides `confidenceBasis.reviewerAuthority` of a
@@ -1030,7 +1036,13 @@ that is not `verified` or `assumed` keeps `reviewerAuthority: "none"` and still
 records the kind. Producer-supplied `metadata.survey.reviewerKind` and
 `reviewerKindInferred` are discarded: they are computed from the review.
 `evidenceStrength` is unchanged by the kind (an auto-accept policy actor still
-projects `"weak"`).
+projects `"weak"`). A producer's `confidenceBasis.reviewerAuthority` still
+overrides the derived value, with one limit: it may not raise an attested `agent`
+or `rule` review to `operator` or `domain_expert` (the projection throws). Lower
+authorities, any override of an attested `human`, and any override of an inferred
+kind are unchanged. The same projection applies to a claim that selects no
+candidate: it records the kind and discards producer-supplied
+`reviewerKind` / `reviewerKindInferred`.
 
 **Legacy records.** A review with no `reviewerKind` keeps the authority it has
 always had: `auto-accept-policy` is inferred as `rule` (`system`) and any other
@@ -1043,10 +1055,13 @@ attestation.
 **Validation.** An unknown value (including `null`) is refused with
 `reviewerKind must be one of human, agent, rule`, and `reviewerKind: "human"`
 on the `auto-accept-policy` actor is refused as a contradiction (a threshold rule
-is never a person). The check runs where a review is built or projected:
-`buildSurveyTrustBundle`, `SurveyInputBuilder.addReviewOutcome`, the Workbench
-decision and event builders, `entityOutcomeFromDecision`, and
-`deriveOversightMetrics`. Survey's own auto-accept outcomes (`surveySchemaMapping`)
+is never a person). The check runs where a review is built, carried or projected:
+`buildSurveyTrustBundle` (every supplied review, including one that loses
+selection), `SurveyInputBuilder.addReviewOutcome`, the Workbench decision and
+event builders, `buildCanonicalReviewedTrustInput`, `appendReviewSessionEvents`,
+`applyMappingReview`, `splitRoundForCarryForward`, `entityOutcomeFromDecision`, and
+`deriveOversightMetrics`. Two reviews at the same instant that differ only in
+kind are conflicting decisions, not one recorded twice. Survey's own auto-accept outcomes (`surveySchemaMapping`)
 attest `reviewerKind: "rule"`. `REVIEWER_KINDS` and `isReviewerKind`
 are exported for hosts.
 
@@ -1056,10 +1071,12 @@ order, each with `inferredDecisionCount`). Human and agent decisions are differe
 oversight evidence; do not read the pooled `aggregate` as a measure of human
 review.
 
-Not covered: the review proof (`buildReviewProofAnchor`) does not yet bind
-`reviewerKind`, so it is not tamper-evident through the proof. Entity outcomes
-are content-addressed over the decision, so a changed kind is a different outcome
-id.
+The review proof (`buildReviewProofAnchor`) binds an attested `reviewerKind`, so
+changing it changes the proof; a record with no kind hashes exactly as before.
+Entity outcomes are content-addressed over the decision, so a changed kind is a
+different outcome id. Confidence calibration counts human labels only: an outcome
+attested `agent` or `rule` is skipped like the auto-accept policy's (and counted
+again under `includeAutoAccepted`).
 
 ## Comfort zone flags
 
@@ -1613,7 +1630,8 @@ Calibration is **advisory**, and honest about what it does not know:
   auto-accept gate; do not wire it into `minConfidence` without your own evaluation.
 - **Human labels only.** Machine auto-accepts are excluded by default — an
   auto-accepted outcome is the threshold accepting its own guess, so counting it as
-  "correct" would let the policy validate itself. `includeAutoAccepted` overrides
+  "correct" would let the policy validate itself. So is any outcome the host
+  attested `reviewerKind: "agent"` or `"rule"`. `includeAutoAccepted` overrides
   this for offline analysis.
 - **Affirmed conclusions only get a value.** `conclusionConfidence.value` is read
   as "probability the conclusion is correct"; attaching an affirmation rate to a
