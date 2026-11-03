@@ -630,6 +630,8 @@ describe("a producer cannot raise an attested agent or rule review to human auth
     // Without the override, an attested agent's round is system authority, not the legacy operator default.
     assert.equal(buildSurveyTrustBundle(agentRound).claims[0]!.confidenceBasis?.reviewerAuthority, "system");
     assert.equal(buildSurveyTrustBundle(notConfirmed({})).claims[0]!.confidenceBasis?.reviewerAuthority, "operator", "a legacy could-not-confirm round keeps the default it had");
+    // Only an attested kind changes that default: an inferred rule (the policy actor) must not.
+    assert.equal(buildSurveyTrustBundle(notConfirmed({ actor: "auto-accept-policy" })).claims[0]!.confidenceBasis?.reviewerAuthority, "operator");
   });
 
   it("still allows an equal or lower authority, any override of an attested human, and any override of a legacy record", () => {
