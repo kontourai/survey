@@ -1569,7 +1569,9 @@ candidate after building its ReviewItem and obtaining its stable candidate ID.
 Every alternative includes its evidence in the displayed value, and the first
 source is available to the inspector. Confidence components stay in the API
 record and are not rendered in the value, so score-blind sessions cannot leak
-them through candidate text. A Workbench `ReviewDecision` can be bound
+them through candidate text. Alternatives that differ only in their component
+scores remain distinct records and may appear identical in a score-blind
+session; the API retains the components. A Workbench `ReviewDecision` can be bound
 with `entityOutcomeFromDecision`: verified selection accepts, rejected rejects,
 and `could_not_confirm` abstains with a reason. An API caller can record a
 reasoned dispute using a proposed decision with label

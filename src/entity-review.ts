@@ -56,6 +56,7 @@ export interface EntityProjectionRecord {
   candidateId: string;
   status: "proposed" | "accepted" | "rejected" | "disputed" | "superseded" | "abstained";
   outcomeId?: string;
+  supersedes?: string;
   supersededBy?: string;
   ambiguity?: "conflicting-reviews";
   /** A reviewed mapping assertion only. Admission to Surface is the host's responsibility. */
@@ -186,7 +187,8 @@ export function projectEntityReviews(proposals: readonly EntityProposal[], outco
     if (!before || !after) throw new Error("Supersession must bind a prior candidate and a replacement candidate");
     const identityOperations = ["merge", "alias", "same-as", "split"];
     if (before.operation !== after.operation && !(identityOperations.includes(before.operation) && identityOperations.includes(after.operation))) throw new Error("Supersession relation differs");
-    if (after.operation === "split" && (!identityOperations.includes(before.operation) || prior.spec.disposition !== "accepted" || outcome.spec.disposition !== "accepted")) throw new Error("Split must replace an accepted identity decision");
+    if (after.operation === "split" && outcome.spec.disposition === "accepted" && (!identityOperations.includes(before.operation) || prior.spec.disposition !== "accepted")) throw new Error("Split must replace an accepted identity decision");
+    if (after.operation === "split" && outcome.spec.disposition !== "accepted" && before.operation !== "split") throw new Error("A rejected or disputed split must replace a split decision");
     if (pairKey(before.subjects) !== pairKey(after.subjects)) throw new Error("Supersession subjects differ");
     successors.set(prior.id, outcome.id);
   }
@@ -204,8 +206,13 @@ export function projectEntityReviews(proposals: readonly EntityProposal[], outco
       const applicable = reviews.filter(o => !o.spec.candidateId || o.spec.candidateId === id);
       const live = applicable.filter(o => !successors.has(o.id) && o.spec.disposition !== "abstained");
       const samePair = liveIdentity.filter(entry => pairKey(entry.alternative.subjects) === pairKey(a.subjects));
-      const incompatiblePair = samePair.some(entry => entry.outcome.spec.disposition !== "accepted" || entry.alternative.operation === "split");
-      const proposalConflict = liveReviews.some(entry => entry.spec.disposition !== "accepted" || entry.spec.candidateId !== id);
+      const incompatiblePair = samePair.some(entry => {
+        const other = entry.outcome;
+        if (other.spec.disposition === "disputed") return true;
+        if (a.operation === "split") return (other.spec.disposition === "accepted" && entry.alternative.operation !== "split") || (other.spec.disposition === "rejected" && entry.alternative.operation === "split");
+        return (other.spec.disposition === "accepted" && entry.alternative.operation === "split") || (other.spec.disposition === "rejected" && entry.alternative.operation !== "split");
+      });
+      const proposalConflict = liveReviews.some(entry => entry.spec.disposition === "disputed" || (entry.spec.disposition === "accepted" && entry.spec.candidateId !== id) || (entry.spec.disposition === "rejected" && (!entry.spec.candidateId || entry.spec.candidateId === id)));
       if (!applicable.length) records.push({ proposalId: proposal.id, candidateId: id, status: "proposed", alternative: clone(a) });
       for (const o of applicable) {
         const supersededBy = successors.get(o.id);
@@ -215,7 +222,7 @@ export function projectEntityReviews(proposals: readonly EntityProposal[], outco
         const mappingClaim: Claim | undefined = identityLink ? { id: identityLink.mappingClaimId!, subjectType: a.subjects[0].subjectType, subjectId: a.subjects[0].subjectId, facet: "identity-review", claimType: "entity-relationship", fieldOrBehavior: a.operation, value: clone({ subjects: a.subjects, relation: "equivalent" }), status: "verified", createdAt: o.spec.decision.spec.reviewedAt!, updatedAt: o.spec.decision.spec.reviewedAt!, metadata: { survey: { proposalId: proposal.id, outcomeId: o.id, evidence: clone(a.evidence), policy: clone(proposal.spec.policy), reviewer: clone(o.spec.decision.spec.actor) } } } : undefined;
         const mappingEvidence: Evidence[] | undefined = mappingClaim ? a.evidence.map(e => ({ id: `entity-evidence:${o.id}:${e.id}`, claimId: mappingClaim.id, evidenceType: "source_excerpt", method: "extraction", sourceRef: e.sourceRef, sourceLocator: e.locator, excerptOrSummary: e.excerpt, observedAt: e.observedAt, collectedBy: proposal.spec.proposer.id, integrityRef: e.checksum, metadata: { sourceId: e.sourceId, locatorScheme: e.locatorScheme, stance: e.stance } })) : undefined;
         const mappingEvent: VerificationEvent | undefined = mappingClaim ? { id: `entity-event:${o.id}`, claimId: mappingClaim.id, status: "verified", actor: o.spec.decision.spec.actor!.id, method: "survey-entity-review", evidenceIds: mappingEvidence!.map(e => e.id), createdAt: o.spec.decision.spec.reviewedAt!, verifiedAt: o.spec.decision.spec.reviewedAt!, ...(o.spec.decision.spec.rationale ? { notes: o.spec.decision.spec.rationale } : {}) } : undefined;
-        records.push({ proposalId: proposal.id, candidateId: id, status, outcomeId: o.id, ...(supersededBy ? { supersededBy } : {}), ...(ambiguous ? { ambiguity: "conflicting-reviews" as const } : {}), ...(identityLink ? { identityLink, mappingClaim, mappingEvidence, mappingEvent } : {}), alternative: clone(a) });
+        records.push({ proposalId: proposal.id, candidateId: id, status, outcomeId: o.id, ...(o.spec.supersedes ? { supersedes: o.spec.supersedes } : {}), ...(supersededBy ? { supersededBy } : {}), ...(ambiguous ? { ambiguity: "conflicting-reviews" as const } : {}), ...(identityLink ? { identityLink, mappingClaim, mappingEvidence, mappingEvent } : {}), alternative: clone(a) });
       }
     }
   }

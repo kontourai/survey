@@ -177,3 +177,59 @@ test("contradictory selections in one review item suppress identity links", () =
   assert.equal(records.find(r => r.outcomeId === merge.id)?.ambiguity, "conflicting-reviews");
   assert.equal(records.some(r => r.identityLink), false);
 });
+
+test("a rejected split does not suppress a merge and a clean split is not ambiguous", () => {
+  const m = proposal(alternative("merge"));
+  const merge = entityOutcomeFromDecision(m, decision(m, "accept-proposed"));
+  const s = proposal(alternative("split"));
+  const rejected = entityOutcomeFromDecision(s, decision(s, "reject-proposed"));
+  assert.ok(projectEntityReviews([m, s], [merge, rejected]).find(r => r.outcomeId === merge.id)?.identityLink);
+  const split = entityOutcomeFromDecision(s, decision(s, "accept-proposed"), merge.id);
+  const record = projectEntityReviews([m, s], [merge, split]).find(r => r.outcomeId === split.id)!;
+  assert.equal(record.ambiguity, undefined);
+  assert.equal(record.supersedes, merge.id);
+  const rejectSplit = entityOutcomeFromDecision(s, decision(s, "reject-proposed"), split.id);
+  const reversals = projectEntityReviews([m, s], [merge, split, rejectSplit]);
+  assert.equal(reversals.find(r => r.outcomeId === rejectSplit.id)?.supersedes, split.id);
+  assert.equal(reversals.find(r => r.outcomeId === split.id)?.status, "superseded");
+  assert.equal(reversals.some(r => r.identityLink), false);
+});
+
+test("validation rejects malformed proposals, mismatched decisions and tampered records", () => {
+  const good = alternative("merge");
+  assert.throws(() => proposal({ ...good, subjects: [subjects[0], subjects[0]] }), /Self relations/);
+  assert.throws(() => proposal({ ...good, evidence: [] }), /Exact evidence/);
+  assert.throws(() => proposal({ ...good, operation: "bogus" as EntityOperation }), /Invalid entity operation/);
+  assert.throws(() => proposal({ ...good, confidenceComponents: { name: 2 } }), /Invalid confidence component/);
+  const p = proposal(good);
+  const d = decision(p, "accept-proposed");
+  assert.throws(() => entityOutcomeFromDecision(p, { ...d, spec: { ...d.spec, reviewItemName: "wrong" } }), /bind proposal/);
+  assert.throws(() => entityOutcomeFromDecision(p, { ...d, spec: { ...d.spec, editedValue: "forged" } }), /cannot edit/);
+  assert.throws(() => entityOutcomeFromDecision(p, { ...d, spec: { ...d.spec, candidateId: "unknown" } }), /Unknown candidate/);
+  const noCandidate = structuredClone(d); delete noCandidate.spec.candidateId;
+  assert.throws(() => entityOutcomeFromDecision(p, noCandidate), /requires a candidate/);
+  const accepted = entityOutcomeFromDecision(p, d);
+  const modified = structuredClone(accepted); modified.spec.decision.spec.actor!.id = "other";
+  assert.throws(() => projectEntityReviews([p], [modified]), /Invalid outcome identity/);
+  assert.throws(() => projectEntityReviews([], [accepted]), /Missing outcome proposal/);
+  const altered = structuredClone(p); altered.spec.revision = "tampered";
+  assert.throws(() => entityProposalToReviewItem(altered), /Invalid proposal identity/);
+  const another = { ...good, verifications: [] };
+  assert.throws(() => proposal(good, another), /Conflicting duplicate alternative/);
+});
+
+test("supersession cannot replace an unrelated relation", () => {
+  const p = proposal(alternative("domain:owns"));
+  const first = entityOutcomeFromDecision(p, decision(p, "accept-proposed"));
+  const other = proposal(alternative("related-to"));
+  const replacement = entityOutcomeFromDecision(other, decision(other, "accept-proposed"), first.id);
+  assert.throws(() => projectEntityReviews([p, other], [first, replacement]), /relation differs/);
+});
+
+test("cross-type identity never follows confidence alone and requires explicit review", () => {
+  const pair: EntityAlternative["subjects"] = [{ subjectType: "organization", subjectId: "alex-smith" }, { subjectType: "person", subjectId: "alex-smith" }];
+  const p = proposal(alternative("merge", pair));
+  assert.equal(projectEntityReviews([p], [])[0]?.identityLink, undefined);
+  const approved = entityOutcomeFromDecision(p, decision(p, "accept-proposed"));
+  assert.equal(projectEntityReviews([p], [approved])[0]?.identityLink?.relation, "equivalent");
+});
