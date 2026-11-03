@@ -304,3 +304,18 @@ test("independent contradictory decisions on the same pair suppress links and fl
   const unsupported = decision(m, "accept-proposed"); unsupported.spec.status = "assumed";
   assert.throws(() => entityOutcomeFromDecision(m, unsupported), /Unsupported review disposition/);
 });
+
+test("split ancestry recognizes reviewed aliases and rejects ungrounded disputed splits", () => {
+  const s = proposal(alternative("split"));
+  for (const operation of ["merge", "alias", "same-as"] as const) {
+    const mapping = proposal(alternative(operation));
+    const accepted = entityOutcomeFromDecision(mapping, decision(mapping, "accept-proposed"));
+    const rejected = entityOutcomeFromDecision(mapping, decision(mapping, "reject-proposed"), accepted.id);
+    const split = entityOutcomeFromDecision(s, decision(s, "accept-proposed"), rejected.id);
+    assert.equal(projectEntityReviews([mapping, s], [accepted, rejected, split]).find(r => r.outcomeId === split.id)?.status, "accepted");
+  }
+  const d = decision(s, "accept-proposed"); d.spec.status = "proposed"; d.metadata.labels = { "survey.kontourai.io/entity-disposition": "disputed" };
+  const dispute = entityOutcomeFromDecision(s, d);
+  const split = entityOutcomeFromDecision(s, decision(s, "accept-proposed"), dispute.id);
+  assert.throws(() => projectEntityReviews([s], [dispute, split]), /accepted identity mapping/);
+});
