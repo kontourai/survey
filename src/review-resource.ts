@@ -6,6 +6,7 @@ import type {
   RawSource,
   ReviewAuthorizing,
   ReviewOutcome,
+  ReviewerKind,
 } from "./types.js";
 
 export const reviewResourceApiVersion = "survey.kontourai.io/v1alpha1";
@@ -215,6 +216,13 @@ export interface ReviewDecisionSpec {
   resolutionReason?: string;
   attemptEvidenceIds?: string[];
   actor?: ReviewActor;
+  /**
+   * What kind of reviewer `actor` is, as attested by the host that
+   * authenticated them. Copied from the host's session, never from the
+   * browser or the reviewer. Absent: the kind is inferred downstream and
+   * marked `inferred`.
+   */
+  reviewerKind?: ReviewerKind;
   reviewedAt?: string;
   rationale?: string;
   evidenceIds?: string[];
@@ -303,6 +311,13 @@ export interface ReviewSessionEventSpec {
   eventType: ReviewSessionEventType;
   occurredAt: string;
   actor?: ReviewActor;
+  /**
+   * The host-attested kind of `actor`, stamped on the event for the audit
+   * trail. Replay and apply never read it: a browser can write any value into
+   * an event it posts, so the kind a decision carries comes from the host's
+   * session snapshot alone.
+   */
+  reviewerKind?: ReviewerKind;
   reviewItemName?: string;
   activeItemName?: string;
   reviewDecisionName?: string;

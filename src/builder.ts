@@ -11,6 +11,7 @@ import type {
   SurveyInput,
 } from "./types.js";
 import { SURVEY_INPUT_CONTRACT_VERSION } from "./types.js";
+import { assertReviewerKind } from "./producer-discipline.js";
 
 export interface SurveyInputBuilderArgs {
   source: string;
@@ -95,6 +96,7 @@ export class SurveyInputBuilder {
   }
 
   addReviewOutcome(reviewOutcome: ReviewOutcome): this {
+    assertReviewerKind(`Review outcome ${reviewOutcome.id}`, reviewOutcome);
     addUnique(this.reviewOutcomes, reviewOutcome, "review outcome");
     return this;
   }

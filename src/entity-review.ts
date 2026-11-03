@@ -1,6 +1,8 @@
 import type { Claim, Evidence, IdentityLink, SubjectRef, VerificationEvent } from "@kontourai/surface";
 import { valueDigest, type CandidateVerification } from "./candidate-verification.js";
 import { decisionResolution } from "./decision-carry-forward.js";
+import { assertReviewerKind, resolveReviewerKind, reviewerAuthorityForKind } from "./producer-discipline.js";
+import type { ReviewerKind } from "./types.js";
 import { reviewResourceApiVersion, type ReviewDecision, type ReviewItem } from "./review-resource.js";
 
 /** A producer-supplied, exact source reference; the host is responsible for resolving it. */
@@ -64,6 +66,14 @@ export interface EntityProjectionRecord {
   mappingClaim?: Claim;
   mappingEvidence?: Evidence[];
   mappingEvent?: VerificationEvent;
+  /**
+   * The host-attested `reviewerKind` the decision carries, or the kind
+   * inferred for a decision recorded without one (`reviewerKindInferred:
+   * true`). A host that needs a human decision rejects an inferred kind.
+   * Present whenever `outcomeId` is.
+   */
+  reviewerKind?: ReviewerKind;
+  reviewerKindInferred?: boolean;
   alternative: EntityAlternative;
 }
 
@@ -148,6 +158,7 @@ export function entityOutcomeFromDecision(proposal: EntityProposal, decision: Re
   assertProposal(proposal);
   if (decision.apiVersion !== reviewResourceApiVersion || decision.kind !== "ReviewDecision" || decision.spec.reviewItemName !== proposal.id) throw new Error("Decision does not bind proposal");
   required(decision.metadata.name, "decision name"); required(decision.spec.actor?.id, "review actor"); required(decision.spec.reviewedAt, "reviewedAt");
+  assertReviewerKind("Entity decision", { reviewerKind: decision.spec.reviewerKind, actor: decision.spec.actor!.id });
   if (!Number.isFinite(Date.parse(decision.spec.reviewedAt))) throw new Error("Invalid review time");
   if (decision.spec.editedValue !== undefined) throw new Error("Entity decisions cannot edit proposed values");
   let disposition: EntityDisposition;
@@ -233,10 +244,11 @@ export function projectEntityReviews(proposals: readonly EntityProposal[], outco
         const status = supersededBy ? "superseded" : o.spec.disposition;
         const ambiguous = status === "accepted" && (proposalConflict || incompatiblePair);
         const identityLink: IdentityLink | undefined = status === "accepted" && live.length > 0 && !ambiguous && ["merge", "alias", "same-as"].includes(a.operation) ? { id: `entity-link:${o.id}`, subjects: clone(a.subjects), relation: "equivalent", mappingClaimId: `entity-claim:${o.id}`, attestedBy: o.spec.decision.spec.actor!.id, reason: o.spec.decision.spec.rationale } : undefined;
-        const mappingClaim: Claim | undefined = identityLink ? { id: identityLink.mappingClaimId!, subjectType: a.subjects[0].subjectType, subjectId: a.subjects[0].subjectId, facet: "identity-review", claimType: "entity-relationship", fieldOrBehavior: a.operation, value: clone({ subjects: a.subjects, relation: "equivalent" }), status: "verified", createdAt: o.spec.decision.spec.reviewedAt!, updatedAt: o.spec.decision.spec.reviewedAt!, metadata: { survey: { proposalId: proposal.id, outcomeId: o.id, evidence: clone(a.evidence), policy: clone(proposal.spec.policy), reviewer: clone(o.spec.decision.spec.actor) } } } : undefined;
+        const reviewer = resolveReviewerKind({ reviewerKind: o.spec.decision.spec.reviewerKind, actor: o.spec.decision.spec.actor!.id });
+        const mappingClaim: Claim | undefined = identityLink ? { id: identityLink.mappingClaimId!, subjectType: a.subjects[0].subjectType, subjectId: a.subjects[0].subjectId, facet: "identity-review", claimType: "entity-relationship", fieldOrBehavior: a.operation, value: clone({ subjects: a.subjects, relation: "equivalent" }), status: "verified", createdAt: o.spec.decision.spec.reviewedAt!, updatedAt: o.spec.decision.spec.reviewedAt!, confidenceBasis: { reviewerAuthority: reviewerAuthorityForKind(reviewer.kind) }, metadata: { survey: { proposalId: proposal.id, outcomeId: o.id, reviewerKind: reviewer.kind, reviewerKindInferred: reviewer.inferred, evidence: clone(a.evidence), policy: clone(proposal.spec.policy), reviewer: clone(o.spec.decision.spec.actor) } } } : undefined;
         const mappingEvidence: Evidence[] | undefined = mappingClaim ? a.evidence.map(e => ({ id: `entity-evidence:${o.id}:${e.id}`, claimId: mappingClaim.id, evidenceType: "source_excerpt", method: "extraction", sourceRef: e.sourceRef, sourceLocator: e.locator, excerptOrSummary: e.excerpt, observedAt: e.observedAt, collectedBy: proposal.spec.proposer.id, integrityRef: e.checksum, metadata: { sourceId: e.sourceId, locatorScheme: e.locatorScheme, stance: e.stance } })) : undefined;
         const mappingEvent: VerificationEvent | undefined = mappingClaim ? { id: `entity-event:${o.id}`, claimId: mappingClaim.id, status: "verified", actor: o.spec.decision.spec.actor!.id, method: "survey-entity-review", evidenceIds: mappingEvidence!.map(e => e.id), createdAt: o.spec.decision.spec.reviewedAt!, verifiedAt: o.spec.decision.spec.reviewedAt!, ...(o.spec.decision.spec.rationale ? { notes: o.spec.decision.spec.rationale } : {}) } : undefined;
-        records.push({ proposalId: proposal.id, candidateId: id, status, outcomeId: o.id, ...(o.spec.supersedes ? { supersedes: o.spec.supersedes } : {}), ...(supersededBy ? { supersededBy } : {}), ...(ambiguous ? { ambiguity: "conflicting-reviews" as const } : {}), ...(identityLink ? { identityLink, mappingClaim, mappingEvidence, mappingEvent } : {}), alternative: clone(a) });
+        records.push({ proposalId: proposal.id, candidateId: id, status, outcomeId: o.id, reviewerKind: reviewer.kind, reviewerKindInferred: reviewer.inferred, ...(o.spec.supersedes ? { supersedes: o.spec.supersedes } : {}), ...(supersededBy ? { supersededBy } : {}), ...(ambiguous ? { ambiguity: "conflicting-reviews" as const } : {}), ...(identityLink ? { identityLink, mappingClaim, mappingEvidence, mappingEvent } : {}), alternative: clone(a) });
       }
     }
   }

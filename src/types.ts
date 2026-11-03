@@ -91,6 +91,13 @@ export type ReviewAuthorizing =
   | ReviewAuthorizingExchange
   | ReviewAuthorizingAuthorizedAction;
 
+/**
+ * What kind of reviewer made a decision. It is asserted by the host that
+ * authenticated the reviewer, never by the reviewer: a browser, a replayed
+ * event or a decision payload cannot set it.
+ */
+export type ReviewerKind = "human" | "agent" | "rule";
+
 export interface ReviewOutcome {
   id: string;
   candidateSetId: string;
@@ -104,6 +111,13 @@ export interface ReviewOutcome {
   /** Evidence of attempts made before the reviewer concluded they could not confirm. */
   attemptEvidenceIds?: string[];
   actor?: string;
+  /**
+   * Host-attested kind of `actor`. Absent on legacy records: the kind is then
+   * inferred (`auto-accept-policy` is a rule, any other actor is a human) and
+   * the projection marks it `inferred: true`. A consumer that must have a
+   * human decision rejects an inferred kind.
+   */
+  reviewerKind?: ReviewerKind;
   reviewedAt?: string;
   rationale?: string;
   evidenceIds?: string[];

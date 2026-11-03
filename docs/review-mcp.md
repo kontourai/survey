@@ -41,6 +41,13 @@ Options:
 | `survey_review_item` | `itemName: string` | Full item detail: current vs proposed values, confidence, source refs, excerpts, and current decision |
 | `survey_review_decide` | `itemName: string`, `decision: "accept" \| "hold" \| "reject" \| "could-not-confirm" \| "select"`, `note?: string`, `reason?: string`, `attemptEvidenceIds?: string[]`, `candidateId?: string` | Applies the decision through the real session APIs and persists atomically. `reason` is required and non-empty for `could-not-confirm`. `candidateId` is required for `select`. |
 
+`survey_review_decide` refuses a session whose snapshot is attested
+`reviewerKind: "human"` (see [Reviewer kind](./record-contracts.md#reviewer-kind)):
+this server authenticates nobody, so it cannot tell a person from the agent
+driving the client. Decide such a session through a host that authenticates the
+reviewer. Decisions it records on an `agent`-attested or unattested session carry
+that session's kind.
+
 Decision mapping:
 
 | MCP value | ReviewWorkbenchDecision | Effect |

@@ -17,6 +17,7 @@ import { basename, dirname, join } from "node:path";
 import type { ReviewQueueSessionState } from "./review-workbench/review-queue-session.js";
 import type { ReviewSessionEvent } from "./review-resource.js";
 import { defaultReviewSessionName } from "./review-workbench/review-queue-session.js";
+import { assertReviewerKind } from "./producer-discipline.js";
 
 export interface ReviewSessionFileContent {
   readonly session: unknown;
@@ -345,6 +346,9 @@ export function appendReviewSessionEvents(
 ): ReviewSessionEvent[] {
   if (content.producerApplication !== undefined) throw new Error("This review was already sent to its workflow; open a new review session");
   const sessionName = storedReviewSessionName(content);
+  // The host's attestation, checked once for the whole append: an unknown kind
+  // or a policy actor attested human is a bad session, not a bad event.
+  assertReviewerKind(`Review session ${sessionName}`, { reviewerKind: content.snapshot.reviewerKind, actor: content.snapshot.actorId });
   const start = content.events.length;
   const renumbered = [...appended]
     .sort((left, right) => left.spec.sequence - right.spec.sequence)
@@ -353,8 +357,23 @@ export function appendReviewSessionEvents(
       return {
         ...event,
         metadata: { ...event.metadata, name: `${sessionName}-${String(sequence).padStart(4, "0")}-${event.spec.eventType}` },
-        spec: { ...event.spec, sessionName, sequence },
+        // The host's session names who is deciding and what kind of reviewer they
+        // are; both overwrite whatever the poster put in the event, so the stored
+        // log never pairs a posted actor with the host's kind, or records a kind
+        // the host did not attest.
+        spec: {
+          ...stripReviewerKind(event.spec),
+          sessionName,
+          sequence,
+          actor: { id: content.snapshot.actorId },
+          ...(content.snapshot.reviewerKind !== undefined ? { reviewerKind: content.snapshot.reviewerKind } : {}),
+        },
       };
     });
   return [...content.events, ...renumbered];
+}
+
+function stripReviewerKind(spec: ReviewSessionEvent["spec"]): ReviewSessionEvent["spec"] {
+  const { reviewerKind: _postedReviewerKind, ...rest } = spec;
+  return rest;
 }

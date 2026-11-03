@@ -21,9 +21,11 @@ export type {
   ReviewOutcome,
   ReviewResolution,
   ReviewStatus,
+  ReviewerKind,
   SurveyInput,
 } from "./types.js";
 export { SURVEY_INPUT_CONTRACT_VERSION } from "./types.js";
+export { isReviewerKind, REVIEWER_KINDS } from "./producer-discipline.js";
 export { reviewResourceApiVersion } from "./review-resource.js";
 export {
   buildReviewItemsFromExtractionEnvelopeImport,
@@ -386,6 +388,7 @@ export type {
   OversightMetrics,
   OversightMetricsClaimsSubject,
   OversightQualityClaim,
+  ReviewerKindOversightMetrics,
   ReviewerOversightMetrics,
 } from "./oversight-metrics.js";
 export {

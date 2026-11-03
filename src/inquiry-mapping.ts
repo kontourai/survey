@@ -22,6 +22,7 @@ import type { DerivationRule, InquiryRecord, TrustBundle } from "@kontourai/surf
 import { resolveInquiry } from "@kontourai/surface";
 import type { CanonicalClaimTarget } from "@kontourai/surface";
 import type { Candidate, CandidateSet, ReviewOutcome } from "./types.js";
+import { assertReviewerKind } from "./producer-discipline.js";
 import {
   assertValidAutoAcceptThreshold,
   evaluateAutoAccept,
@@ -244,6 +245,7 @@ export function applyMappingReview(
   candidateSet: CandidateSet,
   reviewOutcome: ReviewOutcome,
 ): InquiryMapping {
+  assertReviewerKind(`Review outcome ${reviewOutcome.id}`, reviewOutcome);
   const normalized = candidateSet.target;
 
   // Find the reviewed candidate

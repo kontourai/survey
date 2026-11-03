@@ -846,6 +846,14 @@ export async function startReviewConsoleServer(
             const { snapshot, events: existingEvents } = content;
             const revision = reviewSessionRevision(existingEvents);
             if (content.producerApplication !== undefined) return { result: { status: 409, body: { error: "This review was sent to its workflow; open a new review session", revision } } };
+            // This server authenticates nobody: any local client can post here, and
+            // the events are stored now, before any producer-owned apply runs, so
+            // that apply cannot protect them. Recording the post under a session
+            // attested as human would stamp whoever posted as a person; a host that
+            // authenticates the reviewer writes through its own ingress instead.
+            if (snapshot.reviewerKind === "human") {
+              return { result: { status: 403, body: { error: "This session is attested as a human reviewer's, and this console authenticates nobody. Decide it through a host that authenticates the reviewer, or open a session attested as an agent.", revision } } };
+            }
 
             // Compare-and-swap: the appended events express decisions made on
             // the reviewer's view of the log, so they are only safe to append

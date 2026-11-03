@@ -13,6 +13,7 @@ import {
   type ReviewSessionPresentation,
   type ReviewSessionSampling,
 } from "../../src/review-resource.js";
+import type { ReviewerKind } from "../types.js";
 
 export type { ReviewSessionPresentation, ReviewSessionSampling } from "../../src/review-resource.js";
 
@@ -38,6 +39,8 @@ export interface ReviewWorkbenchState {
   readonly decision?: ReviewWorkbenchDecision;
   readonly reviewedAt: string;
   readonly actorId: string;
+  /** The host-attested kind of `actorId`; recorded on the decision. See {@link ReviewQueueSessionState.reviewerKind}. */
+  readonly reviewerKind?: ReviewerKind;
   /**
    * Reviewer-edited override for the item's proposed value (inline edit in the
    * field-diff card). Additive/optional: undefined means no edit was made and the
@@ -63,6 +66,15 @@ export interface ReviewQueueSessionState {
   readonly decisionsByItemName: Readonly<Record<string, ReviewWorkbenchDecision>>;
   readonly reviewedAt: string;
   readonly actorId: string;
+  /**
+   * What kind of reviewer `actorId` is, attested by the host that
+   * authenticated them when it opened the session. It lives in the host-held
+   * snapshot and is stamped on every decision and event from here; replay
+   * never reads it from an event, so a browser cannot raise it (a `rule` or
+   * an `agent` becoming `human`). Absent: decisions record no kind and
+   * Survey infers one downstream, marked `inferred`.
+   */
+  readonly reviewerKind?: ReviewerKind;
   /**
    * Reviewer-edited overrides for proposed values, keyed by ReviewItem name.
    * Additive/optional: a session built before this field existed behaves exactly
@@ -240,6 +252,7 @@ export function currentReviewWorkbenchState(session: ReviewQueueSessionState): R
     selectedCandidateId: session.selectedCandidateIdsByItemName?.[item.metadata.name],
     reviewedAt: session.reviewedAt,
     actorId: session.actorId,
+    ...(session.reviewerKind !== undefined ? { reviewerKind: session.reviewerKind } : {}),
     ...(session.presentation !== undefined ? { presentation: session.presentation } : {}),
     ...(session.sampling !== undefined ? { sampling: session.sampling } : {}),
   };
@@ -586,6 +599,7 @@ export function buildReviewSessionEvents(
       resolutionReason: decision === "could-not-confirm" ? note : undefined,
       attemptEvidenceIds,
       actor: session.actorId,
+      reviewerKind: session.reviewerKind,
       reviewedAt: session.reviewedAt,
     });
     const conditions = sessionConditionsStamp(session);
@@ -764,7 +778,7 @@ export function isClearedWorkbenchDecisionEvent(event: ReviewSessionEvent): bool
 
 export function buildReviewSessionEvent(
   session: ReviewQueueSessionState,
-  spec: Omit<ReviewSessionEventSpec, "actor">,
+  spec: Omit<ReviewSessionEventSpec, "actor" | "reviewerKind">,
 ): ReviewSessionEvent {
   return canonicalizeJsonResource({
     apiVersion: reviewResourceApiVersion,
@@ -777,6 +791,7 @@ export function buildReviewSessionEvent(
       actor: {
         id: session.actorId,
       },
+      ...(session.reviewerKind !== undefined ? { reviewerKind: session.reviewerKind } : {}),
     },
   });
 }

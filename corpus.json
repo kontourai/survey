@@ -116,6 +116,10 @@
       "section": "Decisions"
     },
     {
+      "source": "docs/decisions/reviewer-kind.md",
+      "section": "Decisions"
+    },
+    {
       "source": "docs/decisions/source-linked-extraction-inspector.md",
       "section": "Decisions"
     },

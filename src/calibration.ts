@@ -30,6 +30,7 @@
 
 import type { Claim, Evidence, TrustBundle, VerificationEvent } from "@kontourai/surface";
 import { AUTO_ACCEPT_ACTOR } from "./producer-profile.js";
+import { resolveReviewerKind } from "./producer-discipline.js";
 import type { Candidate, CandidateSet, Extraction, ReviewOutcome } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -83,8 +84,10 @@ export interface DeriveCalibrationOptions {
    */
   readonly minBinSamples?: number;
   /**
-   * Include machine auto-accepted outcomes (actor === AUTO_ACCEPT_ACTOR) as
-   * labeled samples. Default false — see the module note on circularity.
+   * Include machine outcomes as labeled samples: the auto-accept policy
+   * (actor === AUTO_ACCEPT_ACTOR) and any review the host attested as an
+   * `agent` or a `rule` (`reviewerKind`). Default false — see the module note
+   * on circularity.
    */
   readonly includeAutoAccepted?: boolean;
   /**
@@ -348,8 +351,9 @@ function toSample(
 ): CalibrationSample | undefined {
   // No human label yet.
   if (outcome.status === "proposed") return undefined;
-  // Machine auto-accepts are not human labels (circular) unless opted in.
-  if (!includeAutoAccepted && outcome.actor === AUTO_ACCEPT_ACTOR) return undefined;
+  // Machine reviews are not human labels (circular) unless opted in: the
+  // auto-accept policy, and any review the host attested as an agent or a rule.
+  if (!includeAutoAccepted && (outcome.actor === AUTO_ACCEPT_ACTOR || resolveReviewerKind(outcome).kind !== "human")) return undefined;
 
   const candidateSet = candidateSetById.get(outcome.candidateSetId);
   if (candidateSet === undefined) return undefined;

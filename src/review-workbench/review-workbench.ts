@@ -1,5 +1,5 @@
 import { canonicalJson } from "./canonical.js";
-import { assertReviewResolutionConsistency } from "../producer-discipline.js";
+import { assertReviewResolutionConsistency, isReviewerKind } from "../producer-discipline.js";
 import {
   candidateForDecision,
   conflictSelectionIssue,
@@ -255,6 +255,8 @@ export function buildReviewDecision(state: ReviewWorkbenchState, options: Review
       actor: {
         id: state.actorId,
       },
+      // Attested by the host in the session; never taken from the browser's input.
+      ...(state.reviewerKind !== undefined ? { reviewerKind: state.reviewerKind } : {}),
       reviewedAt: state.reviewedAt,
       rationale: state.note,
       ...(authorizing !== undefined ? { authorizing } : {}),
@@ -279,6 +281,7 @@ export function buildReviewDecision(state: ReviewWorkbenchState, options: Review
     resolutionReason: reviewDecision.spec.resolutionReason,
     attemptEvidenceIds: reviewDecision.spec.attemptEvidenceIds,
     actor: reviewDecision.spec.actor?.id,
+    reviewerKind: reviewDecision.spec.reviewerKind,
     reviewedAt: reviewDecision.spec.reviewedAt,
   });
   return reviewDecision;
@@ -1717,6 +1720,7 @@ function renderAuditDetails(
     selectedCandidateId: session.selectedCandidateIdsByItemName?.[item.metadata.name],
     reviewedAt: session.reviewedAt,
     actorId: session.actorId,
+    ...(session.reviewerKind !== undefined ? { reviewerKind: session.reviewerKind } : {}),
     ...(session.presentation !== undefined ? { presentation: session.presentation } : {}),
     ...(session.sampling !== undefined ? { sampling: session.sampling } : {}),
   };
@@ -2307,6 +2311,7 @@ function queueSessionFromStartState(
       : {}),
     reviewedAt: startState.reviewedAt,
     actorId: startState.actorId,
+    ...(startState.reviewerKind !== undefined ? { reviewerKind: startState.reviewerKind } : {}),
     ...(startState.presentation !== undefined ? { presentation: startState.presentation } : {}),
     ...(startState.sampling !== undefined ? { sampling: startState.sampling } : {}),
   };
@@ -2510,6 +2515,7 @@ function refreshAuditPayloadForItem(
     editedValue: session.editedValuesByItemName?.[itemName],
     reviewedAt: session.reviewedAt,
     actorId: session.actorId,
+    ...(session.reviewerKind !== undefined ? { reviewerKind: session.reviewerKind } : {}),
   };
   payload.textContent = JSON.stringify(buildReviewDecision(state, { presentationAdapter: controller.presentationAdapter }) ?? null, null, 2);
 }
@@ -2615,7 +2621,8 @@ function isReviewQueueSessionState(value: unknown): value is ReviewQueueSessionS
     || !isStringRecord(value.notesByItemName)
     || !isStringRecord(value.decisionsByItemName)
     || typeof value.reviewedAt !== "string"
-    || typeof value.actorId !== "string") {
+    || typeof value.actorId !== "string"
+    || (value.reviewerKind !== undefined && !isReviewerKind(value.reviewerKind))) {
     return false;
   }
 
@@ -2629,7 +2636,8 @@ function isReviewWorkbenchState(value: unknown): value is ReviewWorkbenchState {
     && isReviewItem(value.item)
     && typeof value.note === "string"
     && typeof value.reviewedAt === "string"
-    && typeof value.actorId === "string";
+    && typeof value.actorId === "string"
+    && (value.reviewerKind === undefined || isReviewerKind(value.reviewerKind));
 }
 
 function isReviewItem(value: unknown): value is ReviewItem {
