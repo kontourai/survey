@@ -1583,8 +1583,11 @@ using them. No similarity or confidence threshold promotes a candidate.
 
 A split is an accepted review superseding an earlier accepted identity decision;
 a later merge can supersede the split. A later review can also explicitly
-supersede a rejected or disputed candidate, preserving the prior disposition. The full prior outcome must be supplied
-for projection, and the subject pair and relation must agree. Abstention never
+supersede a rejected or disputed candidate, preserving the prior disposition. A split can be accepted again after a reviewed rejection or dispute. The full
+prior outcome must be supplied for projection, and the subject pair and
+relation must agree. Projection records carry both `supersedes` on the new
+record and `supersededBy` on the predecessor. A rejected split does not
+contradict a merge, and a clean split is not itself a conflict. Abstention never
 supersedes a prior decision. Missing, branching, or cyclic supersession fails
 closed. `projectEntityReviews` reports proposed, accepted, rejected, disputed,
 abstained and superseded records with ancestry. Accepted merge, alias and

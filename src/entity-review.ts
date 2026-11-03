@@ -187,7 +187,7 @@ export function projectEntityReviews(proposals: readonly EntityProposal[], outco
     if (!before || !after) throw new Error("Supersession must bind a prior candidate and a replacement candidate");
     const identityOperations = ["merge", "alias", "same-as", "split"];
     if (before.operation !== after.operation && !(identityOperations.includes(before.operation) && identityOperations.includes(after.operation))) throw new Error("Supersession relation differs");
-    if (after.operation === "split" && outcome.spec.disposition === "accepted" && (!identityOperations.includes(before.operation) || prior.spec.disposition !== "accepted")) throw new Error("Split must replace an accepted identity decision");
+    if (after.operation === "split" && outcome.spec.disposition === "accepted" && !(before.operation === "split" || (identityOperations.includes(before.operation) && prior.spec.disposition === "accepted"))) throw new Error("Split must replace an earlier split or an accepted identity decision");
     if (after.operation === "split" && outcome.spec.disposition !== "accepted" && before.operation !== "split") throw new Error("A rejected or disputed split must replace a split decision");
     if (pairKey(before.subjects) !== pairKey(after.subjects)) throw new Error("Supersession subjects differ");
     successors.set(prior.id, outcome.id);

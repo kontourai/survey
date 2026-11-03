@@ -233,3 +233,39 @@ test("cross-type identity never follows confidence alone and requires explicit r
   const approved = entityOutcomeFromDecision(p, decision(p, "accept-proposed"));
   assert.equal(projectEntityReviews([p], [approved])[0]?.identityLink?.relation, "equivalent");
 });
+
+test("split can be re-accepted after a dispute or rejection with complete ancestry", () => {
+  for (const disposition of ["disputed", "rejected"] as const) {
+    const m = proposal(alternative("merge"));
+    const merge = entityOutcomeFromDecision(m, decision(m, "accept-proposed"));
+    const s = proposal(alternative("split"));
+    const split = entityOutcomeFromDecision(s, decision(s, "accept-proposed"), merge.id);
+    const next = decision(s, disposition === "disputed" ? "accept-proposed" : "reject-proposed");
+    if (disposition === "disputed") { next.spec.status = "proposed"; next.metadata.labels = { "survey.kontourai.io/entity-disposition": "disputed" }; }
+    const adverse = entityOutcomeFromDecision(s, next, split.id);
+    const restoreDecision = decision(s, "accept-proposed"); restoreDecision.spec.reviewedAt = "2026-11-04T00:00:00Z";
+    const restored = entityOutcomeFromDecision(s, restoreDecision, adverse.id);
+    const records = projectEntityReviews([m, s], [merge, split, adverse, restored]);
+    assert.equal(records.find(r => r.outcomeId === restored.id)?.status, "accepted");
+    assert.equal(records.find(r => r.outcomeId === restored.id)?.supersedes, adverse.id);
+    assert.equal(records.find(r => r.outcomeId === restored.id)?.ambiguity, undefined);
+    assert.equal(records.some(r => r.identityLink), false);
+  }
+});
+
+test("independent disputes and rejected split decisions surface as conflicts", () => {
+  const m = proposal(alternative("merge")); const merge = entityOutcomeFromDecision(m, decision(m, "accept-proposed"));
+  const s = proposal(alternative("split"));
+  const d = decision(s, "accept-proposed"); d.spec.status = "proposed"; d.metadata.labels = { "survey.kontourai.io/entity-disposition": "disputed" };
+  const dispute = entityOutcomeFromDecision(s, d);
+  assert.equal(projectEntityReviews([m, s], [merge, dispute]).find(r => r.outcomeId === merge.id)?.identityLink, undefined);
+  const rejected = entityOutcomeFromDecision(s, decision(s, "reject-proposed"));
+  const acceptedSplit = entityOutcomeFromDecision(s, decision(s, "accept-proposed"), merge.id);
+  assert.equal(projectEntityReviews([m, s], [merge, rejected, acceptedSplit]).find(r => r.outcomeId === acceptedSplit.id)?.ambiguity, "conflicting-reviews");
+  const illegal = entityOutcomeFromDecision(s, decision(s, "reject-proposed"), merge.id);
+  assert.throws(() => projectEntityReviews([m, s], [merge, illegal]), /must replace a split decision/);
+  const rel = proposal(alternative("related-to"));
+  const accepted = entityOutcomeFromDecision(rel, decision(rel, "accept-proposed"));
+  const rejectedRel = entityOutcomeFromDecision(rel, decision(rel, "reject-proposed"));
+  assert.equal(projectEntityReviews([rel], [accepted, rejectedRel]).find(r => r.outcomeId === accepted.id)?.ambiguity, "conflicting-reviews");
+});

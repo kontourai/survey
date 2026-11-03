@@ -34,7 +34,8 @@ Surface owns identity admission and accumulation over time. Equivalent links
 are emitted only as review-backed candidate mappings with claims, evidence and
 review events, not as a declaration that a link is admitted at a knowledge cut.
 Domain relations and splits do not become equivalent links. Subject-type
-compatibility belongs to producer policy, so a cross-type mapping requires an
-explicit review and is never inferred from names or scores. Survey preserves
+compatibility belongs to producer policy; the same explicit review requirement
+applies to every mapping, including cross-type mappings. Names and scores never
+automatically accept one. Survey preserves
 conflicts and cannot infer missing authority or completeness from a supplied
 history. Existing Surface admission gaps are tracked in surface#353 and #357.
