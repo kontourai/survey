@@ -1016,10 +1016,15 @@ actor over whatever an event carried, and a snapshot with no kind stores none. T
 Workbench has no control that sets it.
 
 The kind is per session, so it attests the authenticated principal who writes to
-it. `survey-review-mcp` authenticates nobody and cannot tell a person from the
-agent driving its client, so `survey_review_decide` refuses a session attested
-`human`: decide that session in the review console (or a host's own writer that
-authenticates the reviewer), or open it attested `agent`. A host that builds `ReviewOutcome` records itself sets it
+it. Survey ships no authenticated writer. `survey-review-mcp` cannot tell a person
+from the agent driving its client, and the standalone review console serves any
+local client, so both refuse a session attested `human`: `survey_review_decide`
+returns an error and `POST /api/events` returns 403 (unless the console was given
+a producer-owned `producerApply`, where the host revalidates authentication
+before anything is applied). Decide such a session through a host's own writer
+that authenticates the reviewer, or open it attested `agent`. A reviewer kind
+stored by an earlier writer is not re-verified: the kind exists on no released
+version, so there are no earlier human-attested sessions to migrate. A host that builds `ReviewOutcome` records itself sets it
 from its own authentication, not from a request body.
 
 **Projection.** The kind decides `confidenceBasis.reviewerAuthority` of a
@@ -1038,7 +1043,9 @@ records the kind. Producer-supplied `metadata.survey.reviewerKind` and
 `evidenceStrength` is unchanged by the kind (an auto-accept policy actor still
 projects `"weak"`). A producer's `confidenceBasis.reviewerAuthority` still
 overrides the derived value, with one limit: it may not raise an attested `agent`
-or `rule` review to `operator` or `domain_expert` (the projection throws). Lower
+or `rule` review to `operator` or `domain_expert` (the projection throws), on
+every projection path, including a claim that selects no candidate and a
+could-not-confirm round that projects no review. Lower
 authorities, any override of an attested `human`, and any override of an inferred
 kind are unchanged. The same projection applies to a claim that selects no
 candidate: it records the kind and discards producer-supplied

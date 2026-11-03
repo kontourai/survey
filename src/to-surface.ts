@@ -158,7 +158,11 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
     const evidenceId = projectionRecordId(projection.id, projectionContextId, "claim-evidence", "evidence.source");
     const autoAccepted = projectionReview?.actor === AUTO_ACCEPT_ACTOR;
     const reviewer = projectionReview ? resolveReviewerKind(projectionReview) : undefined;
-    assertReviewerAuthorityOverride(projection, reviewer);
+    // Authority follows the selected review even when the claim projects no
+    // review (a could-not-confirm round), so the kind that decided it still
+    // bounds what a producer override can claim.
+    const authorityReviewer = review ? resolveReviewerKind(review) : undefined;
+    assertReviewerAuthorityOverride(projection, authorityReviewer);
 
     const claim: Claim = {
       id: projection.id,
@@ -183,7 +187,10 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
         // own confidence, so its claims also carry weak evidence. A record
         // with no host-attested kind keeps the authority it always had.
         reviewerAuthority: status === "verified" || status === "assumed"
-          ? (reviewer ? reviewerAuthorityForKind(reviewer.kind) : "operator")
+          ? (reviewer
+            ? reviewerAuthorityForKind(reviewer.kind)
+            // No projected review: only an attested kind changes the legacy default.
+            : authorityReviewer && !authorityReviewer.inferred ? reviewerAuthorityForKind(authorityReviewer.kind) : "operator")
           : "none",
         evidenceStrength: (status === "verified" || status === "assumed") && !autoAccepted ? "moderate" : "weak",
         impactLevel: projection.impactLevel,
@@ -407,6 +414,7 @@ function projectUnselectedSetClaim(context: {
 
   const { reviewerKind: _producerReviewerKind, reviewerKindInferred: _producerReviewerKindInferred, ...producerSurvey } = isRecord(projection.metadata?.survey) ? projection.metadata.survey : {};
   const reviewer = review ? resolveReviewerKind(review) : undefined;
+  assertReviewerAuthorityOverride(projection, reviewer);
   context.claims.push({
     id: projection.id,
     subjectType: projection.subjectType,

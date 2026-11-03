@@ -44,8 +44,9 @@ Options:
 `survey_review_decide` refuses a session whose snapshot is attested
 `reviewerKind: "human"` (see [Reviewer kind](./record-contracts.md#reviewer-kind)):
 this server authenticates nobody, so it cannot tell a person from the agent
-driving the client. Decisions it records on an `agent`-attested or unattested
-session carry that session's kind.
+driving the client. Decide such a session through a host that authenticates the
+reviewer. Decisions it records on an `agent`-attested or unattested session carry
+that session's kind.
 
 Decision mapping:
 

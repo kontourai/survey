@@ -46,8 +46,10 @@ bind, so it is part of the outcome identity, and their mapping claims project
 the same authority.
 
 The kind is per session, so it attests the authenticated principal writing to
-it. The MCP server authenticates nobody, so `survey_review_decide` refuses a
-session attested human rather than stamp an agent's tool call as a person's.
+it. Neither shipped server authenticates anybody, so `survey_review_decide` and the
+console's `POST /api/events` refuse a session attested human (the console unless
+the host supplied a producer-owned apply) rather than stamp whoever posted as a
+person.
 Producer `confidenceBasis` overrides cannot raise an attested agent or rule to a
 human authority. The review proof binds an attested kind (absent kind, same
 digest), and calibration counts human labels only.

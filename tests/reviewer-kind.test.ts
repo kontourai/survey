@@ -378,6 +378,34 @@ describe("the review console stores the host's kind for events a browser posts (
     for (const event of stored) assert.equal(event.spec.reviewerKind, "agent");
   });
 
+  it("refuses a post to a session attested human, and stores nothing", async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), "survey-reviewer-kind-"));
+    const sessionPath = join(tmpDir, "session.json");
+    await copyFile("example-data/mcp-review-session.json", sessionPath);
+    const file = JSON.parse(await readFile(sessionPath, "utf8")) as { snapshot: ReviewQueueSessionState; events: unknown[] };
+    file.snapshot = { ...file.snapshot, reviewerKind: "human" };
+    await writeFile(sessionPath, JSON.stringify(file));
+    const before = file.events.length;
+    const handle = await startReviewConsoleServer({ sessionPath, port: 0 });
+    try {
+      const itemName = file.snapshot.items[0]!.metadata.name;
+      const decisionEvents = buildReviewSessionEvents({ ...file.snapshot, decisionsByItemName: { [itemName]: "accept-proposed" } })
+        .filter((event) => event.spec.eventType.startsWith("decision-"));
+      const revision = ((await (await fetch(`${handle.url}api/session`)).json()) as { revision: string }).revision;
+      const res = await fetch(`${handle.url}api/events`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ events: decisionEvents, baseRevision: revision }),
+      });
+      assert.equal(res.status, 403);
+      assert.match(((await res.json()) as { error: string }).error, /authenticates nobody/);
+      assert.equal(((JSON.parse(await readFile(sessionPath, "utf8")) as { events: unknown[] }).events).length, before);
+    } finally {
+      await handle.close();
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   it("drops the browser's human when the host attested no kind", async () => {
     const stored = await postBrowserDecision(undefined);
     assert.ok(stored.length > 0);
@@ -577,6 +605,33 @@ describe("a producer cannot raise an attested agent or rule review to human auth
     }
   });
 
+  it("refuses the same override on a claim that selects no candidate, and under a could-not-confirm round", () => {
+    const base = surveyInput([]);
+    const conflict: SurveyInput = {
+      ...base,
+      extractions: [base.extractions[0]!, { ...base.extractions[0]!, id: "extraction.2", value: 52000 }],
+      candidateSets: [{
+        id: "set.1", target: "reportedAmount", status: "conflict",
+        candidates: [
+          { id: "candidate.1", extractionId: "extraction.1", value: 48000, confidence: 0.9 },
+          { id: "candidate.2", extractionId: "extraction.2", value: 52000, confidence: 0.8 },
+        ],
+      }],
+      reviewOutcomes: [review({ status: "rejected", candidateId: undefined, reviewerKind: "agent", actor: "triage-agent" })],
+      claims: [{ ...base.claims[0]!, candidateId: undefined, confidenceBasis: { reviewerAuthority: "operator" } }],
+    };
+    assert.throws(() => buildSurveyTrustBundle(conflict), /contradicts the attested reviewerKind agent/);
+
+    // A could-not-confirm round on an assumed claim projects no review of its own.
+    const notConfirmed = (extra: Partial<ReviewOutcome>) => surveyInput([review({ status: "assumed", resolution: "could_not_confirm", resolutionReason: "Source unreachable.", ...extra })]);
+    const agentRound = notConfirmed({ reviewerKind: "agent", actor: "triage-agent" });
+    const forged = { ...agentRound, claims: [{ ...agentRound.claims[0]!, confidenceBasis: { reviewerAuthority: "operator" as const } }] };
+    assert.throws(() => buildSurveyTrustBundle(forged), /contradicts the attested reviewerKind agent/);
+    // Without the override, an attested agent's round is system authority, not the legacy operator default.
+    assert.equal(buildSurveyTrustBundle(agentRound).claims[0]!.confidenceBasis?.reviewerAuthority, "system");
+    assert.equal(buildSurveyTrustBundle(notConfirmed({})).claims[0]!.confidenceBasis?.reviewerAuthority, "operator", "a legacy could-not-confirm round keeps the default it had");
+  });
+
   it("still allows an equal or lower authority, any override of an attested human, and any override of a legacy record", () => {
     assert.equal(buildSurveyTrustBundle(withOverride("agent", "system")).claims[0]!.confidenceBasis?.reviewerAuthority, "system");
     assert.equal(buildSurveyTrustBundle(withOverride("agent", "none")).claims[0]!.confidenceBasis?.reviewerAuthority, "none");
@@ -756,7 +811,8 @@ describe("the review proof binds the attested kind (proof gap from review)", () 
   it("changing only the kind changes the proof, and a record with no kind keeps its digest", () => {
     assert.notEqual(anchorFor("agent"), anchorFor("human"));
     assert.notEqual(anchorFor("human"), anchorFor(undefined));
-    assert.equal(anchorFor(undefined), anchorFor(undefined));
+    // Computed by origin/main (a9fede3, which has no reviewerKind) for this exact fixture.
+    assert.equal(anchorFor(undefined), "72214229d2d402b4e1fc1bbb92fc46caad0bcf906a1adb988c16117dc81bce87");
   });
 });
 
