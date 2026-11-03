@@ -187,7 +187,21 @@ export function projectEntityReviews(proposals: readonly EntityProposal[], outco
     if (!before || !after) throw new Error("Supersession must bind a prior candidate and a replacement candidate");
     const identityOperations = ["merge", "alias", "same-as", "split"];
     if (before.operation !== after.operation && !(identityOperations.includes(before.operation) && identityOperations.includes(after.operation))) throw new Error("Supersession relation differs");
-    if (after.operation === "split" && outcome.spec.disposition === "accepted" && !(before.operation === "split" || (identityOperations.includes(before.operation) && prior.spec.disposition === "accepted"))) throw new Error("Split must replace an earlier split or an accepted identity decision");
+    if (after.operation === "split" && outcome.spec.disposition === "accepted") {
+      let ancestor: EntityOutcome | undefined = prior;
+      const visited = new Set<string>();
+      let foundMapping = false;
+      while (ancestor) {
+        if (visited.has(ancestor.id)) throw new Error("Cyclic supersession");
+        visited.add(ancestor.id);
+        const candidate = ancestor.spec.proposal.spec.alternatives.find(a => candidateId(a) === ancestor!.spec.candidateId);
+        if (candidate && ["merge", "alias", "same-as"].includes(candidate.operation) && ancestor.spec.disposition === "accepted") { foundMapping = true; break; }
+        if (!ancestor.spec.supersedes) break;
+        ancestor = byId.get(ancestor.spec.supersedes);
+        if (!ancestor) throw new Error("Missing supersession ancestry");
+      }
+      if (!foundMapping) throw new Error("Split requires an accepted identity mapping in its ancestry");
+    }
     if (after.operation === "split" && outcome.spec.disposition !== "accepted" && before.operation !== "split") throw new Error("A rejected or disputed split must replace a split decision");
     if (pairKey(before.subjects) !== pairKey(after.subjects)) throw new Error("Supersession subjects differ");
     successors.set(prior.id, outcome.id);

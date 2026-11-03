@@ -28,7 +28,10 @@ reviews suppress candidate links pending resolution; abstentions do not. Review
 assertions remain distinct from Surface admission and current-state semantics.
 Rejecting a split is not a rejection of the earlier merge. A clean split is not
 itself a conflict. A rejected or disputed split can supersede an earlier split;
-this does not automatically restore the earlier merge.
+this does not automatically restore the earlier merge. A later review may
+accept a split again when its complete ancestry reaches an accepted mapping.
+A disputed or rejected mapping can likewise be replaced by a split if its
+ancestry contains that accepted mapping.
 
 Surface owns identity admission and accumulation over time. Equivalent links
 are emitted only as review-backed candidate mappings with claims, evidence and

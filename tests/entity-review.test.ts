@@ -142,7 +142,7 @@ test("ancestry rejects unbound splits, different subjects, and branches", () => 
   assert.throws(() => projectEntityReviews([m, split], [original, first, branch]), /ambiguous supersession/);
   const rejected = entityOutcomeFromDecision(m, decision(m, "reject-proposed"));
   const badSplit = entityOutcomeFromDecision(split, decision(split, "accept-proposed"), rejected.id);
-  assert.throws(() => projectEntityReviews([m, split], [rejected, badSplit]), /accepted identity decision/);
+  assert.throws(() => projectEntityReviews([m, split], [rejected, badSplit]), /accepted identity mapping/);
 });
 
 test("subject identity comparisons cannot collide through separator characters", () => {
@@ -268,4 +268,39 @@ test("independent disputes and rejected split decisions surface as conflicts", (
   const accepted = entityOutcomeFromDecision(rel, decision(rel, "accept-proposed"));
   const rejectedRel = entityOutcomeFromDecision(rel, decision(rel, "reject-proposed"));
   assert.equal(projectEntityReviews([rel], [accepted, rejectedRel]).find(r => r.outcomeId === accepted.id)?.ambiguity, "conflicting-reviews");
+});
+
+test("a split requires an accepted mapping in complete ancestry, including after disputed merge", () => {
+  const s = proposal(alternative("split"));
+  for (const action of ["reject-proposed", "could-not-confirm"] as const) {
+    const earlier = entityOutcomeFromDecision(s, decision(s, action));
+    const split = entityOutcomeFromDecision(s, decision(s, "accept-proposed"), earlier.id);
+    assert.throws(() => projectEntityReviews([s], [earlier, split]), /accepted identity mapping/);
+  }
+  const m = proposal(alternative("merge"));
+  const merge = entityOutcomeFromDecision(m, decision(m, "accept-proposed"));
+  const d = decision(m, "accept-proposed"); d.spec.status = "proposed"; d.metadata.labels = { "survey.kontourai.io/entity-disposition": "disputed" };
+  const disputed = entityOutcomeFromDecision(m, d, merge.id);
+  const split = entityOutcomeFromDecision(s, decision(s, "accept-proposed"), disputed.id);
+  const records = projectEntityReviews([m, s], [merge, disputed, split]);
+  assert.equal(records.find(r => r.outcomeId === split.id)?.status, "accepted");
+  assert.equal(records.some(r => r.identityLink), false);
+  assert.throws(() => projectEntityReviews([m, s], [disputed, split]), /Missing/);
+});
+
+test("independent contradictory decisions on the same pair suppress links and flag splits", () => {
+  const m = proposal(alternative("merge"));
+  const m2 = createEntityProposal({ ...m.spec, revision: "2" });
+  const merge = entityOutcomeFromDecision(m, decision(m, "accept-proposed"));
+  const rejectedMerge = entityOutcomeFromDecision(m2, decision(m2, "reject-proposed"));
+  const records = projectEntityReviews([m, m2], [merge, rejectedMerge]);
+  assert.equal(records.find(r => r.outcomeId === merge.id)?.identityLink, undefined);
+  const s = proposal(alternative("split")); const s2 = createEntityProposal({ ...s.spec, revision: "2" });
+  const split = entityOutcomeFromDecision(s, decision(s, "accept-proposed"), merge.id);
+  const rejectedSplit = entityOutcomeFromDecision(s2, decision(s2, "reject-proposed"));
+  assert.equal(projectEntityReviews([m, s, s2], [merge, split, rejectedSplit]).find(r => r.outcomeId === split.id)?.ambiguity, "conflicting-reviews");
+  const unlinkedMerge = entityOutcomeFromDecision(m2, decision(m2, "accept-proposed"));
+  assert.equal(projectEntityReviews([m, m2, s], [merge, split, unlinkedMerge]).find(r => r.outcomeId === split.id)?.ambiguity, "conflicting-reviews");
+  const unsupported = decision(m, "accept-proposed"); unsupported.spec.status = "assumed";
+  assert.throws(() => entityOutcomeFromDecision(m, unsupported), /Unsupported review disposition/);
 });
