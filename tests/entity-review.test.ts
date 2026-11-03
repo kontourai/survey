@@ -90,3 +90,90 @@ test("bulk plan is bounded and validates supersession without side effects", () 
   assert.throws(() => planEntityReviewBatch([entry, entry]), /Duplicate/);
   assert.throws(() => planEntityReviewBatch([{ ...entry, supersedes: "missing" }]), /supersession/);
 });
+
+test("symmetric alternatives and evidence order share deterministic identity", () => {
+  const a = alternative("merge");
+  const reversed = { ...a, subjects: [a.subjects[1], a.subjects[0]] as EntityAlternative["subjects"], evidence: [...a.evidence].reverse() };
+  assert.equal(proposal(a).id, proposal(reversed).id);
+  assert.equal(proposal(a, reversed).spec.alternatives.length, 1);
+  assert.notEqual(proposal(alternative("domain:owns")).id, proposal(alternative("domain:owns", [subjects[1], subjects[0]])).id);
+});
+
+test("unlinked re-merge after split exposes conflict and never emits an identity link", () => {
+  const m = proposal(alternative("merge"));
+  const first = entityOutcomeFromDecision(m, decision(m, "accept-proposed"));
+  const s = proposal(alternative("split"));
+  const split = entityOutcomeFromDecision(s, decision(s, "accept-proposed"), first.id);
+  const laterDecision = decision(m, "accept-proposed"); laterDecision.spec.reviewedAt = "2026-11-03T00:00:00Z";
+  const later = entityOutcomeFromDecision(m, laterDecision);
+  const records = projectEntityReviews([m, s], [first, split, later]);
+  assert.equal(records.find(r => r.outcomeId === later.id)?.ambiguity, "conflicting-reviews");
+  assert.equal(records.some(r => r.identityLink), false);
+});
+
+test("reviewed rejection and dispute can be superseded; abstention alone does not remove a link", () => {
+  const p = proposal(alternative("merge"));
+  const rejected = entityOutcomeFromDecision(p, decision(p, "reject-proposed"));
+  const accepted = entityOutcomeFromDecision(p, decision(p, "accept-proposed"), rejected.id);
+  assert.ok(projectEntityReviews([p], [rejected, accepted]).find(r => r.outcomeId === accepted.id)?.identityLink);
+  const dispute = decision(p, "accept-proposed");
+  dispute.spec.status = "proposed";
+  dispute.metadata.labels = { "survey.kontourai.io/entity-disposition": "disputed" };
+  const disputed = entityOutcomeFromDecision(p, dispute, accepted.id);
+  assert.equal(projectEntityReviews([p], [rejected, accepted, disputed]).find(r => r.outcomeId === disputed.id)?.status, "disputed");
+  const acceptAgainDecision = decision(p, "accept-proposed"); acceptAgainDecision.spec.reviewedAt = "2026-11-04T00:00:00Z";
+  const acceptAgain = entityOutcomeFromDecision(p, acceptAgainDecision, disputed.id);
+  assert.ok(projectEntityReviews([p], [rejected, accepted, disputed, acceptAgain]).find(r => r.outcomeId === acceptAgain.id)?.identityLink);
+  const abstain = entityOutcomeFromDecision(p, decision(p, "could-not-confirm"));
+  assert.ok(projectEntityReviews([p], [rejected, accepted, disputed, acceptAgain, abstain]).find(r => r.outcomeId === acceptAgain.id)?.identityLink);
+});
+
+test("ancestry rejects unbound splits, different subjects, and branches", () => {
+  const m = proposal(alternative("merge"));
+  const original = entityOutcomeFromDecision(m, decision(m, "accept-proposed"));
+  const split = proposal(alternative("split"));
+  assert.throws(() => entityOutcomeFromDecision(split, decision(split, "accept-proposed")), /earlier reviewed mapping/);
+  const other = proposal(alternative("split", [subjects[0], { subjectType: "person", subjectId: "other" }]));
+  const wrong = entityOutcomeFromDecision(other, decision(other, "accept-proposed"), original.id);
+  assert.throws(() => projectEntityReviews([m, other], [original, wrong]), /subjects differ/);
+  const first = entityOutcomeFromDecision(split, decision(split, "accept-proposed"), original.id);
+  const d = decision(split, "accept-proposed"); d.spec.reviewedAt = "2026-11-04T00:00:00Z";
+  const branch = entityOutcomeFromDecision(split, d, original.id);
+  assert.throws(() => projectEntityReviews([m, split], [original, first, branch]), /ambiguous supersession/);
+  const rejected = entityOutcomeFromDecision(m, decision(m, "reject-proposed"));
+  const badSplit = entityOutcomeFromDecision(split, decision(split, "accept-proposed"), rejected.id);
+  assert.throws(() => projectEntityReviews([m, split], [rejected, badSplit]), /accepted identity decision/);
+});
+
+test("subject identity comparisons cannot collide through separator characters", () => {
+  const before: EntityAlternative["subjects"] = [{ subjectType: "p", subjectId: "a\u0001q\u0000b" }, { subjectType: "r", subjectId: "c" }];
+  const after: EntityAlternative["subjects"] = [{ subjectType: "p", subjectId: "a" }, { subjectType: "q", subjectId: "b\u0001r\u0000c" }];
+  const m = proposal(alternative("merge", before));
+  const accepted = entityOutcomeFromDecision(m, decision(m, "accept-proposed"));
+  const s = proposal(alternative("split", after));
+  const split = entityOutcomeFromDecision(s, decision(s, "accept-proposed"), accepted.id);
+  assert.throws(() => projectEntityReviews([m, s], [accepted, split]), /subjects differ/);
+});
+
+test("alias and renamed entity reviews map to equivalent while a proposed malicious cycle remains inert", () => {
+  const renamed: EntityAlternative["subjects"] = [{ subjectType: "organization", subjectId: "old-name" }, { subjectType: "organization", subjectId: "new-name" }];
+  for (const operation of ["alias", "same-as"] as const) {
+    const p = proposal(alternative(operation, renamed));
+    const accepted = entityOutcomeFromDecision(p, decision(p, "accept-proposed"));
+    assert.equal(projectEntityReviews([p], [accepted])[0]?.identityLink?.relation, "equivalent");
+  }
+  const third = { subjectType: "person", subjectId: "alex-3" };
+  const cycle = [proposal(alternative("domain:controls", [subjects[0], subjects[1]])), proposal(alternative("domain:controls", [subjects[1], third])), proposal(alternative("domain:controls", [third, subjects[0]]))];
+  assert.ok(projectEntityReviews(cycle, []).every(r => r.status === "proposed" && !r.identityLink));
+});
+
+test("contradictory selections in one review item suppress identity links", () => {
+  const p = proposal(alternative("merge"), alternative("related-to"));
+  const item = entityProposalToReviewItem(p);
+  const id = (op: string) => item.spec.candidates.find(c => (c.value as { operation: string }).operation === op)!.id;
+  const merge = entityOutcomeFromDecision(p, decision(p, "select-proposed", id("merge")));
+  const related = entityOutcomeFromDecision(p, decision(p, "select-proposed", id("related-to")));
+  const records = projectEntityReviews([p], [merge, related]);
+  assert.equal(records.find(r => r.outcomeId === merge.id)?.ambiguity, "conflicting-reviews");
+  assert.equal(records.some(r => r.identityLink), false);
+});

@@ -1567,7 +1567,9 @@ candidate after building its ReviewItem and obtaining its stable candidate ID.
 
 `entityProposalToReviewItem` makes an ordinary, non-editable `ReviewItem`.
 Every alternative includes its evidence in the displayed value, and the first
-source is available to the inspector. A Workbench `ReviewDecision` can be bound
+source is available to the inspector. Confidence components stay in the API
+record and are not rendered in the value, so score-blind sessions cannot leak
+them through candidate text. A Workbench `ReviewDecision` can be bound
 with `entityOutcomeFromDecision`: verified selection accepts, rejected rejects,
 and `could_not_confirm` abstains with a reason. An API caller can record a
 reasoned dispute using a proposed decision with label
@@ -1578,19 +1580,22 @@ must bind decisions to authenticated actors and policy before persisting or
 using them. No similarity or confidence threshold promotes a candidate.
 
 A split is an accepted review superseding an earlier accepted identity decision;
-a later merge can supersede the split. The full prior outcome must be supplied
+a later merge can supersede the split. A later review can also explicitly
+supersede a rejected or disputed candidate, preserving the prior disposition. The full prior outcome must be supplied
 for projection, and the subject pair and relation must agree. Abstention never
 supersedes a prior decision. Missing, branching, or cyclic supersession fails
 closed. `projectEntityReviews` reports proposed, accepted, rejected, disputed,
 abstained and superseded records with ancestry. Accepted merge, alias and
 same-as decisions can carry a Surface `equivalent` IdentityLink and its mapping
 claim, evidence and review event. A split or a general relationship is not an
-identity link. Conflicting decisions for one proposal suppress links. These are
+identity link. Conflicting decisions for one proposal, or incompatible live reviews of the
+same subject pair, suppress candidate links and report `conflicting-reviews`.
+Abstention does not suppress an earlier accepted link. These are
 review assertions, **not an admitted current-state projection**: hosts must
 supply complete custody, authority and knowledge-cut inputs and let Surface
 admit links, as described by [Surface's knowledge accumulation decision](https://github.com/kontourai/surface/blob/main/docs/decisions/knowledge-accumulation.md).
-Do not append a superseded link to an active Surface bundle. Cross-proposal
-conflicts and time-based current state are Surface's responsibility.
+Do not append a superseded link to an active Surface bundle. The supplied record set must be complete: Surface still owns cross-bundle
+admission, transitive identity conflicts and time-based current state.
 
 `planEntityReviewBatch` is a side-effect-free dry run of at most 50 explicit
 decisions. It validates the complete supplied ancestry and returns the exact

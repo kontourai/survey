@@ -21,7 +21,9 @@ review items, decisions and replayable events. It stores immutable, content
 addressed outcomes and explicit supersession ancestry. A split is a reviewed
 replacement of a prior mapping; abstention changes no earlier outcome. Bulk
 planning is bounded and pure; transactional persistence and authorization stay
-with the host. Confidence is descriptive and never an acceptance rule.
+with the host. Confidence is descriptive and never an acceptance rule. Same-pair contradictory
+reviews suppress candidate links pending resolution; abstentions do not. Review
+assertions remain distinct from Surface admission and current-state semantics.
 
 Surface owns identity admission and accumulation over time. Equivalent links
 are emitted only as review-backed candidate mappings with claims, evidence and
