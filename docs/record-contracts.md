@@ -1024,12 +1024,19 @@ producer-owned `producerApply` (the events are stored at POST time, before any
 apply runs). Decide such a session through a host's own writer that authenticates
 the reviewer, or open it attested `agent`.
 
-Decision events in a kind-attested session must carry the host's `reviewerKind`
-stamp. Apply refuses one without it (`missing-reviewer-kind-stamp`): an earlier
-Survey version's writer preserves the snapshot's unknown field but never stamps
-events, so the attestation says nothing about who made that decision. A stamp that
-differs from the snapshot's is ignored, not refused; the snapshot's kind wins.
-Sessions that attest nothing are unaffected. A host that builds `ReviewOutcome` records itself sets it
+Decision events (including an undo) in a kind-attested session must carry a
+`reviewerKind` stamp. Apply refuses one without it (`missing-reviewer-kind-stamp`).
+This is a compatibility guard, not authentication: an earlier Survey version's
+writer preserves the snapshot's unknown field but never stamps events, so the
+attestation says nothing about who made that decision. A stamp's presence proves
+neither that the host issued it nor who wrote the event, and a stamp that differs
+from the snapshot's is ignored, not refused (the snapshot's kind wins). Binding the
+writer and its event stream to the session is the host's authenticated ingress. In
+particular, `agent`, `rule` and unattested sessions stay writable by any local
+client, and a host that persists browser event streams (the embed's local-storage
+store keys on item ids) must isolate them per session and principal, or an agent's
+stream could be replayed under a human snapshot. Sessions that attest nothing are
+unaffected by the guard. A host that builds `ReviewOutcome` records itself sets it
 from its own authentication, not from a request body.
 
 **Projection.** The kind decides `confidenceBasis.reviewerAuthority` of a

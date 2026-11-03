@@ -289,9 +289,19 @@ describe("the Workbench ignores a browser-supplied reviewer kind (#359)", () => 
       const { reviewerKind: _stamp, ...spec } = event.spec;
       return { ...event, spec };
     });
-    const applied = deriveReviewSessionApplyResultForSnapshot({ snapshot, events: unstamped });
-    assert.equal(applied.ok, false);
-    assert.ok(applied.issues.some((issue) => issue.code === "missing-reviewer-kind-stamp"), JSON.stringify(applied.issues));
+    const stampedIssues = (events: ReviewSessionEvent[]) => deriveReviewSessionApplyResultForSnapshot({ snapshot, events })
+      .issues.filter((issue) => issue.code === "missing-reviewer-kind-stamp");
+    // Each decision event type is checked on its own: the other cannot mask a missing guard.
+    for (const eventType of ["decision-changed", "decision-submitted"] as const) {
+      const only = unstamped.filter((event) => event.spec.eventType === eventType || !event.spec.eventType.startsWith("decision-"))
+        .map((event, index) => ({ ...event, spec: { ...event.spec, sequence: index + 1 } }));
+      assert.ok(only.some((event) => event.spec.eventType === eventType), `fixture has a ${eventType} event`);
+      assert.ok(stampedIssues(only).length > 0, `${eventType} without a stamp is refused`);
+    }
+    // An undo (a cleared decision) is a decision event too and carries the stamp.
+    const decided = unstamped.find((event) => event.spec.eventType === "decision-changed")!;
+    const cleared = { ...decided, spec: { ...decided.spec, data: { workbenchDecision: null } } };
+    assert.ok(stampedIssues([cleared].map((event) => ({ ...event, spec: { ...event.spec, sequence: 1 } }))).length > 0);
     // The same events are fine when the snapshot attests nothing: old sessions keep working.
     assert.equal(deriveReviewSessionApplyResultForSnapshot({ snapshot: hostSnapshot(), events: unstamped }).ok, true);
   });
