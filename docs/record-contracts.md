@@ -1019,12 +1019,17 @@ The kind is per session, so it attests the authenticated principal who writes to
 it. Survey ships no authenticated writer. `survey-review-mcp` cannot tell a person
 from the agent driving its client, and the standalone review console serves any
 local client, so both refuse a session attested `human`: `survey_review_decide`
-returns an error and `POST /api/events` returns 403 (unless the console was given
-a producer-owned `producerApply`, where the host revalidates authentication
-before anything is applied). Decide such a session through a host's own writer
-that authenticates the reviewer, or open it attested `agent`. A reviewer kind
-stored by an earlier writer is not re-verified: the kind exists on no released
-version, so there are no earlier human-attested sessions to migrate. A host that builds `ReviewOutcome` records itself sets it
+returns an error and `POST /api/events` returns 403, even when the console has a
+producer-owned `producerApply` (the events are stored at POST time, before any
+apply runs). Decide such a session through a host's own writer that authenticates
+the reviewer, or open it attested `agent`.
+
+Decision events in a kind-attested session must carry the host's `reviewerKind`
+stamp. Apply refuses one without it (`missing-reviewer-kind-stamp`): an earlier
+Survey version's writer preserves the snapshot's unknown field but never stamps
+events, so the attestation says nothing about who made that decision. A stamp that
+differs from the snapshot's is ignored, not refused; the snapshot's kind wins.
+Sessions that attest nothing are unaffected. A host that builds `ReviewOutcome` records itself sets it
 from its own authentication, not from a request body.
 
 **Projection.** The kind decides `confidenceBasis.reviewerAuthority` of a

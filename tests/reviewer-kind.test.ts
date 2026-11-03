@@ -32,6 +32,7 @@ import {
 } from "../src/index.js";
 import type { EntityAlternative, ReviewOutcome, ReviewerKind, SurveyInput } from "../src/index.js";
 import { startReviewConsoleServer } from "../src/console/review-console-server.js";
+import { bindReviewQueue } from "../src/review-workbench/review-workbench.js";
 import { reviewResourceApiVersion, type ReviewDecision, type ReviewSessionEvent } from "../src/review-resource.js";
 import {
   buildReviewDecision,
@@ -282,6 +283,19 @@ describe("the Workbench ignores a browser-supplied reviewer kind (#359)", () => 
     assert.equal(applied.decisions[0]!.spec.reviewerKind, "agent");
   });
 
+  it("refuses decisions on a kind-attested session that carry no stamp (written by a writer that never saw the attestation)", () => {
+    const snapshot = hostSnapshot("human");
+    const unstamped = browserEvents(snapshot, "human").map((event) => {
+      const { reviewerKind: _stamp, ...spec } = event.spec;
+      return { ...event, spec };
+    });
+    const applied = deriveReviewSessionApplyResultForSnapshot({ snapshot, events: unstamped });
+    assert.equal(applied.ok, false);
+    assert.ok(applied.issues.some((issue) => issue.code === "missing-reviewer-kind-stamp"), JSON.stringify(applied.issues));
+    // The same events are fine when the snapshot attests nothing: old sessions keep working.
+    assert.equal(deriveReviewSessionApplyResultForSnapshot({ snapshot: hostSnapshot(), events: unstamped }).ok, true);
+  });
+
   it("a snapshot with no kind stays kindless when the browser claims human", () => {
     const snapshot = hostSnapshot();
     const events = browserEvents(snapshot, "human");
@@ -376,6 +390,41 @@ describe("the review console stores the host's kind for events a browser posts (
     const stored = await postBrowserDecision("agent");
     assert.ok(stored.length > 0);
     for (const event of stored) assert.equal(event.spec.reviewerKind, "agent");
+  });
+
+  it("refuses a post to a session attested human even when the host supplied a producer apply, and stores nothing", async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), "survey-reviewer-kind-"));
+    const sessionPath = join(tmpDir, "session.json");
+    await copyFile("example-data/mcp-review-session.json", sessionPath);
+    const file = JSON.parse(await readFile(sessionPath, "utf8")) as { session: { metadata: { name: string } }; snapshot: ReviewQueueSessionState; events: unknown[] };
+    const snapshot: ReviewQueueSessionState = { ...file.snapshot, items: file.snapshot.items.slice(0, 1), decisionsByItemName: {}, notesByItemName: {}, reviewerKind: "human" };
+    await writeFile(sessionPath, JSON.stringify({ ...file, snapshot, events: [] }));
+    let applied = 0;
+    const handle = await startReviewConsoleServer({
+      sessionPath,
+      port: 0,
+      producerApply: {
+        binding: bindReviewQueue(snapshot, { sessionName: file.session.metadata.name }),
+        apply: async () => { applied += 1; return { reference: "host:1", summary: "applied" }; },
+      },
+    });
+    try {
+      const itemName = snapshot.items[0]!.metadata.name;
+      const events = buildReviewSessionEvents({ ...snapshot, decisionsByItemName: { [itemName]: "accept-proposed" } }, file.session.metadata.name)
+        .filter((event) => event.spec.eventType.startsWith("decision-"));
+      const revision = ((await (await fetch(`${handle.url}api/session`)).json()) as { revision: string }).revision;
+      const res = await fetch(`${handle.url}api/events`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ events, baseRevision: revision }),
+      });
+      assert.equal(res.status, 403);
+      assert.equal(((JSON.parse(await readFile(sessionPath, "utf8")) as { events: unknown[] }).events).length, 0);
+      assert.equal(applied, 0);
+    } finally {
+      await handle.close();
+      await rm(tmpDir, { recursive: true, force: true });
+    }
   });
 
   it("refuses a post to a session attested human, and stores nothing", async () => {

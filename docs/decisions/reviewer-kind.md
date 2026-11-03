@@ -47,9 +47,12 @@ the same authority.
 
 The kind is per session, so it attests the authenticated principal writing to
 it. Neither shipped server authenticates anybody, so `survey_review_decide` and the
-console's `POST /api/events` refuse a session attested human (the console unless
-the host supplied a producer-owned apply) rather than stamp whoever posted as a
-person.
+console's `POST /api/events` refuse a session attested human rather than stamp
+whoever posted as a person. The console refuses even with a producer-owned apply,
+which runs only after the events are stored. Decision events in a kind-attested
+session must carry the host's stamp, so decisions written by an earlier Survey
+version's writer, which preserves the snapshot's field but never stamps events,
+are refused at apply instead of reading as explicit human.
 Producer `confidenceBasis` overrides cannot raise an attested agent or rule to a
 human authority. The review proof binds an attested kind (absent kind, same
 digest), and calibration counts human labels only.

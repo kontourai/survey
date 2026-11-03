@@ -28,7 +28,8 @@ export type ReviewSessionReplayIssueCode =
   | "missing-resolution-reason"
   | "edited-value-not-editable"
   | "edited-value-type-mismatch"
-  | "session-conditions-mismatch";
+  | "session-conditions-mismatch"
+  | "missing-reviewer-kind-stamp";
 
 export interface ReviewSessionReplayIssue {
   readonly code: ReviewSessionReplayIssueCode;
@@ -72,6 +73,21 @@ export function validateReviewSessionEventsForSnapshot(
         code: "unknown-review-item",
         reviewItemName,
         message: `ReviewSessionEvent ${event.metadata.name} references review item ${reviewItemName}, but the supplied session snapshot does not contain that ReviewItem.`,
+      });
+    }
+
+    // A kind-attested session's decisions carry the host's stamp. A decision
+    // without one was written by something that never saw the attestation (an
+    // earlier Survey version, or a writer that builds events by hand), so the
+    // snapshot's kind says nothing about who made it. A stamp that differs from
+    // the snapshot's is not an issue: it is ignored and the snapshot's kind wins.
+    if ((event.spec.eventType === "decision-changed" || event.spec.eventType === "decision-submitted")
+      && snapshot.reviewerKind !== undefined && event.spec.reviewerKind === undefined) {
+      issues.push({
+        ...eventRef,
+        code: "missing-reviewer-kind-stamp",
+        reviewItemName,
+        message: `ReviewSessionEvent ${event.metadata.name} is a decision event in a session attested as ${snapshot.reviewerKind}, but carries no reviewerKind stamp, so nothing shows it was written under that attestation.`,
       });
     }
 

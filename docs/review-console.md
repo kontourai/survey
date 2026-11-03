@@ -44,7 +44,7 @@ Appending is a compare-and-swap. The body carries `events` (the events to append
 
 `POST /api/events` also refuses requests that a web page on another site could send through the browser: a `Content-Type` other than `application/json` (`415`), an `Origin` other than the console's own loopback origin (`403`), and, on every route, a `Host` that is not a loopback name (`403`, DNS rebinding).
 
-The console authenticates nobody: any local client can post. So `POST /api/events` answers `403` for a session whose snapshot is attested `reviewerKind: "human"`, unless the console was started with a producer-owned `producerApply` that revalidates authentication before applying (see [Reviewer kind](./record-contracts.md#reviewer-kind)).
+The console authenticates nobody: any local client can post. So `POST /api/events` answers `403` for a session whose snapshot is attested `reviewerKind: "human"`, even when the console was started with a producer-owned `producerApply`, because the events are stored at post time, before any apply runs (see [Reviewer kind](./record-contracts.md#reviewer-kind)).
 
 ```
 ┌───────────────┐                    ┌─────────────────┐
