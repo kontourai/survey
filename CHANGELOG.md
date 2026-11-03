@@ -1,5 +1,17 @@
 # Changelog
 
+## [8.3.0](https://github.com/kontourai/survey/compare/v8.2.1...v8.3.0) (2026-11-03)
+
+
+### Features
+
+* add reviewed entity relationship workflow ([#358](https://github.com/kontourai/survey/issues/358)) ([da1e74c](https://github.com/kontourai/survey/commit/da1e74c60f96cd8f77dceaacc8ca1a3bbfb84d47))
+
+
+### Fixes
+
+* retain ownership of browser concurrency probe ports ([#351](https://github.com/kontourai/survey/issues/351)) ([669e927](https://github.com/kontourai/survey/commit/669e9272bc9a90c9313cccb0e586cedf63fdbc81))
+
 ## [8.2.1](https://github.com/kontourai/survey/compare/v8.2.0...v8.2.1) (2026-10-14)
 
 
