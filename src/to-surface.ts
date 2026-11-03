@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Claim, Evidence, TrustBundle, TrustStatus, VerificationEvent } from "@kontourai/surface";
 import { buildReviewProofAnchor } from "./review-proof.js";
-import { assertReviewOutcomeDiscipline, resolveReviewerKind, reviewerAuthorityForKind } from "./producer-discipline.js";
+import { assertReviewerKind, assertReviewOutcomeDiscipline, resolveReviewerKind, reviewerAuthorityForKind } from "./producer-discipline.js";
 import { deriveCalibration, type CalibrationMetrics } from "./calibration.js";
 import { AUTO_ACCEPT_ACTOR } from "./producer-profile.js";
 import { canonicalJson } from "./review-workbench/canonical.js";
@@ -115,6 +115,9 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
   const rawSources = indexById(input.rawSources, "raw source");
   const extractions = indexById(input.extractions, "extraction");
   const candidateSets = indexById(input.candidateSets, "candidate set");
+  // Every supplied review, not only the one a claim selects: an invalid kind on
+  // a review that loses selection must still be refused, not silently skipped.
+  for (const review of input.reviewOutcomes) assertReviewerKind(`Review outcome ${review.id}`, review);
   const reviewsByCandidateSet = groupBy(input.reviewOutcomes, (review) => review.candidateSetId);
 
   // Only the explicit experimental opt-in produces a value (#279).
@@ -155,6 +158,7 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
     const evidenceId = projectionRecordId(projection.id, projectionContextId, "claim-evidence", "evidence.source");
     const autoAccepted = projectionReview?.actor === AUTO_ACCEPT_ACTOR;
     const reviewer = projectionReview ? resolveReviewerKind(projectionReview) : undefined;
+    assertReviewerAuthorityOverride(projection, reviewer);
 
     const claim: Claim = {
       id: projection.id,
@@ -401,7 +405,8 @@ function projectUnselectedSetClaim(context: {
     return id;
   });
 
-  const producerSurvey = isRecord(projection.metadata?.survey) ? projection.metadata.survey : {};
+  const { reviewerKind: _producerReviewerKind, reviewerKindInferred: _producerReviewerKindInferred, ...producerSurvey } = isRecord(projection.metadata?.survey) ? projection.metadata.survey : {};
+  const reviewer = review ? resolveReviewerKind(review) : undefined;
   context.claims.push({
     id: projection.id,
     subjectType: projection.subjectType,
@@ -436,6 +441,7 @@ function projectUnselectedSetClaim(context: {
           ...(candidate.rejectionReason !== undefined ? { rejectionReason: candidate.rejectionReason } : {}),
         })),
         reviewOutcomeId: review?.id,
+        ...(reviewer ? { reviewerKind: reviewer.kind, reviewerKindInferred: reviewer.inferred } : {}),
       },
     },
   });
@@ -761,6 +767,23 @@ function resolveInterpretationTargetClaim(interpretation: Interpretation, claims
   return claim;
 }
 
+/**
+ * A producer's `confidenceBasis` spreads last, so it can override
+ * `reviewerAuthority`. It may not raise an attested agent or rule review to a
+ * human authority: the host's attestation is what the authority states. A
+ * lower authority, and any override of an inferred (legacy) kind, stays allowed.
+ */
+function assertReviewerAuthorityOverride(
+  projection: ClaimTarget,
+  reviewer: { kind: ReviewerKind; inferred: boolean } | undefined,
+): void {
+  const override = projection.confidenceBasis?.reviewerAuthority;
+  if (!reviewer || reviewer.inferred || reviewerAuthorityForKind(reviewer.kind) !== "system") return;
+  if (override === "operator" || override === "domain_expert") {
+    throw new Error(`Claim ${projection.id} confidenceBasis.reviewerAuthority ${override} contradicts the attested reviewerKind ${reviewer.kind}`);
+  }
+}
+
 function buildSurveyMetadata(input: {
   projection: ClaimTarget;
   rawSource: RawSource;
@@ -948,6 +971,9 @@ function reviewDecisionKey(review: ReviewOutcome): string {
   return canonicalJson({
     candidateId: review.candidateId ?? null,
     status: review.status,
+    // Who decided is part of the decision: a human and an agent at the same
+    // instant are two decisions, not one recorded twice.
+    reviewerKind: review.reviewerKind ?? null,
     resolution: review.resolution ?? null,
     edit: edit ? { value: edit.value } : null,
     // These reach the claim (comfort zone, testimony provenance), so reviews

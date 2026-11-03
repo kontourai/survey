@@ -8,6 +8,7 @@ import type {
   SurveyInput,
 } from "./types.js";
 import { SURVEY_INPUT_CONTRACT_VERSION } from "./types.js";
+import { assertReviewerKind } from "./producer-discipline.js";
 import type { ReviewCandidate, ReviewItem } from "./review-resource.js";
 import { canonicalJson } from "./review-workbench/canonical.js";
 import type { ReviewWorkbenchResult } from "./review-workbench/review-workbench.js";
@@ -138,6 +139,7 @@ export function buildCanonicalReviewedTrustInput(
     addConsistent(candidateSets, candidateSet, "candidate set");
 
     const decision = result.reviewDecision.spec;
+    assertReviewerKind(`ReviewDecision ${result.reviewDecision.metadata.name}`, { reviewerKind: decision.reviewerKind, actor: decision.actor?.id });
     const reviewOutcomeId = decision.projection?.reviewOutcomeId
       ?? (selected ?? item.spec).projection?.reviewOutcomeId
       ?? `${item.metadata.name}.${result.decision}.review-outcome`;

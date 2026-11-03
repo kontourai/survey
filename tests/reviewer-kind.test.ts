@@ -12,8 +12,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
+  applyMappingReview,
   buildCanonicalReviewedTrustInput,
+  buildReviewProofAnchor,
   buildSurveyTrustBundle,
+  deriveCalibration,
+  proposalsToCandidateSet,
+  splitRoundForCarryForward,
   createEntityProposal,
   currentProposedReviewItem,
   deriveOversightMetrics,
@@ -551,5 +556,254 @@ describe("entity review outcomes carry the reviewer kind (#359)", () => {
     const outcome = entityOutcomeFromDecision(proposal, decision);
     const tampered = { ...outcome, spec: { ...outcome.spec, decision: { ...outcome.spec.decision, spec: { ...outcome.spec.decision.spec, reviewerKind: "human" as const } } } };
     assert.throws(() => projectEntityReviews([proposal], [tampered]), /Invalid outcome identity/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Review round 1 (kontourai/survey#360): findings F1-F6 and the proof binding
+// ---------------------------------------------------------------------------
+
+describe("a producer cannot raise an attested agent or rule review to human authority (F1)", () => {
+  function withOverride(kind: ReviewerKind | undefined, reviewerAuthority: "operator" | "domain_expert" | "system" | "none") {
+    const base = surveyInput([review(kind ? { reviewerKind: kind, actor: "triage-agent" } : {})]);
+    return { ...base, claims: [{ ...base.claims[0]!, confidenceBasis: { reviewerAuthority } }] };
+  }
+
+  it("refuses operator and domain_expert over an attested agent or rule", () => {
+    for (const kind of ["agent", "rule"] as const) {
+      for (const authority of ["operator", "domain_expert"] as const) {
+        assert.throws(() => buildSurveyTrustBundle(withOverride(kind, authority)), /contradicts the attested reviewerKind/, `${kind}/${authority}`);
+      }
+    }
+  });
+
+  it("still allows an equal or lower authority, any override of an attested human, and any override of a legacy record", () => {
+    assert.equal(buildSurveyTrustBundle(withOverride("agent", "system")).claims[0]!.confidenceBasis?.reviewerAuthority, "system");
+    assert.equal(buildSurveyTrustBundle(withOverride("agent", "none")).claims[0]!.confidenceBasis?.reviewerAuthority, "none");
+    assert.equal(buildSurveyTrustBundle(withOverride("human", "domain_expert")).claims[0]!.confidenceBasis?.reviewerAuthority, "domain_expert");
+    assert.equal(buildSurveyTrustBundle(withOverride(undefined, "domain_expert")).claims[0]!.confidenceBasis?.reviewerAuthority, "domain_expert");
+  });
+});
+
+describe("a claim that selects no candidate carries the same reviewer provenance (F3)", () => {
+  function unselected(reviewerKind: ReviewerKind | undefined, producerMetadata?: Record<string, unknown>): SurveyInput {
+    const base = surveyInput([]);
+    return {
+      ...base,
+      extractions: [
+        base.extractions[0]!,
+        { ...base.extractions[0]!, id: "extraction.2", value: 52000 },
+      ],
+      candidateSets: [{
+        id: "set.1",
+        target: "reportedAmount",
+        status: "conflict",
+        candidates: [
+          { id: "candidate.1", extractionId: "extraction.1", value: 48000, confidence: 0.9 },
+          { id: "candidate.2", extractionId: "extraction.2", value: 52000, confidence: 0.8 },
+        ],
+      }],
+      reviewOutcomes: [{
+        id: "review.1",
+        candidateSetId: "set.1",
+        status: "proposed",
+        resolution: "could_not_confirm",
+        resolutionReason: "Neither source could be checked.",
+        actor: "triage-agent",
+        reviewedAt: "2026-11-02T00:00:00.000Z",
+        ...(reviewerKind ? { reviewerKind } : {}),
+      }],
+      claims: [{ ...base.claims[0]!, candidateId: undefined, ...(producerMetadata ? { metadata: producerMetadata } : {}) }],
+    };
+  }
+
+  it("records the attested kind, and discards a forged one", () => {
+    const survey = buildSurveyTrustBundle(unselected("agent", { survey: { reviewerKind: "human", reviewerKindInferred: false } })).claims[0]!.metadata?.survey as Record<string, unknown>;
+    assert.equal(survey.reviewerKind, "agent");
+    assert.equal(survey.reviewerKindInferred, false);
+  });
+
+  it("marks an inferred kind, and records none for an unreviewed claim", () => {
+    const survey = buildSurveyTrustBundle(unselected(undefined)).claims[0]!.metadata?.survey as Record<string, unknown>;
+    assert.equal(survey.reviewerKind, "human");
+    assert.equal(survey.reviewerKindInferred, true);
+    const bare = { ...unselected(undefined, { survey: { reviewerKind: "human" } }), reviewOutcomes: [] };
+    assert.equal((buildSurveyTrustBundle(bare).claims[0]!.metadata?.survey as Record<string, unknown>).reviewerKind, undefined);
+  });
+});
+
+describe("every review boundary validates the kind (F4)", () => {
+  const bogus = (reviewerKind: unknown) => reviewerKind as ReviewerKind;
+
+  it("buildCanonicalReviewedTrustInput refuses an unknown kind and a policy actor attested human on a decision", () => {
+    const snapshot = hostSnapshot("agent");
+    const applied = deriveReviewSessionApplyResultForSnapshot({ snapshot, events: browserEvents(snapshot, "human") });
+    assert.equal(applied.ok, true, JSON.stringify(applied.issues));
+    const forge = (spec: Partial<ReviewDecision["spec"]>) => applied.results.map((result) => ({
+      ...result,
+      reviewDecision: { ...result.reviewDecision, spec: { ...result.reviewDecision.spec, ...spec } },
+    }));
+    const build = (results: ReturnType<typeof forge>) => buildCanonicalReviewedTrustInput({
+      source: "directory-review/session-359",
+      generatedAt: "2026-11-03T12:00:01.000Z",
+      projectionContextId: "session-359",
+      items: snapshot.items,
+      results,
+    });
+    assert.throws(() => build(forge({ reviewerKind: bogus("admin") })), /reviewerKind must be one of/);
+    assert.throws(() => build(forge({ reviewerKind: bogus(null) })), /reviewerKind must be one of/);
+    assert.throws(() => build(forge({ reviewerKind: "human", actor: { id: "auto-accept-policy" } })), /contradicts actor auto-accept-policy/);
+    assert.doesNotThrow(() => build(forge({})));
+  });
+
+  it("applyMappingReview refuses them instead of minting a durable verified mapping", () => {
+    const proposal = {
+      id: "p1", question: "What is the annual fee?", target: { subjectType: "record", facet: "profile", claimType: "field", fieldOrBehavior: "annualFee" },
+      confidence: 0.9, rationale: "x", proposedAt: "2026-06-10T00:00:00.000Z", proposedBy: "m",
+    } as unknown as Parameters<typeof proposalsToCandidateSet>[1][number];
+    const { candidateSet, candidates } = proposalsToCandidateSet("What is the annual fee?", [proposal]);
+    const outcome = (extra: Record<string, unknown>) => ({
+      id: "r1", candidateSetId: candidateSet.id, candidateId: candidates[0]!.id, status: "verified" as const,
+      actor: "reviewer@example.test", reviewedAt: "2026-06-10T12:00:00.000Z", ...extra,
+    }) as ReviewOutcome;
+    assert.throws(() => applyMappingReview(candidateSet, outcome({ reviewerKind: "admin" })), /reviewerKind must be one of/);
+    assert.throws(() => applyMappingReview(candidateSet, outcome({ actor: "auto-accept-policy", reviewerKind: "human" })), /contradicts actor auto-accept-policy/);
+    assert.doesNotThrow(() => applyMappingReview(candidateSet, outcome({ reviewerKind: "human" })));
+  });
+
+  it("splitRoundForCarryForward refuses a prior decision whose kind is invalid", () => {
+    const snapshot = hostSnapshot("agent");
+    const item = snapshot.items[0]!;
+    const entry = { item, slotId: "slot:a", candidateVersionIds: Object.fromEntries(item.spec.candidates.map((c) => [c.id, `v:${c.id}`])) };
+    const decision = buildReviewDecision({ item, decision: "accept-proposed", note: "ok", actorId: "reviewer-7", reviewerKind: "agent", reviewedAt: "2026-11-03T12:00:00.000Z" })!;
+    const prior = (spec: Partial<ReviewDecision["spec"]>) => ({ ...entry, decision: { ...decision, spec: { ...decision.spec, ...spec } } });
+    assert.doesNotThrow(() => splitRoundForCarryForward({ roundId: "r2", items: [entry], priorDecisions: [prior({})] }));
+    assert.throws(() => splitRoundForCarryForward({ roundId: "r2", items: [entry], priorDecisions: [prior({ reviewerKind: bogus("admin") })] }), /reviewerKind must be one of/);
+    assert.throws(() => splitRoundForCarryForward({ roundId: "r2", items: [entry], priorDecisions: [prior({ reviewerKind: "human", actor: { id: "auto-accept-policy" } })] }), /contradicts actor auto-accept-policy/);
+  });
+
+  it("the stored event log pairs the host's actor with the host's kind, not the poster's actor", () => {
+    const content: ReviewSessionFileContent = { session: undefined, snapshot: hostSnapshot("human"), events: [] };
+    const forged = browserEvents(hostSnapshot("human"), "human").map((event) => ({ ...event, spec: { ...event.spec, actor: { id: "auto-accept-policy" } } }));
+    for (const event of appendReviewSessionEvents(content, forged)) {
+      assert.equal(event.spec.actor?.id, "reviewer-7");
+      assert.equal(event.spec.reviewerKind, "human");
+    }
+    const contradictory: ReviewSessionFileContent = { ...content, snapshot: { ...content.snapshot, actorId: "auto-accept-policy" } };
+    assert.throws(() => appendReviewSessionEvents(contradictory, forged), /contradicts actor auto-accept-policy/);
+    const unknown: ReviewSessionFileContent = { ...content, snapshot: { ...content.snapshot, reviewerKind: bogus("admin") } };
+    assert.throws(() => appendReviewSessionEvents(unknown, forged), /reviewerKind must be one of/);
+  });
+});
+
+describe("review selection cannot hide or blur the kind (F5)", () => {
+  it("refuses an invalid kind on a review that loses selection", () => {
+    const winner = review({ id: "a", reviewerKind: "human" });
+    const loser = review({ id: "z", reviewerKind: "admin" as unknown as ReviewerKind });
+    assert.throws(() => buildSurveyTrustBundle(surveyInput([winner, loser])), /reviewerKind must be one of/);
+    const policyHuman = review({ id: "z", actor: "auto-accept-policy", status: "assumed", reviewerKind: "human" });
+    assert.throws(() => buildSurveyTrustBundle(surveyInput([winner, policyHuman])), /contradicts actor auto-accept-policy/);
+  });
+
+  it("treats a human and an agent review at the same instant as conflicting, not as one recorded twice", () => {
+    const human = review({ id: "a", reviewerKind: "human" });
+    const agent = review({ id: "z", reviewerKind: "agent", actor: "triage-agent" });
+    assert.throws(() => buildSurveyTrustBundle(surveyInput([human, agent])), /conflicting review outcomes/);
+    // The same decision recorded twice with the same kind is still one review.
+    assert.doesNotThrow(() => buildSurveyTrustBundle(surveyInput([human, { ...human, id: "b" }])));
+  });
+});
+
+describe("calibration counts only human labels (F6)", () => {
+  function labelled(reviewerKind: ReviewerKind | undefined, id: string) {
+    return {
+      extractions: [{ id: `ext-${id}`, sourceId: "s", target: "field.a", value: "v", extractor: "extractor-x", extractedAt: "2026-07-01T00:00:00.000Z" }],
+      candidateSets: [{
+        id: `cs-${id}`, target: "field.a", status: "resolved" as const, selectedCandidateId: `cand-${id}`,
+        candidates: [{ id: `cand-${id}`, extractionId: `ext-${id}`, value: "v", confidence: 0.9, metadata: { candidateRole: "proposed" } }],
+      }],
+      reviewOutcomes: [{
+        id: `ro-${id}`, candidateSetId: `cs-${id}`, candidateId: `cand-${id}`, status: "verified" as const,
+        actor: "reviewer", reviewedAt: "2026-07-01T00:00:00.000Z", ...(reviewerKind ? { reviewerKind } : {}),
+      }],
+    };
+  }
+  const merge = (...parts: ReturnType<typeof labelled>[]) => ({
+    extractions: parts.flatMap((p) => p.extractions),
+    candidateSets: parts.flatMap((p) => p.candidateSets),
+    reviewOutcomes: parts.flatMap((p) => p.reviewOutcomes),
+  });
+
+  it("excludes an agent- or rule-attested affirmation, keeps human and legacy, and honors includeAutoAccepted", () => {
+    const input = merge(labelled("human", "h"), labelled(undefined, "legacy"), labelled("agent", "ag"), labelled("rule", "ru"));
+    const metrics = deriveCalibration(input);
+    assert.equal(metrics.overall.sampleCount, 2);
+    assert.equal(metrics.skippedCount, 2);
+    assert.equal(deriveCalibration(input, { includeAutoAccepted: true }).overall.sampleCount, 4);
+  });
+});
+
+describe("the review proof binds the attested kind (proof gap from review)", () => {
+  function proofInput(reviewerKind?: ReviewerKind) {
+    const base = surveyInput([review(reviewerKind ? { reviewerKind } : {})]);
+    return base;
+  }
+  function anchorFor(reviewerKind?: ReviewerKind) {
+    const bundle = buildSurveyTrustBundle(proofInput(reviewerKind), { reviewProofs: true });
+    return bundle.claims[0]!.currentIntegrityAnchor!.value;
+  }
+
+  it("changing only the kind changes the proof, and a record with no kind keeps its digest", () => {
+    assert.notEqual(anchorFor("agent"), anchorFor("human"));
+    assert.notEqual(anchorFor("human"), anchorFor(undefined));
+    assert.equal(anchorFor(undefined), anchorFor(undefined));
+  });
+});
+
+describe("the MCP tool cannot decide a session attested as human (F2)", () => {
+  async function decideOver(hostKind: ReviewerKind | undefined) {
+    const { spawn } = await import("node:child_process");
+    const { createInterface } = await import("node:readline");
+    const tmpDir = await mkdtemp(join(tmpdir(), "survey-mcp-kind-"));
+    const sessionPath = join(tmpDir, "session.json");
+    await copyFile("example-data/mcp-review-session.json", sessionPath);
+    const file = JSON.parse(await readFile(sessionPath, "utf8")) as { snapshot: ReviewQueueSessionState };
+    if (hostKind) file.snapshot = { ...file.snapshot, reviewerKind: hostKind };
+    await writeFile(sessionPath, JSON.stringify(file));
+    const server = spawn("node", ["bin/survey-review-mcp.mjs", "--session", sessionPath], { stdio: ["pipe", "pipe", "inherit"] });
+    try {
+      const reply = new Promise<{ result?: { isError?: boolean; content: Array<{ text?: string }> } }>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("MCP timed out")), 15_000);
+        createInterface({ input: server.stdout! }).on("line", (line) => {
+          if (!line.trim()) return;
+          const message = JSON.parse(line);
+          if (message.id === 2) { clearTimeout(timer); resolve(message); }
+        });
+      });
+      const send = (message: unknown) => server.stdin!.write(`${JSON.stringify(message)}\n`);
+      send({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "agent-client", version: "0" } } });
+      send({ jsonrpc: "2.0", method: "notifications/initialized" });
+      send({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "survey_review_decide", arguments: { itemName: file.snapshot.items[0]!.metadata.name, decision: "accept", note: "relayed by an agent" } } });
+      const response = await reply;
+      const stored = JSON.parse(await readFile(sessionPath, "utf8")) as { events: ReviewSessionEvent[] };
+      return { response, stored: stored.events.filter((event) => event.spec.eventType.startsWith("decision-")) };
+    } finally {
+      server.kill();
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  }
+
+  it("refuses on a human-attested session and records nothing", async () => {
+    const { response, stored } = await decideOver("human");
+    assert.equal(response.result?.isError, true);
+    assert.match(response.result?.content[0]?.text ?? "", /cannot tell a person from an agent/);
+    assert.equal(stored.length, 0);
+  });
+
+  it("records an agent-attested session's decision as an agent's", async () => {
+    const { response, stored } = await decideOver("agent");
+    assert.notEqual(response.result?.isError, true, JSON.stringify(response));
+    assert.ok(stored.length > 0);
+    for (const event of stored) assert.equal(event.spec.reviewerKind, "agent");
   });
 });

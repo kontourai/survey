@@ -1,5 +1,6 @@
 import { sha256Hex } from "./sha256.js";
 import { canonicalJson } from "./review-workbench/canonical.js";
+import { assertReviewerKind } from "./producer-discipline.js";
 import type { ReviewCandidate, ReviewDecision, ReviewItem } from "./review-resource.js";
 
 /**
@@ -311,6 +312,9 @@ function assertRoundItem(entry: RoundReviewItem, label: string): void {
 }
 
 function assertDecisionNamesItem(decision: ReviewDecision, item: ReviewItem): void {
+  // A carried or superseding decision keeps the reviewer kind it was made under;
+  // one that carries an invalid kind is not carried as accepted.
+  assertReviewerKind(`ReviewDecision ${decision.metadata?.name}`, { reviewerKind: decision.spec?.reviewerKind, actor: decision.spec?.actor?.id });
   if (decision.spec.reviewItemName !== item.metadata.name) throw new Error(`ReviewDecision ${decision.metadata.name} names ${decision.spec.reviewItemName}, not ${item.metadata.name}.`);
   if (decision.spec.candidateId !== undefined && !item.spec.candidates.some((candidate) => candidate.id === decision.spec.candidateId)) {
     throw new Error(`ReviewDecision ${decision.metadata.name} selects candidate ${decision.spec.candidateId}, which ReviewItem ${item.metadata.name} does not hold.`);

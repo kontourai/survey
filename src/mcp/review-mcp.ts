@@ -614,6 +614,14 @@ async function toolDecide(
   }>(options.sessionPath, (file) => {
     if (file.producerApplication !== undefined) throw new DomainError("This review was already sent to its workflow; open a new review session");
     const { snapshot, events } = file;
+    // A tool call cannot tell a person from the agent driving the client, and
+    // this server authenticates nobody. Recording the call under a session the
+    // host attested as human would launder an agent's decision into a human one,
+    // so such a session is decided through a surface that authenticates the
+    // reviewer (the review console, or a host's own writer), not through here.
+    if (snapshot.reviewerKind === "human") {
+      throw new DomainError("This session is attested as a human reviewer's, and the MCP server cannot tell a person from an agent. Decide it in the review console, or open a session attested as an agent.");
+    }
     const attestation = attestedQueue(file);
     const current = currentSessionState(snapshot, events);
 

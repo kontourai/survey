@@ -164,6 +164,7 @@ export type CanonicalReviewProofPayloadV3 = Omit<
     resolution?: ReviewOutcome["resolution"];
     resolutionReason?: string;
     attemptEvidenceIds?: string[];
+    reviewerKind?: ReviewOutcome["reviewerKind"];
   };
 };
 
@@ -253,6 +254,8 @@ export function buildCanonicalReviewProofPayload(input: ReviewProofInput): Canon
             ? { attemptEvidenceIds: [...input.reviewOutcome.attemptEvidenceIds].sort() }
             : {}),
           actor: input.reviewOutcome.actor,
+          // Bound only when attested, so a proof of a record with no kind keeps its digest.
+          ...(input.reviewOutcome.reviewerKind !== undefined ? { reviewerKind: input.reviewOutcome.reviewerKind } : {}),
           reviewedAt: input.reviewOutcome.reviewedAt,
           rationale: input.reviewOutcome.rationale,
           evidenceIds: input.reviewOutcome.evidenceIds ? [...input.reviewOutcome.evidenceIds].sort() : undefined,
