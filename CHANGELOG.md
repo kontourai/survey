@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.4.0](https://github.com/kontourai/survey/compare/v8.3.0...v8.4.0) (2026-11-03)
+
+
+### Features
+
+* host-attested reviewerKind on review outcomes ([#360](https://github.com/kontourai/survey/issues/360)) ([5387632](https://github.com/kontourai/survey/commit/5387632dbe26ca8d6b7c8c9904d95d8c2f908f91))
+
 ## [8.3.0](https://github.com/kontourai/survey/compare/v8.2.1...v8.3.0) (2026-11-03)
 
 
