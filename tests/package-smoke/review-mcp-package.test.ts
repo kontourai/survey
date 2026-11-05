@@ -64,9 +64,9 @@ test("packed Survey CLI serves modern and legacy MCP from a clean consumer", asy
     ) as { dependencies?: Record<string, string> };
     assert.equal(
       manifest.dependencies?.["@modelcontextprotocol/server"],
-      "2.0.0",
+      "2.4.0",
     );
-    assert.equal(manifest.dependencies?.zod, "4.4.3");
+    assert.equal(manifest.dependencies?.zod, "4.6.7");
 
     const cli = join(consumer, "node_modules", ".bin", "survey-review-mcp");
     const fixture = join(packageRoot, "example-data", "mcp-review-session.json");

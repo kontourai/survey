@@ -78,8 +78,8 @@
   },
   "dependencies": {
     "@kontourai/surface": "^2.13.0 || ^3.0.0 || ^4.0.0",
-    "@modelcontextprotocol/server": "2.0.0",
-    "zod": "4.4.3"
+    "@modelcontextprotocol/server": "2.4.0",
+    "zod": "4.6.7"
   },
   "peerDependencies": {
     "typescript": ">=5.0.0"
@@ -90,10 +90,10 @@
     }
   },
   "devDependencies": {
-    "@kontourai/flow-agents": "5.10.0",
-    "@kontourai/traverse": "^3.0.1",
+    "@kontourai/flow-agents": "9.11.0",
+    "@kontourai/traverse": "^5.0.3",
     "@kontourai/ui": "^1.20.0",
-    "@kontourai/veritas": "1.11.2",
+    "@kontourai/veritas": "1.12.1",
     "@playwright/test": "^1.62.0",
     "@types/node": "^26.1.2",
     "typescript": "^7.0.2"
