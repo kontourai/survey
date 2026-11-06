@@ -25,7 +25,11 @@
     },
     {
       "source": "docs/consumer-integration-guide.md",
-      "section": "Start Here"
+      "section": "Start Here",
+      "covers": [
+        "src/**",
+        "bin/**"
+      ]
     },
     {
       "source": "docs/upgrade-guide.md",
@@ -57,7 +61,11 @@
     },
     {
       "source": "docs/record-contracts.md",
-      "section": "Reference"
+      "section": "Reference",
+      "covers": [
+        "src/types.ts",
+        "src/builder.ts"
+      ]
     },
     {
       "source": "docs/review-resource-contract.md",
@@ -218,7 +226,9 @@
   ],
   "exclude": [],
   "decisions": {
-    "adr": { "dir": "docs/adr" }
+    "adr": {
+      "dir": "docs/adr"
+    }
   },
   "redirects": {
     "record-contracts.html": "docs/record-contracts.md",
