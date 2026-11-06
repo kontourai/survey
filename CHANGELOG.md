@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.4.1](https://github.com/kontourai/survey/compare/v8.4.0...v8.4.1) (2026-11-06)
+
+
+### Documentation
+
+* map producer and record contracts to source ([#365](https://github.com/kontourai/survey/issues/365)) ([2636fbf](https://github.com/kontourai/survey/commit/2636fbfc04b1ed6e07bfd1d20d0f671204c5226c))
+
 ## [8.4.0](https://github.com/kontourai/survey/compare/v8.3.0...v8.4.0) (2026-11-03)
 
 
