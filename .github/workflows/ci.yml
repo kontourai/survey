@@ -83,8 +83,9 @@ jobs:
           - surface: '^4'
             expect: '^4\.'
             consumer: '^4'
-          - surface: '^5'
-            expect: '^5\.'
+          # Exact: a dev dependency locks 5.0.0, which pnpm would reuse for ^5.
+          - surface: '5.1.0'
+            expect: '^5\.1\.0$'
             consumer: '^5'
           - surface: '^6'
             expect: '^6\.'
