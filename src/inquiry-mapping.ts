@@ -421,21 +421,9 @@ export function resolveQuestion(
   const inquiryId = `inquiry.${normalized}.${askedAt}`;
 
   if (!mapping) {
-    // No mapping or rejected: return honest unsupported record
-    return {
-      id: inquiryId,
-      inquiry: {
-        id: inquiryId,
-        question,
-        askedBy,
-        askedAt,
-      },
-      outcome: "unsupported",
-      resolutionPath: { claimIds: [] },
-      inputSnapshot: [],
-      statusFunctionVersion: "1",
-      resolvedAt: askedAt,
-    };
+    // No mapping or rejected: an inquiry with no target, which Surface records
+    // as unsupported under the status function version it derives with.
+    return resolveInquiry(bundle, { id: inquiryId, question, askedBy, askedAt }, { now: new Date(askedAt) });
   }
 
   // Build a Surface Inquiry from the mapping

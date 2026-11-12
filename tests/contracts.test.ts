@@ -32,7 +32,10 @@ describe("Survey Surface projection", () => {
     const report = buildTrustReport(valid);
 
     assert.equal(report.claims.length, 2);
-    assert.equal(report.evidence.length, 2);
+    // One source excerpt per claim, plus the attestation of the review that
+    // verified the first (#367).
+    assert.equal(report.evidence.length, 3);
+    assert.deepEqual(report.evidence.filter((item) => item.method === "attestation").map((item) => item.claimId), [report.claims[0]?.id]);
     assert.equal(report.summary.byStatus.verified, 1);
     assert.equal(report.summary.byStatus.proposed, 1);
     assert.equal(report.claims[0]?.metadata?.survey && typeof report.claims[0].metadata.survey, "object");

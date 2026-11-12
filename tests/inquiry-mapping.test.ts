@@ -14,13 +14,14 @@ import {
   surveyAgentUtterance,
 } from "../src/index.js";
 import type { InquiryMapping, MappingProposal } from "../src/index.js";
+import { attestSurveyReviews } from "./review-attestation-fixture.js";
 
 // ---------------------------------------------------------------------------
 // Shared test fixtures
 // ---------------------------------------------------------------------------
 
 function makeBundle(overrides?: Partial<TrustBundle>): TrustBundle {
-  return {
+  return attestSurveyReviews({
     schemaVersion: 3,
     source: "test",
     claims: [
@@ -76,7 +77,7 @@ function makeBundle(overrides?: Partial<TrustBundle>): TrustBundle {
       },
     ],
     ...overrides,
-  };
+  });
 }
 
 function makeProposal(overrides: Partial<MappingProposal> & { id: string; question: string }): MappingProposal {
@@ -543,7 +544,7 @@ describe("surveyAgentUtterance — end-to-end", () => {
   // canonical-key matching.  A production extractor would know the
   // subjectType for its domain and produce the correct canonical target.
   function makeUtteranceBundle(): TrustBundle {
-    return {
+    return attestSurveyReviews({
       schemaVersion: 3,
       source: "test.agent-utterance",
       claims: [
@@ -596,7 +597,7 @@ describe("surveyAgentUtterance — end-to-end", () => {
           verifiedAt: "2026-06-01T00:00:00.000Z",
         },
       ],
-    };
+    });
   }
 
   it("processes a multi-statement utterance and returns mixed badges (verified + unsupported)", async () => {

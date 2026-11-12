@@ -19,6 +19,7 @@ import { describe, it } from "node:test";
 import type { TrustBundle, TrustStatus } from "@kontourai/surface";
 import { surveyAgentUtterance, referenceUtteranceExtractor } from "../src/agent-utterance.js";
 import type { ExtractedStatement, UtteranceClaimExtractor } from "../src/agent-utterance.js";
+import { attestSurveyReviews } from "./review-attestation-fixture.js";
 
 const NOW = new Date("2026-06-10T00:00:00.000Z");
 const TARGET = { subjectType: "unknown", subjectId: "acme", fieldOrBehavior: "status" } as const;
@@ -34,7 +35,7 @@ const TARGET = { subjectType: "unknown", subjectId: "acme", fieldOrBehavior: "st
  * read back off the InquiryRecord, never against the event's own string.
  */
 function makeBundle(value: unknown, eventStatus: TrustStatus | null = "verified"): TrustBundle {
-  return {
+  return attestSurveyReviews({
     schemaVersion: 3,
     source: "test.agent-utterance-badge",
     claims: [
@@ -67,7 +68,7 @@ function makeBundle(value: unknown, eventStatus: TrustStatus | null = "verified"
               verifiedAt: "2026-06-01T00:00:00.000Z",
             },
           ],
-  };
+  });
 }
 
 /** A bundle whose claim was verified long enough ago to have gone stale. */
@@ -79,6 +80,8 @@ function makeStaleBundle(value: unknown): TrustBundle {
       id: "policy.short",
       claimType: "test.field",
       requiredEvidence: [],
+      // A policy that requires nothing is no policy from status function "3".
+      requiredMethods: ["attestation"],
       acceptanceCriteria: [],
       reviewAuthority: "operator",
       validityRule: { kind: "duration", durationDays: 5 },
