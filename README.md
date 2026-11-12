@@ -47,6 +47,12 @@ your project and Survey share one Surface copy (`npm ls @kontourai/surface`
 shows one entry). Without a version, npm installs the latest Surface, which
 can fall outside that range; npm then installs a separate copy for Survey.
 
+Surface 5.x and 6.x are not supported yet. From 5.0, Surface derives a
+`verified` claim as `proposed` when no verification policy resolves for it.
+Survey's projection (`buildSurveyTrustBundle`) emits no policies. On those
+versions, Survey's reviewed claims and the inquiry answers built on them do
+not derive `verified` ([#367](https://github.com/kontourai/survey/issues/367)).
+
 Requires Node.js >=22. TypeScript >=5.0 is required to compile against
 Survey's published type declarations (`defineProductVocabulary`'s `const`
 type parameters are TS 5.0+ syntax) — JavaScript consumers are unaffected;
