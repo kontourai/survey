@@ -38,20 +38,24 @@ The Review Workbench rendering a real example queue — current vs proposed valu
 ## Quickstart
 
 ```sh
-npm install @kontourai/survey @kontourai/surface@^4
+npm install @kontourai/survey @kontourai/surface@^6
 ```
 
-Survey supports `@kontourai/surface` 2.13 and later 2.x, 3.x, and 4.x. CI tests
-2.13.0 and the newest 3.x and 4.x. Install a Surface version in that range so
-your project and Survey share one Surface copy (`npm ls @kontourai/surface`
+Survey supports `@kontourai/surface` 2.13 and later 2.x, and 3.x to 6.x. CI
+tests 2.13.0 and the newest 3.x, 4.x, 5.x, and 6.x. Install a Surface version
+in that range so your project and Survey share one Surface copy (`npm ls @kontourai/surface`
 shows one entry). Without a version, npm installs the latest Surface, which
 can fall outside that range; npm then installs a separate copy for Survey.
 
-Surface 5.x and 6.x are not supported yet. From 5.0, Surface derives a
-`verified` claim as `proposed` when no verification policy resolves for it.
-Survey's projection (`buildSurveyTrustBundle`) emits no policies. On those
-versions, Survey's reviewed claims and the inquiry answers built on them do
-not derive `verified` ([#367](https://github.com/kontourai/survey/issues/367)).
+From 5.0, Surface derives a `verified` claim as `proposed` unless a
+verification policy that requires some evidence resolves for it. Survey's
+projection (`buildSurveyTrustBundle`) emits one policy, `survey.review-outcome.v1`,
+which every projected claim names in `verificationPolicyId`. It requires
+`attestation`-method evidence, which Survey emits for each review that affirmed
+a claim: `human_attestation` for a person, `attestation` for an agent or rule,
+with the reviewer as `collectedBy`. Unreviewed candidates carry no attestation
+and derive `proposed`. On Surface 2.13 to 4.x the derived statuses are the same
+as before ([#367](https://github.com/kontourai/survey/issues/367)).
 
 Requires Node.js >=22. TypeScript >=5.0 is required to compile against
 Survey's published type declarations (`defineProductVocabulary`'s `const`

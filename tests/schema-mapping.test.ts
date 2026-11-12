@@ -15,6 +15,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { IdentityLink, TrustBundle } from "@kontourai/surface";
 import { resolveInquiry } from "@kontourai/surface";
+import { attestSurveyReviews } from "./review-attestation-fixture.js";
 import {
   buildSurveyTrustBundle,
   mappingReviewToSurface,
@@ -758,7 +759,7 @@ describe("end-to-end: cross-system resolveInquiry via IdentityLink", () => {
       : [];
 
     // Merge: mappingBundle + data claim
-    return {
+    return attestSurveyReviews({
       schemaVersion: 3,
       source: "e2e-test",
       claims: [...mappingBundle.claims, dataClaim],
@@ -766,7 +767,7 @@ describe("end-to-end: cross-system resolveInquiry via IdentityLink", () => {
       policies: mappingBundle.policies,
       events: [...mappingBundle.events, dataEvent, ...disputeEvents],
       identityLinks: mappingBundle.identityLinks,
-    };
+    });
   }
 
   it("resolves erp.Customer.email via the identity link to crm.Contact.email", () => {

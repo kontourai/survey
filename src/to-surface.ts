@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Claim, Evidence, TrustBundle, TrustStatus, VerificationEvent } from "@kontourai/surface";
+import type { Claim, Evidence, TrustBundle, TrustStatus, VerificationEvent, VerificationPolicy } from "@kontourai/surface";
 import { buildReviewProofAnchor } from "./review-proof.js";
 import { assertReviewerKind, assertReviewOutcomeDiscipline, resolveReviewerKind, reviewerAuthorityForKind } from "./producer-discipline.js";
 import { deriveCalibration, type CalibrationMetrics } from "./calibration.js";
@@ -24,6 +24,48 @@ type PolicyStandardFields = {
   standardVersion?: string;
   paragraphRef?: string;
   reference?: string;
+};
+
+/**
+ * The verification policy every claim Survey projects names (#367). It states
+ * what a Survey `verified` means: a review outcome recorded a reviewer
+ * affirming the value. Survey emits that review as attestation evidence (see
+ * {@link reviewAttestationEvidence}), which satisfies `requiredMethods`.
+ *
+ * From status function "3" (Surface 5.0) a verified event with no policy, or
+ * one that requires nothing, derives `proposed`; this policy is what lets a
+ * reviewed claim derive `verified` there. Under "2" the requirement is checked
+ * as well, and every reviewed claim carries the attestation, so the derived
+ * status is unchanged.
+ *
+ * `requiredEvidence` is empty so an agent or rule review, which Survey also
+ * projects as `verified` (with `reviewerAuthority: "system"`), satisfies it as
+ * a human review does; the evidence type (`human_attestation` or
+ * `attestation`) and the claim's reviewer authority say which it was.
+ * `manual` validity adds no policy window, so freshness derives as it did
+ * with no policy. `claimType` is required by the
+ * schema; claims resolve this policy by `verificationPolicyId`, not by type.
+ * `impactLevel` is required too; reports read the claim's own impact level.
+ *
+ * The id names this exact content and is versioned: a change to the policy is
+ * a new id (`.v2`), never an edit under `.v1`. Surface's `mergeBundles` keeps
+ * one record per policy id by a content tie-break without throwing, so two
+ * contents under one id would make the governing policy depend on that
+ * tie-break; a fixed id per content keeps every Survey bundle that names it in
+ * agreement.
+ */
+const SURVEY_REVIEW_POLICY_ID = "survey.review-outcome.v1";
+const SURVEY_REVIEW_POLICY: VerificationPolicy = {
+  id: SURVEY_REVIEW_POLICY_ID,
+  claimType: SURVEY_REVIEW_POLICY_ID,
+  requiredEvidence: [],
+  requiredMethods: ["attestation"],
+  acceptanceCriteria: ["A Survey review outcome records a named reviewer affirming the claim's value."],
+  reviewAuthority: "survey-reviewer",
+  validityRule: { kind: "manual" },
+  stalenessTriggers: [],
+  conflictRules: [],
+  impactLevel: "medium",
 };
 
 /** Minimum labeled samples a calibration group needs before its empirical
@@ -173,6 +215,7 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
       fieldOrBehavior: projection.fieldOrBehavior,
       value: claimValue,
       status,
+      verificationPolicyId: SURVEY_REVIEW_POLICY_ID,
       createdAt,
       updatedAt,
       impactLevel: projection.impactLevel,
@@ -291,14 +334,23 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
       }),
     });
 
+    // Only an affirming review is attested: the policy reads it as the review
+    // that makes the claim `verified`, and every other claim keeps its status
+    // from its own events.
+    const attestation = projectionReview && reviewer && (status === "verified" || status === "assumed")
+      ? reviewAttestationEvidence({ claimId: projection.id, review: projectionReview, reviewer, status, projectionContextId })
+      : undefined;
+    if (attestation) evidence.push(attestation);
+
     const rationale = projectionReview?.rationale ?? candidateSet.rationale;
+    const eventEvidenceIds = projectionReview?.evidenceIds?.length ? projectionReview.evidenceIds : [evidenceId];
     events.push({
       id: projectionRecordId(projection.id, projectionContextId, "claim-event", `event.${status}`),
       claimId: projection.id,
       status,
       actor: projection.actor ?? projectionReview?.actor ?? projection.collectedBy,
       method: projection.eventMethod ?? eventMethodFor(status, candidateSet),
-      evidenceIds: projectionReview?.evidenceIds?.length ? projectionReview.evidenceIds : [evidenceId],
+      evidenceIds: attestation ? [...eventEvidenceIds, attestation.id] : eventEvidenceIds,
       createdAt: projectionReview?.reviewedAt ?? input.generatedAt,
       verifiedAt: status === "verified" || status === "assumed" ? projectionReview?.reviewedAt ?? input.generatedAt : undefined,
       notes: rationale,
@@ -333,7 +385,7 @@ export function buildSurveyTrustBundle(input: SurveyInput, options: BuildSurveyT
     source: input.source,
     claims,
     evidence,
-    policies: [],
+    policies: [SURVEY_REVIEW_POLICY],
     events,
   };
 }
@@ -424,6 +476,7 @@ function projectUnselectedSetClaim(context: {
     fieldOrBehavior: projection.fieldOrBehavior,
     value: "value" in projection ? projection.value : null,
     status,
+    verificationPolicyId: SURVEY_REVIEW_POLICY_ID,
     createdAt: projection.createdAt ?? sources.map(({ extraction }) => extraction.extractedAt).sort()[0]!,
     updatedAt: projection.updatedAt ?? review?.reviewedAt ?? input.generatedAt,
     impactLevel: projection.impactLevel,
@@ -463,6 +516,44 @@ function projectUnselectedSetClaim(context: {
     createdAt: review?.reviewedAt ?? input.generatedAt,
     notes: review?.rationale ?? candidateSet.rationale,
   });
+}
+
+/**
+ * The review that affirmed a claim, as Surface attestation evidence: the
+ * reviewer is the collector and the review outcome the source. A person's
+ * review is `human_attestation`; an agent's or a rule's (including the
+ * auto-accept policy) is `attestation`. A legacy review with no attested kind
+ * is typed by the kind Survey infers for it, and `reviewerKindInferred` says
+ * so. `collectedByKind` is not set: it needs a version 9 bundle, which older
+ * Surface readers refuse.
+ */
+function reviewAttestationEvidence(input: {
+  claimId: string;
+  review: ReviewOutcome;
+  reviewer: { kind: ReviewerKind; inferred: boolean };
+  status: TrustStatus;
+  projectionContextId: string | undefined;
+}): Evidence {
+  const { review, reviewer } = input;
+  // Producer discipline refuses a verified or assumed claim without either;
+  // refuse here too rather than attest a review with no reviewer or time.
+  const { actor, reviewedAt } = review;
+  if (!actor || !reviewedAt) throw new Error(`Review outcome ${review.id} needs an actor and reviewedAt to be attested`);
+  return {
+    id: projectionRecordId(input.claimId, input.projectionContextId, "claim-review-evidence", "evidence.review"),
+    claimId: input.claimId,
+    evidenceType: reviewer.kind === "human" ? "human_attestation" : "attestation",
+    method: "attestation",
+    sourceRef: `survey:review-outcome:${review.id}`,
+    excerptOrSummary: review.rationale ?? `Review outcome ${review.id} recorded ${input.status} by ${actor}.`,
+    observedAt: reviewedAt,
+    collectedBy: actor,
+    metadata: {
+      reviewOutcomeId: review.id,
+      reviewerKind: reviewer.kind,
+      reviewerKindInferred: reviewer.inferred,
+    },
+  };
 }
 
 function validateProjectionContextId(contextId: string | undefined): string | undefined {

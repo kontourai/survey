@@ -1220,6 +1220,32 @@ const report = buildTrustReport(validateTrustBundle(
 ));
 ```
 
+The bundle carries one verification policy, `survey.review-outcome.v1`, and
+every projected claim names it in `verificationPolicyId`. It requires
+`attestation`-method evidence. Survey emits that evidence for each review that
+affirmed a claim (`verified` or `assumed`): `human_attestation` for a person,
+`attestation` for an agent or rule, with the reviewer as `collectedBy`, the
+review outcome as `sourceRef`, and the evidence linked from the claim's event.
+From Surface 5.0, a `verified` claim derives `verified` only when a policy that
+requires something resolves for it, so this policy is what keeps reviewed
+claims `verified` there; an unreviewed candidate has no attestation and derives
+`proposed`. The policy's `manual` validity rule adds no expiry. When you copy
+Survey claims into another bundle, copy the policy with them:
+`validateTrustBundle` refuses a claim that names a policy the bundle lacks, and
+from Surface 5.0 such a claim derives `proposed`. A policy you key on the same
+`claimType` does not govern Survey claims, because a claim's
+`verificationPolicyId` takes precedence.
+
+A policy id names one fixed content: Survey never changes the policy under
+`survey.review-outcome.v1`, and a different policy ships under a new id
+(`.v2`). Do not declare your own policy with a Survey policy id. Surface's
+`mergeBundles` keeps one record per policy id: when two bundles carry
+different content under the same id, it keeps one by a content tie-break and
+does not throw (it throws only on claim collisions), so your policy can lose
+to Survey's or replace it without notice. `mergeBundlesDetailed` reports the
+collision under `policies`. To govern Survey claims with your own policy, give
+it its own id and point the claims' `verificationPolicyId` at it.
+
 For source-authority claims, prefer
 `sourceOfAuthorityObservationBuilder`. For corrected documents or other
 multi-candidate cases, prefer `candidateReviewRecord` or the lower-level record
