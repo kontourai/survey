@@ -65,6 +65,8 @@ jobs:
   # is exempt from minimumReleaseAge in pnpm-workspace.yaml, so a same-day
   # release is resolved). Keep the 2.x pin equal to the range's lower bound in
   # package.json. The lockfile's own Surface version is covered by `verify`.
+  # Surface 5.x and 6.x are not legs: from 5.0, with no resolvable policy,
+  # Survey's reviewed claims derive `proposed` (README, #367).
   surface-compat:
     name: Surface ${{ matrix.surface }}
     runs-on: ubuntu-latest
@@ -119,9 +121,13 @@ jobs:
           fi
         working-directory: survey
 
+      # tests/surface-version.test.ts fails unless the suite itself resolves
+      # the pinned version, not just node_modules after the pin step.
       - name: Unit tests
         run: npm test
         working-directory: survey
+        env:
+          SURVEY_EXPECT_SURFACE: ${{ matrix.expect }}
 
       - name: Package smoke tests
         run: npm run test:package-smoke
