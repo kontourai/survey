@@ -1,5 +1,21 @@
 # Changelog
 
+## [9.0.0](https://github.com/kontourai/survey/compare/v8.4.0...v9.0.0) (2026-11-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* buildSurveyTrustBundle now emits the verification policy survey.review-outcome.v1 and every projected claim names it in verificationPolicyId. Copying Survey claims into a bundle without that policy now fails validateTrustBundle (the claim references an unknown policy), and from Surface 5.0 such a claim derives proposed. A consumer policy keyed on the claims' claimType no longer governs Survey claims, because verificationPolicyId takes precedence: for example an agent-reviewed claim that derived proposed under a consumer policy requiring human_attestation now derives verified under Survey's policy. To apply your own policy, give it its own id and point the claims' verificationPolicyId at it.
+
+### Features
+
+* derive verified for reviewed claims on Surface 5 and 6 and widen the range ([#375](https://github.com/kontourai/survey/issues/375)) ([475141f](https://github.com/kontourai/survey/commit/475141f8cc1bd91a765e6822e3ccf878e3a0382c)), closes [#367](https://github.com/kontourai/survey/issues/367)
+
+
+### Documentation
+
+* map producer and record contracts to source ([#365](https://github.com/kontourai/survey/issues/365)) ([2636fbf](https://github.com/kontourai/survey/commit/2636fbfc04b1ed6e07bfd1d20d0f671204c5226c))
+
 ## [8.4.0](https://github.com/kontourai/survey/compare/v8.3.0...v8.4.0) (2026-11-03)
 
 
