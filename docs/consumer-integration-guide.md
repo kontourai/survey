@@ -1220,6 +1220,22 @@ const report = buildTrustReport(validateTrustBundle(
 ));
 ```
 
+The bundle carries one verification policy, `survey.review-outcome`, and every
+projected claim names it in `verificationPolicyId`. It requires
+`attestation`-method evidence. Survey emits that evidence for each review that
+affirmed a claim (`verified` or `assumed`): `human_attestation` for a person,
+`attestation` for an agent or rule, with the reviewer as `collectedBy`, the
+review outcome as `sourceRef`, and the evidence linked from the claim's event.
+From Surface 5.0, a `verified` claim derives `verified` only when a policy that
+requires something resolves for it, so this policy is what keeps reviewed
+claims `verified` there; an unreviewed candidate has no attestation and derives
+`proposed`. The policy's `manual` validity rule adds no expiry. When you copy
+Survey claims into another bundle, copy the policy with them:
+`validateTrustBundle` refuses a claim that names a policy the bundle lacks, and
+from Surface 5.0 such a claim derives `proposed`. A policy you key on the same
+`claimType` does not govern Survey claims, because a claim's
+`verificationPolicyId` takes precedence.
+
 For source-authority claims, prefer
 `sourceOfAuthorityObservationBuilder`. For corrected documents or other
 multi-candidate cases, prefer `candidateReviewRecord` or the lower-level record

@@ -61,12 +61,12 @@ jobs:
           DECISIONS_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
 
   # One leg per supported @kontourai/surface major: the lowest version the
-  # dependency range admits and the newest published 3.x and 4.x (@kontourai/*
+  # dependency range admits and the newest published 3.x to 6.x (@kontourai/*
   # is exempt from minimumReleaseAge in pnpm-workspace.yaml, so a same-day
   # release is resolved). Keep the 2.x pin equal to the range's lower bound in
   # package.json. The lockfile's own Surface version is covered by `verify`.
-  # Surface 5.x and 6.x are not legs: from 5.0, with no resolvable policy,
-  # Survey's reviewed claims derive `proposed` (README, #367).
+  # The 5.x and 6.x legs derive under status functions "3" and "4", where a
+  # reviewed claim is verified only through Survey's review policy (#367).
   surface-compat:
     name: Surface ${{ matrix.surface }}
     runs-on: ubuntu-latest
@@ -83,6 +83,12 @@ jobs:
           - surface: '^4'
             expect: '^4\.'
             consumer: '^4'
+          - surface: '^5'
+            expect: '^5\.'
+            consumer: '^5'
+          - surface: '^6'
+            expect: '^6\.'
+            consumer: '^6'
     steps:
       - name: Checkout
         uses: actions/checkout@v7
