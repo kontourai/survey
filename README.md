@@ -49,7 +49,7 @@ can fall outside that range; npm then installs a separate copy for Survey.
 
 From 5.0, Surface derives a `verified` claim as `proposed` unless a
 verification policy that requires some evidence resolves for it. Survey's
-projection (`buildSurveyTrustBundle`) emits one policy, `survey.review-outcome`,
+projection (`buildSurveyTrustBundle`) emits one policy, `survey.review-outcome.v1`,
 which every projected claim names in `verificationPolicyId`. It requires
 `attestation`-method evidence, which Survey emits for each review that affirmed
 a claim: `human_attestation` for a person, `attestation` for an agent or rule,

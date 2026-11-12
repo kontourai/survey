@@ -46,8 +46,15 @@ type PolicyStandardFields = {
  * with no policy. `claimType` is required by the
  * schema; claims resolve this policy by `verificationPolicyId`, not by type.
  * `impactLevel` is required too; reports read the claim's own impact level.
+ *
+ * The id names this exact content and is versioned: a change to the policy is
+ * a new id (`.v2`), never an edit under `.v1`. Surface's `mergeBundles` keeps
+ * one record per policy id by a content tie-break without throwing, so two
+ * contents under one id would make the governing policy depend on that
+ * tie-break; a fixed id per content keeps every Survey bundle that names it in
+ * agreement.
  */
-const SURVEY_REVIEW_POLICY_ID = "survey.review-outcome";
+const SURVEY_REVIEW_POLICY_ID = "survey.review-outcome.v1";
 const SURVEY_REVIEW_POLICY: VerificationPolicy = {
   id: SURVEY_REVIEW_POLICY_ID,
   claimType: SURVEY_REVIEW_POLICY_ID,

@@ -75,6 +75,54 @@ describe("Survey review verification policy", () => {
     assert.ok(event?.evidenceIds.includes(attestation.id), "the verified event links the review attestation");
   });
 
+  it("keeps the content of survey.review-outcome.v1 fixed (a changed policy needs a new id)", () => {
+    // Bundles from different Survey releases merge by policy id; Surface keeps
+    // one record per id by a content tie-break. Edit this only with a new id.
+    assert.deepEqual(buildSurveyTrustBundle(publicFieldReviewExample).policies, [
+      {
+        id: "survey.review-outcome.v1",
+        claimType: "survey.review-outcome.v1",
+        requiredEvidence: [],
+        requiredMethods: ["attestation"],
+        acceptanceCriteria: ["A Survey review outcome records a named reviewer affirming the claim's value."],
+        reviewAuthority: "survey-reviewer",
+        validityRule: { kind: "manual" },
+        stalenessTriggers: [],
+        conflictRules: [],
+        impactLevel: "medium",
+      },
+    ]);
+  });
+
+  // Only a review that affirmed the value is attested. The rejection,
+  // deferral and plain proposed reviews are projected with their actor and
+  // time, so attesting every projected review would put attestation evidence
+  // on those claims. A could-not-confirm review is not projected at all; those
+  // cases pin that it is not attested either, even with an assumed status.
+  for (const [label, review, expected] of [
+    ["a rejection", { status: "rejected", resolution: "rejected" }, "rejected"],
+    ["a deferral (held, still proposed)", { status: "proposed", resolution: "held" }, "proposed"],
+    ["a plain proposed review", { status: "proposed" }, "proposed"],
+    ["could not confirm (proposed)", { status: "proposed", resolution: "could_not_confirm", resolutionReason: "The source was unreachable." }, "proposed"],
+    ["could not confirm (assumed)", { status: "assumed", resolution: "could_not_confirm", resolutionReason: "The source was unreachable." }, "assumed"],
+  ] as const) {
+    it(`attests no review for ${label}, and the claim derives ${expected}`, () => {
+      const input = structuredClone(publicFieldReviewExample);
+      const outcome = input.reviewOutcomes[0]!;
+      delete outcome.rationale;
+      Object.assign(outcome, review);
+      const bundle = buildSurveyTrustBundle(input);
+
+      const claimEvidence = bundle.evidence.filter((item) => item.claimId === REVIEWED);
+      assert.ok(claimEvidence.length > 0, "the reviewed claim still projects its source evidence");
+      assert.deepEqual(claimEvidence.filter((item) => item.method === "attestation" || item.evidenceType === "human_attestation"), []);
+      const event = bundle.events.find((item) => item.claimId === REVIEWED);
+      assert.ok(event, "the reviewed claim has an event");
+      assert.ok(event.evidenceIds.every((id) => !id.endsWith("evidence.review")), "no event links a review attestation");
+      assert.equal(statusOf(bundle, REVIEWED), expected);
+    });
+  }
+
   it("derives proposed when the review attestation is removed, on every status function version", () => {
     const bundle = buildSurveyTrustBundle(publicFieldReviewExample);
     const attestationIds = new Set(bundle.evidence.filter((item) => item.method === "attestation").map((item) => item.id));
