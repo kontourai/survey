@@ -42,8 +42,8 @@ type PolicyStandardFields = {
  * projects as `verified` (with `reviewerAuthority: "system"`), satisfies it as
  * a human review does; the evidence type (`human_attestation` or
  * `attestation`) and the claim's reviewer authority say which it was.
- * `manual` validity adds no policy window: only a claim's own `expiresAt` or
- * `ttlSeconds` makes it stale, as before. `claimType` is required by the
+ * `manual` validity adds no policy window, so freshness derives as it did
+ * with no policy. `claimType` is required by the
  * schema; claims resolve this policy by `verificationPolicyId`, not by type.
  * `impactLevel` is required too; reports read the claim's own impact level.
  */
