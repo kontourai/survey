@@ -19,8 +19,8 @@ importers:
         version: 4.6.7
     devDependencies:
       '@kontourai/flow-agents':
-        specifier: 11.0.0
-        version: 11.0.0(@ai-sdk/provider@4.0.4)(@kontourai/bearing@0.2.0(playwright@1.65.0))(playwright@1.65.0)(typescript@7.0.2)(zod@4.6.7)
+        specifier: 11.2.0
+        version: 11.2.0(@ai-sdk/provider@4.0.4)(@kontourai/bearing@0.2.0(playwright@1.65.0))(playwright@1.65.0)(typescript@7.0.2)(zod@4.6.7)
       '@kontourai/traverse':
         specifier: ^5.0.3
         version: 5.0.3(@anthropic-ai/sdk@1.8.0(zod@4.6.7))(@kontourai/relay@0.8.0(@ai-sdk/provider@4.0.4)(@anthropic-ai/sdk@1.8.0(zod@4.6.7)))(playwright@1.65.0)(typescript@7.0.2)
@@ -260,8 +260,8 @@ packages:
     engines: {node: '>=22'}
     hasBin: true
 
-  '@kontourai/flow-agents@11.0.0':
-    resolution: {integrity: sha512-gY3mh0wpICJs9KhaIxsK5mF4LCNj5VG2cgaAFBenGRkfjHCL5AGqNxmy0EGrRrK8LYAhKCB86/RR+ne+1ftt9g==}
+  '@kontourai/flow-agents@11.2.0':
+    resolution: {integrity: sha512-RuNFCqGVMF8+51sGriPKFqDCFnKlbGevVMNAdFHgbjT5AJry3woM4J9Dh1uVfZSUqSJaJy00dIN4zkWm9u1mTw==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -1390,7 +1390,7 @@ snapshots:
       commander: 15.1.0
       zod: 4.6.7
 
-  '@kontourai/flow-agents@11.0.0(@ai-sdk/provider@4.0.4)(@kontourai/bearing@0.2.0(playwright@1.65.0))(playwright@1.65.0)(typescript@7.0.2)(zod@4.6.7)':
+  '@kontourai/flow-agents@11.2.0(@ai-sdk/provider@4.0.4)(@kontourai/bearing@0.2.0(playwright@1.65.0))(playwright@1.65.0)(typescript@7.0.2)(zod@4.6.7)':
     dependencies:
       '@kontourai/conduit': 0.8.0
       '@kontourai/datum': 0.8.1(playwright@1.65.0)
